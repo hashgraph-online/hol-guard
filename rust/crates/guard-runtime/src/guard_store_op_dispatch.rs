@@ -479,7 +479,7 @@ pub(crate) fn dispatch(
         "hook_managed_install_admission" => {
             crate::guard_store_managed_installs::hook_admission(connection, args)
         }
-        "list_events_after" => cloud_events::list_after(connection, args),
+        "list_events_after" | "list_events" => cloud_events::list_log(connection, method, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),
         "cached_supply_chain_bundle" => {
             crate::supply_chain_bundle_cache_op::cached_bundle(connection)

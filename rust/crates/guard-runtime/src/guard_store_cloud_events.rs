@@ -72,19 +72,43 @@ pub(crate) fn append_event(
     Ok(())
 }
 
-/// `list_events_after`: the local event log past `event_id`, oldest first.
-/// A stored payload that is not a mapping reads as an empty one, and one that
-/// is not JSON at all fails the read as `json.loads` does.
-pub(crate) fn list_after(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreResult<Value> {
-    let rows = query_all(
-        connection,
-        "select event_id, event_name, payload_json, occurred_at from guard_events \
-         where event_id > ? order by event_id asc limit ?",
-        &[
-            Value::from(args.int("event_id")?),
-            Value::from(args.int("limit")?),
-        ],
-    )?;
+#[path = "guard_store_event_log_pages.rs"]
+mod event_log_pages;
+
+/// The local event log reads: `list_events` pages newest first and
+/// `list_events_after` reads oldest first past an event id.
+pub(crate) fn list_log(
+    connection: &rusqlite::Connection,
+    method: &str,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    if method == "list_events" {
+        return event_log_pages::list_events(connection, args);
+    }
+    list_after(connection, args)
+}
+
+/// `list_events_after`: the local event log past `event_id`, oldest first,
+/// limited to `event_names` when the caller names any. A stored payload that
+/// is not a mapping reads as an empty one, and one that is not JSON at all
+/// fails the read as `json.loads` does.
+fn list_after(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreResult<Value> {
+    let mut sql = String::from(
+        "select event_id, event_name, payload_json, occurred_at from guard_events where event_id > ?",
+    );
+    let mut params = vec![Value::from(args.int("event_id")?)];
+    if let Some(names) = args
+        .strings("event_names")?
+        .filter(|names| !names.is_empty())
+    {
+        sql.push_str(" and event_name in (");
+        sql.push_str(&vec!["?"; names.len()].join(", "));
+        sql.push(')');
+        params.extend(names.into_iter().map(Value::from));
+    }
+    sql.push_str(" order by event_id asc limit ?");
+    params.push(Value::from(args.int("limit")?));
+    let rows = query_all(connection, &sql, &params)?;
     let mut items = Vec::with_capacity(rows.len());
     for row in &rows {
         let payload = match serde_json::from_str::<Value>(text(row, "payload_json")) {

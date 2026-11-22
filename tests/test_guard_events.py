@@ -16,7 +16,6 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.runtime.runner_native_sync import pain_signal_sync_url, value_metrics
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_event_receipts import _list_events_query
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.cloud_receipt_payload_client import cloud_sync_receipt_payload
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
@@ -176,16 +175,31 @@ class TestGuardEvents:
             )
 
         store = GuardStore(home_dir)
-        recent_query, recent_params = _list_events_query(1000, None)
-        named_query, named_params = _list_events_query(1000, "alpha")
+        # The statements the native ``list_events`` page read runs.
+        select = "select event_id, event_name, payload_json, occurred_at from guard_events where 1 = 1"
+        order = " order by occurred_at desc, event_id desc limit ?"
+        cursor = " and (occurred_at, event_id) < (?, ?)"
+        recent = (select + order, (1000,))
+        named = (select + " and event_name = ?" + order, ("alpha", 1000))
+        recent_page = (select + cursor + order, ("2026-07-18T00:00:02Z", 3, 1000))
+        named_page = (select + " and event_name = ?" + cursor + order, ("alpha", "2026-07-18T00:00:02Z", 3, 1000))
 
         with sqlite3.connect(store.path) as connection:
-            recent_plan = connection.execute(f"explain query plan {recent_query}", recent_params).fetchall()
-            named_plan = connection.execute(f"explain query plan {named_query}", named_params).fetchall()
+            recent_plans = [
+                connection.execute(f"explain query plan {query}", params).fetchall()
+                for query, params in (recent, recent_page)
+            ]
+            named_plans = [
+                connection.execute(f"explain query plan {query}", params).fetchall()
+                for query, params in (named, named_page)
+            ]
 
-        assert any("idx_guard_events_recent" in str(row[3]) for row in recent_plan)
-        assert any("idx_guard_events_name_recent" in str(row[3]) for row in named_plan)
-        assert all("USE TEMP B-TREE FOR ORDER BY" not in str(row[3]) for row in (*recent_plan, *named_plan))
+        for plan in recent_plans:
+            assert any("idx_guard_events_recent" in str(row[3]) for row in plan)
+        for plan in named_plans:
+            assert any("idx_guard_events_name_recent" in str(row[3]) for row in plan)
+        for plan in (*recent_plans, *named_plans):
+            assert all("USE TEMP B-TREE FOR ORDER BY" not in str(row[3]) for row in plan)
         assert [item["payload"]["sequence"] for item in store.list_events()] == [3, 2, 1]
         assert [item["payload"]["sequence"] for item in store.list_events(event_name="alpha")] == [3, 1]
 

@@ -12,17 +12,44 @@ LOCAL_ONCE_LEGACY_AUTHORITY_KIND = "legacy"
 EXACT_CLOUD_AUTHORITY_KIND = "exact-cloud"
 
 
-def _list_events_query(limit: int, event_name: str | None) -> tuple[str, tuple[object, ...]]:
-    query = """
-        select event_id, event_name, payload_json, occurred_at
-        from guard_events
-    """
-    params: tuple[object, ...] = ()
-    if event_name is not None:
-        query += " where event_name = ?"
-        params = (event_name,)
-    query += " order by occurred_at desc, event_id desc limit ?"
-    return query, (*params, limit)
+_EVENT_PAGE_ITEM_KEYS = frozenset({"event_id", "event_name", "occurred_at", "payload_json"})
+
+
+def _event_page(answer: object) -> tuple[list[dict[str, object]], bool]:
+    """Check one native ``list_events`` page and parse each stored payload."""
+
+    if not isinstance(answer, dict) or set(answer) != {"items", "more"}:
+        raise RuntimeError("native list_events returned no answer")
+    raw_items = answer["items"]
+    more = answer["more"]
+    if not isinstance(raw_items, list) or not isinstance(more, bool):
+        raise RuntimeError("native list_events returned no answer")
+    items: list[dict[str, object]] = []
+    for item in raw_items:
+        if not isinstance(item, dict) or set(item) != _EVENT_PAGE_ITEM_KEYS:
+            raise RuntimeError("native list_events returned no answer")
+        event_id = item["event_id"]
+        event_name = item["event_name"]
+        occurred_at = item["occurred_at"]
+        payload_json = item["payload_json"]
+        if (
+            isinstance(event_id, bool)
+            or not isinstance(event_id, int)
+            or not isinstance(event_name, str)
+            or not isinstance(occurred_at, str)
+            or not isinstance(payload_json, str)
+        ):
+            raise RuntimeError("native list_events returned no answer")
+        payload = json.loads(payload_json)
+        items.append(
+            {
+                "event_id": event_id,
+                "event_name": event_name,
+                "occurred_at": occurred_at,
+                "payload": payload if isinstance(payload, dict) else {},
+            }
+        )
+    return items, more
 
 
 class StoreEventReceiptsMixin:
@@ -73,23 +100,27 @@ class StoreEventReceiptsMixin:
         return None if approval_id is None else str(approval_id)
 
     def list_events(self, limit: int = 100, event_name: str | None = None) -> list[dict[str, object]]:
-        query, params = _list_events_query(limit, event_name)
-        with self._connect() as connection:
-            rows = connection.execute(query, params).fetchall()
+        """The local event log, newest first, read from bounded native pages."""
+
         items: list[dict[str, object]] = []
-        for row in rows:
-            payload = json.loads(str(row["payload_json"]))
-            if not isinstance(payload, dict):
-                payload = {}
-            items.append(
-                {
-                    "event_id": int(row["event_id"]),
-                    "event_name": str(row["event_name"]),
-                    "occurred_at": str(row["occurred_at"]),
-                    "payload": payload,
-                }
-            )
-        return items
+        before: dict[str, object] | None = None
+        while True:
+            wanted = -1 if limit < 0 else limit - len(items)
+            if wanted == 0:
+                return items
+            args: dict[str, object] = {"limit": wanted}
+            if event_name is not None:
+                args["event_name"] = event_name
+            if before is not None:
+                args["before"] = before
+            page, more = _event_page(self._native_store_call("list_events", args))
+            items.extend(page)
+            if not more:
+                return items
+            if not page:
+                raise RuntimeError("native list_events returned no answer")
+            last = page[-1]
+            before = {"occurred_at": last["occurred_at"], "event_id": last["event_id"]}
 
     def list_events_after(
         self,
@@ -98,31 +129,23 @@ class StoreEventReceiptsMixin:
         limit: int = 100,
         event_names: tuple[str, ...] | None = None,
     ) -> list[dict[str, object]]:
-        query = """
-            select event_id, event_name, payload_json, occurred_at
-            from guard_events
-            where event_id > ?
-        """
-        params: list[object] = [event_id]
+        args: dict[str, object] = {"event_id": event_id, "limit": limit}
         if event_names:
-            placeholders = ", ".join("?" for _ in event_names)
-            query += f" and event_name in ({placeholders})"
-            params.extend(event_names)
-        query += " order by event_id asc limit ?"
-        params.append(limit)
-        with self._connect() as connection:
-            rows = connection.execute(query, tuple(params)).fetchall()
+            args["event_names"] = list(event_names)
+        answer = self._native_store_call("list_events_after", args)
+        if not isinstance(answer, list):
+            raise RuntimeError("native list_events_after returned no answer")
         items: list[dict[str, object]] = []
-        for row in rows:
-            payload = json.loads(str(row["payload_json"]))
-            if not isinstance(payload, dict):
-                payload = {}
-            items.append(
-                {
-                    "event_id": int(row["event_id"]),
-                    "event_name": str(row["event_name"]),
-                    "occurred_at": str(row["occurred_at"]),
-                    "payload": payload,
-                }
-            )
+        for item in answer:
+            if not isinstance(item, dict) or set(item) != {"event_id", "event_name", "occurred_at", "payload"}:
+                raise RuntimeError("native list_events_after returned no answer")
+            if (
+                isinstance(item["event_id"], bool)
+                or not isinstance(item["event_id"], int)
+                or not isinstance(item["event_name"], str)
+                or not isinstance(item["occurred_at"], str)
+                or not isinstance(item["payload"], dict)
+            ):
+                raise RuntimeError("native list_events_after returned no answer")
+            items.append(item)
         return items
