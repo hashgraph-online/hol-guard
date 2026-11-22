@@ -159,9 +159,24 @@ def test_complete_native_outage_preserves_wire_event_and_safe_fallback(monkeypat
 
     monkeypatch.setattr(policy, "_runtime_availability", lambda *_args, **_kwargs: None)
     assert canonical_hook_event_name({"hook_event_name": "PostToolUse"}) == "PostToolUse"
-    # With no Rust projection, the transport cannot safely classify an event.
-    # The bridge therefore pauses fail-closed rather than interpreting aliases.
-    assert hook_event_pauses_when_unavailable("PostToolUse") is True
-    assert hook_event_pauses_when_unavailable("Stop") is True
+    # With no Rust projection, the existing fail-closed contract keeps passive
+    # lifecycle events observable and still blocks deciding events.
+    assert hook_event_pauses_when_unavailable("PostToolUse") is False
+    assert hook_event_pauses_when_unavailable("Stop") is False
     assert hook_event_pauses_when_unavailable("PreToolUse") is True
     assert canonical_hook_event_name({"hook_event_name": "post_toolcall"}) == "post_toolcall"
+
+
+def test_prompt_alias_stays_blocked_when_rust_is_unavailable(monkeypatch) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+
+    monkeypatch.setattr(policy, "_runtime_availability", lambda *_args, **_kwargs: None)
+    event_name = canonical_hook_event_name({"hook_event_name": "prompt"})
+    assert event_name == "UserPromptSubmit"
+    response = availability_harness_response(
+        harness="claude-code",
+        event_name=event_name,
+        reason_code="native_hook_event_unavailable",
+        reason="Native review unavailable.",
+    )
+    assert response["decision"] == "block"

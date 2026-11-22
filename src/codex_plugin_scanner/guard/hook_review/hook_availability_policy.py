@@ -19,7 +19,11 @@ def _wire_event_name(payload: Mapping[str, object]) -> str:
     for key in _EVENT_FIELDS:
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            stripped = value.strip()
+            compact = stripped.lower().replace("_", "").replace("-", "")
+            if compact in {"prompt", "userpromptsubmit", "userpromptsubmitted"}:
+                return "UserPromptSubmit"
+            return stripped
     return "PreToolUse"
 
 
@@ -57,9 +61,10 @@ def _native_availability(
 
     from ..native_hook_render import native_hook_availability
 
-    resident = native_hook_availability(payload, guard_home=guard_home, deadline=deadline)
-    if isinstance(resident, Mapping):
-        return dict(resident)
+    if guard_home is not None:
+        resident = native_hook_availability(payload, guard_home=guard_home, deadline=deadline)
+        if isinstance(resident, Mapping):
+            return dict(resident)
     return _runtime_availability(payload, deadline=deadline)
 
 
@@ -84,7 +89,11 @@ def hook_event_pauses_when_unavailable(
 
     native = _native_availability({"event": event_name}, guard_home=guard_home, deadline=deadline)
     pauses = native.get("pauses") if native is not None else None
-    return pauses if isinstance(pauses, bool) else True
+    if isinstance(pauses, bool):
+        return pauses
+    from .hook_fail_closed import _event_kind
+
+    return _event_kind(event_name) != "lifecycle"
 
 
 def hook_event_is_permission_request(
