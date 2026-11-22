@@ -6,7 +6,8 @@ use std::path::Path;
 
 use serde_json::{Map, Value};
 
-use super::{http_get_json, GUARD_DAEMON_COMPATIBILITY_VERSION, REQUIRED_DAEMON_TABLES};
+use super::http::http_get_json;
+use super::{GUARD_DAEMON_COMPATIBILITY_VERSION, REQUIRED_DAEMON_TABLES};
 
 /// `daemon_state_matches_current_runtime` (runtime_peer.py:105-:135).
 pub(crate) fn daemon_state_matches_current_runtime(payload: &Map<String, Value>) -> bool {
@@ -70,7 +71,7 @@ pub(crate) fn daemon_healthz_details_match(
 }
 
 /// Accept a newer Desktop-owned daemon when it is compatible with this runtime.
-fn daemon_state_matches_compatible_runtime(payload: &Map<String, Value>) -> bool {
+pub(crate) fn daemon_state_matches_compatible_runtime(payload: &Map<String, Value>) -> bool {
     if payload.get("source_root").is_none() {
         return daemon_state_matches_current_runtime(payload);
     }
