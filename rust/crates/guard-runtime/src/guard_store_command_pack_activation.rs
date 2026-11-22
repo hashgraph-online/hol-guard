@@ -41,7 +41,7 @@ pub(crate) fn read(connection: &Connection) -> StoreResult<Value> {
         &[],
     )?;
     let Some(version) = marker.as_ref().and_then(compatible_version) else {
-        return Ok(state("schema_invalid"));
+        return Ok(refused("native_command_pack_schema_invalid"));
     };
     if version < FIRST_PACK_SCHEMA_VERSION {
         return Ok(state("absent"));
@@ -55,7 +55,7 @@ pub(crate) fn read(connection: &Connection) -> StoreResult<Value> {
         &[],
     )?;
     let Some(slot) = slot else {
-        return Ok(state("missing"));
+        return Ok(refused("native_command_pack_activation_missing"));
     };
     let row: Map<String, Value> = SLOT_FIELDS
         .iter()
@@ -71,6 +71,11 @@ pub(crate) fn read(connection: &Connection) -> StoreResult<Value> {
 
 fn state(name: &str) -> Value {
     json!({"state": name})
+}
+
+/// A slot the callers must refuse, named by the error code they raise.
+fn refused(code: &str) -> Value {
+    json!({"state": "refused", "code": code})
 }
 
 /// The marker's version when it carries an integer version and the checksum

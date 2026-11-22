@@ -28,18 +28,15 @@ def prepare_directory_for_store(store):
 
 
 _SLOT_FIELDS = ("revision", "record_json", "record_digest", "record_mac", "recorded_at")
-_SLOT_ERRORS = {
-    "schema_invalid": "native_command_pack_schema_invalid",
-    "missing": "native_command_pack_activation_missing",
-}
+_SLOT_REFUSALS = frozenset({"native_command_pack_schema_invalid", "native_command_pack_activation_missing"})
 
 
 def read_slot(store):
     """The stored activation slot, read by the native store, or None before the pack schema.
 
     The row is returned unauthenticated; callers verify it with their key.
-    The native read decides the state. This only turns its four states into
-    the errors the Python callers already raise and refuses any other answer
+    The native read decides the state and names the error code of a slot the
+    callers must refuse. This raises that code and refuses any other answer
     shape, because the record it hands on gates which command packs run.
     """
     method = "read_command_pack_activation"
@@ -49,8 +46,9 @@ def read_slot(store):
         raise NativePolicySnapshotError(f"native {method} returned no answer")
     if state == "absent" and set(answer) == {"state"}:
         return None
-    if state in _SLOT_ERRORS and set(answer) == {"state"}:
-        raise NativePolicySnapshotError(_SLOT_ERRORS[state])
+    code = answer.get("code") if state == "refused" and set(answer) == {"state", "code"} else None
+    if code in _SLOT_REFUSALS:
+        raise NativePolicySnapshotError(code)
     row = answer.get("row") if state == "present" and set(answer) == {"state", "row"} else None
     if not isinstance(row, dict) or set(row) != set(_SLOT_FIELDS) or not _slot_types(row):
         raise NativePolicySnapshotError(f"native {method} returned no answer")

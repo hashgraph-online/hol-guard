@@ -137,11 +137,6 @@ def activation_slot_call(connect):
     from codex_plugin_scanner.guard.catalog_delivery.activation_store import _row
     from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 
-    states = {
-        "native_command_pack_schema_invalid": "schema_invalid",
-        "native_command_pack_activation_missing": "missing",
-    }
-
     def call(method, args):
         assert method == "read_command_pack_activation" and args == {}
         with connect() as connection:
@@ -152,7 +147,7 @@ def activation_slot_call(connect):
             try:
                 row = _row(connection)
             except NativePolicySnapshotError as error:
-                return {"state": states[str(error)]}
+                return {"state": "refused", "code": str(error)}
         if row is None:
             return {"state": "absent"}
         fields = ("revision", "record_json", "record_digest", "record_mac", "recorded_at")
