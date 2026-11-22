@@ -88,3 +88,23 @@ def test_availability_response_uses_the_native_renderer(monkeypatch, tmp_path: P
             "deadline": 12.0,
         }
     ]
+
+
+def test_availability_response_does_not_retry_native_outage_render(monkeypatch, tmp_path: Path) -> None:
+    calls: list[object] = []
+
+    def render(*args: object, **kwargs: object):
+        calls.append((args, kwargs))
+        return None
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_render.native_render_cli", render)
+    response = availability_harness_response(
+        harness="cursor",
+        event_name="PreToolUse",
+        reason_code="native_pre_tool_unavailable",
+        reason="Native review unavailable.",
+        guard_home=tmp_path,
+        deadline=12.0,
+    )
+    assert response["policy_action"] == "block"
+    assert len(calls) == 1
