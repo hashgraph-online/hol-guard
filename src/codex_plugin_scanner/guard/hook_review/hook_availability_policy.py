@@ -135,6 +135,7 @@ def availability_harness_response(
     reason_code: str,
     reason: str,
     prompt_reason: str | None = None,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
     """Fixed harness result when native review is unavailable.
 
@@ -146,7 +147,12 @@ def availability_harness_response(
     from .hook_fail_closed import fail_closed_response
 
     return fail_closed_response(
-        harness, event_name, reason=reason, reason_code=reason_code, prompt_reason=prompt_reason
+        harness,
+        event_name,
+        reason=reason,
+        reason_code=reason_code,
+        prompt_reason=prompt_reason,
+        guard_home=guard_home,
     )
 
 

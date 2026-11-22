@@ -300,6 +300,7 @@ def fail_closed_response(
     reason: str = RENDER_UNAVAILABLE_REASON,
     reason_code: str = RENDER_UNAVAILABLE_REASON_CODE,
     prompt_reason: str | None = None,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
     """Fixed response when the resident cannot answer a hook.
 
@@ -309,6 +310,22 @@ def fail_closed_response(
     or the posture, and nothing here ever authorizes an action.
     """
 
+    if guard_home is not None:
+        from ..hook_failure_bridge import native_hook_failure
+
+        native = native_hook_failure(
+            harness,
+            event_name,
+            prompt_reason if _event_kind(event_name) == "prompt" and prompt_reason else reason,
+        )
+        if native is not None:
+            document, _exit_code = native
+            try:
+                decoded = json.loads(document)
+            except (TypeError, ValueError):
+                decoded = None
+            if isinstance(decoded, dict):
+                return decoded
     kind = _event_kind(event_name)
     if kind == "prompt":
         reason = prompt_reason or PROMPT_UNAVAILABLE_REASON
