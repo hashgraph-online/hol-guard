@@ -208,6 +208,7 @@ mod pip_reads;
 mod piped_group;
 mod pnpm_reads;
 mod postgres_reads;
+mod preference_reads;
 mod printf_words;
 mod process_stops;
 mod pytest_contained;
