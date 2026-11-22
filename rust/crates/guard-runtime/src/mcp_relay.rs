@@ -5,11 +5,10 @@
 //! with the scrubbed environment, and relays JSON-RPC between the host on
 //! stdio and the child without a Python process or per-frame resident round
 //! trips. Every `tools/call` is decided in one round trip to the resident's
-//! `mcp_relay_decide` op, and anything it does not decide is blocked. A
-//! session that needs a feature the relay has not ported yet never reaches
-//! that point: at startup the relay hands it to the Python proxy
-//! (`mcp_relay_lane`), so installers select the relay wherever the runtime
-//! advertises it. Any other lane that is not ready keeps the session native.
+//! `mcp_relay_decide` op, and anything it does not decide is blocked. A lane
+//! that is not ready at startup keeps the session native as well
+//! (`mcp_relay_lane`): its first call waits for a lane the daemon is still
+//! preparing, and each call the lane cannot decide is refused.
 //!
 //! The child session runs in its own process group on unix and in a
 //! kill-on-close JobObject on Windows.
@@ -34,9 +33,7 @@ mod session {
         child_response_timeout, inline_approval_timeout, ChildLink, Relay, RelayExit,
     };
     use crate::mcp_relay_host::LineHost;
-    use crate::mcp_relay_lane::{
-        hand_off, hands_off, note, startup, DaemonKick, Gate, STARTUP_BUDGET,
-    };
+    use crate::mcp_relay_lane::{note, startup, DaemonKick, Gate, STARTUP_BUDGET};
     use crate::mcp_relay_launch::{inherited_environment, prepare, spawn};
     use crate::mcp_relay_resident::{ProcessFacts, ResidentRelayAuthority};
 
@@ -71,8 +68,8 @@ mod session {
             Err(reason) => return fail(&reason, 1),
         };
         let mut authority = ResidentRelayAuthority::new(&args, &launch, &ProcessFacts::current());
-        // Before any stdin byte is read or the child exists: a session the
-        // lane cannot serve runs as the Python proxy, on untouched stdio.
+        // Before any stdin byte is read or the child exists, so a session
+        // whose lane the daemon is still preparing starts warming.
         let workspace = authority.lane_workspace().unwrap_or_default().to_owned();
         let mut kick = DaemonKick::new(&args, python_argv, std::path::Path::new(&workspace));
         let gate = startup(
@@ -81,11 +78,7 @@ mod session {
             STARTUP_BUDGET,
         );
         note(&gate);
-        let warming = match gate {
-            Gate::NotReady(code) if hands_off(&code) => return hand_off(python_argv),
-            Gate::NotReady(_) => true,
-            Gate::Relay { .. } => false,
-        };
+        let warming = matches!(gate, Gate::NotReady(_));
         let authority = authority.with_kick(Box::new(kick)).warming(warming);
         let mut child = match spawn(&args, &launch) {
             Ok(child) => child,
