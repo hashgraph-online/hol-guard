@@ -150,6 +150,9 @@ class StoreCloudEventsMixin:
         oauth_changed = _is_oauth_credentials_key(state_key)
         args = {"state_key": state_key, "payload": _payload_arg(payload), "now": now}
         if not oauth_changed:
+            if not _fits_native_request(payload):
+                self._write_oversized_sync_payload(state_key, payload, now)
+                return
             self._native_store_call("set_sync_payload", args)
             return
         self._clear_oauth_secret_payload_cache()
@@ -157,6 +160,23 @@ class StoreCloudEventsMixin:
         from .review_event_wake import review_event_wake_signal
 
         review_event_wake_signal(self.path).notify()
+
+    def _write_oversized_sync_payload(
+        self, state_key: str, payload: Mapping[str, object] | Sequence[object], now: str
+    ) -> None:
+        # An AIBOM inventory may hold more rows than one native store request
+        # accepts, so a payload past those limits is written here instead.
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into sync_state (state_key, payload_json, updated_at)
+                values (?, ?, ?)
+                on conflict(state_key) do update set
+                  payload_json = excluded.payload_json,
+                  updated_at = excluded.updated_at
+                """,
+                (state_key, json.dumps(payload), now),
+            )
 
     def insert_sync_payload_if_absent(self, state_key: str, payload: Mapping[str, object], now: str) -> None:
         """Store ``payload`` only when ``state_key`` has no row; an existing row always wins."""
@@ -467,6 +487,32 @@ def _is_oauth_credentials_key(state_key: str) -> bool:
     return state_key == _OAUTH_LOCAL_CREDENTIALS_STATE_KEY or state_key.startswith(
         _OAUTH_LOCAL_CREDENTIALS_STATE_KEY + ":"
     )
+
+
+# The native store request parser refuses a JSON collection wider than this
+# and a request larger than 4 MiB; the byte bound leaves room for the envelope.
+_NATIVE_COLLECTION_WIDTH = 4096
+_NATIVE_PAYLOAD_BYTES = 3 * 1024 * 1024
+
+
+def _fits_native_request(payload: object) -> bool:
+    """Whether one native store request can carry ``payload``."""
+
+    if len(json.dumps(payload, separators=(",", ":")).encode("utf-8")) > _NATIVE_PAYLOAD_BYTES:
+        return False
+    pending: list[object] = [payload]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, Mapping):
+            children = list(value.values())
+        elif isinstance(value, (list, tuple)):
+            children = list(value)
+        else:
+            continue
+        if len(children) > _NATIVE_COLLECTION_WIDTH:
+            return False
+        pending.extend(children)
+    return True
 
 
 def _payload_arg(payload: Mapping[str, object] | Sequence[object]) -> object:

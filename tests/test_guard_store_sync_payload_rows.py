@@ -69,3 +69,12 @@ def test_deletes_remove_the_named_rows_and_count_them(tmp_path: Path, monkeypatc
     assert store.get_sync_payload("b") is None
     assert store.get_sync_payload(_CREDENTIALS) is None
     assert store.get_sync_payload("c") == {}
+
+
+def test_a_payload_wider_than_one_native_request_still_saves(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    rows = [{"id": index} for index in range(5_000)]
+
+    store.set_sync_payload("aibom_inventory", {"rows": rows}, _NOW)
+
+    assert store.get_sync_payload("aibom_inventory") == {"rows": rows}
