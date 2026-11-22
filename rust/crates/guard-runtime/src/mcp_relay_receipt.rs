@@ -56,7 +56,7 @@ mod package;
 #[path = "mcp_relay_receipt_record.rs"]
 mod record;
 #[path = "mcp_relay_receipt_remember.rs"]
-mod remember;
+pub(crate) mod remember;
 #[path = "mcp_relay_receipt_row.rs"]
 mod row;
 
