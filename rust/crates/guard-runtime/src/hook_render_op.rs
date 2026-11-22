@@ -418,6 +418,13 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
 fn render_edge(request: &HookRenderRequestV1) -> Result<Object, &'static str> {
     let harness = request.harness.as_str();
     match request.kind.as_str() {
+        "accepted_allow" => {
+            let verdict =
+                object_of(request.verdict.as_ref()).ok_or("native_hook_render_invalid")?;
+            let mut response = pre_tool(harness, verdict);
+            response.insert("approval_reuse_status".into(), json!("accepted"));
+            Ok(response)
+        }
         "pre_tool" => {
             let verdict =
                 object_of(request.verdict.as_ref()).ok_or("native_hook_render_invalid")?;
