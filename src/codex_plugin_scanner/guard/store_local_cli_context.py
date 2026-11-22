@@ -52,25 +52,6 @@ def ensure_local_cli_context_columns(connection: sqlite3.Connection) -> None:
             connection.execute(f"alter table local_cli_observation add column {column} text")
 
 
-def note_capability_cause(connection: sqlite3.Connection, *, cli_id: str, identity_hash: str, cause: str) -> int:
-    """Keep that an allowed CLI's contained run was denied what ``cause`` names.
-
-    The newest denial wins, so the connector points at the capability the last
-    run lacked. Nothing here turns a capability on. Returns how many rows
-    changed.
-    """
-
-    if cause not in CAPABILITY_BY_CAUSE:
-        raise ValueError("invalid_first_blocked_cause")
-    cursor = connection.execute(
-        """update local_cli_observation set first_blocked_cause = ?
-            where cli_id = ? and identity_hash = ? and surface = 'cli'
-              and first_blocked_cause is not ?""",
-        (cause, cli_id, identity_hash, cause),
-    )
-    return cursor.rowcount
-
-
 def _column_names(connection: sqlite3.Connection, table: str) -> set[str]:
     names: set[str] = set()
     for row in connection.execute(f"pragma table_info({table})").fetchall():
@@ -85,5 +66,4 @@ __all__ = [
     "MAX_LABEL_CHARS",
     "MAX_SUMMARY_CHARS",
     "ensure_local_cli_context_columns",
-    "note_capability_cause",
 ]

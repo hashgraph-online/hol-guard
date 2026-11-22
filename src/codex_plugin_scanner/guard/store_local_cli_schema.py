@@ -42,6 +42,19 @@ class LocalCliSchemaError(ValueError):
         self.supported_version = supported_version
 
 
+def local_cli_schema_is_current(connection: sqlite3.Connection) -> bool:
+    """Whether the store records this build's local CLI migration marker.
+
+    The native local CLI methods read columns only that migration adds, so an
+    older or missing marker sends the store through the initializer that runs it.
+    """
+
+    marker = connection.execute(
+        "select version, checksum from local_cli_schema_migration where singleton = 1"
+    ).fetchone()
+    return marker is not None and tuple(marker) == (LOCAL_CLI_SCHEMA_VERSION, _SCHEMA_CHECKSUM)
+
+
 def ensure_local_cli_schema(connection: sqlite3.Connection, *, for_read: bool = False) -> None:
     if for_read:
         exists = connection.execute(

@@ -29,6 +29,7 @@ from .store_extension_control_authority import StoreExtensionControlAuthorityMix
 from .store_cloud_review_settings import StoreCloudReviewSettingsMixin
 from .store_cloud_status_rows import StoreCloudStatusRowsMixin
 from .store_oauth_sign_in_stamp import StoreOAuthSignInStampMixin
+from .store_command_queue_lanes import StoreCommandQueueLanesMixin
 from .store_worker_host import StoreWorkerHostMixin
 from .store_aibom_state import StoreAibomStateMixin
 from .store_policy_trust_rows import StorePolicyTrustRowsMixin
@@ -94,6 +95,7 @@ class GuardStore(
     StoreCloudReviewSettingsMixin,
     StoreCloudStatusRowsMixin,
     StoreOAuthSignInStampMixin,
+    StoreCommandQueueLanesMixin,
     StoreWorkerHostMixin,
     StoreAibomStateMixin,
     StorePolicyTrustRowsMixin,
