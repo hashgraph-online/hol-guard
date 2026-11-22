@@ -27,6 +27,7 @@ from .store_event_receipts import StoreEventReceiptsMixin
 from .store_exact_cloud_local_once import StoreExactCloudLocalOnceMixin
 from .store_extension_control_authority import StoreExtensionControlAuthorityMixin
 from .store_cloud_review_settings import StoreCloudReviewSettingsMixin
+from .store_cloud_status_rows import StoreCloudStatusRowsMixin
 from .store_worker_host import StoreWorkerHostMixin
 from .store_aibom_state import StoreAibomStateMixin
 from .store_policy_trust_rows import StorePolicyTrustRowsMixin
@@ -90,6 +91,7 @@ class GuardStore(
     StoreCloudEventsMixin,
     StoreFleetPostureStateMixin,
     StoreCloudReviewSettingsMixin,
+    StoreCloudStatusRowsMixin,
     StoreWorkerHostMixin,
     StoreAibomStateMixin,
     StorePolicyTrustRowsMixin,

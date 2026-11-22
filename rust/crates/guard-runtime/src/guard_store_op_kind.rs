@@ -128,6 +128,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "hook_managed_install_admission"
         // The bundle and every row it is judged against, as one view.
         | "policy_bundle_trust_rows"
+        // The Guard Cloud status rows, read as one view.
+        | "cloud_status_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the

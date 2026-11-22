@@ -80,6 +80,7 @@ from .runtime.protection_health_runtime import build_runtime_protection_health
 from .store import (
     GuardStore,
 )
+from .store_cloud_status_rows import CloudStatusRows
 from .synced_policy import synced_policy_bundle_validation
 from .temporary_mcp_approvals import (
     TemporaryMcpGrantSelection,
@@ -1412,13 +1413,14 @@ def _build_runtime_cloud_context(
     connect_retry_required = connect_retry_required_from_state(latest_connect_state)
     connect_retry_refresh_race = connect_retry_refresh_race_from_state(latest_connect_state)
     sync_url = cloud_profile["sync_url"] if cloud_profile is not None else None
-    sync_summary = store.get_sync_payload("sync_summary") or {}
-    alert_preferences = store.get_sync_payload("alert_preferences") or {}
+    status_rows = store.cloud_status_rows()
+    sync_summary = status_rows.sync_summary
+    alert_preferences = status_rows.alert_preferences
     policy_bundle, cached_policy_bundle_error = synced_policy_bundle_validation(store)
     policy_bundle = policy_bundle or {}
     policy_defaults = policy_bundle.get("policyDefaults")
     remote_policy = policy_defaults if isinstance(policy_defaults, dict) else {}
-    policy_bundle_last_error = _sync_payload_dict(store, "policy_bundle_last_error")
+    policy_bundle_last_error = status_rows.policy_bundle_last_error
     remote_payload_active = any((sync_summary, remote_policy, alert_preferences))
     cloud_state = resolve_guard_cloud_state(
         sync_configured=cloud_profile is not None,
@@ -1430,6 +1432,7 @@ def _build_runtime_cloud_context(
     cloud_status = _runtime_cloud_status(
         store,
         latest_connect_state,
+        status_rows,
         cloud_state=cloud_state,
         sync_configured=cloud_profile is not None,
         oauth_repair_required=oauth_repair_required,
@@ -1483,6 +1486,7 @@ def _build_runtime_cloud_context(
 def _runtime_cloud_status(
     store: GuardStore,
     latest_connect_state: dict[str, object] | None,
+    status_rows: CloudStatusRows,
     *,
     cloud_state: str,
     sync_configured: bool,
@@ -1501,7 +1505,7 @@ def _runtime_cloud_status(
     from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 
     pending_events = store.count_guard_events_v1(uploaded=False)
-    event_summary = _sync_payload_dict(store, "guard_events_v1_summary")
+    event_summary = status_rows.guard_events_v1_summary
     proof = _connect_state_proof(latest_connect_state.get("proof") if latest_connect_state is not None else None)
     reply: object = None
     try:
@@ -1519,8 +1523,8 @@ def _runtime_cloud_status(
                 "event_summary": {key: event_summary[key] for key in _EVENT_SUMMARY_FIELDS if key in event_summary},
                 "synced_at": [
                     event_summary.get("synced_at"),
-                    _sync_payload_dict(store, "sync_summary").get("synced_at"),
-                    _sync_payload_dict(store, "runtime_session_summary").get("synced_at"),
+                    status_rows.sync_summary.get("synced_at"),
+                    status_rows.runtime_session_summary.get("synced_at"),
                 ],
                 "policy_ack": policy_ack,
                 "sync_url": sync_url,
