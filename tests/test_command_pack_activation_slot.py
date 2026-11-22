@@ -34,15 +34,9 @@ def test_a_store_before_the_pack_schema_has_no_slot():
     assert calls == [("read_command_pack_activation", {})]
 
 
-@pytest.mark.parametrize(
-    ("state", "code"),
-    [
-        ("schema_invalid", "native_command_pack_schema_invalid"),
-        ("missing", "native_command_pack_activation_missing"),
-    ],
-)
-def test_a_broken_slot_raises_its_own_code(state, code):
-    store, _ = _store({"state": state})
+@pytest.mark.parametrize("code", ["native_command_pack_schema_invalid", "native_command_pack_activation_missing"])
+def test_a_broken_slot_raises_its_own_code(code):
+    store, _ = _store({"state": "refused", "code": code})
     with pytest.raises(NativePolicySnapshotError, match=f"^{code}$"):
         activation_store.read_slot(store)
 
@@ -63,7 +57,10 @@ def test_a_present_slot_comes_back_as_stored():
         {"state": {}},
         {"state": None},
         {"state": "absent", "row": dict(ROW)},
-        {"state": "missing", "extra": 1},
+        {"state": "missing"},
+        {"state": "refused"},
+        {"state": "refused", "code": "native_other"},
+        {"state": "refused", "code": "native_command_pack_activation_missing", "extra": 1},
         {"state": "present"},
         {"state": "present", "row": None},
         {"state": "present", "row": {**ROW, "extra": 1}},

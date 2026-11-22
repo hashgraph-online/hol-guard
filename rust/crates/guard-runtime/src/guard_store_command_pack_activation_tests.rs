@@ -103,7 +103,7 @@ fn an_unknown_or_forged_marker_is_invalid() {
         mark(&connection, version, &checksum);
         assert_eq!(
             read(&connection).expect("read"),
-            json!({"state": "schema_invalid"}),
+            json!({"state": "refused", "code": "native_command_pack_schema_invalid"}),
             "{version}"
         );
     }
@@ -114,7 +114,7 @@ fn an_unknown_or_forged_marker_is_invalid() {
         .expect("clear");
     assert_eq!(
         read(&empty).expect("read"),
-        json!({"state": "schema_invalid"})
+        json!({"state": "refused", "code": "native_command_pack_schema_invalid"})
     );
 }
 
@@ -124,12 +124,12 @@ fn an_empty_or_malformed_slot_is_missing() {
     mark(&connection, 6, &schema_checksum(6));
     assert_eq!(
         read(&connection).expect("read"),
-        json!({"state": "missing"})
+        json!({"state": "refused", "code": "native_command_pack_activation_missing"})
     );
     slot(&connection, "{}", "short");
     assert_eq!(
         read(&connection).expect("read"),
-        json!({"state": "missing"})
+        json!({"state": "refused", "code": "native_command_pack_activation_missing"})
     );
 }
 
