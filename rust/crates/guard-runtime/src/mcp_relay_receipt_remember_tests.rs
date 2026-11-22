@@ -1,0 +1,118 @@
+use std::path::Path;
+
+use base64ct::{Base64UrlUnpadded, Encoding};
+use rusqlite::Connection;
+use serde_json::{json, Value};
+
+use crate::encrypted_secret_store::EncryptedFileSecretStore;
+use crate::guard_store_cmd_vectors_tests::temp_home;
+use crate::guard_store_policy_upsert::tests::SCHEMA;
+use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
+use crate::mcp_relay_receipt::tests::record;
+use crate::mcp_relay_receipt::{is_plain, write};
+use crate::policy_integrity_resolver::{
+    build_scoped_secret_ref, load_policy_integrity_control_state, POLICY_INTEGRITY_KEY_REF,
+};
+
+/// The record an inline-approved forward leaves when the relay remembers it.
+fn remembered() -> Value {
+    let mut record = record("forward", "inline-approved", "allow");
+    record["remember"] = json!(true);
+    record
+}
+
+fn store_home(tag: &str, keyed: bool) -> std::path::PathBuf {
+    let (receipts, inventory) = vectors();
+    let home = temp_home(tag);
+    build_database(&home.join("guard.db"), &receipts, &inventory);
+    Connection::open(home.join("guard.db"))
+        .unwrap()
+        .execute_batch(SCHEMA)
+        .unwrap();
+    if keyed {
+        let key: Vec<u8> = (0u8..32).collect();
+        EncryptedFileSecretStore::new(&home)
+            .set_secret(
+                &build_scoped_secret_ref(POLICY_INTEGRITY_KEY_REF, &home),
+                &Base64UrlUnpadded::encode_string(&key),
+            )
+            .unwrap();
+    }
+    home
+}
+
+fn saved_allows(home: &Path) -> Vec<(String, String, String, Option<String>)> {
+    let connection = Connection::open(home.join("guard.db")).unwrap();
+    let mut statement = connection
+        .prepare(
+            "select artifact_id, action, source, integrity_key_id from policy_decisions \
+             where scope = 'artifact' order by decision_id",
+        )
+        .unwrap();
+    statement
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+#[test]
+fn only_an_inline_approved_forward_may_remember() {
+    assert!(is_plain(&remembered()));
+    let mut refused = record("block", "inline-denied", "review");
+    refused["remember"] = json!(true);
+    assert!(!is_plain(&refused));
+    let mut policy = record("forward", "policy", "allow");
+    policy["remember"] = json!(true);
+    assert!(!is_plain(&policy));
+    let mut malformed = remembered();
+    malformed["remember"] = json!("yes");
+    assert!(!is_plain(&malformed));
+}
+
+#[test]
+fn a_remembered_forward_saves_a_signed_allow_then_its_receipt() {
+    let home = store_home("relay-remember-signed", true);
+    let before = count(&home, "runtime_receipts");
+
+    let unwritten = write(home.to_str().unwrap(), vec![remembered()]);
+
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 1);
+    let allows = saved_allows(&home);
+    assert_eq!(allows.len(), 1, "{allows:?}");
+    let (artifact_id, action, source, key_id) = &allows[0];
+    assert_eq!(artifact_id, "codex:project:shell:run_command");
+    assert_eq!(action, "allow");
+    assert_eq!(source, "runtime-inline");
+    assert!(key_id.is_some(), "the allow must be signed");
+    let control =
+        load_policy_integrity_control_state(&mut EncryptedFileSecretStore::new(&home), &home)
+            .expect("finalized control state");
+    assert_eq!(control["generation"], json!(1));
+    assert!(control["pending_generation"].is_null(), "{control}");
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn without_a_key_the_receipt_is_still_written() {
+    let home = store_home("relay-remember-unkeyed", false);
+    let before = count(&home, "runtime_receipts");
+
+    let unwritten = write(home.to_str().unwrap(), vec![remembered()]);
+
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 1);
+    assert!(saved_allows(&home).is_empty());
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_home_without_a_store_hands_back_the_remembering_record() {
+    let home = temp_home("relay-remember-no-store");
+    let unwritten = write(home.to_str().unwrap(), vec![remembered()]);
+    assert_eq!(unwritten, [remembered()]);
+    let _ = std::fs::remove_dir_all(&home);
+}
