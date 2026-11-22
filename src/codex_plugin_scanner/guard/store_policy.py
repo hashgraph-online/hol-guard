@@ -51,7 +51,11 @@ from .artifact_identity import scoped_policy_artifact_key
 from .native_approval_proof import approval_reuse_claim_disposition as native_claim_disposition
 from .native_execution import _resident_request
 from .native_memory_pattern import memory_pattern_verdict
-from .native_policy_presence import extension_control_authority_base, policy_row_presence
+from .native_policy_presence import (
+    NativePolicyPresenceError,
+    extension_control_authority_base,
+    policy_row_presence,
+)
 from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NativePolicySnapshotError
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from .native_policy_snapshot_windows_support import _runtime_state_directory
@@ -1273,7 +1277,18 @@ class StorePolicyMixin:
         if artifact_id is None:
             return None, None
         current_time = _canonical_utc_timestamp(now or _now())
-        if not policy_row_presence(self).any_saved:
+        try:
+            has_saved_rows = policy_row_presence(self).any_saved
+        except (NativePolicyPresenceError, sqlite3.Error) as error:
+            # Without an answer the store may hold saved rows, so the miss
+            # fails closed like an unavailable diagnosis below.
+            _LOGGER.warning(
+                "%s: saved-row presence unavailable; treating the saved allow as rejected (%s)",
+                error,
+                APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON,
+            )
+            return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None
+        if not has_saved_rows:
             return None, None
         self._provision_resident_verifier()
 
