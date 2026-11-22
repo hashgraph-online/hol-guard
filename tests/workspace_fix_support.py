@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -10,7 +11,6 @@ import pytest
 
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.workspace_assessment_reads import _run_payload
 
 
 def admit_worktree(
@@ -142,4 +142,25 @@ def get_run(store: GuardStore, run_id: str) -> dict[str, object] | None:
             """,
             (run_id,),
         ).fetchone()
-    return _run_payload(row) if row is not None else None
+    if row is None:
+        return None
+    names = (
+        "run_id",
+        "codebase_key",
+        "worktree_key",
+        "snapshot_digest",
+        "kind",
+        "trigger_kind",
+        "state",
+        "dirty_generation",
+        "coverage",
+        "findings",
+        "error_code",
+        "created_at_ms",
+        "started_at_ms",
+        "finished_at_ms",
+    )
+    run = dict(zip(names, row, strict=True))
+    run["coverage"] = json.loads(str(run["coverage"]))
+    run["findings"] = json.loads(str(run["findings"]))
+    return run
