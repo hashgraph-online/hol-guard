@@ -60,7 +60,7 @@ from .store_command_activity_maintenance_schema import ensure_command_activity_m
 from .store_command_activity_schema import ensure_command_activity_schema
 from .store_command_shadow_schema import ensure_command_shadow_schema
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_local_cli_schema import ensure_local_cli_schema, local_cli_schema_marker
+from .store_local_cli_schema import ensure_local_cli_schema, local_cli_schema_is_current
 from .store_receipt_rollup_schema import request_receipt_rollup_rebuild
 from .store_resume import ensure_resume_schema
 from .store_review_event_outbox_schema import ensure_review_event_outbox_schema
@@ -1346,20 +1346,13 @@ class StoreConnectionSchemaMixin:
                         "continuation_snapshot_json",
                         "extension_allow_hint_json",
                     }
-                    # The native local CLI methods read columns only the local
-                    # CLI migration adds, so an older marker sends the store
-                    # through the serialized initializer that runs it.
-                    local_cli_marker = connection.execute(
-                        "select version, checksum from local_cli_schema_migration where singleton = 1"
-                    ).fetchone()
                     return (
                         row is not None
                         and int(row[0]) == len(_REQUIRED_SCHEMA_MIGRATION_VERSIONS)
                         and storage_row is not None
                         and "oauth_source" in approval_columns
                         and required_approval_columns <= approval_columns
-                        and local_cli_marker is not None
-                        and tuple(local_cli_marker) == local_cli_schema_marker()
+                        and local_cli_schema_is_current(connection)
                     )
                 finally:
                     connection.close()
