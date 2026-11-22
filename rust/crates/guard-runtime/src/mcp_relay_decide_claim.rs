@@ -291,12 +291,7 @@ fn after_claim(
         // `_queue_approval_center_response`, straight to the queue: the
         // proxy raises no native prompt or inline elicitation here.
         Routed::Queue { policy_action } => {
-            let mode = context
-                .admitted
-                .binding
-                .review
-                .blocked_request_mode
-                .as_deref();
+            let mode = context.admitted.blocked_request_mode();
             if mode == Some(ASK_MODE) {
                 let prepared = ask::prepare(
                     &context.request,

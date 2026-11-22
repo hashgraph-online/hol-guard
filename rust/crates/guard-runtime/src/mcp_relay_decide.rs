@@ -173,6 +173,7 @@ struct Admitted {
     workspace: String,
     snapshot: Arc<AdmittedPolicySnapshot>,
     binding: Arc<DirectLaneBinding>,
+    session: session_config::SessionSettings,
 }
 
 /// A decision that forwards only once its saved approval is claimed.
@@ -447,7 +448,7 @@ fn decide(
     let written = store::write_audit(&request.guard_home, &audit);
     let (mut resolved, legged) = resolved?;
     written?;
-    let asks = admitted.binding.review.blocked_request_mode.as_deref() == Some(ASK_MODE);
+    let asks = admitted.blocked_request_mode() == Some(ASK_MODE);
     // A package call is answered by its own lane, under the package policy and
     // the tool authority together, so none of the tool-only route below runs
     // for it. The inline elicitation that route raises first under `ask` is
@@ -497,7 +498,7 @@ fn decide(
     )?;
     if routed == Routed::ObserveForward {
         // `_observe_tool_forward` records the decision without the downgrade.
-        let mode = admitted.binding.review.blocked_request_mode.as_deref();
+        let mode = admitted.blocked_request_mode();
         let (routed, append) = observe::forward(mode, &resolved.decision)?;
         return settle(request, &resolved, routed, append, policy_store);
     }
@@ -571,7 +572,7 @@ fn decide(
             settle(request, &resolved, routed, None, policy_store)
         }
         Routed::Queue { policy_action } => {
-            let mode = admitted.binding.review.blocked_request_mode.as_deref();
+            let mode = admitted.blocked_request_mode();
             let routed = match mode {
                 // The row is written before the block is answered, as the
                 // proxy queues it before it replies to the client.
@@ -611,10 +612,17 @@ fn admit(
     if binding.evidence_drain != Some(true) {
         return Err(EVIDENCE_UNDRAINED);
     }
+    let session = session_config::session_settings(
+        &binding,
+        &request.build.harness,
+        &request.guard_home,
+        request.workspace.as_deref(),
+    );
     Ok(Admitted {
         workspace,
         snapshot,
         binding,
+        session,
     })
 }
 
@@ -826,7 +834,7 @@ fn settle_package(
                     policy_action: policy_action.clone(),
                 },
                 ToolLeg::Queue { policy_action } => {
-                    let mode = admitted.binding.review.blocked_request_mode.as_deref();
+                    let mode = admitted.blocked_request_mode();
                     match mode {
                         Some(ASK_MODE) => {
                             ask::queue(request, admitted, resolved, policy_action.clone())?
@@ -943,6 +951,8 @@ use resolve::resolve;
 mod saved;
 #[path = "mcp_relay_decide_session.rs"]
 mod session;
+#[path = "mcp_relay_decide_session_config.rs"]
+mod session_config;
 #[path = "mcp_relay_decide_store.rs"]
 pub(crate) mod store;
 #[path = "mcp_relay_decide_subject.rs"]
