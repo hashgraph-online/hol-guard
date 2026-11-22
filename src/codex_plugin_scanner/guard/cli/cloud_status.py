@@ -22,13 +22,7 @@ _SELF_TIMEOUT_SECONDS = 8
 
 
 def _last_sync_at(store: GuardStore) -> str | None:
-    summary = store.get_sync_payload("sync_summary")
-    if isinstance(summary, dict) and isinstance(summary.get("synced_at"), str):
-        return str(summary["synced_at"])
-    cursor = store.get_sync_payload("receipt_sync_cursor")
-    if isinstance(cursor, dict) and isinstance(cursor.get("synced_at"), str):
-        return str(cursor["synced_at"])
-    return None
+    return store.cloud_status_rows().last_sync_at
 
 
 def _section(parent: Mapping[str, Any], key: str) -> dict[str, Any]:

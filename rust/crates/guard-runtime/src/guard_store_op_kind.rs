@@ -41,6 +41,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "fleet_posture_cached_diagnostics"
         | "fleet_posture_cached_runtimes"
         | "cloud_review_settings_state"
+        | "cloud_status_rows"
         | "worker_refresh_status"
         | "repair_self_check_status"
         | "aibom_sync_schedule"

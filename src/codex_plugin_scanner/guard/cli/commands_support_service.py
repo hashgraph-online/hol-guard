@@ -75,6 +75,7 @@ def _guard_service_sync_failure_message(error: GuardSyncNotConfiguredError) -> s
 def _guard_service_status_payload(store: GuardStore) -> dict[str, object]:
     cloud_profile = store.get_cloud_sync_profile()
     service_profile = _guard_service_runtime_profile(store)
+    status_rows = store.cloud_status_rows()
     return {
         "configured": cloud_profile is not None and service_profile is not None,
         "connection": {
@@ -82,8 +83,8 @@ def _guard_service_status_payload(store: GuardStore) -> dict[str, object]:
             "sync_url": cloud_profile["sync_url"] if cloud_profile is not None else None,
         },
         "service": service_profile,
-        "runtime": store.get_sync_payload("runtime_session_summary") or {},
-        "receipts": store.get_sync_payload("sync_summary") or {},
+        "runtime": status_rows.runtime_session_summary,
+        "receipts": status_rows.sync_summary,
     }
 
 def _guard_service_sync_payload(store: GuardStore) -> dict[str, object]:

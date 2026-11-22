@@ -81,18 +81,11 @@ def _now() -> str:
     return now()
 
 
-def _latest_cloud_sync(store: GuardStore) -> dict[str, object]:
-    latest = store.get_sync_payload("headless_app_sync_summary")
-    if not isinstance(latest, dict):
-        latest = store.get_sync_payload("sync_summary")
-    return dict(latest) if isinstance(latest, dict) else {}
-
-
 def _reconnect_facts(store: GuardStore) -> dict[str, object]:
-    summary = store.get_sync_payload("runtime_session_summary")
-    runtime = summary if isinstance(summary, dict) else {}
+    status_rows = store.cloud_status_rows()
+    runtime = status_rows.runtime_session_summary
     return {
-        "latest_cloud_sync": _latest_cloud_sync(store),
+        "latest_cloud_sync": status_rows.latest_cloud_sync,
         "last_runtime_sync_at": _text(runtime.get("runtime_session_synced_at")) or _text(runtime.get("synced_at")),
         "local_guard_online_at": _text(runtime.get("local_guard_online_at")),
         "daemon_id": _text(runtime.get("runtime_device_id")),
