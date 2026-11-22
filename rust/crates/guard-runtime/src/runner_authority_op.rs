@@ -166,7 +166,6 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "contained_denial_note" => crate::contained_denial_note::dispatch(args),
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),
-        "detector_debug_trace" => detector::trace::detector_debug_trace(args),
         "skill_content_risk" => detector::skill_content_risk(args),
         "current_authority_actions" => detector::current_authority_actions(args),
         "request_overrides" => detector::request_overrides(args),
@@ -326,6 +325,10 @@ fn evaluate(request: &RunnerAuthorityRequestV1) -> KindResult {
         "context_usage" => crate::context_usage_meter::dispatch(&request.args, &request.guard_home),
         // The Codex config switches take the Codex install lock as that home's owner.
         "codex_config" => crate::codex_config_switch::dispatch(&request.args, &request.guard_home),
+        // The detector debug trace is written under that home.
+        "detector_debug_trace" => {
+            detector::trace::detector_debug_trace(&request.args, &request.guard_home)
+        }
         "codex_live_hook_target" => {
             crate::codex_request_resume_live::dispatch_target(&request.args, &request.guard_home)
         }

@@ -52,10 +52,23 @@ def test_the_trace_inputs_go_to_the_native_writer(tmp_path: Path, monkeypatch: p
     assert _write(tmp_path) is None
     kind, args = seen[0]
     assert kind == "detector_debug_trace"
-    assert args["guard_home"] == str((tmp_path / "guard-home").resolve())
-    assert args["action"] == {"tool_name": "Bash", "prompt_excerpt": "kept out"}
+    assert "guard_home" not in args
+    assert args["action"] == {"tool_name": "Bash", "prompt_excerpt": "[redacted]"}
     assert args["signals"] == []
     assert args["telemetry"] == [_RESULT.telemetry[0].to_dict()]
+
+
+def test_the_served_home_is_the_one_the_resident_checks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    homes: list[object] = []
+
+    def native(_kind: str, _args: Mapping[str, Any], **kwargs: object) -> object:
+        homes.append(kwargs.get("guard_home"))
+        return {"trace_error": None}
+
+    monkeypatch.setattr(guard_run_evaluation, "native_runner_authority", native)
+
+    assert _write(tmp_path) is None
+    assert [Path(str(home)).resolve() for home in homes] == [(tmp_path / "guard-home").resolve()]
 
 
 def test_a_reported_write_failure_is_returned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

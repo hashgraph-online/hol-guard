@@ -26,6 +26,7 @@ from . import runner_native_authority as _authority
 from .actions import GuardActionEnvelope, redacted_workspace_label
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 
+_REDACTED = "[redacted]"
 _NO_TRACE_ANSWER = {
     "error_type": "NativeRunnerAuthorityError",
     "message": "native detector_debug_trace returned no answer",
@@ -201,12 +202,16 @@ def _write_detector_debug_trace(
 ) -> dict[str, object] | None:
     """Have the native runtime write the redacted trace; a failure is reported, never raised."""
 
+    # Prompt fields never reach the trace, so they are not sent either; the
+    # native writer still redacts the nested ones.
+    action = {
+        key: (_REDACTED if "prompt" in str(key).lower() else value) for key, value in action_envelope.to_dict().items()
+    }
     try:
         payload = native_runner_authority(
             "detector_debug_trace",
             {
-                "guard_home": str(config.guard_home.resolve()),
-                "action": action_envelope.to_dict(),
+                "action": action,
                 "signals": [signal.to_dict() for signal in result.signals],
                 "telemetry": [item.to_dict() for item in result.telemetry],
             },

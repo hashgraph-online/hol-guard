@@ -18,13 +18,20 @@ fn action() -> Value {
     })
 }
 
-fn args(guard_home: &Path) -> Value {
+fn args() -> Value {
     json!({
-        "guard_home": guard_home.to_str().expect("utf-8 path"),
         "action": action(),
         "signals": [{"signal_id": "s1"}],
         "telemetry": [{"detector_id": "d1", "status": "ok"}],
     })
+}
+
+fn home_text(guard_home: &Path) -> &str {
+    guard_home.to_str().expect("utf-8 path")
+}
+
+fn write(guard_home: &Path, args: &Value) -> KindResult {
+    detector_debug_trace(args, home_text(guard_home))
 }
 
 fn trace_files(guard_home: &Path) -> Vec<PathBuf> {
@@ -83,7 +90,7 @@ fn the_file_name_is_the_stamp_and_a_stable_action_digest() {
 fn the_kind_writes_one_redacted_trace() {
     let home = tempfile::tempdir().expect("tempdir");
     let guard_home = home.path().join("guard-home");
-    let answer = dispatch("detector_debug_trace", &args(&guard_home)).expect("answer");
+    let answer = write(&guard_home, &args()).expect("answer");
     assert_eq!(answer, json!({"trace_error": null}));
     let files = trace_files(&guard_home);
     assert_eq!(files.len(), 1);
@@ -109,7 +116,7 @@ fn the_kind_writes_one_redacted_trace() {
 fn a_debug_entry_that_is_a_file_is_reported_not_raised() {
     let home = tempfile::tempdir().expect("tempdir");
     fs::write(home.path().join("debug"), "not a directory").expect("write");
-    let answer = dispatch("detector_debug_trace", &args(home.path())).expect("answer");
+    let answer = write(home.path(), &args()).expect("answer");
     assert_eq!(answer["trace_error"]["error_type"], "FileExistsError");
     assert!(answer["trace_error"]["message"].is_string());
 }
@@ -119,18 +126,16 @@ fn a_detectors_entry_that_is_a_file_is_reported_not_raised() {
     let home = tempfile::tempdir().expect("tempdir");
     fs::create_dir(home.path().join("debug")).expect("debug dir");
     fs::write(home.path().join("debug").join("detectors"), "x").expect("write");
-    let answer = dispatch("detector_debug_trace", &args(home.path())).expect("answer");
+    let answer = write(home.path(), &args()).expect("answer");
     assert_eq!(answer["trace_error"]["error_type"], "FileExistsError");
 }
 
 #[test]
 fn malformed_arguments_are_refused() {
     let home = tempfile::tempdir().expect("tempdir");
-    let good = args(home.path());
+    let good = args();
     let mut cases = vec![json!(null), json!([]), json!({})];
     for (key, value) in [
-        ("guard_home", json!("relative/home")),
-        ("guard_home", json!(7)),
         ("action", json!([])),
         ("action", json!("text")),
         ("signals", json!({})),
@@ -140,19 +145,49 @@ fn malformed_arguments_are_refused() {
         case[key] = value;
         cases.push(case);
     }
-    for key in ["guard_home", "action", "signals", "telemetry"] {
+    for key in ["action", "signals", "telemetry"] {
         let mut case = good.clone();
         case.as_object_mut().expect("object").remove(key);
         cases.push(case);
     }
     for case in cases {
-        assert_eq!(
-            dispatch("detector_debug_trace", &case),
-            Err(ERR_INVALID),
-            "{case}"
-        );
+        assert_eq!(write(home.path(), &case), Err(ERR_INVALID), "{case}");
     }
+    assert_eq!(
+        detector_debug_trace(&good, "relative/home"),
+        Err(ERR_INVALID)
+    );
     assert!(!home.path().join("debug").exists());
+}
+
+#[test]
+fn the_trace_goes_under_the_verified_home_not_one_from_the_arguments() {
+    let served = tempfile::tempdir().expect("served home");
+    let elsewhere = tempfile::tempdir().expect("other home");
+    let mut case = args();
+    case["guard_home"] = json!(home_text(elsewhere.path()));
+    let answer = write(served.path(), &case).expect("answer");
+    assert_eq!(answer, json!({"trace_error": null}));
+    assert_eq!(trace_files(served.path()).len(), 1);
+    assert!(!elsewhere.path().join("debug").exists());
+}
+
+#[test]
+fn the_kind_is_only_served_with_a_verified_home() {
+    assert_eq!(
+        dispatch("detector_debug_trace", &args()),
+        Err("native_runner_authority_unknown_kind")
+    );
+}
+
+#[test]
+fn the_file_name_ignores_prompt_text() {
+    let mut other = action();
+    other["prompt_excerpt"] = json!("a different prompt");
+    assert_eq!(
+        trace_file_name(stamp(), &other).expect("name"),
+        trace_file_name(stamp(), &action()).expect("name")
+    );
 }
 
 #[test]

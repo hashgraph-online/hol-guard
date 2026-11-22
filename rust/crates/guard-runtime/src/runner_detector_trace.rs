@@ -25,15 +25,14 @@ use guard_contracts::RUNNER_AUTHORITY_MAX_BYTES;
 const REDACTED: &str = "[redacted]";
 const DIGEST_HEX_CHARS: usize = 12;
 
-/// Write the trace for one action; `trace_error` is `null` once it is on disk.
-pub(crate) fn detector_debug_trace(args: &Value) -> KindResult {
+/// Write the trace for one action under `guard_home`, the home the resident
+/// verified for this request; `trace_error` is `null` once it is on disk.
+pub(crate) fn detector_debug_trace(args: &Value, guard_home: &str) -> KindResult {
     let args = args.as_object().ok_or(ERR_INVALID)?;
-    let guard_home = args
-        .get("guard_home")
-        .and_then(Value::as_str)
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .ok_or(ERR_INVALID)?;
+    let guard_home = PathBuf::from(guard_home);
+    if !guard_home.is_absolute() {
+        return Err(ERR_INVALID);
+    }
     let action = args
         .get("action")
         .filter(|value| value.is_object())
@@ -72,14 +71,17 @@ pub(super) fn trace_payload(
     }))
 }
 
-/// `<UTC stamp>-<first 12 hex of the canonical action digest>.json`.
+/// `<UTC stamp>-<first 12 hex of the canonical redacted action digest>.json`.
+///
+/// The digest covers the redacted action, so the name does not depend on
+/// prompt text the trace never holds.
 pub(super) fn trace_file_name(
     created_at: DateTime<Utc>,
     action: &Value,
 ) -> Result<String, &'static str> {
     let mut canonical = Vec::with_capacity(1024);
     crate::context_digest_json::write_canonical_json_with_limit(
-        action,
+        &redacted(action),
         &mut canonical,
         RUNNER_AUTHORITY_MAX_BYTES,
     )?;
