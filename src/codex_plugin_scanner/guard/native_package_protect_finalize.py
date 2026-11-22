@@ -62,6 +62,8 @@ def package_protect_stored_policy(
         "artifact_id": artifact.artifact_id,
         "artifact_hash": artifact_hash,
         "workspace_dir": str(workspace_dir),
+        "policy_workspaces": list(policy_workspaces),
+        **({"publisher": artifact.publisher} if artifact.publisher is not None else {}),
         **facts,
     }
 

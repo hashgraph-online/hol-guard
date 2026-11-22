@@ -223,20 +223,18 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     let mut ignored_integrity = request.ignored_integrity;
     let mut daemon_authority = request.daemon_authority;
     let mut resolved_authority = None;
-    let resolved_decision = if request.decision.is_none() && request.ignored_integrity {
+    let resolved_decision = if request.decision.is_none()
+        && request.ignored_integrity
+        && !request.policy_workspaces.is_empty()
+    {
         let authority = crate::daemon_policy_authority::ResidentPolicyAuthority::new(
             std::path::PathBuf::from(&request.guard_home),
         );
-        let workspaces = if request.policy_workspaces.is_empty() {
-            vec![request.workspace_dir.clone()]
-        } else {
-            request.policy_workspaces.clone()
-        };
         if let Some((decision, authority_value)) = authority.resolve_package_policy(
             &request.harness,
             Some(&request.artifact_id),
             &request.artifact_hash,
-            &workspaces,
+            &request.policy_workspaces,
             request.publisher.as_deref(),
         ) {
             ignored_integrity = false;

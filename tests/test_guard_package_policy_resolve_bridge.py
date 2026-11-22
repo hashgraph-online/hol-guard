@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_package_policy_resolve as bridge
+from codex_plugin_scanner.guard import native_package_protect_finalize as finalize
 from codex_plugin_scanner.guard.runtime import command_queue_drain
 
 
@@ -59,6 +60,25 @@ def test_no_saved_facts_skips_the_resident(monkeypatch: pytest.MonkeyPatch) -> N
     evaluation, disposition, reused = _call(_Store(None))
     assert evaluation.policy_action == "review"  # type: ignore[attr-defined]
     assert (disposition, reused) == (None, None)
+
+
+def test_finalize_stored_policy_preserves_lookup_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        finalize,
+        "_hydrate",
+        lambda *_args, **_kwargs: {"ignored_integrity": True, "authority": None},
+    )
+    artifact = type("Artifact", (), {"harness": "codex", "artifact_id": "command:npm", "publisher": "npm"})()
+    stored = finalize.package_protect_stored_policy(
+        _Store(None),
+        artifact=artifact,
+        artifact_hash="hash",
+        workspace_dir=Path("/work"),
+        now="2026-07-17T00:00:00Z",
+        policy_workspaces=("/workspace", "/workspace/linked"),
+    )
+    assert stored["policy_workspaces"] == ["/workspace", "/workspace/linked"]
+    assert stored["publisher"] == "npm"
 
 
 @pytest.mark.parametrize(
