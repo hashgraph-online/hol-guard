@@ -147,3 +147,47 @@ def test_an_account_without_a_password_entry_still_searches_the_system_directori
 
     assert entries
     assert str(bin_dir.resolve()) not in entries
+
+
+def test_uninstall_acts_on_the_running_custom_tool_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.cli import uninstall_commands
+
+    prefix = _tool_environment(tmp_path)
+    bin_dir = _launcher_dir(tmp_path, prefix / "bin" / "hol-guard", monkeypatch)
+    monkeypatch.delenv("UV_TOOL_DIR", raising=False)
+    monkeypatch.setattr(uninstall_commands.sys, "prefix", str(prefix))
+
+    environment = uninstall_commands._uninstall_environment("uv")
+
+    assert environment is not None
+    assert environment["UV_TOOL_DIR"] == str(prefix.parent.resolve())
+    assert environment["UV_TOOL_BIN_DIR"] == str(bin_dir)
+    assert uninstall_commands._uninstall_environment("pipx") is None
+
+
+def test_a_uv_receipt_under_a_pipx_root_uses_the_proven_launcher(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "share" / "pipx" / "tools"
+    root.mkdir(parents=True)
+    prefix = _tool_environment(tmp_path)
+    moved = root / "hol-guard"
+    prefix.rename(moved)
+    bin_dir = _launcher_dir(tmp_path, moved / "bin" / "hol-guard", monkeypatch)
+    monkeypatch.setattr(update_subprocess.sys, "prefix", str(moved))
+
+    assert update_subprocess._manager_home_from_prefix("uv") == (root.resolve(), bin_dir)
+
+
+def test_launcher_candidates_survive_an_unknown_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.cli import update_uv_layout
+
+    prefix = _tool_environment(tmp_path)
+    bin_dir = _launcher_dir(tmp_path, prefix / "bin" / "hol-guard", monkeypatch)
+
+    def no_home() -> Path:
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(update_uv_layout.Path, "home", staticmethod(no_home))
+
+    assert custom_uv_tool_layout(prefix) == (prefix.parent, bin_dir)

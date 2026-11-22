@@ -1462,9 +1462,7 @@ def _standard_manager_home_from_prefix(installer_kind: str) -> tuple[Path, Path]
         return manager_home, user_home / ".local" / "bin"
     if os.name != "nt" and _manager_path_matches(marker_root, Path("/opt/pipx/venvs")):
         return manager_home, Path("/usr/local/bin")
-    manager_root_matches = any(
-        _manager_component_matches(local_root, expected_name) for expected_name in ("pipx", "uv")
-    )
+    manager_root_matches = _manager_component_matches(local_root, installer_kind)
     if manager_root_matches and _manager_component_matches(local_root.parent, "share"):
         bin_dir = local_root.parent.parent / "bin"
     elif manager_root_matches:

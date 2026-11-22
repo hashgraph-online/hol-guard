@@ -9,6 +9,7 @@ own ``~/.local/bin`` and the fixed system directories, never there.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 
@@ -48,6 +49,22 @@ def custom_uv_tool_layout(prefix: Path) -> tuple[Path, Path] | None:
     return None
 
 
+def uv_tool_environment_overrides(prefix: Path) -> dict[str, str]:
+    """``UV_TOOL_DIR`` (and ``UV_TOOL_BIN_DIR`` when proven) that make uv act on ``prefix`` itself.
+
+    Without them ``uv tool`` falls back to its default directory and can act on a different
+    HOL Guard installation than the one running.
+    """
+
+    if prefix.name not in _PACKAGE_DIRECTORY_NAMES or not is_uv_tool_environment(prefix):
+        return {}
+    overrides = {"UV_TOOL_DIR": str(prefix.parent)}
+    layout = custom_uv_tool_layout(prefix)
+    if layout is not None:
+        overrides["UV_TOOL_BIN_DIR"] = str(layout[1])
+    return overrides
+
+
 def _bin_dir_candidates() -> list[Path]:
     """Where ``uv tool install`` puts launchers, in uv's order of preference."""
 
@@ -59,7 +76,8 @@ def _bin_dir_candidates() -> list[Path]:
     data_home = os.environ.get("XDG_DATA_HOME", "").strip()
     if data_home and Path(data_home).is_absolute():
         candidates.append(Path(data_home).parent / "bin")
-    candidates.append(Path.home() / ".local" / "bin")
+    with contextlib.suppress(KeyError, OSError, RuntimeError):
+        candidates.append(Path.home() / ".local" / "bin")
     return candidates
 
 

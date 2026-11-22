@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from ..harness_context import HarnessContext
 from ..native_daemon_manage import retire_all_guard_daemons_for_home
@@ -16,6 +18,7 @@ from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as _managed_install_context
 from .update_commands import _current_version, _installer_kind
 from .update_retirement import _resident_state_absent, resident_stop_executable, retire_native_resident_for_home
+from .update_uv_layout import uv_tool_environment_overrides
 
 
 def run_guard_self_uninstall(
@@ -199,6 +202,7 @@ def run_guard_self_uninstall(
             capture_output=True,
             check=False,
             text=True,
+            env=_uninstall_environment(installer),
         )
     except OSError as error:
         payload.update(
@@ -383,6 +387,15 @@ def _clear_oauth_credentials(store: GuardStore) -> str | None:
 def _stopped_message(*, failed: str, removed: list[str]) -> str:
     done = f" Already removed: {', '.join(removed)}." if removed else " Nothing had been removed yet."
     return f"HOL Guard removal stopped at {failed} before the package uninstall command ran.{done}"
+
+
+def _uninstall_environment(installer: str) -> dict[str, str] | None:
+    """Point ``uv tool uninstall`` at the running environment, not uv's default directory."""
+
+    if installer != "uv":
+        return None
+    overrides = uv_tool_environment_overrides(Path(sys.prefix).expanduser().resolve())
+    return {**os.environ, **overrides} if overrides else None
 
 
 def _uninstall_command(installer: str) -> list[str]:
