@@ -164,20 +164,14 @@ fn the_gate_line_has_a_fixed_shape() {
         "hol-guard mcp-relay: lane not ready: direct_lane_unbound\n"
     );
     assert_eq!(
-        gate_line(&Gate::NotReady(
-            "mcp_relay_session_server_proxy_tools".to_owned()
-        )),
-        "hol-guard mcp-relay: python proxy: mcp_relay_session_server_proxy_tools\n"
+        gate_line(&Gate::NotReady("mcp_relay_store_newer".to_owned())),
+        "hol-guard mcp-relay: python proxy: mcp_relay_store_newer\n"
     );
 }
 
 #[test]
-fn only_an_unported_feature_or_a_newer_runtime_hands_the_session_to_the_proxy() {
-    for code in [
-        "mcp_relay_runtime_superseded",
-        "mcp_relay_store_newer",
-        "mcp_relay_session_server_proxy_tools",
-    ] {
+fn only_a_newer_runtime_or_store_hands_the_session_to_the_proxy() {
+    for code in ["mcp_relay_runtime_superseded", "mcp_relay_store_newer"] {
         assert!(hands_off(code), "{code}");
     }
     // A lane the daemon has not prepared yet keeps the session native and
@@ -207,6 +201,7 @@ fn only_an_unported_feature_or_a_newer_runtime_hands_the_session_to_the_proxy() 
         "mcp_relay_store_unreadable",
         "mcp_relay_saved_remote_policy",
         "mcp_relay_saved_policy_unverifiable",
+        "mcp_relay_session_server_proxy_tools",
         "mcp_relay_session_review_mode",
         "direct_lane_unsupported",
         "mcp_relay_workspace_invalid",

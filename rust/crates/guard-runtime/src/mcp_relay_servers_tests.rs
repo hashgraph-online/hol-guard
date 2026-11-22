@@ -18,20 +18,18 @@ fn an_unreported_server_is_unknown() {
 }
 
 #[test]
-fn a_server_without_proxy_tools_is_relayable_and_a_mark_sticks() {
+fn a_reported_server_is_relayable() {
     let servers = RelayServers::default();
-    assert!(servers.record(&server("docs"), false));
+    assert!(servers.record(&server("docs")));
     assert_eq!(servers.relayable(&server("docs")), Ok(()));
-    assert!(servers.record(&server("docs"), true));
-    assert_eq!(servers.relayable(&server("docs")), Err(SERVER_PROXY_TOOLS));
-    assert!(servers.record(&server("docs"), false));
-    assert_eq!(servers.relayable(&server("docs")), Err(SERVER_PROXY_TOOLS));
+    assert!(servers.record(&server("docs")));
+    assert_eq!(servers.relayable(&server("docs")), Ok(()));
 }
 
 #[test]
 fn every_identity_field_names_another_server() {
     let servers = RelayServers::default();
-    servers.record(&server("docs"), false);
+    servers.record(&server("docs"));
     let mut other = server("docs");
     other.identity_hash = "b".repeat(64);
     assert_eq!(servers.relayable(&other), Err(SERVER_UNKNOWN));
@@ -47,79 +45,42 @@ fn every_identity_field_names_another_server() {
 fn a_server_past_the_bound_stays_unknown() {
     let servers = RelayServers::default();
     for index in 0..MAX_SERVERS {
-        assert!(servers.record(&server(&format!("s{index}")), false));
+        assert!(servers.record(&server(&format!("s{index}"))));
     }
-    assert!(!servers.record(&server("late"), false));
+    assert!(!servers.record(&server("late")));
     assert_eq!(servers.relayable(&server("late")), Err(SERVER_UNKNOWN));
-    // A known server is still updated.
-    assert!(servers.record(&server("s0"), true));
-    assert_eq!(servers.relayable(&server("s0")), Err(SERVER_PROXY_TOOLS));
+    // A known server is still recorded.
+    assert!(servers.record(&server("s0")));
+    assert_eq!(servers.relayable(&server("s0")), Ok(()));
     let mut long = server("long");
     long.config_path = "x".repeat(MAX_KEY_BYTES);
-    assert!(!RelayServers::default().record(&long, false));
+    assert!(!RelayServers::default().record(&long));
 }
 
 #[test]
-fn only_tools_the_relay_cannot_send_are_decided_by_the_proxy() {
-    // The relay never sends a call to a missing or empty name.
-    for tool in [
-        json!({"description": "no name"}),
-        json!({"name": 7}),
-        json!({"name": ""}),
-    ] {
-        assert!(proxy_tool(&tool), "{tool}");
-    }
-    // The resident reads a Composio wrapper's provider catalog hash itself,
-    // and a non-ASCII name is sent like any other.
-    for tool in [
-        json!({"name": "COMPOSIO_SEARCH_TOOLS"}),
-        json!({"name": "github__composio_execute"}),
-        json!({"name": "composio_\u{e9}"}),
-        json!({"name": "compo\u{17f}io_multi_execute_tool"}),
-        json!({"name": "lire_\u{e9}t\u{e9}"}),
-    ] {
-        assert!(!proxy_tool(&tool), "{tool}");
-    }
-}
-
-#[test]
-fn a_shell_or_command_tool_no_longer_holds_its_server_back() {
-    // The resident decides a package call itself, and a package call it
-    // cannot settle marks the server on its way to the fail-closed answer.
-    for tool in [
-        json!({"name": "bash"}),
-        json!({"name": " Run_Command "}),
-        json!({"name": "\u{1c}shell"}),
-        json!({"name": "exec", "inputSchema": {"properties": {"cmd": {"type": "string"}}}}),
-        json!({"name": "exec", "input_schema": {"properties": {"shellCommand": {}}}}),
-        json!({"name": "run", "inputSchema": {"$ref": "#/$defs/Run"}}),
-        json!({"name": "run", "inputSchema": {"allOf": [{"properties": {"command": {}}}]}}),
-        json!({"name": "run", "inputSchema": {"patternProperties": {"^comm": {}}}}),
-        json!({"name": "read_file", "inputSchema": {"properties": {"path": {}}}}),
-        json!({"name": "read_file", "inputSchema": "object"}),
-    ] {
-        assert!(!proxy_tool(&tool), "{tool}");
-    }
-}
-
-#[test]
-fn a_report_records_whether_any_tool_is_decided_by_the_proxy() {
+fn a_catalog_never_hands_its_server_to_the_proxy() {
+    // A nameless tool, a shell tool and a command-shaped schema all leave the
+    // server relayable: the resident decides or refuses each call itself.
     let servers = RelayServers::default();
     let request = McpRelayServerReportRequestV1 {
         guard_home: "/tmp/guard".to_owned(),
         server: server("docs"),
-        tools: vec![json!({"name": "read_file"}), json!({"name": "search"})],
+        tools: vec![
+            json!({"name": "read_file"}),
+            json!({"description": "nameless"}),
+            json!({"name": ""}),
+            json!({"name": "bash"}),
+            json!({"name": "exec", "inputSchema": {"properties": {"cmd": {"type": "string"}}}}),
+        ],
     };
     let answer: Value = serde_json::from_slice(&report(&request, &servers).unwrap()).unwrap();
     assert_eq!(answer, json!({"schema": REPORT_SCHEMA, "recorded": true}));
     assert_eq!(servers.relayable(&server("docs")), Ok(()));
-    let request = McpRelayServerReportRequestV1 {
-        tools: vec![
-            json!({"name": "read_file"}),
-            json!({"description": "nameless"}),
-        ],
-        ..request
-    };
-    report(&request, &servers).unwrap();
-    assert_eq!(servers.relayable(&server("docs")), Err(SERVER_PROXY_TOOLS));
+}
+
+#[test]
+fn the_relay_never_sends_a_call_to_an_empty_name() {
+    assert!(!sendable_name(""));
+    assert!(sendable_name("read_file"));
+    assert!(sendable_name("lire_\u{e9}t\u{e9}"));
 }
