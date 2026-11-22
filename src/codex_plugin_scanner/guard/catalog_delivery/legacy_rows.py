@@ -55,9 +55,17 @@ def _answer(store, method: str, args: dict[str, object], fields: frozenset[str])
     return answer
 
 
-def evidence_rows(store, observed_revision: int | None) -> EvidenceRows:
-    """The snapshot, and the pending row and transition at ``observed_revision``."""
-    answer = _answer(store, _EVIDENCE, {"observed_revision": observed_revision}, _EVIDENCE_FIELDS)
+def evidence_rows(store, observed_revision: object) -> EvidenceRows:
+    """The snapshot, and the pending row and transition at ``observed_revision``.
+
+    The revision comes from the anchor before it is authenticated. One that
+    is not a stored revision selects no pending row, as the SQL lookup did,
+    and the lifecycle op then refuses the anchor itself.
+    """
+    selected = None
+    if isinstance(observed_revision, int) and not isinstance(observed_revision, bool):
+        selected = observed_revision if 0 <= observed_revision < 2**63 else None
+    answer = _answer(store, _EVIDENCE, {"observed_revision": selected}, _EVIDENCE_FIELDS)
     snapshot = answer["snapshot"]
     revision = None
     envelope = None
