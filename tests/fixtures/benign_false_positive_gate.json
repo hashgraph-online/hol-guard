@@ -21879,7 +21879,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "rg -n route --glob 'src/*' src"
+        "command": "rg -n settings --glob 'src/*' src"
       },
       "cwd": "worktree",
       "expect": "allow"

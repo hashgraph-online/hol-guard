@@ -78,12 +78,20 @@ fn attach(
         .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
         .clamp(1, MAX_DEADLINE_BUDGET_MS);
     let deadline = started + Duration::from_millis(budget);
+    // A lane the daemon closed to republish is awaited for at most three
+    // quarters of the budget, which leaves the rest for the scan and reply.
+    let wait_until = started + Duration::from_millis(budget.saturating_mul(3) / 4);
     let resident_view = origin_store.map(|store| {
         let digest = envelope
             .policy_snapshot
             .get("policy_digest")
             .and_then(Value::as_str)?;
-        store.structured_output_binding(envelope.policy_generation, digest, Some(deadline))
+        store.structured_output_binding_awaiting(
+            envelope.policy_generation,
+            digest,
+            deadline,
+            wait_until,
+        )
     });
     let view = match resident_view {
         Some(Some(Some(view))) => Some(view),

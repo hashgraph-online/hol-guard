@@ -813,9 +813,9 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Search the source directory of the project I am in for the word route, and list the source files it holds. Run each listed command once, in order, from the project directory, and tell me what each one printed. An empty result is a valid answer: report it and carry on to the next command. Do not substitute tools, change the command or the directory, add verification calls, request approval, or change policy. Stop after the listed calls.",
+      "prompt": "Search the source directory of the project I am in for the word settings, and list the source files it holds. Run each listed command once, in order, from the project directory, and tell me what each one printed. An empty result is a valid answer: report it and carry on to the next command. Do not substitute tools, change the command or the directory, add verification calls, request approval, or change policy. Stop after the listed calls.",
       "commands": [
-        "rg -n route --glob 'src/*' src",
+        "rg -n settings --glob 'src/*' src",
         "rg -l --glob 'src/**' export src"
       ]
     },

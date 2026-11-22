@@ -53,6 +53,8 @@ const DIRECT_LANE_ACK_MAX_LEASE_MS: u64 = 120_000;
 /// push, so this covers one ACK write, not a publish.
 const DIRECT_LANE_ACK_SETTLE: Duration = Duration::from_millis(100);
 const DIRECT_LANE_ACK_SETTLE_POLL: Duration = Duration::from_millis(5);
+/// How often a routed `PostToolUse` looks for the lane to reopen.
+const STRUCTURED_BINDING_REOPEN_POLL: Duration = Duration::from_millis(10);
 
 pub(crate) struct DirectLaneBinding {
     generation: u64,
@@ -356,6 +358,49 @@ impl PolicySnapshotStore {
             return None;
         }
         Some(binding.structured_output_config.clone())
+    }
+
+    /// [`Self::structured_output_binding`] for a hook the daemon routed here,
+    /// waiting until `wait_until` for a lane the daemon closed to republish.
+    ///
+    /// The daemon closes the direct lane while it republishes a moved fact
+    /// (saved decisions, review facts, the structured view itself) and routes
+    /// its hooks through the edge meanwhile. A `PostToolUse` routed in that
+    /// window names the generation the daemon decided under, and the binding
+    /// for it is back once the republish is acknowledged. Withholding at once
+    /// hid ordinary output that happened to finish during the republish, such
+    /// as a contained run's. A binding
+    /// that does not come back in time, or that moved past the requested
+    /// generation, still answers `None`, so that content stays withheld.
+    pub(crate) fn structured_output_binding_awaiting(
+        &self,
+        generation: u64,
+        policy_digest: &str,
+        deadline: Instant,
+        wait_until: Instant,
+    ) -> Option<Option<Value>> {
+        loop {
+            let view = self.structured_output_binding(generation, policy_digest, Some(deadline));
+            if view.is_some()
+                || self
+                    .bound_generation()
+                    .is_some_and(|bound| bound > generation)
+            {
+                return view;
+            }
+            let now = Instant::now();
+            if now >= wait_until {
+                return None;
+            }
+            std::thread::sleep(STRUCTURED_BINDING_REOPEN_POLL.min(wait_until - now));
+        }
+    }
+
+    fn bound_generation(&self) -> Option<u64> {
+        self.direct_lane
+            .lock()
+            .ok()
+            .and_then(|binding| binding.as_ref().map(|binding| binding.generation))
     }
 
     /// The admitted snapshot when `binding` matches it and the publisher's
