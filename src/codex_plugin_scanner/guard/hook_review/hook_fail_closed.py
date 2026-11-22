@@ -349,11 +349,7 @@ def fail_closed_response(
         decoded = native_hook_failure_document(
             canonical_harness(harness),
             event_name,
-            (
-                prompt_reason or PROMPT_UNAVAILABLE_REASON
-                if _event_kind(event_name) == "prompt"
-                else reason
-            ),
+            (prompt_reason or PROMPT_UNAVAILABLE_REASON if _event_kind(event_name) == "prompt" else reason),
             reason_code=reason_code,
             deadline=deadline,
         )
