@@ -100,7 +100,7 @@ def _stub_sync(monkeypatch: pytest.MonkeyPatch, response: dict[str, object]) -> 
     monkeypatch.setattr(
         runner,
         "cached_policy_bundle_validation",
-        lambda _store, policy_bundle: (
+        lambda _store, policy_bundle, rows=None: (
             (policy_bundle, None) if isinstance(policy_bundle, dict) else (None, "invalid_policy_bundle")
         ),
     )
