@@ -55,3 +55,35 @@ def test_runtime_availability_reuses_the_rust_answer(monkeypatch) -> None:
     }
     assert len(calls) == 1
     policy._RUNTIME_AVAILABILITY_CACHE.clear()
+
+
+def test_availability_response_uses_the_native_renderer(monkeypatch, tmp_path: Path) -> None:
+    calls: list[dict[str, object]] = []
+
+    def render(kind: str, harness: str, params: dict[str, object], **kwargs: object):
+        calls.append({"kind": kind, "harness": harness, "params": params, **kwargs})
+        return "document", {"policy_action": "block", "reason_code": "native_pre_tool_unavailable"}
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_render.native_render_cli", render)
+    response = availability_harness_response(
+        harness="cursor",
+        event_name="PreToolUse",
+        reason_code="native_pre_tool_unavailable",
+        reason="Native review unavailable.",
+        guard_home=tmp_path,
+    )
+    assert response["policy_action"] == "block"
+    assert calls == [
+        {
+            "kind": "availability_response",
+            "harness": "cursor",
+            "params": {
+                "event_name": "PreToolUse",
+                "reason": "Native review unavailable.",
+                "reason_code": "native_pre_tool_unavailable",
+                "prompt_reason": None,
+            },
+            "guard_home": tmp_path,
+            "deadline": None,
+        }
+    ]
