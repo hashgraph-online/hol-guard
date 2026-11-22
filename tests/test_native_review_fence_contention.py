@@ -15,12 +15,12 @@ import threading
 import time
 from pathlib import Path
 
-from codex_plugin_scanner.guard.hook_review.hook_native_review_fence import (
-    LEASE_WAIT_SECONDS,
-    native_review_fence,
-)
 from codex_plugin_scanner.guard.native_command_control_authority_io import (
     hold_command_control_authority_lock,
+)
+from codex_plugin_scanner.guard.native_policy_fence_window import (
+    LEASE_WAIT_SECONDS,
+    native_review_fence,
 )
 
 _SNAPSHOT = {"command_extensions_bound": True, "generation": 1}

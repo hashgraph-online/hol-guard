@@ -179,7 +179,7 @@ impl PolicySnapshotStore {
     }
 }
 
-pub(super) fn open_mutation_lock(path: &Path, private_root: &Path) -> Result<File, String> {
+pub(crate) fn open_mutation_lock(path: &Path, private_root: &Path) -> Result<File, String> {
     super::policy_store_validation::validate_private_directory(private_root)?;
     #[cfg(windows)]
     {

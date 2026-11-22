@@ -318,6 +318,9 @@ pub(crate) fn dispatch(
         "update_receipt_policy_decision" => {
             receipt_writes::update_policy_decision(connection, args)
         }
+        "amend_receipt_authority_evidence" => {
+            receipt_writes::authority_evidence::amend(connection, args)
+        }
         "update_receipt_approval_context" => {
             receipt_writes::update_approval_context(connection, args)
         }
@@ -334,6 +337,7 @@ pub(crate) fn dispatch(
         "get_approval_request" => {
             approval_reads::get_approval_request(connection, guard_home, args, owner)
         }
+        "get_raw_approval_request_snapshot" => approval_reads::raw_row::get(connection, args),
         "list_approval_requests" => {
             approval_reads::list_approval_requests(connection, guard_home, args, owner)
         }

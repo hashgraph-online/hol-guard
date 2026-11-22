@@ -40,6 +40,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "fleet_posture_state"
         | "fleet_posture_cached_diagnostics"
         | "fleet_posture_cached_runtimes"
+        | "stored_fleet_posture_hash_key"
         | "cloud_review_settings_state"
         | "worker_refresh_status"
         | "repair_self_check_status"
@@ -115,6 +116,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "read_local_mcp_skills"
         | "workflow_capability_plan"
         | "get_approval_request"
+        | "get_raw_approval_request_snapshot"
         | "list_approval_requests"
         | "list_approval_request_page"
         | "count_approval_requests"
@@ -130,6 +132,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "policy_bundle_trust_rows"
         // The Guard Cloud status rows, read as one view.
         | "cloud_status_rows"
+        // Every named command queue lane, read as one view.
+        | "command_queue_lane_rows"
         // Two rows read as one consent pair.
         | "exact_cloud_review_state" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
@@ -208,6 +212,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "set_receipt_action_envelope"
         | "update_receipt_policy_decision"
         | "update_receipt_approval_context"
+        | "amend_receipt_authority_evidence"
         | "list_receipts_for_command_detail_backfill"
         | "receipt_summary_between"
         | "receipt_analytics"
@@ -249,6 +254,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "commit_fleet_posture_sent"
         | "record_fleet_posture_diagnostics"
         | "record_fleet_posture_runtimes"
+        | "fleet_posture_hash_key"
         | "rotate_installation_id"
         | "add_event"
         | "set_managed_install"

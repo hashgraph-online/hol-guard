@@ -10,6 +10,7 @@ event, and returns raw rows that are only shaped here.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping
 from contextlib import closing
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -163,6 +164,33 @@ class StoreReceiptsRuntimeMixin:
     def latest_receipt_rowid(self, *, harness: str | None = None) -> int | None:
         value = self._native_store_call("latest_receipt_rowid", {"harness": harness})
         return value if isinstance(value, int) else None
+
+    def amend_receipt_authority_evidence(
+        self,
+        *,
+        after_rowid: int,
+        artifact_ids: Iterable[str],
+        evidence: Mapping[str, object],
+        approval_source: str,
+        source_actions: Iterable[str],
+        replace_existing_source: bool = False,
+    ) -> int:
+        """Merge runner authority evidence into the receipts one evaluation emitted."""
+
+        changed = self._native_store_call(
+            "amend_receipt_authority_evidence",
+            {
+                "after_rowid": after_rowid,
+                "artifact_ids": sorted(artifact_ids),
+                "evidence": dict(evidence),
+                "approval_source": approval_source,
+                "source_actions": sorted(source_actions),
+                "replace_existing_source": replace_existing_source,
+            },
+        )
+        if not isinstance(changed, int) or isinstance(changed, bool):
+            raise RuntimeError("amend_receipt_authority_evidence returned a non-integer result")
+        return changed
 
     def get_receipt(self, receipt_id: str) -> dict[str, object] | None:
         return self._native_store_call("get_receipt", {"receipt_id": receipt_id})

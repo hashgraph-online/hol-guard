@@ -81,6 +81,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::hook_policy_admission_op::HOOK_POLICY_ADMISSION_FEATURE.into(),
         crate::hook_connector_facts_op::HOOK_CONNECTOR_FACTS_FEATURE.into(),
         crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_FEATURE.into(),
+        crate::hook_policy_fence_window_op::HOOK_REVIEW_FENCE_FEATURE.into(),
         crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WRITE_FEATURE.into(),
         crate::hook_policy_fence_window_op::HOOK_POLICY_FENCE_WINDOW_WAIT_FEATURE.into(),
         crate::policy_store::policy_store_direct_lane::subdirectory::WORKSPACE_OVERLAY_READINESS_FEATURE.into(),

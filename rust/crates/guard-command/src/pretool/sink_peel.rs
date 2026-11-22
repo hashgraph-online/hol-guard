@@ -99,8 +99,8 @@ pub(super) fn peel(
     peels_relative_inside: bool,
 ) -> Result<Option<ContainedWrapperCore>, &'static str> {
     let mut characters: Vec<char> = command.chars().collect();
-    let status = status_echo(&characters);
-    if let Some((start, _)) = &status {
+    let report = trailing_report(&characters);
+    if let Some((start, _)) = &report {
         characters.truncate(*start);
         while matches!(characters.last().copied(), Some(' ' | '\t')) {
             characters.pop();
@@ -126,7 +126,7 @@ pub(super) fn peel(
     // The text `directory` was resolved from, which decides whether a `\\?\`
     // prefix on it is the caller's or one Windows generated.
     let mut spelled = PathBuf::from(workspace);
-    let mut wrapped = status.is_some();
+    let mut wrapped = report.is_some();
     let mut output: Option<ContainedOutput> = None;
 
     if tokens.first().map(word) == Some("cd") {
@@ -194,8 +194,10 @@ pub(super) fn peel(
                 return Ok(Some(ContainedWrapperCore {
                     core: joined,
                     directory: python_resolved(&spelled, directory),
-                    output: status.map(|(_, label)| ContainedOutput {
-                        status_label: Some(label),
+                    output: report.map(|(_, report)| ContainedOutput {
+                        status_label: report.status,
+                        success_label: report.success,
+                        failure_label: report.failure,
                         ..passthrough()
                     }),
                 }));
@@ -252,9 +254,11 @@ pub(super) fn peel(
         });
         wrapped = true;
     }
-    if let Some((_, label)) = status {
+    if let Some((_, report)) = report {
         output = Some(ContainedOutput {
-            status_label: Some(label),
+            status_label: report.status,
+            success_label: report.success,
+            failure_label: report.failure,
             ..output.unwrap_or_else(passthrough)
         });
     }
@@ -310,6 +314,8 @@ fn passthrough() -> ContainedOutput {
         count: 0,
         merge_stderr: false,
         status_label: None,
+        success_label: None,
+        failure_label: None,
         stages: Vec::new(),
     }
 }
@@ -802,42 +808,10 @@ fn inline_program_index(tokens: &[Token]) -> Option<usize> {
         .then_some(2)
 }
 
-/// A final `; echo "<label>$?"`: where it starts, and the label it prints.
-/// A label with spaces must be double-quoted.
-fn status_echo(characters: &[char]) -> Option<(usize, String)> {
-    (0..characters.len())
-        .filter(|index| characters[*index] == ';')
-        .find_map(|index| status_echo_at(characters, index).map(|label| (index, label)))
-}
+#[path = "sink_peel_report.rs"]
+mod report;
 
-fn status_echo_at(characters: &[char], start: usize) -> Option<String> {
-    let mut index = skip_blanks(characters, start + 1);
-    index = literal(characters, index, "echo")?;
-    index = require_blanks(characters, index)?;
-    let quoted = characters.get(index) == Some(&'"');
-    if quoted {
-        index += 1;
-    }
-    let mut label = String::new();
-    while label.len() < STATUS_LABEL_LIMIT
-        && characters.get(index).copied().is_some_and(|character| {
-            character.is_ascii_alphanumeric()
-                || "_=:-".contains(character)
-                || (quoted && character == ' ')
-        })
-    {
-        label.push(characters[index]);
-        index += 1;
-    }
-    index = literal(characters, index, "$?")?;
-    if quoted {
-        if characters.get(index) != Some(&'"') {
-            return None;
-        }
-        index += 1;
-    }
-    (skip_blanks(characters, index) == characters.len()).then_some(label)
-}
+use report::trailing_report;
 
 /// `cd <dir> 2>/dev/null; …` only silences a cd this peel resolves itself
 /// first. The kept prefix ends at the first returned index, and the dropped

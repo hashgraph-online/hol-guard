@@ -122,3 +122,23 @@ class StoreFleetPostureStateMixin:
             "record_fleet_posture_runtimes",
             {"scope": scope, "section": dict(section), "valid_until": valid_until, "now": now},
         )
+
+    def fleet_posture_hash_key(self: _NativeStore, *, now: str) -> str:
+        """The per-install fleet posture hash key, created and stored on first use.
+
+        A stored key is read without taking the write lock, so a busy writer
+        cannot cost a sync cycle its posture report. Only when no usable key is
+        stored does the native store read the row again and write a new random
+        key in one write transaction, so concurrent reports agree on one key.
+        The native store owns the rule for which stored key is usable.
+        """
+
+        stored = self._native_store_call("stored_fleet_posture_hash_key", {})
+        stored_key = stored.get("key") if isinstance(stored, dict) else None
+        if isinstance(stored_key, str) and stored_key:
+            return stored_key
+        answer = self._native_store_call("fleet_posture_hash_key", {"now": now})
+        key = answer.get("key") if isinstance(answer, dict) else None
+        if not isinstance(key, str) or len(key) < 32:
+            raise RuntimeError("native fleet posture hash key returned no answer")
+        return key

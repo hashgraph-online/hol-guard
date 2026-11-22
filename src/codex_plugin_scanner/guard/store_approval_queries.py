@@ -200,35 +200,10 @@ class StoreApprovalQueriesMixin:
         return self._native_approval_read("get_approval_extension_allow_hint", {"request_id": request_id})
 
     def get_raw_approval_request_snapshot(self, request_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "select * from approval_requests where request_id = ?",
-                (request_id,),
-            ).fetchone()
-        return dict(row) if row is not None else None
+        """The stored request row with every column as saved, before any projection."""
 
-    def get_approval_request_status(self, request_id: str) -> str | None:
-        """The stored status of one request, without building its review payload."""
-
-        with self._connect() as connection:
-            row = connection.execute(
-                "select status from approval_requests where request_id = ?",
-                (request_id,),
-            ).fetchone()
-        return None if row is None else str(row[0])
-
-    def get_approval_request_statuses(self, request_ids: list[str]) -> dict[str, str]:
-        """The stored status of each listed request that exists, in one read."""
-
-        if not request_ids:
-            return {}
-        placeholders = ",".join("?" * len(request_ids))
-        with self._connect() as connection:
-            rows = connection.execute(
-                f"select request_id, status from approval_requests where request_id in ({placeholders})",
-                tuple(request_ids),
-            ).fetchall()
-        return {str(row[0]): str(row[1]) for row in rows}
+        row = self._native_store_call("get_raw_approval_request_snapshot", {"request_id": request_id})
+        return dict(row) if isinstance(row, dict) else None
 
     def approval_desktop_notified_at(self, request_id: str) -> str | None:
         return self._native_approval_read("approval_desktop_notified_at", {"request_id": request_id})
@@ -269,23 +244,9 @@ class StoreApprovalQueriesMixin:
         return self._native_approval_read("oldest_approval_request_created_at", {"status": status})
 
     def clear_approval_requests(self, *, harness: str | None = None, status: str | None = None) -> int:
-        conditions: list[str] = []
-        params: list[object] = []
-        if harness is not None:
-            conditions.append("harness = ?")
-            params.append(harness)
-        if status is not None:
-            conditions.append("status = ?")
-            params.append(status)
-        query = "delete from approval_requests"
-        if conditions:
-            query += " where " + " and ".join(conditions)
-        with self._connect() as connection:
-            request_rows = connection.execute(
-                f"select request_id from approval_requests{' where ' + ' and '.join(conditions) if conditions else ''}",
-                tuple(params),
-            ).fetchall()
-            request_ids = [str(row["request_id"]) for row in request_rows]
-            purge_request_resumes(connection, request_ids)
-            cursor = connection.execute(query, tuple(params))
-            return int(cursor.rowcount if cursor.rowcount is not None else 0)
+        """Delete the matching requests and their resume rows; returns how many requests went."""
+
+        cleared = self._native_store_call("clear_approval_requests", {"harness": harness, "status": status})
+        if not isinstance(cleared, int) or isinstance(cleared, bool):
+            raise RuntimeError("native clear_approval_requests returned no count")
+        return cleared

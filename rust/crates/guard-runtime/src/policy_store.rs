@@ -44,6 +44,7 @@ mod policy_store_business_floor;
 mod policy_store_business_source;
 #[path = "policy_store_command_authority.rs"]
 mod policy_store_command_authority;
+pub(crate) use policy_store_command_authority::open_mutation_lock;
 #[path = "policy_store_command_floor.rs"]
 mod policy_store_command_floor;
 #[path = "policy_store_command_packs.rs"]
