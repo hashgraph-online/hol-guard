@@ -83,6 +83,7 @@ fn run_as(lane: &Lane, harness: &str, home_dir: Option<&str>, payload: Value) ->
         workspace: None,
         deadline_budget_ms: None,
         emergency_safe_only: false,
+        lifecycle_only: false,
         payload,
     };
     serde_json::from_slice(&evaluate(request, &lane.fixture.store).unwrap()).unwrap()

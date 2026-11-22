@@ -13,8 +13,7 @@ from .aibom_models import (
 
 def _sync_summary(store: Any) -> dict[str, object]:
     """Return a typed view of the most recent stored AIBOM synchronization."""
-    payload = store.get_sync_payload("aibom_sync_summary")
-    return payload if isinstance(payload, dict) else {}
+    return store.aibom_sync_summary() or {}
 
 
 def _inventory_events_request_body(events: list[dict[str, object]]) -> bytes:

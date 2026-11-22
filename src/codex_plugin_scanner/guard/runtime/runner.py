@@ -517,7 +517,7 @@ def sync_receipts(
         if workspace_id is not None:
             aibom_context["workspace_id"] = workspace_id
     if aibom_context:
-        store.set_sync_payload("aibom_inventory_context", aibom_context, now)
+        store.record_aibom_inventory_context(aibom_context, now=now)
     # Top-level ``policy``, ``teamPolicyPack``, and ``exceptions`` fields are
     # legacy unsigned siblings. They may be present on an authenticated HTTPS
     # response, but they are not covered by the pinned policy-bundle signature

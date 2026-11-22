@@ -180,9 +180,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident hook decision response; the
         # answer is strictly validated and never reinterpreted into a decision.
         "src/codex_plugin_scanner/guard/native_hook_decision.py",
-        # Decodes the bounded reply from the attested Claude writer. Rust
-        # authorizes the save and validates the next generation before replying.
-        "src/codex_plugin_scanner/guard/native_claude_question_save.py",
         # Decodes the bounded resident daemon route policy response; strictly
         # bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_daemon_route.py",

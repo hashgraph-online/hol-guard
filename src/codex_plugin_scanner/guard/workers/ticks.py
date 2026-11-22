@@ -128,15 +128,8 @@ def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
 
     refreshed_at = _now()
     min_interval = max(int(_AIBOM_AUTO_SYNC_INTERVAL_SECONDS), 1)
-    payload = store.get_sync_payload("aibom_inventory_context")
     current_workspace_id = store.get_cloud_workspace_id()
-    bound = (
-        payload
-        if current_workspace_id is not None
-        and isinstance(payload, dict)
-        and payload.get("workspace_id") == current_workspace_id
-        else {}
-    )
+    bound = store.aibom_inventory_context(workspace_id=current_workspace_id)
 
     def _path(value: object) -> Path | None:
         return Path(value).expanduser() if isinstance(value, str) and value.strip() else None
@@ -156,8 +149,7 @@ def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
                 )
             except Exception as error:
                 user_inventory = {"collected": False, "error": str(error)}
-            store.set_sync_payload(
-                "aibom_inventory_daemon",
+            store.record_aibom_inventory_daemon(
                 {
                     "status": "missing_workspace_context",
                     "reason": "missing_workspace_context",
@@ -165,7 +157,7 @@ def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
                     "refreshed_at": refreshed_at,
                     "user_inventory": user_inventory,
                 },
-                refreshed_at,
+                now=refreshed_at,
             )
             return {"ok": False, "status": "missing_workspace_context"}
         auth_context = _resolve_guard_sync_auth_context(store)
@@ -187,8 +179,8 @@ def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
             if summary.get("synced") is True
             else str(summary.get("reason") or "skipped")
         )
-        store.set_sync_payload(
-            "aibom_inventory_daemon", {**summary, "status": status, "refreshed_at": refreshed_at}, refreshed_at
+        store.record_aibom_inventory_daemon(
+            {**summary, "status": status, "refreshed_at": refreshed_at}, now=refreshed_at
         )
         return {"ok": not has_error and status != "not_configured", "status": status}
     except GuardSyncAuthorizationExpiredError as error:
@@ -197,7 +189,7 @@ def aibom_inventory(store: GuardStore, args: Mapping[str, Any]) -> dict[str, obj
         record = {"status": "not_configured", "refreshed_at": refreshed_at}
     except Exception as error:
         record = {"error": str(error), "refreshed_at": refreshed_at, "status": "error"}
-    store.set_sync_payload("aibom_inventory_daemon", record, refreshed_at)
+    store.record_aibom_inventory_daemon(record, now=refreshed_at)
     return {"ok": False, "status": record["status"]}
 
 

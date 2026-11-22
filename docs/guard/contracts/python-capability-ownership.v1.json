@@ -2358,7 +2358,6 @@
    "path": "src/codex_plugin_scanner/guard/routes/hook_calls.py",
    "source_sha256": "c68fcecf9a6076fb56de4fcca2a757cde193dbd06c65c2c91290a97619805b8b",
    "forbidden_symbols": [
-    "hook_claude_question_save",
     "hook_integrity_finalize_locked"
    ],
    "native_replacements": [

@@ -6,7 +6,7 @@ import importlib
 import os
 import time as time
 import urllib.error
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -27,9 +27,6 @@ from .aibom_content_upload import primary_content_sources_from_artifacts as prim
 from .aibom_content_upload import upload_primary_content_sources as upload_primary_content_sources
 from .aibom_models import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS as _AIBOM_AUTO_SYNC_INTERVAL_SECONDS
 from .aibom_models import _AIBOM_CLOUD_SYNC_OPTIONS as _AIBOM_CLOUD_SYNC_OPTIONS
-from .aibom_models import _AIBOM_EMPTY_SYNC_RETRY_SECONDS as _AIBOM_EMPTY_SYNC_RETRY_SECONDS
-from .aibom_models import _AIBOM_GUARD_EVENTS_BACKOFF_KEY as _AIBOM_GUARD_EVENTS_BACKOFF_KEY
-from .aibom_models import _AIBOM_GUARD_EVENTS_BACKOFF_MINUTES as _AIBOM_GUARD_EVENTS_BACKOFF_MINUTES
 from .aibom_models import _AIBOM_MAX_REQUEST_BODY_BYTES as _AIBOM_MAX_REQUEST_BODY_BYTES
 from .aibom_models import _AIBOM_SYNC_BATCH_SIZE as _AIBOM_SYNC_BATCH_SIZE
 from .aibom_models import AibomCliOptions as AibomCliOptions
@@ -79,50 +76,6 @@ def _aware_utc_timestamp(value: str) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
-
-
-def _aibom_sync_is_due(
-    store: Any,
-    *,
-    generated_at: str,
-    min_interval_seconds: int,
-) -> bool:
-    """Apply freshness and empty-inventory retry intervals to prior sync state."""
-    prior = store.get_sync_payload("aibom_sync_summary")
-    if not isinstance(prior, dict):
-        return True
-    if prior.get("synced") is not True:
-        return True
-    synced_at = prior.get("synced_at")
-    if not isinstance(synced_at, str) or not synced_at.strip():
-        return True
-    retry_interval = min_interval_seconds
-    if prior.get("snapshots") == 0:
-        retry_interval = min(min_interval_seconds, _AIBOM_EMPTY_SYNC_RETRY_SECONDS)
-    try:
-        last_sync = _aware_utc_timestamp(synced_at)
-        now = _aware_utc_timestamp(generated_at)
-        elapsed = (now - last_sync).total_seconds()
-    except (ValueError, OverflowError, TypeError):
-        return True
-    return elapsed >= retry_interval
-
-
-def _aibom_guard_events_endpoint_unavailable_recently(store: Any) -> bool:
-    """Respect the recorded missing-endpoint backoff interval."""
-    summary = store.get_sync_payload(_AIBOM_GUARD_EVENTS_BACKOFF_KEY)
-    if not isinstance(summary, dict):
-        return False
-    if summary.get("sync_reason") != "guard_events_endpoint_unavailable":
-        return False
-    synced_at = summary.get("synced_at")
-    if not isinstance(synced_at, str) or not synced_at.strip():
-        return False
-    try:
-        parsed = _aware_utc_timestamp(synced_at)
-    except (ValueError, OverflowError, TypeError):
-        return False
-    return datetime.now(timezone.utc) - parsed < timedelta(minutes=_AIBOM_GUARD_EVENTS_BACKOFF_MINUTES)
 
 
 def _resolve_operator_home_dir(home_dir: Path | None = None) -> Path:
@@ -198,7 +151,7 @@ def sync_aibom_snapshots(
             "accepted": 0,
             "message": "No cloud-compatible harness snapshots were available to sync.",
         }
-        store.set_sync_payload("aibom_sync_summary", summary, synced_at)
+        store.record_aibom_sync_summary(summary, now=synced_at)
         return summary
 
     resolved_auth_context = auth_context if auth_context is not None else runner._resolve_guard_sync_auth_context(store)
@@ -241,7 +194,7 @@ def sync_aibom_snapshots(
             "error": "Guard Cloud AIBOM sync failed because an inventory snapshot exceeds the request limit.",
             "content_upload": content_upload_summary,
         }
-        store.set_sync_payload("aibom_sync_summary", failure_summary, generated_at)
+        store.record_aibom_sync_summary(failure_summary, now=generated_at)
         return failure_summary
     total_accepted = 0
     total_rejected = len(oversized_events)
@@ -276,17 +229,8 @@ def sync_aibom_snapshots(
             elif error.code == 404:
                 synced_at = generated_at
                 remaining_events = syncable_event_count - events_sent
-                store.set_sync_payload(
-                    _AIBOM_GUARD_EVENTS_BACKOFF_KEY,
-                    {
-                        "synced_at": synced_at,
-                        "events": remaining_events,
-                        "accepted": total_accepted,
-                        "skipped": remaining_events,
-                        "sync_skipped": True,
-                        "sync_reason": "guard_events_endpoint_unavailable",
-                    },
-                    synced_at,
+                store.record_aibom_guard_events_unavailable(
+                    events=remaining_events, accepted=total_accepted, now=synced_at
                 )
                 summary: dict[str, object] = {
                     "synced": False,
@@ -301,7 +245,7 @@ def sync_aibom_snapshots(
                 }
                 if batches_sent == 0:
                     summary["skipped"] = True
-                store.set_sync_payload("aibom_sync_summary", summary, synced_at)
+                store.record_aibom_sync_summary(summary, now=synced_at)
                 return summary
             failure_summary: dict[str, object] = {
                 "synced": False,
@@ -314,7 +258,7 @@ def sync_aibom_snapshots(
                 "error": "Guard Cloud AIBOM sync failed due to an HTTP error.",
                 "content_upload": content_upload_summary,
             }
-            store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
+            store.record_aibom_sync_summary(failure_summary, now=synced_at)
             raise RuntimeError("Guard Cloud AIBOM sync failed due to an HTTP error.") from error
         except (OSError, RuntimeError) as error:
             failure_message = (
@@ -333,7 +277,7 @@ def sync_aibom_snapshots(
                 "error": failure_message,
                 "content_upload": content_upload_summary,
             }
-            store.set_sync_payload("aibom_sync_summary", failure_summary, synced_at)
+            store.record_aibom_sync_summary(failure_summary, now=synced_at)
             if isinstance(error, RuntimeError):
                 raise
             raise RuntimeError("Guard Cloud AIBOM sync failed due to a network error.") from error
@@ -393,5 +337,5 @@ def sync_aibom_snapshots(
         summary["partial"] = bool(summary.get("partial")) or total_accepted > 0
         summary["reason"] = "snapshots_rejected"
         summary["message"] = f"Guard Cloud rejected {cloud_rejected} of {len(snapshots)} inventory snapshots."
-    store.set_sync_payload("aibom_sync_summary", summary, synced_at)
+    store.record_aibom_sync_summary(summary, now=synced_at)
     return summary

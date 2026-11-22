@@ -71,17 +71,20 @@ from .update_desktop_apply import (
 from .update_desktop_core import is_desktop_managed_runtime
 from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
+from .update_native_marker import (
+    forget_native_wheel_install,
+    native_wheel_install_recorded,
+    record_native_wheel_install,
+)
 from .update_native_wheel import (
     bundled_native_runtime_missing,
     github_only_platform,
     install_native_payload,
     native_platform_supported,
     native_runtime_payload,
-    native_wheel_install_recorded,
     plan_native_wheel_update,
     prepare_native_wheel,
     pypi_serves_native_wheel,
-    record_native_wheel_install,
     update_command_for,
 )
 from .update_native_wheel import (
@@ -482,7 +485,13 @@ def repair_native_runtime_if_missing(
         else:
             home = resolve_guard_home()
         # A native wheel this updater installed is recorded and can be reinstalled; other direct installs cannot.
-        if not native_wheel_install_recorded(home, archive_sha256=_direct_url_archive_sha256(direct_url)):
+        local_archive_install = _local_archive_install_payload(direct_url) or {}
+        if not native_wheel_install_recorded(
+            home,
+            archive_sha256=_direct_url_archive_sha256(direct_url),
+            archive_path=_optional_text(local_archive_install.get("path")),
+            installed_version=_current_version(),
+        ):
             return None
     return run_guard_update(
         dry_run=False,
@@ -611,7 +620,10 @@ def _run_guard_update_unlocked(
     )
     vcs_install = _vcs_install_payload(direct_url)
     native_install_recorded = local_archive_install is not None and native_wheel_install_recorded(
-        resolved_guard_home, archive_sha256=_direct_url_archive_sha256(direct_url)
+        resolved_guard_home,
+        archive_sha256=_direct_url_archive_sha256(direct_url),
+        archive_path=_optional_text(local_archive_install.get("path")),
+        installed_version=current_version,
     )
     payload["current_version"] = current_version
     if direct_url is not None:
@@ -1168,12 +1180,15 @@ def _run_guard_update_unlocked(
                 resolved_guard_home,
                 version=resulting_version,
                 sha256=trusted_wheel.sha256,
+                staged_path=trusted_wheel.staged_path,
             )
             trusted_wheel.cleanup()
             payload["native_runtime"] = native_runtime_payload(
                 bundled_native_runtime_missing(), version=resulting_version, installer=installer
             )
         elif trusted_wheel is not None:
+            # A wheel the user supplied replaces any wheel this updater installed earlier.
+            forget_native_wheel_install(resolved_guard_home)
             _record_verified_local_wheel_receipt(
                 payload,
                 update_context=update_context,
@@ -2461,6 +2476,10 @@ def _recover_local_archive_install(
     }
 
 
+def _optional_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 def _direct_url_archive_sha256(direct_url: dict[str, object] | None) -> str | None:
     if not isinstance(direct_url, dict):
         return None
@@ -3341,7 +3360,10 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
             local_archive_install is not None
             and str(local_archive_install.get("archive_type") or "") == "wheel"
             and not native_wheel_install_recorded(
-                resolved_guard_home, archive_sha256=_direct_url_archive_sha256(direct_url)
+                resolved_guard_home,
+                archive_sha256=_direct_url_archive_sha256(direct_url),
+                archive_path=_optional_text(local_archive_install.get("path")),
+                installed_version=current_version,
             )
         ):
             auto_updatable = False
