@@ -87,13 +87,3 @@ def ensure_resume_schema(connection: sqlite3.Connection) -> None:
         )
         """
     )
-
-
-def delete_request_resumes(connection: sqlite3.Connection, request_ids: list[str]) -> None:
-    if not request_ids:
-        return
-    placeholders = ", ".join("?" for _ in request_ids)
-    connection.execute(
-        f"delete from guard_request_resumes where request_id in ({placeholders})",
-        tuple(request_ids),
-    )

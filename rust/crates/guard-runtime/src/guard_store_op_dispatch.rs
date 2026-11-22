@@ -334,6 +334,7 @@ pub(crate) fn dispatch(
         "get_approval_request" => {
             approval_reads::get_approval_request(connection, guard_home, args, owner)
         }
+        "get_raw_approval_request_snapshot" => approval_reads::raw_row::get(connection, args),
         "list_approval_requests" => {
             approval_reads::list_approval_requests(connection, guard_home, args, owner)
         }

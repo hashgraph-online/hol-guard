@@ -115,6 +115,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "read_local_mcp_skills"
         | "workflow_capability_plan"
         | "get_approval_request"
+        | "get_raw_approval_request_snapshot"
         | "list_approval_requests"
         | "list_approval_request_page"
         | "count_approval_requests"
