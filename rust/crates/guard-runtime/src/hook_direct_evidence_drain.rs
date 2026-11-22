@@ -270,7 +270,7 @@ mod tests {
         let mut queued =
             crate::mcp_relay_receipt::tests::record("forward", "inline-approved", "allow");
         queued["remember"] = json!(true);
-        assert!(queue.offer(queued.clone()));
+        queue.unwritten().requeue(vec![queued.clone()]);
         let mut forward = queued.clone();
         forward.as_object_mut().unwrap().remove("remember");
         let mut paged = queue
