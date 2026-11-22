@@ -102,6 +102,7 @@ from .update_subprocess import (
     UpdateSubprocessError,
     build_trusted_update_context,
 )
+from .update_uv_layout import is_uv_tool_environment
 from .windows_arm64_python import REASON_CODE as WINDOWS_ARM64_REASON_CODE
 from .windows_arm64_python import (
     native_windows_arm64_python,
@@ -2232,13 +2233,15 @@ def _runtime_installer_kind() -> str | None:
             return "pipx"
         if "/uv/tools/" in normalized_parent and (parent / "pyvenv.cfg").is_file():
             return "uv"
+        if is_uv_tool_environment(parent):
+            return "uv"
     return None
 
 
 def _installer_kind() -> str:
     prefix_path = Path(sys.prefix).resolve()
     normalized_prefix = prefix_path.as_posix().lower()
-    if "/uv/tools/" in normalized_prefix:
+    if "/uv/tools/" in normalized_prefix or is_uv_tool_environment(prefix_path):
         return "uv"
     if (prefix_path / "pipx_metadata.json").exists():
         return "pipx"
