@@ -23,6 +23,7 @@ from typing import Any, Final
 from ..blocked_request_mode import BLOCKED_REASON, safe_alternative_reason
 from ..native_hook_decision import NativeHookDecisionError, native_review_response
 from ..native_hook_render import (
+    native_render_accepted_allow,
     native_render_fail_closed_verdict,
     native_render_pre_tool,
     native_render_recording_only_pre_tool,
@@ -195,10 +196,9 @@ def render_accepted_allow(
     the activity record never says an approval was accepted for a blocked action.
     """
 
-    rendered = native_render_pre_tool(harness, allowed, guard_home=guard_home, **_deadline_kwargs(deadline))
+    rendered = native_render_accepted_allow(harness, allowed, guard_home=guard_home, **_deadline_kwargs(deadline))
     if rendered is None:
         return fail_closed_pre_tool(harness)
-    rendered["approval_reuse_status"] = "accepted"
     return rendered
 
 

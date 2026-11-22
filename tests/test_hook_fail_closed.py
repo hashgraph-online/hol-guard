@@ -95,12 +95,16 @@ def test_resident_response_is_returned_unchanged(monkeypatch: pytest.MonkeyPatch
 
 
 def test_accepted_allow_is_marked_only_when_the_resident_rendered_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool", lambda *a, **k: {"decision": "allow"})
+    monkeypatch.setattr(
+        hook_fail_closed,
+        "native_render_accepted_allow",
+        lambda *a, **k: {"decision": "allow", "approval_reuse_status": "accepted"},
+    )
     assert render_accepted_allow("pi", {"decision": "allow"}) == {
         "decision": "allow",
         "approval_reuse_status": "accepted",
     }
-    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool", lambda *a, **k: None)
+    monkeypatch.setattr(hook_fail_closed, "native_render_accepted_allow", lambda *a, **k: None)
     failed = render_accepted_allow("pi", {"decision": "allow"})
     assert failed["decision"] == "deny"
     assert "approval_reuse_status" not in failed

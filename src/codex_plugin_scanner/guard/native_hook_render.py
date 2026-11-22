@@ -397,6 +397,14 @@ def native_render_pre_tool(
     return _render({"kind": "pre_tool", "harness": harness, "verdict": dict(verdict)}, guard_home, deadline)
 
 
+def native_render_accepted_allow(
+    harness: str, verdict: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
+) -> dict[str, object] | None:
+    """Render an accepted saved-approval allow with its reuse status in Rust."""
+
+    return _render({"kind": "accepted_allow", "harness": harness, "verdict": dict(verdict)}, guard_home, deadline)
+
+
 def native_render_recording_only_pre_tool(
     harness: str, *, reason_code: str, reason: str, guard_home: Path | None = None, deadline: float | None = None
 ) -> dict[str, object] | None:
@@ -436,6 +444,7 @@ __all__ = [
     "native_evaluation_has_terminal_policy_action",
     "native_hook_availability",
     "native_recording_only_for_binding",
+    "native_render_accepted_allow",
     "native_render_cli",
     "native_render_fail_closed_verdict",
     "native_render_pre_tool",
