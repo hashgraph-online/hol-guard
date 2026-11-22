@@ -43,7 +43,7 @@ def test_export_redacts_paths_without_changing_skill_presence(
         "custom_field": "preserve-me",
         "launch_command": f"python {home}/server.py --token fake-secret",
     }
-    store = SimpleNamespace(list_inventory=lambda: [original], get_sync_payload=lambda _key: None)
+    store = SimpleNamespace(list_inventory=lambda: [original], aibom_sync_summary=lambda: None)
     context = HarnessContext(home, skill_root, tmp_path / "guard")
     monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", lambda *_args, **_kwargs: ())
     monkeypatch.setattr(aibom_cli, "_resolve_trust_attestation_context", lambda *_args, **_kwargs: {})
