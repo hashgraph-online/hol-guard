@@ -246,14 +246,26 @@ fn later_pages_read_the_runs_the_first_page_saw() {
     }
 
     assert_eq!(seen, ["wt-0", "wt-1", "wt-2", "wt-3", "wt-4", "wt-5"]);
-    let fresh = call(
-        &connection,
-        "list_latest_assessed_workspace_runs",
-        json!({}),
-    )
-    .expect("list");
-    assert!(run_ids(&fresh).contains(&"wt-5-newer"));
-    assert!(run_ids(&fresh).contains(&"wt-4-queued"));
+    // A fresh listing starts a new bound, so it reads the runs that finished
+    // between pages. Large findings spread it over several pages.
+    let mut fresh = Vec::new();
+    let mut args = json!({});
+    loop {
+        let answer = call(
+            &connection,
+            "list_latest_assessed_workspace_runs",
+            args.clone(),
+        )
+        .expect("list");
+        fresh.extend(run_ids(&answer).into_iter().map(str::to_owned));
+        if answer["next"].is_null() {
+            break;
+        }
+        args = json!({"after": answer["next"]});
+    }
+    assert!(fresh.iter().any(|id| id == "wt-5-newer"));
+    assert!(fresh.iter().any(|id| id == "wt-4-queued"));
+    assert!(fresh.iter().any(|id| id == "wt-9"));
 }
 
 #[test]
