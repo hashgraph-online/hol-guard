@@ -13,10 +13,12 @@ unavailable resident can never leave a saved approval applied.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 from .native_context import _resolve_digest_home
+from .native_daemon_client import GuardSurfaceDaemonClient, load_running_guard_surface_daemon_client
 from .native_package_approval_hash import _evaluation_view, _transport
 from .native_package_evaluation_compose import NativePackageEvaluationComposeError, apply_package_evaluation_patch
 
@@ -37,6 +39,57 @@ _REREAD_CLAIMS = frozenset({"exact_cloud", "legacy_local", "store"})
 
 class NativePackagePolicyResolveError(NativePackageEvaluationComposeError):
     """No authoritative native stored-policy resolution was available."""
+
+
+@dataclass(frozen=True)
+class DaemonPolicyResolution:
+    """Transport result from the already-authenticated native daemon authority."""
+
+    decision: dict[str, object] | None
+    authority: GuardSurfaceDaemonClient | None
+
+
+def resolve_package_policy(
+    *,
+    guard_home: Path,
+    harness: str,
+    artifact_id: str | None,
+    artifact_hash: str,
+    workspaces: tuple[str, ...],
+    publisher: str | None,
+) -> DaemonPolicyResolution:
+    """Resolve a saved package decision without starting or repairing a daemon."""
+
+    try:
+        authority = load_running_guard_surface_daemon_client(guard_home)
+        for workspace in workspaces:
+            lookup = authority.resolve_policy_decision(
+                {
+                    "harness": harness,
+                    "artifact_id": artifact_id,
+                    "artifact_hash": artifact_hash,
+                    "workspace": workspace,
+                    "publisher": publisher,
+                }
+            )
+            decision = lookup.get("decision")
+            if isinstance(decision, dict):
+                return DaemonPolicyResolution(decision=dict(decision), authority=authority)
+        return DaemonPolicyResolution(decision=None, authority=authority)
+    except (OSError, RuntimeError, ValueError):
+        return DaemonPolicyResolution(decision=None, authority=None)
+
+
+def claim_package_policy(
+    authority: GuardSurfaceDaemonClient,
+    decision: dict[str, object],
+) -> bool:
+    """Claim reuse through the same native authority that resolved the decision."""
+
+    try:
+        return authority.claim_policy_decision({"decision": decision})
+    except (OSError, RuntimeError, ValueError):
+        return False
 
 
 def _text(value: object) -> str | None:
@@ -105,8 +158,6 @@ def _hydrate(
             break
     authority = None
     if decision is None and ignored_integrity is not None:
-        from .hook_review.policy_authority_client import resolve_package_policy
-
         resolution = resolve_package_policy(
             guard_home=store.guard_home,
             harness=artifact.harness,
@@ -162,8 +213,6 @@ def _hydrate(
 
 def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: Any, now: str) -> bool:
     if kind == "daemon" and authority is not None:
-        from .hook_review.policy_authority_client import claim_package_policy
-
         return claim_package_policy(authority, decision)
     if kind == "exact_cloud":
         return store.consume_waited_exact_cloud_package_allow(decision, now=now)
