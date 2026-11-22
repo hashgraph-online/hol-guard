@@ -20666,6 +20666,108 @@
       "expect": "allow"
     },
     {
+      "id": "defaults-read-domain",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults read com.apple.dock"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-read-domain-key",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults read com.apple.dock orientation"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-read-global-key",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults read -g AppleInterfaceStyle"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-read-type",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults read-type com.apple.finder ShowPathbar"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-domain-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults domains"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "defaults-current-host-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "defaults -currentHost read com.apple.screensaver"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "jq-interpolated-string-stage",
       "fix_area": "read",
       "harnesses": [

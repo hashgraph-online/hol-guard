@@ -134,9 +134,12 @@ fn segment_proofs(
         .iter()
         .enumerate()
         .map(|(index, segment)| {
-            // `$((PATH=10))` assigns as it expands, which a later step sees.
-            let assigns = index + 1 < model.segments.len()
-                && super::shell_arithmetic::arithmetic_assigns(&segment.text);
+            // `$((PATH=10))` assigns while the shell expands this step's own
+            // words, before it looks the program up, so the assignment decides
+            // what this step runs as well as what the steps after it run.
+            // `defaults read $((PATH=1))` runs `1/defaults`, not the macOS
+            // program. Screen it on every step, the last one included.
+            let assigns = super::shell_arithmetic::arithmetic_assigns(&segment.text);
             (index == 0 && cwd.is_some())
                 || (!assigns
                     && exact_safe_segment_with_context(model, segment, false, proof_context))
@@ -498,6 +501,7 @@ pub(super) fn exact_safe_segment_with_context(
         || super::status_facts::safe_status_fact(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
         || super::liveness_probes::safe_liveness_probe(basename, &segment.arguments)
+        || super::preference_reads::safe_preference_read(basename, &segment.arguments)
         || super::manager_usage::safe_manager_segment(basename, model, segment, context)
     {
         return true;
