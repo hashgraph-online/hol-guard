@@ -371,7 +371,9 @@ impl PolicySnapshotStore {
     /// hid ordinary output that happened to finish during the republish, such
     /// as a contained run's. A binding
     /// that does not come back in time, or that moved past the requested
-    /// generation, still answers `None`, so that content stays withheld.
+    /// generation, still answers `None`, so that content stays withheld. A
+    /// lane that never admitted a hook at this generation is not waited on:
+    /// nothing will reopen it, and every routed hook would stall.
     pub(crate) fn structured_output_binding_awaiting(
         &self,
         generation: u64,
@@ -382,6 +384,7 @@ impl PolicySnapshotStore {
         loop {
             let view = self.structured_output_binding(generation, policy_digest, Some(deadline));
             if view.is_some()
+                || !self.direct_lane_was_open(generation, policy_digest)
                 || self
                     .bound_generation()
                     .is_some_and(|bound| bound > generation)
@@ -441,9 +444,31 @@ impl PolicySnapshotStore {
             {
                 return Err(DirectLaneDefer::Unbound);
             }
+            self.note_direct_lane_open(binding);
             return Ok(current);
         }
+        self.note_direct_lane_open(binding);
         Ok(snapshot)
+    }
+
+    fn note_direct_lane_open(&self, binding: &DirectLaneBinding) {
+        if let Ok(mut opened) = self.direct_lane_opened.lock() {
+            if opened.as_ref().is_none_or(|(generation, digest)| {
+                *generation != binding.generation || *digest != binding.policy_digest
+            }) {
+                *opened = Some((binding.generation, binding.policy_digest.clone()));
+            }
+        }
+    }
+
+    /// Whether the lane last admitted a hook at exactly this generation and
+    /// digest, which is what a lane closed to republish looks like.
+    fn direct_lane_was_open(&self, generation: u64, policy_digest: &str) -> bool {
+        self.direct_lane_opened.lock().ok().is_some_and(|opened| {
+            opened
+                .as_ref()
+                .is_some_and(|(open, digest)| *open == generation && digest == policy_digest)
+        })
     }
 
     /// The ACK file, re-read briefly while it still names a generation older
