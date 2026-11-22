@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime import command_queue_auth
@@ -16,8 +17,9 @@ class _Store:
         self.guard_home = guard_home
         self.records: dict[str, object] = {_STATE_KEY: {"key_id": "first", "issuer": "https://issuer.test"}}
 
-    def get_sync_payload(self, key: str) -> object:
-        return self.records.get(key)
+    def oauth_sign_in_stamp(self) -> str | None:
+        record = self.records.get(_STATE_KEY)
+        return None if record is None else json.dumps(record, sort_keys=True)
 
 
 class _Resolver:

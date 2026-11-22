@@ -132,6 +132,10 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "oldest_approval_request_created_at"
         | "cached_supply_chain_bundle"
         | "hook_managed_install_admission"
+        // Only a digest, or the shape, of the stored sign-in record leaves
+        // the store.
+        | "oauth_sign_in_stamp"
+        | "oauth_sign_in_presence"
         // The bundle and every row it is judged against, as one view.
         | "policy_bundle_trust_rows"
         // The Guard Cloud status rows, read as one view.
@@ -229,6 +233,10 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "clear_read_state"
         | "set_device_label"
         | "set_sync_payload"
+        | "write_credential_sync_payload"
+        | "insert_sync_payload_if_absent"
+        | "delete_sync_payload"
+        | "delete_sync_payloads"
         | "record_command_queue_lease_limit"
         | "transition_command_queue_state"
         | "transition_cloud_review_sync_state"
