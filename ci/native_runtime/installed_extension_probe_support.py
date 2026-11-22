@@ -11,6 +11,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
+from ci.native_runtime.installed_extension_receipt_reads import (
+    persisted_native_receipt_ids as persisted_native_receipt_ids,
+)
+from ci.native_runtime.installed_extension_receipt_reads import readable_native_receipt as readable_native_receipt
 from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
     compile_source,
     find_packaged_source_compiler,
@@ -22,7 +26,6 @@ from codex_plugin_scanner.guard.native_approval_errors import (
     NATIVE_COMMAND_CONTROL_ERROR_CODES,
     NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 )
-from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -199,27 +202,6 @@ def prove_installed_data_only_authoring(package: Path) -> dict[str, object]:
         "implementation_digest": implementation,
         "source_sha": source_manifest["source_sha"],
     }
-
-
-def persisted_native_receipt_ids(store: GuardStore) -> set[str]:
-    """Return the durable receipt identities without exposing receipt contents."""
-
-    with store._connect() as connection:
-        rows = connection.execute("select decision_id from native_hook_decision_receipts").fetchall()
-    return {row["decision_id"] for row in rows if isinstance(row["decision_id"], str)}
-
-
-def readable_native_receipt(store: GuardStore, decision_id: str) -> dict[str, object] | None:
-    """Read one receipt, treating a store that cannot answer yet as not persisted.
-
-    A poll then keeps waiting and, at its deadline, reports its own diagnostic
-    instead of stopping on the first unanswered read.
-    """
-
-    try:
-        return store.get_native_decision_receipt(decision_id)
-    except NativeGuardStoreUnavailable:
-        return None
 
 
 class _ReceiptProgressWriter(Protocol):
