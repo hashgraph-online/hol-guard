@@ -9,9 +9,13 @@
 //! `secretstorage` negotiates it when it can, so the key never crosses the
 //! session bus in the clear.
 //!
-//! The runtime never answers a desktop prompt: a locked collection or item is
-//! an error, which the mint answers `unavailable` for, and Python's own mint,
-//! which may unlock it, runs instead.
+//! The runtime never unlocks anything: a locked collection or item is an
+//! error, which the mint answers `unavailable` for, and Python's own mint,
+//! which may unlock it, runs instead. A Secret Service that asks to confirm
+//! the creation of an item gets the same prompt `secretstorage`'s
+//! `create_item` raises in Python's mint, which this write replaces, and the
+//! call still ends at the deadline. A write that ends that way may yet commit,
+//! so the mint then answers `busy` and Python mints nothing.
 
 use std::collections::HashMap;
 use std::sync::mpsc;
@@ -20,7 +24,7 @@ use std::time::Instant;
 use secret_service::blocking::SecretService;
 use secret_service::EncryptionType;
 
-use super::mirrored::Primary;
+use super::mirrored::{Primary, WriteFailure};
 
 /// `KeyringBackend.appid` for the Python library's own items.
 const APPLICATION: &str = "Python keyring library";
@@ -41,23 +45,28 @@ fn attributes<'a>(service_name: &'a str, secret_id: &'a str) -> HashMap<&'a str,
 
 impl SecretServiceKeyring {
     /// Run one D-Bus exchange on its own thread and give up at the deadline.
-    /// A stalled thread is left to finish on its own; it holds no lock.
+    /// A stalled thread is left to finish on its own; it holds no lock. A call
+    /// that never started is [`WriteFailure::Refused`]; one that started and
+    /// gave no answer in time is [`WriteFailure::Unsettled`].
     fn bounded<T: Send + 'static>(
         &self,
         call: impl FnOnce() -> Result<T, ()> + Send + 'static,
-    ) -> Result<T, ()> {
+    ) -> Result<T, WriteFailure> {
         let wait = self
             .deadline
             .checked_duration_since(Instant::now())
-            .ok_or(())?;
+            .ok_or(WriteFailure::Refused)?;
         let (sender, receiver) = mpsc::sync_channel(1);
         std::thread::Builder::new()
             .name("hol-guard-keyring".to_owned())
             .spawn(move || {
                 let _ = sender.send(call());
             })
-            .map_err(|_| ())?;
-        receiver.recv_timeout(wait).map_err(|_| ())?
+            .map_err(|_| WriteFailure::Refused)?;
+        match receiver.recv_timeout(wait) {
+            Ok(answer) => answer.map_err(|()| WriteFailure::Refused),
+            Err(_) => Err(WriteFailure::Unsettled),
+        }
     }
 }
 
@@ -105,9 +114,10 @@ impl Primary for SecretServiceKeyring {
     fn get(&self, secret_id: &str) -> Result<Option<String>, ()> {
         let (service_name, secret_id) = (self.service_name.clone(), secret_id.to_owned());
         self.bounded(move || read(&service_name, &secret_id))
+            .map_err(|_| ())
     }
 
-    fn set(&self, secret_id: &str, value: &str) -> Result<(), ()> {
+    fn set(&self, secret_id: &str, value: &str) -> Result<(), WriteFailure> {
         let service_name = self.service_name.clone();
         let (secret_id, value) = (secret_id.to_owned(), value.to_owned());
         self.bounded(move || write(&service_name, &secret_id, &value))

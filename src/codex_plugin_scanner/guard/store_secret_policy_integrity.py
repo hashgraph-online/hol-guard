@@ -571,7 +571,12 @@ class StoreSecretPolicyIntegrityMixin:
             if minted in {"armed", "busy"}:
                 return None, None
             if minted == "present":
+                # The native mint stored or found a key. A reread that finds
+                # nothing is an unreadable copy, not a missing key, so minting
+                # here would replace it.
                 encoded_key = self._get_policy_integrity_secret_from_store(key_ref)
+                if encoded_key is None:
+                    return None, None
             try:
                 encoded_key = encoded_key or mint_policy_integrity_key_once(
                     self.guard_home,

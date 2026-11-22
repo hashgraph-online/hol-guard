@@ -30,8 +30,10 @@ def native_mint_keyring_service(guard_home: Path, secret_store: object) -> str |
 
     Only the Linux store that mirrors Python keyring's own Secret Service
     backend into the vault qualifies. The native client writes items exactly as
-    that backend does; a chained backend, a configured collection or a test
-    keyring would not read them back the same way, so those keep Python's mint.
+    that backend does; a chained backend, a configured collection, a
+    non-default attribute scheme (``KeePassXC`` searches ``Title`` and
+    ``UserName``) or a test keyring would not read them back the same way, so
+    those keep Python's mint.
     """
 
     if sys.platform != "linux":
@@ -57,6 +59,8 @@ def native_mint_keyring_service(guard_home: Path, secret_store: object) -> str |
     if (backend_type.__module__, backend_type.__name__) != _SECRET_SERVICE_BACKEND:
         return None
     if getattr(backend, "preferred_collection", None) is not None:
+        return None
+    if getattr(backend, "scheme", None) != "default":
         return None
     return primary.service_name
 
