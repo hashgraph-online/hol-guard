@@ -128,16 +128,41 @@ def subset_store(previous):
     return store
 
 
+def slot_row(connection):
+    """The stored activation slot over a fixture connection, as the native read selects it."""
+    from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
+    from codex_plugin_scanner.guard.store_extension_control_authority_schema import (
+        PACK_ACTIVATION_SCHEMA_VERSION,
+        extension_control_schema_marker_is_compatible,
+    )
+
+    marker = connection.execute(
+        "select version, checksum from extension_control_schema_migration where singleton=1"
+    ).fetchone()
+    if marker is None or not extension_control_schema_marker_is_compatible(marker["version"], marker["checksum"]):
+        raise NativePolicySnapshotError("native_command_pack_schema_invalid")
+    if marker["version"] < PACK_ACTIVATION_SCHEMA_VERSION:
+        return None
+    value = connection.execute("""select * from extension_command_pack_activation where singleton=1
+        and length(cast(record_json as blob)) between 1 and 65536
+        and length(record_digest)=64 and length(record_mac)=64""").fetchone()
+    if value is None:
+        raise NativePolicySnapshotError("native_command_pack_activation_missing")
+    return value
+
+
 def activation_slot_call(connect):
-    """Stand-in for the native ``read_command_pack_activation`` over a fixture connection.
+    """Stand-in for the native activation slot and pending-record reads over a fixture connection.
 
     Fixture stores keep their database in memory, out of the resident's reach,
-    so this answers the one slot read with the same states the native read uses.
+    so this answers the slot read and the pending-record list with the same
+    states and cell checks the native reads use.
     """
-    from codex_plugin_scanner.guard.catalog_delivery.activation_store import _row
     from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 
     def call(method, args):
+        if method == "list_command_pack_pending_records" and args == {}:
+            return {"items": _pending_items(connect)}
         assert method == "read_command_pack_activation" and args == {}
         with connect() as connection:
             if not connection.execute(
@@ -145,7 +170,7 @@ def activation_slot_call(connect):
             ).fetchone():
                 return {"state": "absent"}
             try:
-                row = _row(connection)
+                row = slot_row(connection)
             except NativePolicySnapshotError as error:
                 return {"state": "refused", "code": str(error)}
         if row is None:
@@ -154,3 +179,18 @@ def activation_slot_call(connect):
         return {"state": "present", "row": {name: row[name] for name in fields}}
 
     return call
+
+
+def _pending_items(connect):
+    fields = ("record_json", "record_digest", "record_mac")
+    with connect() as connection:
+        if not connection.execute(
+            "select 1 from sqlite_master where type='table' and name='extension_command_pack_pending'"
+        ).fetchone():
+            return []
+        rows = connection.execute(
+            "select "
+            + ", ".join(f"case when typeof({name}) = 'text' then {name} end" for name in fields)
+            + " from extension_command_pack_pending order by control_revision"
+        ).fetchall()
+    return [dict(zip(fields, tuple(row), strict=True)) for row in rows]

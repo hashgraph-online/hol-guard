@@ -2,8 +2,8 @@
 //!
 //! The relay cannot hand a call back once the MCP server runs, so a call the
 //! resident does not decide is refused rather than proxied. A server whose
-//! catalog offers a tool that can only carry such a call therefore runs under
-//! the Python proxy instead.
+//! calls the resident could not settle therefore runs under the Python proxy
+//! instead.
 //!
 //! The resident decides a call that installs or runs a package itself
 //! (`mcp_relay_decide_package.rs`), so a tool the package parser reads as a
@@ -12,9 +12,10 @@
 //! server back; a package call the lane cannot settle defers, and that defer
 //! marks the server for the proxy the same way an unknown server's first
 //! session does. A Composio tool is decided there too: the resident reads the
-//! provider catalog hash its identity binds from the store. What remains is a
-//! definition with no usable name, which names no tool the catalog can decide
-//! against.
+//! provider catalog hash its identity binds from the store. A definition with
+//! no usable name does not hold its server back either: the relay never sends
+//! a call to a missing or empty name and refuses it, so the server's named
+//! tools stay on the relay.
 //!
 //! The relay learns a catalog only after it started the server, so the
 //! resident remembers each server's catalog for later sessions:
@@ -65,8 +66,11 @@ pub(crate) struct RelayServerV1 {
 pub(crate) struct McpRelayServerReportRequestV1 {
     pub(crate) guard_home: String,
     pub(crate) server: RelayServerV1,
-    /// The tool definitions of the server's whole catalog.
-    pub(crate) tools: Vec<Value>,
+    /// The tool definitions of the server's whole catalog. Both reporters
+    /// still send them, so the request keeps accepting them, but no
+    /// definition changes which launcher a later session runs.
+    #[serde(rename = "tools")]
+    pub(crate) _tools: Vec<Value>,
 }
 
 /// Each reported server and whether it offers a tool the proxy decides.
@@ -117,19 +121,12 @@ pub(crate) fn report(
     request: &McpRelayServerReportRequestV1,
     servers: &RelayServers,
 ) -> Result<Vec<u8>, String> {
-    let proxy_tools = request.tools.iter().any(proxy_tool);
-    let recorded = servers.record(&request.server, proxy_tools);
+    // A catalog report only makes the server known. No definition in it
+    // marks the server: a call the relay cannot send is refused, and only a
+    // call the resident defers (`mark_package_server`) marks it.
+    let recorded = servers.record(&request.server, false);
     serde_json::to_vec(&json!({"schema": REPORT_SCHEMA, "recorded": recorded}))
         .map_err(|_| "mcp_relay_server_report_encoding_failed".to_owned())
-}
-
-/// Whether the proxy, not the resident, decides some call of `tool`: a
-/// definition without a name the relay can send.
-pub(crate) fn proxy_tool(tool: &Value) -> bool {
-    !tool
-        .get("name")
-        .and_then(Value::as_str)
-        .is_some_and(sendable_name)
 }
 
 /// A tool name the relay sends a call for (`decide_request`); a call to any

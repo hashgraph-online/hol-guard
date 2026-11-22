@@ -220,6 +220,13 @@ fn bounded(
     };
     let ended = status(output.kind, exit_code, chain);
     if let Some(label) = output.status_label.as_ref() {
+        // `${PIPESTATUS[0]}` asks for the first stage of the pipeline, which
+        // is the core, rather than for the status the filters behind it left.
+        let ended = if output.status_from_core {
+            exit_code
+        } else {
+            ended
+        };
         signals.output.out(format!("{label}{ended}\n").as_bytes());
         // The shell's status is the echo's own.
         return Ok(0);
