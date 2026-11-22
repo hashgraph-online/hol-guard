@@ -39,6 +39,8 @@ mod command_pack_legacy_evidence;
 mod command_pack_pending;
 #[path = "guard_store_extension_control_head.rs"]
 mod extension_control_head;
+#[path = "guard_store_extension_control_migration_reads.rs"]
+mod extension_control_migration_reads;
 #[path = "guard_store_extension_control_snapshot.rs"]
 mod extension_control_snapshot;
 
@@ -47,6 +49,7 @@ pub(crate) fn handles(method: &str) -> bool {
         || command_pack_pending::handles(method)
         || command_pack_legacy_evidence::handles(method)
         || extension_control_head::handles(method)
+        || extension_control_migration_reads::handles(method)
         || matches!(
             method,
             "read_command_pack_activation" | "extension_control_schema_state"
@@ -61,6 +64,9 @@ pub(crate) fn dispatch(
     match method {
         _ if extension_control_head::handles(method) => {
             extension_control_head::dispatch(connection, method, args)
+        }
+        _ if extension_control_migration_reads::handles(method) => {
+            extension_control_migration_reads::dispatch(connection, method, args)
         }
         _ if command_pack_legacy_evidence::handles(method) => {
             command_pack_legacy_evidence::dispatch(connection, method, args)

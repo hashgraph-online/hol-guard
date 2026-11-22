@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import sqlite3
+
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from . import lifecycle
 from .pack_store import decode
 
 SCHEMA = "guard.command-pack-legacy-baseline.v1"
 PURPOSE = "command-pack-legacy-baseline.v1"
+_RETAINED = "command_pack_baseline_retained"
 
 
 def is_baseline(data):
@@ -29,7 +33,7 @@ def verify(row, key):
     )["value"]
 
 
-def baseline_request(connection, metadata, *, recorded_at):
+def baseline_request(store, metadata, *, recorded_at):
     """The legacy baseline the resident retains with a first activation.
 
     A store whose schema already activated packs keeps the baseline or
@@ -39,11 +43,17 @@ def baseline_request(connection, metadata, *, recorded_at):
     draft. A slot still empty after an upgraded schema means an earlier
     first activation was refused, so the baseline is sent again.
     """
-    marker = connection.execute("select version from extension_control_schema_migration where singleton=1").fetchone()
-    if marker is not None and marker["version"] in {5, 6}:
-        slot = connection.execute("select 1 from extension_command_pack_activation where singleton=1").fetchone()
-        if slot is not None:
-            return None
+    answer = store._native_store_call(_RETAINED, {})
+    if answer == {"state": "schema_missing"}:
+        # The SQL read this replaces failed on the missing table.
+        raise sqlite3.OperationalError("extension control authority schema is missing")
+    if not isinstance(answer, dict) or set(answer) != {"state", "retained"} or answer["state"] != "present":
+        raise NativePolicySnapshotError(f"native {_RETAINED} returned no answer")
+    retained = answer["retained"]
+    if not isinstance(retained, bool):
+        raise NativePolicySnapshotError(f"native {_RETAINED} returned no answer")
+    if retained:
+        return None
     return {
         **{name: getattr(metadata, name) for name in ("program_digest", "catalog_digest", "trust_digest")},
         "recorded_at": recorded_at,

@@ -271,20 +271,13 @@ def test_a_catalog_built_in_memory_is_not_attributed_to_the_packaged_resource() 
     ] not in {"in-process", "unattributed"}
 
 
-def _store_with_events(records: list[dict[str, object]]) -> sqlite3.Connection:
-    """A connection holding migration events in the order they were written."""
+def _store_with_events(home: Path, records: list[dict[str, object]]) -> GuardStore:
+    """A store holding migration events in the order they were written."""
 
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    connection.execute(
-        "create table guard_events (event_id integer primary key autoincrement, event_name text, payload_json text)"
-    )
+    store = GuardStore(home)
     for record in records:
-        connection.execute(
-            "insert into guard_events (event_name, payload_json) values (?, ?)",
-            (MIGRATED_EVENT, json.dumps(record)),
-        )
-    return connection
+        store.add_event(MIGRATED_EVENT, record, "2026-01-01T00:00:00+00:00")
+    return store
 
 
 def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
@@ -301,16 +294,17 @@ def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
     """
 
     monkeypatch.setattr(version_module, "__version__", "3.45.0")
-    connection = _store_with_events(
+    store = _store_with_events(
+        tmp_path / "guard-home",
         [
             {"revision": 4, "catalog_digest": "catalog-x", "provenance": {"writer_version": "3.47.0"}},
             {"revision": 5, "catalog_digest": "catalog-y", "provenance": {"writer_version": "3.47.0"}},
             {"revision": 6, "catalog_digest": "catalog-x", "provenance": {"trigger": "authority-read-backfill"}},
-        ]
+        ],
     )
 
     provenance = migration_provenance(
-        recorded_writer_version(connection, "catalog-x"),
+        recorded_writer_version(store, "catalog-x"),
         "catalog-z",
         None,
         trigger="catalog-migration",

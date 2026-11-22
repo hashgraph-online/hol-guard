@@ -104,9 +104,8 @@ class ExtensionControlAuthorityCatalogMixin:
         layers: tuple[ExtensionControlLayer, ...],
         retired_targets: tuple[str, ...],
     ) -> None:
-        with self._connect() as connection:
-            if already_recorded(connection, revision):
-                return
+        if already_recorded(self, revision):
+            return
         described, downgraded_from = migration_provenance(
             None,
             catalog_digest,
@@ -148,8 +147,7 @@ class ExtensionControlAuthorityCatalogMixin:
         """
 
         catalog_digest = str(request["catalog_digest"])
-        with self._connect() as connection:
-            previous_writer_version = recorded_writer_version(connection, previous_catalog_digest)
+        previous_writer_version = recorded_writer_version(self, previous_catalog_digest)
         described, downgraded_from = migration_provenance(
             previous_writer_version,
             catalog_digest,
@@ -169,10 +167,7 @@ class ExtensionControlAuthorityCatalogMixin:
         if pack_activation is not None:
             from .catalog_delivery.activation_journal import reserve_request
 
-            with self._connect() as connection:
-                pack_reserve["pack_reserve"] = reserve_request(
-                    self, connection, pack_activation, recorded_at=str(request["now"])
-                )
+            pack_reserve["pack_reserve"] = reserve_request(self, pack_activation, recorded_at=str(request["now"]))
         reply = self._extension_control_authority_op(
             "migrate", key=key, **request, **pack_reserve, migration_record=migration_record
         )
