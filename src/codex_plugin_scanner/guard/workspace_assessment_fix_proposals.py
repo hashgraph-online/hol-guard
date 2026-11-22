@@ -33,6 +33,9 @@ from . import native_workspace_fix as native
 from . import workspace_assessment_store as assessments
 from .store_workspace_assessment_schema import MAX_FIX_DIFF_BYTES
 from .workspace_assessment_worker import queue_manual_run
+from .workspace_fix_proposal_pages import native_pages as _pages
+from .workspace_fix_proposal_pages import native_row as _row
+from .workspace_fix_proposal_pages import native_text as _text
 
 MAX_LISTED_PROPOSALS: Final = 100
 MAX_PROPOSALS_PER_PREPARE: Final = 20
@@ -89,8 +92,6 @@ _COLUMNS: Final = (
     "verification_run_id",
 )
 _WORKTREE_KEYS: Final = frozenset({"root", "paused"})
-# A runaway store cannot keep a listing loop going forever.
-_MAX_PAGES: Final = 4096
 # One apply at a time, so two requests cannot both pass the hash check.
 _APPLY_LOCK: Final = threading.Lock()
 
@@ -442,47 +443,6 @@ def _payload(row: dict[str, Any]) -> dict[str, object]:
 
 def _key_args(keys: assessments.WorktreeKeys) -> dict[str, object]:
     return {"codebase_key": keys.codebase_key, "worktree_key": keys.worktree_key}
-
-
-def _pages(
-    store: Any,
-    method: str,
-    args: dict[str, object],
-    cursor_name: str,
-    fields: frozenset[str],
-    *,
-    limit: int | None = None,
-) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    cursor: object = None
-    for _ in range(_MAX_PAGES):
-        page_args = dict(args)
-        if cursor is not None:
-            page_args[cursor_name] = cursor
-        answer = store._native_store_call(method, page_args)
-        if not isinstance(answer, dict) or set(answer) != {"items", "next"}:
-            raise RuntimeError(f"native {method} returned no answer")
-        items, cursor = answer["items"], answer["next"]
-        if not isinstance(items, list) or (cursor is not None and not items):
-            raise RuntimeError(f"native {method} returned no answer")
-        rows.extend(_row(item, fields, method) for item in items)
-        if limit is not None and len(rows) >= limit:
-            return rows[:limit]
-        if cursor is None:
-            return rows
-    raise RuntimeError(f"native {method} kept paging")
-
-
-def _row(value: object, fields: frozenset[str], method: str) -> dict[str, Any]:
-    if not isinstance(value, dict) or set(value) != fields:
-        raise RuntimeError(f"native {method} returned no answer")
-    return {str(key): item for key, item in value.items()}
-
-
-def _text(value: object, method: str) -> str:
-    if not isinstance(value, str):
-        raise RuntimeError(f"native {method} returned no answer")
-    return value
 
 
 def _skipped_payload(skipped: object) -> list[dict[str, str]]:
