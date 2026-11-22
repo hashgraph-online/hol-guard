@@ -2,11 +2,11 @@
 //! sink.
 //!
 //! Native authority chose the chain before the core ran; the Python sink cuts
-//! `head` and `tail` stages itself and hands each `grep`, `egrep`, `fgrep`,
-//! `rg` or `cut` stage here. The matcher runs exactly as Guard's own sink runs it: the
-//! installed binary located by ownership, an environment built here, and the
-//! captured text alone on its standard input. A host with no matcher, and
-//! every host without the Unix sink, answers as a shell's missing program.
+//! `head` and `tail` stages itself and hands every other stage here. The
+//! filter runs exactly as Guard's own sink runs it: the installed binary
+//! located by ownership, an environment built here, and the captured text
+//! alone on its standard input. A host with no such binary, and every host
+//! without the Unix sink, answers as a shell's missing program.
 //!
 //! The arguments are checked against the same stdin-only grammar native
 //! authority applied to the chain, so a request can never make the matcher
@@ -20,7 +20,9 @@ use serde_json::{json, Value};
 
 const SCHEMA: &str = "contained-output-match.v1";
 const MAX_REQUEST_BYTES: u64 = 192 * 1024 * 1024;
-const MATCHERS: [&str; 5] = ["grep", "egrep", "fgrep", "rg", "cut"];
+const MATCHERS: [&str; 11] = [
+    "grep", "egrep", "fgrep", "rg", "cut", "wc", "cat", "sort", "uniq", "tr", "sed",
+];
 const FILTER_FAILED: &str = "contained_output_filter_failed";
 /// The most matcher output an answer carries. Base64 makes it a third
 /// larger, which still fits the Python client's 384 MiB answer limit.
