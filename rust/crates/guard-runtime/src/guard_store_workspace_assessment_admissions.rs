@@ -27,6 +27,8 @@ use crate::guard_store_db::{
 
 /// A page stays well under the 2 MiB reply cap.
 const PAGE_BYTES: usize = 1024 * 1024;
+/// Room for `{"items":[],"next":[codebase,worktree]}` around the roots.
+const ENVELOPE_BYTES: usize = 512;
 /// True for a state row whose automatic admission has ended.
 const IS_ENDED: &str = "exists ( \
      select 1 from workspace_assessment_ended_admissions e \
@@ -40,6 +42,7 @@ pub(crate) fn handles(method: &str) -> bool {
         "admit_workspace_assessment"
             | "set_workspace_assessment_paused"
             | "record_workspace_assessment_observation"
+            | "observe_workspace_assessment"
             | "workspace_assessment_watched_roots"
             | "is_manual_workspace_assessment_admission"
             | "end_unregistered_workspace_assessment_admissions"
@@ -50,7 +53,11 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
     match method {
         "admit_workspace_assessment" => admit(connection, args),
         "set_workspace_assessment_paused" => set_paused(connection, args),
-        "record_workspace_assessment_observation" => record_observation(connection, args),
+        "record_workspace_assessment_observation" => {
+            let keys = Keys::from_args(args)?;
+            Ok(json!(observe_digests(connection, &keys, args)?))
+        }
+        "observe_workspace_assessment" => observe(connection, args),
         "workspace_assessment_watched_roots" => watched_roots(connection, args),
         "is_manual_workspace_assessment_admission" => is_manual(connection, args),
         _ => end_unregistered(connection, args),
@@ -173,9 +180,35 @@ fn set_paused(connection: &Connection, args: &Args) -> StoreResult<Value> {
     Ok(Value::Bool(changed == 1))
 }
 
-/// Store observed digests and return which triggers they imply.
-fn record_observation(connection: &Connection, args: &Args) -> StoreResult<Value> {
+/// Store observed digests and queue the runs they imply, in the one
+/// transaction, returning how many runs are queued. Recording the digests
+/// without queueing would lose the change: the next poll would compare against
+/// the digests just stored and see nothing new.
+fn observe(connection: &Connection, args: &Args) -> StoreResult<Value> {
     let keys = Keys::from_args(args)?;
+    let detector_set_digest = args.str("detector_set_digest")?;
+    let now_ms = args.int("now_ms")?;
+    let mut queued = 0_i64;
+    for trigger_kind in observe_digests(connection, &keys, args)? {
+        let request = Request {
+            trigger_kind,
+            detector_set_digest,
+            kind: "deterministic",
+            now_ms,
+        };
+        if !enqueue_locked(connection, &keys, &request, None)?.is_null() {
+            queued += 1;
+        }
+    }
+    Ok(Value::from(queued))
+}
+
+/// Store observed digests and return which triggers they imply.
+fn observe_digests(
+    connection: &Connection,
+    keys: &Keys,
+    args: &Args,
+) -> StoreResult<Vec<&'static str>> {
     let stat_digest = args.opt_str("stat_digest")?;
     let feed_digest = args.opt_str("feed_digest")?;
     let Some(row) = query_one(
@@ -185,7 +218,7 @@ fn record_observation(connection: &Connection, args: &Args) -> StoreResult<Value
         &keys.params(),
     )?
     else {
-        return Ok(json!([]));
+        return Ok(Vec::new());
     };
     let mut triggers = Vec::new();
     if changed_from(&row, "observed_stat_digest", stat_digest) {
@@ -208,7 +241,7 @@ fn record_observation(connection: &Connection, args: &Args) -> StoreResult<Value
             worktree,
         ],
     )?;
-    Ok(json!(triggers))
+    Ok(triggers)
 }
 
 /// A digest counts as a change only against an earlier observation.
@@ -249,7 +282,8 @@ fn watched_roots(connection: &Connection, args: &Args) -> StoreResult<Value> {
          order by codebase_key, worktree_key"
     );
     let mut items: Vec<Value> = Vec::new();
-    let mut bytes = 0usize;
+    // The page envelope and its cursor of two keys count against the budget too.
+    let mut bytes = ENVELOPE_BYTES;
     let mut last: Option<(String, String)> = None;
     let mut next = Value::Null;
     query_each(connection, &sql, &params, |row: Row| {

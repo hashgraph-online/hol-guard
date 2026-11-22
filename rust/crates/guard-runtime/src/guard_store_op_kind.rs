@@ -295,6 +295,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "renew_workspace_assessment_lease"
         | "cancel_workspace_assessment"
         | "record_workspace_assessment_observation"
+        | "observe_workspace_assessment"
         | "admit_workspace_assessment"
         | "end_unregistered_workspace_assessment_admissions"
         | "clear_runtime_state"

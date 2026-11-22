@@ -65,6 +65,7 @@ fn every_method_is_routed_with_its_kind() {
         ("admit_workspace_assessment", true),
         ("set_workspace_assessment_paused", true),
         ("record_workspace_assessment_observation", true),
+        ("observe_workspace_assessment", true),
         ("workspace_assessment_watched_roots", false),
         ("is_manual_workspace_assessment_admission", false),
         ("end_unregistered_workspace_assessment_admissions", true),
@@ -186,7 +187,9 @@ fn unavailable_and_ended_roots_are_not_watched() {
 #[test]
 fn a_long_root_list_pages_under_the_budget() {
     let connection = store();
-    let root = "r".repeat(4000);
+    // A control character is six bytes once JSON-escaped, so the encoded
+    // size, not the stored length, is what has to stay under the budget.
+    let root = "\u{1}".repeat(4000);
     for index in 0..300 {
         let worktree = format!("w{index:03}");
         connection
@@ -198,6 +201,7 @@ fn a_long_root_list_pages_under_the_budget() {
             .expect("seed");
     }
     let mut seen = 0;
+    let mut pages = 0;
     let mut after = Value::Null;
     loop {
         let page = call(
@@ -206,15 +210,22 @@ fn a_long_root_list_pages_under_the_budget() {
             json!({"unavailable_digest": key("u"), "after": after}),
         )
         .expect("page");
+        let encoded = serde_json::to_string(&page).expect("encode").len();
+        assert!(encoded <= 1024 * 1024, "page of {encoded} bytes");
         let items = page["items"].as_array().expect("items").len();
         assert!(items > 0);
         seen += items;
+        pages += 1;
         after = page["next"].clone();
+        if pages == 1 {
+            assert!(!after.is_null(), "the first page must not hold every root");
+        }
         if after.is_null() {
             break;
         }
     }
     assert_eq!(seen, 300);
+    assert!(pages > 1);
 }
 
 #[test]
@@ -327,4 +338,44 @@ fn an_observation_reports_only_changes_from_an_earlier_one() {
         with(keys("p"), json!({"stat_digest": key("s")})),
     );
     assert_eq!(paused.expect("paused"), json!([]));
+}
+
+#[test]
+fn an_observed_change_queues_one_run_that_covers_it() {
+    let connection = store();
+    seed(&connection, "a", 0);
+    let observe = |worktree: &str, stat: &str, feed: &str| {
+        call(
+            &connection,
+            "observe_workspace_assessment",
+            with(
+                keys(worktree),
+                json!({
+                    "stat_digest": key(stat),
+                    "feed_digest": key(feed),
+                    "detector_set_digest": key("d"),
+                    "now_ms": 5,
+                }),
+            ),
+        )
+        .expect("observe")
+    };
+    assert_eq!(observe("a", "s1", "f1"), json!(0));
+    assert_eq!(observe("a", "s1", "f1"), json!(0));
+    // Both triggers land on the one queued run.
+    assert_eq!(observe("a", "s2", "f2"), json!(2));
+    let sql = "select count(*) from workspace_assessment_runs where state = 'queued'";
+    assert_eq!(count(&connection, sql), 1);
+    assert_eq!(
+        count(
+            &connection,
+            "select count(*) from workspace_assessment_runs \
+             where trigger_kind = 'file_change' and kind = 'deterministic'"
+        ),
+        1
+    );
+    seed(&connection, "p", 1);
+    assert_eq!(observe("p", "s1", "f1"), json!(0));
+    assert_eq!(observe("p", "s2", "f2"), json!(0));
+    assert_eq!(count(&connection, sql), 1);
 }

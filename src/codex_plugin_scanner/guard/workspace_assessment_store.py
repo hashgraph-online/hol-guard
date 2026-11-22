@@ -226,6 +226,37 @@ def record_observation(
     return tuple(str(item) for item in answer)
 
 
+def observe(
+    store: Any,
+    keys: WorktreeKeys,
+    *,
+    detector_set_digest: str,
+    now_ms: int,
+    stat_digest: str | None = None,
+    feed_digest: str | None = None,
+) -> int:
+    """Store observed digests and queue the runs they imply in one transaction.
+
+    Returns how many runs the observation queued. A failed enqueue leaves the
+    earlier digests in place, so the next poll sees the change again.
+    """
+
+    method = "observe_workspace_assessment"
+    answer = store._native_store_call(
+        method,
+        {
+            **_key_args(keys),
+            "stat_digest": stat_digest,
+            "feed_digest": feed_digest,
+            "detector_set_digest": detector_set_digest,
+            "now_ms": now_ms,
+        },
+    )
+    if isinstance(answer, bool) or not isinstance(answer, int) or not 0 <= answer <= len(_OBSERVED_TRIGGERS):
+        raise RuntimeError(f"native {method} returned no answer")
+    return answer
+
+
 def _bounded_json(value: object, limit: int) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
     if len(encoded.encode("utf-8")) > limit:
@@ -275,6 +306,7 @@ __all__ = [
     "latest_assessed_runs",
     "latest_runs",
     "list_worktrees",
+    "observe",
     "recent_runs",
     "record_observation",
     "renew_lease",

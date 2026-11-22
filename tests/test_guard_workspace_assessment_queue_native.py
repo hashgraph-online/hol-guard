@@ -146,6 +146,19 @@ def test_an_observation_returns_its_triggers() -> None:
             assessments.record_observation(store, KEYS)
 
 
+def test_an_observation_queues_its_runs_in_one_call() -> None:
+    store = _Store([2, 0, -1, 3, True, None])
+    assert assessments.observe(store, KEYS, detector_set_digest="d", now_ms=7, stat_digest="s") == 2
+    assert store.calls[0] == (
+        "observe_workspace_assessment",
+        {**KEY_ARGS, "stat_digest": "s", "feed_digest": None, "detector_set_digest": "d", "now_ms": 7},
+    )
+    assert assessments.observe(store, KEYS, detector_set_digest="d", now_ms=8) == 0
+    for _ in range(4):
+        with pytest.raises(RuntimeError, match="observe_workspace_assessment"):
+            assessments.observe(store, KEYS, detector_set_digest="d", now_ms=9)
+
+
 def test_admission_sends_a_fresh_run_id() -> None:
     store = _Store(["r1", None, 5])
     kwargs: dict[str, Any] = {
