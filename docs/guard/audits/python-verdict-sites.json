@@ -274,68 +274,6 @@
       "note": "Blocks when the authority cannot be refreshed."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
-      "func": "_allow_and_forward",
-      "root": "mcp",
-      "reading": "fails-closed",
-      "actions": [
-        "require-reapproval"
-      ],
-      "note": "Raises the action to require-reapproval; never lowers one."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
-      "func": "_deny_inline_tool_call",
-      "root": "mcp",
-      "reading": "fails-closed",
-      "actions": [
-        "block"
-      ],
-      "note": "Renders the inline denial."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
-      "func": "_handle_message_serialized",
-      "root": "mcp",
-      "reading": "fails-closed",
-      "actions": [
-        "block",
-        "require-reapproval"
-      ],
-      "note": "The serialized message path's stop and queue replies."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
-      "func": "_handle_package_request",
-      "root": "mcp",
-      "reading": "fails-closed",
-      "actions": [
-        "block",
-        "require-reapproval"
-      ],
-      "note": "Raises the action to require-reapproval or block; never lowers one."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
-      "func": "_render_package_postclaim",
-      "root": "mcp",
-      "reading": "renders-native",
-      "actions": [
-        "require-reapproval"
-      ],
-      "note": "Labels the queue disposition the resident returned."
-    },
-    {
-      "file": "src/codex_plugin_scanner/guard/proxy/runtime_mcp.py",
-      "func": "_tool_decision_after_runtime_allow",
-      "root": "mcp",
-      "reading": "renders-native",
-      "actions": [
-        "allow"
-      ],
-      "note": "Carries the native route's `decision_policy_action` onto the decision it forwards."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/review_contracts.py",
       "func": "_request_recommended_scope",
       "root": "none",

@@ -11,14 +11,11 @@
 //! ensure`. A lane that is not ready only because the daemon has not
 //! prepared it yet (`kickable`) keeps the session native: the first
 //! `tools/call` waits, within `WARM_UP_BUDGET`, for the daemon to bind it,
-//! and a call the lane still cannot decide is refused. A session the relay
-//! cannot serve because of a feature it has not ported yet, or because the
-//! daemon runs a newer runtime, is handed to the Python proxy (`hands_off`):
-//! the relay execs the exact proxy argv it was given, with its environment
-//! unchanged (on Windows it runs the proxy as a child on the same stdio and
-//! returns its exit status). Every other reason, including one this module
-//! does not know, keeps the session native, and each call the lane cannot
-//! decide is refused rather than decided by the proxy.
+//! and a call the lane still cannot decide is refused. Every other reason,
+//! including a resident the installed runtime has superseded or a store
+//! newer than this runtime reads, keeps the session native too: no session
+//! is handed to another decider, and each call the lane cannot decide is
+//! refused with the repair that clears it.
 //!
 //! The readiness answer only steers which launcher runs. Each call is still
 //! admitted by the resident's `mcp_relay_decide`, which repeats every check
@@ -101,27 +98,6 @@ pub(crate) fn kickable(code: &str) -> bool {
         )
 }
 
-/// The reasons the session runs as the Python proxy: a runtime the daemon has
-/// superseded or a store schema newer than this runtime reads, which the
-/// proxy of the same release still serves, and the features the relay has
-/// not ported yet. Every other reason the lane, the probe or the gate names,
-/// and any code added later, keeps the session native, so a binding, store
-/// or daemon the resident cannot use refuses each call instead of letting
-/// the proxy decide it. That includes saved policy the resident cannot
-/// verify (`mcp_relay_saved_policy_unverifiable`) or whose bundle authority
-/// it cannot read (`mcp_relay_saved_remote_policy`): the daemon now owns the
-/// policy-integrity key, so the proxy has no key or authority the resident
-/// lacks, and each call repeats the check, so a state the daemon republishes
-/// is read on the next call.
-pub(crate) fn hands_off(code: &str) -> bool {
-    matches!(
-        code,
-        "mcp_relay_runtime_superseded"
-            | "mcp_relay_store_newer"
-            | "mcp_relay_session_server_proxy_tools"
-    )
-}
-
 /// How the session starts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Gate {
@@ -189,7 +165,6 @@ pub(crate) fn gate_line(gate: &Gate) -> String {
             if *kicked { "kicked" } else { "start" },
             elapsed.as_millis()
         ),
-        Gate::NotReady(code) if hands_off(code) => format!("{LINE_PREFIX}python proxy: {code}\n"),
         Gate::NotReady(code) => format!("{LINE_PREFIX}lane not ready: {code}\n"),
     }
 }
@@ -197,67 +172,6 @@ pub(crate) fn gate_line(gate: &Gate) -> String {
 /// Name how the session started; a closed stderr never affects it.
 pub(crate) fn note(gate: &Gate) {
     let _ = std::io::stderr().write_all(gate_line(gate).as_bytes());
-}
-
-/// Replace this process with the Python proxy it was launched for. Runs
-/// before any stdin byte is read and before the MCP server is started, so
-/// the proxy gets the host's untouched stdio, argv and environment. Returns
-/// only when the exec failed.
-#[cfg(unix)]
-pub(crate) fn hand_off(python_argv: &[String]) -> i32 {
-    let Some((program, args)) = python_argv.split_first() else {
-        return 2;
-    };
-    let error = Command::new(program).args(args).exec();
-    crate::runtime_output::stderr_line(format_args!(
-        "{LINE_PREFIX}python proxy launch failed: {error}"
-    ));
-    1
-}
-
-/// Windows has no exec: run the Python proxy on the inherited stdio, argv
-/// and environment and return its exit status. The proxy joins a
-/// kill-on-close JobObject, so it cannot outlive this process.
-#[cfg(windows)]
-pub(crate) fn hand_off(python_argv: &[String]) -> i32 {
-    let Some((program, args)) = python_argv.split_first() else {
-        return 2;
-    };
-    let spawned = Command::new(program)
-        .args(args)
-        .creation_flags(guard_runtime_windows_process::CHILD_TREE_CREATION_FLAGS)
-        .spawn();
-    let mut child = match spawned {
-        Ok(child) => child,
-        Err(error) => {
-            crate::runtime_output::stderr_line(format_args!(
-                "{LINE_PREFIX}python proxy launch failed: {error}"
-            ));
-            return 1;
-        }
-    };
-    let tree = match guard_runtime_windows_process::ChildTree::adopt_suspended(&child) {
-        Ok(tree) => tree,
-        Err(error) => {
-            let _ = child.kill();
-            let _ = child.wait();
-            crate::runtime_output::stderr_line(format_args!(
-                "{LINE_PREFIX}python proxy launch failed: {error}"
-            ));
-            return 1;
-        }
-    };
-    let status = child.wait();
-    drop(tree);
-    match status {
-        Ok(status) => crate::mcp_relay_launch::exit_code(status),
-        Err(error) => {
-            crate::runtime_output::stderr_line(format_args!(
-                "{LINE_PREFIX}python proxy wait failed: {error}"
-            ));
-            1
-        }
-    }
 }
 
 /// The daemon the session's Guard home names, with its token.

@@ -41,7 +41,7 @@ pub(super) fn resolve(
         .clone()
         .ok_or(BINDING_INCOMPLETE)?;
     let view = view::bound_harness_view(binding, &request.build.harness)?;
-    let saved = match connection {
+    let mut saved = match connection {
         Some(connection) => store::saved(
             connection,
             binding,
@@ -50,6 +50,14 @@ pub(super) fn resolve(
         )?,
         None => None,
     };
+    let own_write = request
+        .inline
+        .remembered
+        .as_ref()
+        .and_then(|remembered| remembered.generation);
+    if let (Some(saved), Some(generation)) = (saved.as_mut(), own_write) {
+        saved.read_after_own_write(generation);
+    }
     let resolved = resolve_saved(
         request,
         admitted,
@@ -100,10 +108,12 @@ fn resolve_saved(
                 &subject,
                 &catalog,
                 // The queue route of the package lane is answered by the same
-                // bound mode and redaction level the tool lane's queue route is.
+                // mode and redaction level the tool lane's queue route is: the
+                // bound ones, else the session config's.
                 package_lane::QueueBinding {
-                    blocked_request_mode: binding.review.blocked_request_mode.as_deref(),
-                    redaction_level: view.receipt_redaction_level.as_deref(),
+                    blocked_request_mode: admitted.blocked_request_mode(),
+                    redaction_level: admitted
+                        .redaction_level(view.receipt_redaction_level.as_deref()),
                 },
             )?)))
         }
@@ -125,7 +135,9 @@ fn resolve_saved(
             identity,
             decision,
             mode: view.mode.clone(),
-            redaction_level: view.receipt_redaction_level.clone(),
+            redaction_level: admitted
+                .redaction_level(view.receipt_redaction_level.as_deref())
+                .map(str::to_owned),
         },
         packaged,
     ))

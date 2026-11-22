@@ -76,26 +76,32 @@ fn an_observing_safe_alternative_session_is_decidable() {
 }
 
 #[test]
-fn a_prompting_config_hands_the_session_off() {
+fn an_ask_binding_without_its_center_keeps_the_session_off_the_queue() {
     let home = no_store_home("config");
     for config_mode in ["enforce", "observe"] {
-        for mode in [Some("ask"), None] {
-            let mut prompting = decidable(DirectLaneBinding::empty_for_tests());
-            prompting.mcp_relay = Some(view(config_mode, Some("full")));
-            prompting.review.blocked_request_mode = mode.map(str::to_owned);
-            assert_eq!(
-                session_decidable(&prompting, &home, "codex"),
-                Err("mcp_relay_session_review_mode"),
-                "{config_mode} {mode:?}"
-            );
-        }
+        let mut prompting = decidable(DirectLaneBinding::empty_for_tests());
+        prompting.mcp_relay = Some(view(config_mode, Some("full")));
+        prompting.review.blocked_request_mode = Some("ask".to_owned());
+        assert_eq!(
+            session_decidable(&prompting, &home, "codex"),
+            Err("mcp_relay_session_review_mode"),
+            "{config_mode}"
+        );
     }
-    let mut unbound = decidable(DirectLaneBinding::empty_for_tests());
-    unbound.mcp_relay = Some(view("enforce", None));
-    assert_eq!(
-        session_decidable(&unbound, &home, "codex"),
-        Err("mcp_relay_session_redaction_unbound")
-    );
+}
+
+#[test]
+fn a_mode_or_redaction_level_the_configs_disagree_on_is_left_to_each_call() {
+    let home = no_store_home("unbound");
+    let mut no_mode = decidable(DirectLaneBinding::empty_for_tests());
+    no_mode.review.blocked_request_mode = None;
+    assert_eq!(session_decidable(&no_mode, &home, "codex"), Ok(()));
+    let mut no_level = decidable(DirectLaneBinding::empty_for_tests());
+    no_level.mcp_relay = Some(view("enforce", None));
+    assert_eq!(session_decidable(&no_level, &home, "codex"), Ok(()));
+    let mut no_level = asking("enforce");
+    no_level.mcp_relay = Some(view_for("opencode", "enforce", None));
+    assert_eq!(session_decidable(&no_level, &home, "opencode"), Ok(()));
 }
 
 #[test]
@@ -138,12 +144,6 @@ fn an_asking_session_the_resident_cannot_queue_is_not_decidable() {
     assert_eq!(
         session_decidable(&no_oauth, &home, "opencode"),
         Err("mcp_relay_session_review_mode")
-    );
-    let mut unbound = asking("enforce");
-    unbound.mcp_relay = Some(view_for("opencode", "enforce", None));
-    assert_eq!(
-        session_decidable(&unbound, &home, "opencode"),
-        Err("mcp_relay_session_redaction_unbound")
     );
 }
 

@@ -21,7 +21,8 @@
 //! rebuilds from the record (`mcp_relay_receipt_package.rs`).
 //!
 //! For a pending notice, the drain reads the stored approval after it commits
-//! the receipt. Remembered allows still need native policy persistence.
+//! the receipt. An inline-approved forward the relay remembers saves its
+//! artifact allow first (`mcp_relay_receipt_remember.rs`).
 //!
 //! As in the Python drain, a record the resident cannot compose is dropped,
 //! never guessed. One the store cannot take goes back to the queue as an
@@ -51,9 +52,11 @@ mod event;
 #[path = "mcp_relay_receipt_notice.rs"]
 mod notice;
 #[path = "mcp_relay_receipt_package.rs"]
-mod package;
+pub(crate) mod package;
 #[path = "mcp_relay_receipt_record.rs"]
 mod record;
+#[path = "mcp_relay_receipt_remember.rs"]
+pub(crate) mod remember;
 #[path = "mcp_relay_receipt_row.rs"]
 mod row;
 
@@ -90,14 +93,27 @@ const EVENT_QUEUE_LIMIT: u64 = 1_000;
 
 /// A receipt's store arguments and its silent inbox row's.
 type Args = (Map<String, Value>, Option<Map<String, Value>>);
-/// A record, its receipt's store arguments and its silent inbox row's.
-type Composed = (Value, Map<String, Value>, Option<Map<String, Value>>);
+/// A record, its receipt's store arguments, its silent inbox row's and, for a
+/// remembered forward, the instant its allow is saved at.
+type Composed = (
+    Value,
+    Map<String, Value>,
+    Option<Map<String, Value>>,
+    Option<String>,
+);
 
 /// One writer at a time, so two drains never contend for the store.
 static WRITER: Mutex<()> = Mutex::new(());
 
 /// Whether the resident writes this queued record's receipt itself.
 pub(crate) fn is_plain(record: &Value) -> bool {
+    if record.get(remember::KEY).is_some() {
+        return remember::stripped(record).is_some_and(|forward| plain_either(&forward));
+    }
+    plain_either(record)
+}
+
+fn plain_either(record: &Value) -> bool {
     plain(record).is_some() || package::plain(record).is_some()
 }
 
@@ -151,8 +167,13 @@ fn write_with_notices(
     let composed: Vec<Composed> = records
         .into_iter()
         .filter_map(|record| {
-            let (receipt, row) = compose(guard_home, &record, &Stamp::fresh()?)?;
-            Some((record, receipt, row))
+            let (record, remembered) = match record.get(remember::KEY) {
+                Some(_) => (remember::stripped(&record)?, true),
+                None => (record, false),
+            };
+            let stamp = Stamp::fresh()?;
+            let (receipt, row) = compose(guard_home, &record, &stamp)?;
+            Some((record, receipt, row, remembered.then_some(stamp.store_now)))
         })
         .collect();
     if composed.is_empty() {
@@ -166,13 +187,29 @@ fn write_with_notices(
     let mut notices = Vec::new();
     let unwritten = {
         let _writer = WRITER.lock().unwrap_or_else(PoisonError::into_inner);
+        // Before the gate, in the daemon policy writer's order. A lock that
+        // stays taken costs the memory of each remembered record, never its
+        // receipt.
+        let generation = composed
+            .iter()
+            .any(|(_, _, _, remembered)| remembered.is_some())
+            .then(|| remember::lock(guard_home))
+            .flatten();
         let Ok(_gate) = hold_storage_gate(home, Duration::from_millis(timeout_ms.into())) else {
             return records_of(composed);
         };
         let busy_timeout_ms = u64::from(timeout_ms).clamp(1, MAX_BUSY_TIMEOUT_MS);
         composed
             .into_iter()
-            .filter_map(|(record, receipt, row)| {
+            .filter_map(|(record, receipt, row, remembered)| {
+                // Before the receipt, as `_allow_and_forward` saves it. A
+                // record handed back after this point no longer remembers, so
+                // a retry never saves the allow twice.
+                if let (Some(now), Some(held)) = (remembered, generation.as_ref()) {
+                    remember::save(guard_home, &record, &now, held, |args| {
+                        evaluate(guard_home, busy_timeout_ms, remember::METHOD, args)
+                    });
+                }
                 if !store(guard_home, busy_timeout_ms, RECEIPT_METHOD, receipt) {
                     return Some(record);
                 }
@@ -195,13 +232,30 @@ fn write_with_notices(
 }
 
 fn records_of(composed: Vec<Composed>) -> Vec<Value> {
-    composed.into_iter().map(|(record, ..)| record).collect()
+    composed
+        .into_iter()
+        .map(|(record, _, _, remembered)| match remembered {
+            Some(_) => remember::restored(record),
+            None => record,
+        })
+        .collect()
 }
 
 /// Whether the write is in the store: a failure after the commit (the
 /// outbox generation read) leaves it written, so the daemon must not write a
 /// receipt again under a fresh receipt id.
 fn store(guard_home: &str, busy_timeout_ms: u64, method: &str, args: Map<String, Value>) -> bool {
+    let (reply, committed) = evaluate(guard_home, busy_timeout_ms, method, args);
+    reply.is_some() || committed
+}
+
+/// The store operation's reply, and whether it committed.
+fn evaluate(
+    guard_home: &str,
+    busy_timeout_ms: u64,
+    method: &str,
+    args: Map<String, Value>,
+) -> (Option<Value>, bool) {
     let (outcome, committed) = crate::guard_store_op::evaluate_committing(&GuardStoreRequestV1 {
         schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
         request_id: "mcp-relay-receipt".to_owned(),
@@ -215,7 +269,7 @@ fn store(guard_home: &str, busy_timeout_ms: u64, method: &str, args: Map<String,
         busy_timeout_ms,
         args,
     });
-    outcome.is_ok() || committed
+    (outcome.ok(), committed)
 }
 
 /// The values `build_receipt` and the store call draw fresh for each write.

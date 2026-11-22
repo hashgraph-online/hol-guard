@@ -344,7 +344,7 @@ pub(crate) fn approval_browser_allowed_under(
         != Some("native-only"))
 }
 
-fn effective_config(
+pub(crate) fn effective_config(
     guard_home: &Path,
     workspace: Option<&Path>,
     source: &ManagedPolicySource,
