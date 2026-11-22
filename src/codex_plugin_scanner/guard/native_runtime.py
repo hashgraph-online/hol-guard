@@ -250,6 +250,14 @@ def _isolated_environment() -> dict[str, str]:
     return environment
 
 
+def _isolated_environment_with(keys: tuple[str, ...]) -> dict[str, str]:
+    """The isolated environment plus the named variables a caller needs."""
+
+    environment = _isolated_environment()
+    environment.update({key: os.environ[key] for key in keys if key in os.environ})
+    return environment
+
+
 def _run_native_process_result(
     path: Path,
     args: tuple[str, ...],
@@ -260,6 +268,7 @@ def _run_native_process_result(
     stop_event: threading.Event | None = None,
     allow_windows_breakaway: bool = False,
     windows_kill_on_job_close: bool = True,
+    environment_keys: tuple[str, ...] = (),
 ) -> BoundedHookProcessResult:
     """Run one bounded native invocation and keep its whole result.
 
@@ -274,7 +283,7 @@ def _run_native_process_result(
         (str(path), *args),
         input_text=input_text,
         cwd=path.parent,
-        environment=_isolated_environment(),
+        environment=_isolated_environment_with(environment_keys),
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
         stop_event=stop_event,
@@ -296,6 +305,7 @@ def _run_native_process(
     stop_event: threading.Event | None = None,
     allow_windows_breakaway: bool = False,
     windows_kill_on_job_close: bool = True,
+    environment_keys: tuple[str, ...] = (),
 ) -> str | None:
     result = _run_native_process_result(
         path,
@@ -306,6 +316,7 @@ def _run_native_process(
         allow_windows_breakaway=allow_windows_breakaway,
         windows_kill_on_job_close=windows_kill_on_job_close,
         stop_event=stop_event,
+        environment_keys=environment_keys,
     )
     if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
         return None

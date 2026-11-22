@@ -45,7 +45,7 @@ def test_a_native_mint_is_read_back_from_the_store(tmp_path: Path, monkeypatch: 
         secret_store.set_secret(key_ref, _KEY)
         return "present"
 
-    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", native_mint)
+    monkeypatch.setattr(key_mint_module, "native_policy_integrity_key_mint", native_mint)
     _no_python_mint(monkeypatch)
 
     raw_key, key_id = store._policy_integrity_secret_material(create=True)
@@ -57,7 +57,7 @@ def test_a_native_mint_is_read_back_from_the_store(tmp_path: Path, monkeypatch: 
 @pytest.mark.parametrize("state", ["armed", "busy"])
 def test_a_native_refusal_mints_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str) -> None:
     store = _store(tmp_path, monkeypatch)
-    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", lambda _home, **_kwargs: state)
+    monkeypatch.setattr(key_mint_module, "native_policy_integrity_key_mint", lambda _home, **_kwargs: state)
     _no_python_mint(monkeypatch)
 
     assert store._policy_integrity_secret_material(create=True) == (None, None)
@@ -67,7 +67,7 @@ def test_a_native_refusal_mints_nothing(tmp_path: Path, monkeypatch: pytest.Monk
 @pytest.mark.parametrize("state", [None, "unavailable"])
 def test_without_a_native_mint_python_mints(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str | None) -> None:
     store = _store(tmp_path, monkeypatch)
-    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", lambda _home, **_kwargs: state)
+    monkeypatch.setattr(key_mint_module, "native_policy_integrity_key_mint", lambda _home, **_kwargs: state)
 
     raw_key, key_id = store._policy_integrity_secret_material(create=True)
 
@@ -84,7 +84,7 @@ def test_a_stored_key_asks_no_mint(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     def no_native(_home: Path, **_kwargs: object) -> str | None:
         raise AssertionError("no mint is needed")
 
-    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", no_native)
+    monkeypatch.setattr(key_mint_module, "native_policy_integrity_key_mint", no_native)
     _no_python_mint(monkeypatch)
 
     assert store._policy_integrity_secret_material(create=True)[0] == bytes(range(32))
@@ -116,6 +116,7 @@ def test_only_a_known_state_is_taken_from_the_runtime(
         seen.append((feature, command, request))
         assert "timeout_seconds" not in kwargs
         assert isinstance(kwargs["deadline"], float)
+        assert kwargs["environment_keys"] == ()
         return answer
 
     monkeypatch.setattr(runtime_request, "runtime_answer", fake_answer)
@@ -195,8 +196,9 @@ def test_a_test_keyring_keeps_the_python_mint(tmp_path: Path, monkeypatch: pytes
 def test_the_keyring_mint_names_its_service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[tuple[str, object]] = []
 
-    def fake_answer(feature: str, _command: str, request: object, **_kwargs: object) -> dict[str, object]:
+    def fake_answer(feature: str, _command: str, request: object, **kwargs: object) -> dict[str, object]:
         seen.append((feature, request))
+        assert kwargs["environment_keys"] == ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR")
         return {"state": "busy"}
 
     monkeypatch.setattr(runtime_request, "runtime_answer", fake_answer)
@@ -220,8 +222,8 @@ def test_the_store_hands_its_keyring_service_to_the_native_mint(
         seen.append(keyring_service)
         return "armed"
 
-    monkeypatch.setattr(secret_policy_module, "native_mint_keyring_service", lambda _home, _store: _SERVICE)
-    monkeypatch.setattr(secret_policy_module, "native_policy_integrity_key_mint", native_mint)
+    monkeypatch.setattr(key_mint_module, "native_mint_keyring_service", lambda _home, _store: _SERVICE)
+    monkeypatch.setattr(key_mint_module, "native_policy_integrity_key_mint", native_mint)
     _no_python_mint(monkeypatch)
 
     assert store._policy_integrity_secret_material(create=True) == (None, None)
@@ -240,3 +242,26 @@ def test_a_relative_home_is_sent_resolved(tmp_path: Path, monkeypatch: pytest.Mo
 
     assert key_mint_module.native_policy_integrity_key_mint(Path("guard-home")) == "busy"
     assert seen == [{"guard_home": str(tmp_path.resolve() / "guard-home")}]
+
+
+def test_other_stores_ask_no_native_mint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def no_native(_home: Path, **_kwargs: object) -> str | None:
+        raise AssertionError("only qualifying stores ask the native mint")
+
+    monkeypatch.setattr(key_mint_module, "native_policy_integrity_key_mint", no_native)
+
+    assert key_mint_module.native_mint_for_store(tmp_path, object()) is None
+
+
+def test_named_bus_variables_reach_the_native_child(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_runtime
+
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/example/bus")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/example")
+
+    plain = native_runtime._isolated_environment()
+    extended = native_runtime._isolated_environment_with(("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"))
+
+    assert "DBUS_SESSION_BUS_ADDRESS" not in plain and "XDG_RUNTIME_DIR" not in plain
+    assert extended["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/example/bus"
+    assert extended["XDG_RUNTIME_DIR"] == "/run/example"

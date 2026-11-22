@@ -22,6 +22,7 @@ _NATIVE_MINT_STATES = frozenset({"present", "armed", "busy", "unavailable"})
 # The native mint gives its two lock waits one four-second budget, inside this deadline.
 _NATIVE_MINT_TIMEOUT_SECONDS = 15.0
 _NATIVE_MINT_OUTPUT_LIMIT = 4096
+_SESSION_BUS_ENVIRONMENT = ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR")
 
 
 def native_mint_keyring_service(guard_home: Path, secret_store: object) -> str | None:
@@ -60,6 +61,22 @@ def native_mint_keyring_service(guard_home: Path, secret_store: object) -> str |
     return primary.service_name
 
 
+def native_mint_for_store(guard_home: Path, secret_store: object) -> str | None:
+    """Ask the native runtime to mint the key into ``secret_store`` when it can.
+
+    The plain encrypted-file store and the Linux store that mirrors Python
+    keyring's Secret Service backend qualify. Any other store answers ``None``
+    without a request, and the caller keeps its own mint.
+    """
+
+    from .store_base import EncryptedFileSecretStore
+
+    keyring_service = native_mint_keyring_service(guard_home, secret_store)
+    if keyring_service is None and type(secret_store) is not EncryptedFileSecretStore:
+        return None
+    return native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service)
+
+
 def native_policy_integrity_key_mint(guard_home: Path, *, keyring_service: str | None = None) -> str | None:
     """Ask the native runtime to mint the key in the encrypted-file store.
 
@@ -86,6 +103,9 @@ def native_policy_integrity_key_mint(guard_home: Path, *, keyring_service: str |
         output_limit=_NATIVE_MINT_OUTPUT_LIMIT,
         # One budget for the status check and the command together.
         deadline=time.monotonic() + _NATIVE_MINT_TIMEOUT_SECONDS,
+        # The Secret Service client finds the session bus the way Python's
+        # keyring does: from the bus address, else the runtime directory.
+        environment_keys=() if keyring_service is None else _SESSION_BUS_ENVIRONMENT,
     )
     if answer is None or set(answer) != {"state"}:
         return None
