@@ -16,14 +16,17 @@ use std::path::Path;
 use std::time::Duration;
 
 use base64ct::{Base64UrlUnpadded, Encoding};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 
+use crate::daemon_manage::republish_trust;
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
 use crate::local_mcp_grant_identity::composio_requires_action_review;
+use crate::local_store_read::STORE_FILE_NAME;
 use crate::policy_integrity_generation::lock as policy_generation_lock;
 use crate::policy_integrity_resolver::{
     build_scoped_secret_ref, finalization_state, load_policy_integrity_control_state,
-    policy_integrity_secret_material, POLICY_INTEGRITY_CONTROL_REF,
+    policy_integrity_secret_material, POLICY_INTEGRITY_CONTROL_REF, POLICY_INTEGRITY_STATE_KEY,
 };
 
 pub(super) const KEY: &str = "remember";
@@ -182,11 +185,21 @@ fn signed(
     );
     args.insert("integrity_key_id".to_owned(), json!(material.key_id));
     args.insert("current_generation".to_owned(), json!(generation));
+    let now = args
+        .get("now")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
     let (reply, committed) = store(args);
     let finalized = reply
         .and_then(|reply| reply.get("next_control_state").cloned())
         .and_then(|proposed| finalization_state(Some(&pending), &proposed));
-    if finalized.is_some_and(|finalized| put(&mut secrets, &control_ref, &finalized)) {
+    if let Some(finalized) =
+        finalized.filter(|finalized| put(&mut secrets, &control_ref, finalized))
+    {
+        if let Some(published) = finalized.get("generation").and_then(Value::as_i64) {
+            publish_generation(home, generation, published, &now);
+        }
         return;
     }
     if !committed {
@@ -195,6 +208,58 @@ fn signed(
     // A committed write re-signed every local row at the next generation, so
     // the earlier state would reject them all as a rollback. The pending
     // state stays for the integrity reconcile, which decides the generation.
+}
+
+/// Publish the generation a committed save advanced the rows to. The rows and
+/// the control state now name `next`, while the integrity state in
+/// `sync_state` -- the one the lookups compare a row against -- still names
+/// `generation`, so the saved allow and every re-signed row would read as a
+/// rollback. As `_refresh_policy_integrity_state` does, the advanced state is
+/// written and the running daemon's trust status republished from it. The
+/// write replaces only the exact state that was read and only a protected
+/// one, so a concurrent reconcile or a degraded state is left alone.
+fn publish_generation(home: &Path, generation: i64, next: i64, now: &str) {
+    if next == generation {
+        return;
+    }
+    let Ok(connection) = Connection::open(home.join(STORE_FILE_NAME)) else {
+        return;
+    };
+    if connection.busy_timeout(LOCK_WAIT).is_err() {
+        return;
+    }
+    let Ok(Some(stored)) = connection
+        .query_row(
+            "select payload_json from sync_state where state_key = ?1",
+            [POLICY_INTEGRITY_STATE_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+    else {
+        return;
+    };
+    let Ok(Value::Object(mut state)) = serde_json::from_str::<Value>(&stored) else {
+        return;
+    };
+    if state.get("mode").and_then(Value::as_str) != Some("protected")
+        || state.get("generation").and_then(Value::as_i64) != Some(generation)
+    {
+        return;
+    }
+    state.insert("generation".to_owned(), json!(next));
+    let Ok(advanced) = serde_json::to_string(&state) else {
+        return;
+    };
+    let updated = connection.execute(
+        "update sync_state set payload_json = ?1, updated_at = ?2 \
+         where state_key = ?3 and payload_json = ?4",
+        params![advanced, now, POLICY_INTEGRITY_STATE_KEY, stored],
+    );
+    if updated.is_ok_and(|rows| rows == 1) {
+        let mut args = Map::new();
+        args.insert("trust_status".to_owned(), Value::Object(state));
+        republish_trust(home, &args);
+    }
 }
 
 /// The trusted control state, written at generation 0 when the home has

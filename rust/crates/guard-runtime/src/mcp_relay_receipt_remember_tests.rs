@@ -197,3 +197,56 @@ fn a_record_handed_back_after_its_allow_was_saved_is_retried_without_the_flag() 
     assert_eq!(handed_back(&queued, &[]), None);
     assert_eq!(handed_back(&forward, std::slice::from_ref(&queued)), None);
 }
+
+fn published_after(tag: &str, mode: &str) -> Value {
+    let home = store_home(tag, true);
+    let state = json!({
+        "backend": "vault",
+        "cutover_complete": true,
+        "degraded_reasons": [],
+        "enforcement": "enforce",
+        "generation": 0,
+        "key_id": "key",
+        "mode": mode,
+    });
+    let connection = Connection::open(home.join("guard.db")).unwrap();
+    connection
+        .execute_batch(
+            "create table if not exists sync_state (state_key text primary key, \
+             payload_json text not null, updated_at text not null)",
+        )
+        .unwrap();
+    connection
+        .execute(
+            "insert into sync_state values ('policy_integrity', ?1, 'then')",
+            [serde_json::to_string(&state).unwrap()],
+        )
+        .unwrap();
+
+    let unwritten = write(home.to_str().unwrap(), vec![remembered()]);
+
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    let stored: String = connection
+        .query_row(
+            "select payload_json from sync_state where state_key = 'policy_integrity'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let _ = std::fs::remove_dir_all(&home);
+    serde_json::from_str(&stored).unwrap()
+}
+
+#[test]
+fn a_saved_allow_publishes_the_generation_its_rows_were_signed_at() {
+    let published = published_after("relay-remember-publishes", "protected");
+    assert_eq!(published["generation"], json!(1), "{published}");
+    assert_eq!(published["mode"], json!("protected"));
+    assert_eq!(published["key_id"], json!("key"));
+}
+
+#[test]
+fn a_degraded_integrity_state_is_left_for_the_reconcile() {
+    let published = published_after("relay-remember-degraded", "degraded");
+    assert_eq!(published["generation"], json!(0), "{published}");
+}

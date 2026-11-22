@@ -318,7 +318,7 @@ fn write_state(caller: &Caller, args: &Map<String, Value>) -> Result<(), String>
 
 /// `republish_guard_daemon_trust_status`: the running daemon's state,
 /// re-signed with a new `trust_status` and every other field kept.
-fn republish_trust(home: &Path, args: &Map<String, Value>) -> bool {
+pub(crate) fn republish_trust(home: &Path, args: &Map<String, Value>) -> bool {
     let Some(trust) = object(args, "trust_status") else {
         return false;
     };

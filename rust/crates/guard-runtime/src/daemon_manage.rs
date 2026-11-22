@@ -64,6 +64,7 @@ mod serve_stderr;
 mod start_progress;
 #[path = "daemon_manage_state.rs"]
 mod state;
+pub(crate) use state::republish_trust;
 #[cfg(all(test, unix))]
 #[path = "daemon_manage_tests.rs"]
 mod tests;
