@@ -144,3 +144,24 @@ def test_an_unprovisioned_home_reads_presence_without_the_resident(tmp_path: Any
 
     store.connection.execute("insert into policy_decisions (source) values ('local')")
     assert policy_row_presence(store).local_policy
+
+
+def test_an_open_connection_scope_reads_presence_on_the_shared_connection(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _UnprovisionedStore(tmp_path)
+    store.connection.execute("insert into policy_decisions (source) values ('local')")
+    monkeypatch.setattr(native_policy_presence, "owns_scope", lambda owner: owner is store)
+
+    presence = policy_row_presence(store)
+
+    assert presence.local_policy
+    assert presence.any_saved
+    assert not presence.remote_policy
+
+
+def test_without_a_connection_scope_a_provisioned_home_asks_the_resident() -> None:
+    store = _Store(_presence(local_policy=True))
+
+    assert policy_row_presence(store).local_policy
+    assert store.calls == [("policy_row_presence", {})]

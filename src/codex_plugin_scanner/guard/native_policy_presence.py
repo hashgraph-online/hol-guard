@@ -8,6 +8,10 @@ A native store call first provisions the resident's verifier key, and that
 mints policy-integrity key material. A lookup must not mint keys on a home that
 was never provisioned, so until the verifier key exists the row presence is
 read from SQLite here instead, without touching the keyring.
+
+An operation that already holds the store's shared connection scope (the MCP
+tool-call decision does) reads presence on that connection too. A native call
+there would add a resident round trip to a hot path whose budget allows none.
 """
 
 from __future__ import annotations
@@ -19,6 +23,7 @@ from typing import Any, Final
 from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NativePolicySnapshotError
 from .native_policy_snapshot_windows_support import _runtime_state_directory
 from .policy_integrity import REMOTE_POLICY_SOURCES
+from .store_connection_scope import owns_scope
 
 _PRESENCE_FIELDS: Final = frozenset({"any_saved", "local_policy", "remote_policy", "local_once", "policy_bundle"})
 
@@ -39,8 +44,8 @@ class PolicyRowPresence:
 def policy_row_presence(store: Any) -> PolicyRowPresence:
     """Which saved policy rows exist: local, remote, local-once and policy-bundle."""
 
-    if not _resident_provisioned(store):
-        return _unprovisioned_presence(store)
+    if owns_scope(store) or not _resident_provisioned(store):
+        return _sqlite_presence(store)
     method = "policy_row_presence"
     answer = store._native_store_call(method, {})
     if not isinstance(answer, dict) or set(answer) != _PRESENCE_FIELDS:
@@ -64,8 +69,8 @@ def _resident_provisioned(store: Any) -> bool:
     return verifier.is_file()
 
 
-def _unprovisioned_presence(store: Any) -> PolicyRowPresence:
-    """The presence read for a home whose resident was never provisioned."""
+def _sqlite_presence(store: Any) -> PolicyRowPresence:
+    """The presence read for an unprovisioned home or an open connection scope."""
 
     remote = tuple(sorted(REMOTE_POLICY_SOURCES))
     marks = ",".join("?" for _ in remote)
