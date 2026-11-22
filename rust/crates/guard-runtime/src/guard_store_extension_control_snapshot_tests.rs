@@ -19,12 +19,12 @@ fn snapshot_table(connection: &Connection) {
 }
 
 #[test]
-fn the_snapshot_read_is_routed_as_a_read() {
+fn the_snapshot_read_is_routed_as_a_snapshot() {
     assert!(handles("extension_control_snapshot_layers"));
     assert!(!handles("extension_control_schema_state"));
     assert!(matches!(
         method_kind("extension_control_snapshot_layers"),
-        Some(Kind::Read)
+        Some(Kind::Snapshot)
     ));
 }
 

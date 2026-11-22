@@ -29,12 +29,12 @@ fn pending(connection: &Connection, revision: i64, record: &dyn rusqlite::ToSql)
 }
 
 #[test]
-fn the_pending_read_is_routed_as_a_read() {
+fn the_pending_read_is_routed_as_a_snapshot() {
     assert!(handles("list_command_pack_pending_records"));
     assert!(!handles("read_command_pack_activation"));
     assert!(matches!(
         method_kind("list_command_pack_pending_records"),
-        Some(Kind::Read)
+        Some(Kind::Snapshot)
     ));
 }
 
