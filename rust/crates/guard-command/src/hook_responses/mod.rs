@@ -3,18 +3,15 @@
 //! The resident turns a Rust verdict into the exact JSON each harness expects,
 //! so no Python layer interprets a verdict to build a response. Key sets and
 //! values are byte-parity-critical: vectors recorded from the previous renderer bind every shape.
-
 use serde_json::{json, Map, Value};
-
 mod claude;
 pub mod cli_documents;
 mod containment;
+pub mod fail_closed;
 pub mod hermes;
 pub mod muse;
 mod prompt_risk;
-
 use prompt_risk::prompt_risk_signals;
-
 /// JSON object used for verdicts and rendered responses.
 pub type Object = Map<String, Value>;
 
@@ -27,17 +24,14 @@ const POST_WARN_REASON: &str =
     "HOL Guard raised a non-blocking warning under the installed native policy.";
 const PROMPT_UNAVAILABLE_REASON: &str = "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard and choose Troubleshoot Guard, then Restart Guard, or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, run hol-guard daemon recovery restart --guard-home <path>.";
 const SILENT_WARNING_CODES: [&str; 2] = ["native_policy_observed", "native_policy_warning"];
-
 /// The execution profile a containment `reason_code` requires, if any.
 pub fn contained_execution_profile(reason_code: &str) -> Option<&'static str> {
     containment::required_profile(reason_code)
 }
-
 /// Lower-cased, dash-normalised harness name used to select an envelope.
 pub fn canonical_hook_harness(harness: &str) -> String {
     harness.trim().to_lowercase().replace('_', "-")
 }
-
 fn is_decision_style(canonical: &str) -> bool {
     matches!(canonical, "pi" | "omp")
 }

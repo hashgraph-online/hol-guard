@@ -15,7 +15,6 @@ with the controls it retired.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Final
@@ -26,24 +25,8 @@ from .runtime.generated_command_catalog_provenance import catalog_provenance, is
 MIGRATED_EVENT: Final = "extension_control_authority_catalog_migrated"
 REGRESSED_EVENT: Final = "extension_control_authority_catalog_regressed"
 
-# A store accumulates one migration event per revision, so the scan for the
-# previous catalog's writer is bounded rather than reading the whole table.
-_WRITER_LOOKUP_LIMIT: Final = 512
 
-
-def _encode(payload: dict[str, Any]) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
-
-
-def _decode(raw: object) -> dict[str, Any] | None:
-    try:
-        recorded = json.loads(str(raw))
-    except (json.JSONDecodeError, TypeError):
-        return None
-    return recorded if isinstance(recorded, dict) else None
-
-
-def recorded_writer_version(connection: sqlite3.Connection, catalog_digest: str) -> str | None:
+def recorded_writer_version(store: Any, catalog_digest: str) -> str | None:
     """The Guard version that produced the catalog ``catalog_digest`` names.
 
     The lookup is keyed on the catalog, not on the revision that last moved the
@@ -60,23 +43,19 @@ def recorded_writer_version(connection: sqlite3.Connection, catalog_digest: str)
     Only an event written by the install performing that migration carries a
     writer version. An event backfilled by a later reader describes a revision
     it found rather than one it wrote, and reading the reader's version as the
-    writer's would invent a downgrade on the next migration, or hide one.
+    writer's would invent a downgrade on the next migration, or hide one. The
+    native store scans the newest migration events and answers the version.
     """
 
-    rows = connection.execute(
-        "select payload_json from guard_events where event_name = ? order by event_id desc limit ?",
-        (MIGRATED_EVENT, _WRITER_LOOKUP_LIMIT),
-    ).fetchall()
-    for row in rows:
-        recorded = _decode(row["payload_json"])
-        if recorded is None or recorded.get("catalog_digest") != catalog_digest:
-            continue
-        provenance = recorded.get("provenance")
-        if isinstance(provenance, dict):
-            version = provenance.get("writer_version")
-            if isinstance(version, str) and version:
-                return version
-    return None
+    answer = store._native_store_call("catalog_recorded_writer_version", {"catalog_digest": catalog_digest})
+    if not isinstance(answer, dict) or set(answer) != {"writer_version"}:
+        raise sqlite3.DatabaseError("native catalog_recorded_writer_version returned no answer")
+    version = answer["writer_version"]
+    if version is None:
+        return None
+    if not isinstance(version, str) or not version:
+        raise sqlite3.DatabaseError("native catalog_recorded_writer_version returned no answer")
+    return version
 
 
 def migration_provenance(
@@ -104,22 +83,8 @@ def migration_provenance(
     return provenance, previous_writer_version if downgrade else None
 
 
-def already_recorded(connection: sqlite3.Connection, revision: int) -> bool:
-    """Whether this revision's migration event is already in the store."""
-
-    rows = connection.execute(
-        "select payload_json from guard_events where event_name = ?",
-        (MIGRATED_EVENT,),
-    ).fetchall()
-    for row in rows:
-        recorded = _decode(row["payload_json"])
-        if recorded is not None and recorded.get("revision") == revision:
-            return True
-    return False
-
-
 __all__ = [
     "MIGRATED_EVENT",
     "REGRESSED_EVENT",
-    "already_recorded",
+    "recorded_writer_version",
 ]

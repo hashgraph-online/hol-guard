@@ -10,21 +10,20 @@ Ending an admission stops the worker from checking the worktree and nothing
 else: its run history and fix proposals are the record of what Guard found and
 of any manifest edit it made, so they are kept. The worktree's state row stays,
 paused and marked ended, and a later admission of the same worktree resumes it.
+
+The native store runs each of these as one store transaction.
 """
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Collection
-from typing import Any
+from typing import Any, Final
 
-from .workspace_assessment_store import WorktreeKeys, _enqueue_locked
+from .workspace_assessment_store import WorktreeKeys
 
-# True for a state row whose automatic admission has ended.
-_IS_ENDED = """exists (
-    select 1 from workspace_assessment_ended_admissions e
-    where e.codebase_key = workspace_assessment_state.codebase_key
-      and e.worktree_key = workspace_assessment_state.worktree_key
-)"""
+# A runaway store cannot keep a listing loop going forever.
+_MAX_PAGES: Final = 4096
 
 
 def admit_and_queue(
@@ -46,60 +45,24 @@ def admit_and_queue(
     another worktree admitted the same way, that admission ends.
     """
 
-    # A manual admission takes over any existing row. An automatic one leaves it
-    # alone unless its admission had ended, which a new registration revives.
-    takeover = "update set private_root = excluded.private_root, paused = 0"
-    conflict = f"{takeover} where {_IS_ENDED}" if automatic else takeover
-    with store._connect() as connection:
-        connection.execute("begin immediate")
-        inserted = connection.execute(
-            f"""
-            insert into workspace_assessment_state (codebase_key, worktree_key, private_root, admitted_at_ms)
-            values (?, ?, ?, ?)
-            on conflict(codebase_key, worktree_key) do {conflict}
-            """,
-            (keys.codebase_key, keys.worktree_key, root, now_ms),
-        )
-        if inserted.rowcount != 1:
-            return None
-        connection.execute(
-            "delete from workspace_assessment_ended_admissions where codebase_key = ? and worktree_key = ?",
-            (keys.codebase_key, keys.worktree_key),
-        )
-        if automatic:
-            replaced = connection.execute(
-                """
-                select s.codebase_key, s.worktree_key from workspace_assessment_state s
-                join workspace_assessment_install_admissions a using (codebase_key, worktree_key)
-                where s.private_root = ? and not (s.codebase_key = ? and s.worktree_key = ?)
-                """,
-                (root, keys.codebase_key, keys.worktree_key),
-            ).fetchall()
-            _end_admissions(connection, [(str(row[0]), str(row[1])) for row in replaced], now_ms=now_ms)
-            connection.execute(
-                "insert or ignore into workspace_assessment_install_admissions values (?, ?)",
-                (keys.codebase_key, keys.worktree_key),
-            )
-        else:
-            connection.execute(
-                "delete from workspace_assessment_install_admissions where codebase_key = ? and worktree_key = ?",
-                (keys.codebase_key, keys.worktree_key),
-            )
-        connection.execute(
-            """
-            update workspace_assessment_state set observed_stat_digest = ?, observed_feed_digest = ?
-            where codebase_key = ? and worktree_key = ?
-            """,
-            (stat_digest, feed_digest, keys.codebase_key, keys.worktree_key),
-        )
-        return _enqueue_locked(
-            connection,
-            keys,
-            trigger_kind="workspace_open",
-            detector_set_digest=detector_set_digest,
-            now_ms=now_ms,
-            kind="deterministic",
-        )
+    method = "admit_workspace_assessment"
+    answer = store._native_store_call(
+        method,
+        {
+            "codebase_key": keys.codebase_key,
+            "worktree_key": keys.worktree_key,
+            "root": root,
+            "now_ms": now_ms,
+            "automatic": automatic,
+            "stat_digest": stat_digest,
+            "feed_digest": feed_digest,
+            "detector_set_digest": detector_set_digest,
+            "run_id": uuid.uuid4().hex,
+        },
+    )
+    if answer is not None and (not isinstance(answer, str) or not answer):
+        raise RuntimeError(f"native {method} returned no answer")
+    return answer
 
 
 def watched_roots(store: Any, *, unavailable_digest: str) -> set[str]:
@@ -109,34 +72,38 @@ def watched_roots(store: Any, *, unavailable_digest: str) -> set[str]:
     the worktree at that path is already admitted.
     """
 
-    with store._connect() as connection:
-        rows = connection.execute(
-            f"""
-            select private_root from workspace_assessment_state
-            where (observed_stat_digest is null or observed_stat_digest != ?)
-              and not {_IS_ENDED}
-            """,
-            (unavailable_digest,),
-        ).fetchall()
-    return {str(row[0]) for row in rows}
+    method = "workspace_assessment_watched_roots"
+    roots: set[str] = set()
+    cursor: object = None
+    for _ in range(_MAX_PAGES):
+        args: dict[str, object] = {"unavailable_digest": unavailable_digest}
+        if cursor is not None:
+            args["after"] = cursor
+        answer = store._native_store_call(method, args)
+        if not isinstance(answer, dict) or set(answer) != {"items", "next"}:
+            raise RuntimeError(f"native {method} returned no answer")
+        items = answer["items"]
+        previous, cursor = cursor, answer["next"]
+        if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
+            raise RuntimeError(f"native {method} returned no answer")
+        if cursor is not None and (not isinstance(cursor, list) or not items or cursor == previous):
+            raise RuntimeError(f"native {method} returned no answer")
+        roots.update(items)
+        if cursor is None:
+            return roots
+    raise RuntimeError(f"native {method} kept paging")
 
 
 def is_manual_admission(store: Any, keys: WorktreeKeys, *, root: str) -> bool:
     """Return whether someone admitted this worktree at ``root`` themselves and it is still checked."""
 
-    with store._connect() as connection:
-        row = connection.execute(
-            """
-            select 1 from workspace_assessment_state s
-            where s.codebase_key = ? and s.worktree_key = ? and s.private_root = ? and s.paused = 0
-              and not exists (
-                select 1 from workspace_assessment_install_admissions a
-                where a.codebase_key = s.codebase_key and a.worktree_key = s.worktree_key
-              )
-            """,
-            (keys.codebase_key, keys.worktree_key, root),
-        ).fetchone()
-    return row is not None
+    method = "is_manual_workspace_assessment_admission"
+    answer = store._native_store_call(
+        method, {"codebase_key": keys.codebase_key, "worktree_key": keys.worktree_key, "root": root}
+    )
+    if not isinstance(answer, bool):
+        raise RuntimeError(f"native {method} returned no answer")
+    return answer
 
 
 def end_unregistered_install_admissions(store: Any, registered_roots: Collection[str], *, now_ms: int) -> int:
@@ -145,33 +112,11 @@ def end_unregistered_install_admissions(store: Any, registered_roots: Collection
     Only the admission ends; the worktree's runs, findings and fix proposals stay.
     """
 
-    with store._connect() as connection:
-        connection.execute("begin immediate")
-        rows = connection.execute(
-            """
-            select s.codebase_key, s.worktree_key, s.private_root from workspace_assessment_state s
-            join workspace_assessment_install_admissions a using (codebase_key, worktree_key)
-            """
-        ).fetchall()
-        ended = [(str(row[0]), str(row[1])) for row in rows if str(row[2]) not in registered_roots]
-        _end_admissions(connection, ended, now_ms=now_ms)
-    return len(ended)
-
-
-def _end_admissions(connection: Any, keys: list[tuple[str, str]], *, now_ms: int) -> None:
-    """Stop watching these worktrees, keeping every record that names them."""
-
-    connection.executemany(
-        "delete from workspace_assessment_install_admissions where codebase_key = ? and worktree_key = ?", keys
-    )
-    connection.executemany(
-        "update workspace_assessment_state set paused = 1 where codebase_key = ? and worktree_key = ?", keys
-    )
-    connection.executemany(
-        "insert or ignore into workspace_assessment_ended_admissions (codebase_key, worktree_key, ended_at_ms)"
-        " values (?, ?, ?)",
-        [(codebase_key, worktree_key, now_ms) for codebase_key, worktree_key in keys],
-    )
+    method = "end_unregistered_workspace_assessment_admissions"
+    answer = store._native_store_call(method, {"registered_roots": sorted(registered_roots), "now_ms": now_ms})
+    if isinstance(answer, bool) or not isinstance(answer, int) or answer < 0:
+        raise RuntimeError(f"native {method} returned no answer")
+    return answer
 
 
 __all__ = ["admit_and_queue", "end_unregistered_install_admissions", "is_manual_admission", "watched_roots"]

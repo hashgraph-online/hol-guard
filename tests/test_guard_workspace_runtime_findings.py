@@ -312,7 +312,7 @@ def test_an_observation_pass_probes_a_bounded_number_of_worktrees(tmp_path: Path
         for index in range(5)
     ]
     monkeypatch.setattr(worker.assessments, "list_worktrees", lambda store, include_paused=False: rows)
-    monkeypatch.setattr(worker.assessments, "record_observation", lambda *args, **kwargs: [])
+    monkeypatch.setattr(worker.assessments, "observe", lambda *args, **kwargs: 0)
 
     def unavailable(root, *, mode):
         raise worker.WorkspaceSnapshotError("workspace_root_missing")

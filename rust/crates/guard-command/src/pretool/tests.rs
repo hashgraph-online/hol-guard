@@ -595,7 +595,7 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "gh auth status --show-token",
         "cat .env",
         "head -f README.md",
-        "tail -f README.md",
+        "tail -f .env",
         "cat -",
         "cat /etc/passwd",
         "cat .aws/credentials",

@@ -331,6 +331,33 @@ def test_diagnostic_fails_closed_with_a_typed_warning_when_the_resident_gives_no
     assert all(record.exc_info is None for record in caplog.records)
 
 
+@pytest.mark.parametrize(
+    "failure",
+    [
+        sqlite3.OperationalError("Guard store native runtime unavailable (test)."),
+        ValueError("native_guard_store_value_error"),
+        TimeoutError("native guard store deadline expired"),
+    ],
+)
+def test_diagnostic_fails_closed_when_saved_row_presence_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, failure: Exception
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    def unavailable(_store: object) -> object:
+        raise failure
+
+    monkeypatch.setattr(store_policy, "policy_row_presence", unavailable)
+
+    with caplog.at_level(logging.WARNING, logger=store_policy.__name__):
+        result = store.approval_reuse_diagnostic("codex", _ARTIFACT_ID, _ARTIFACT_HASH, "/workspace/a", None)
+
+    assert result == ("approval_reuse_integrity_failure", None)
+    messages = [record.getMessage() for record in caplog.records if record.name == store_policy.__name__]
+    assert len(messages) == 1
+    assert "saved-row presence unavailable" in messages[0]
+
+
 def test_fresh_home_diagnostic_needs_no_resident(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
 

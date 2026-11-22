@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use super::*;
+use crate::guard_store_op_kind::{method_kind, Kind};
 
 struct Home(PathBuf);
 
@@ -126,14 +127,36 @@ fn a_spent_deadline_leaves_the_resident_reply() {
 }
 
 #[test]
-fn a_plain_read_stays_with_the_resident() {
-    // Each can write: outbox finalization, a pending rollup rebuild, or an
-    // expired pairing.
+fn a_plain_read_the_resident_predates_is_answered_here() {
+    // An a24 CLI asked an a23 Desktop resident for `get_runtime_state`, and
+    // `hol-guard status` failed until the Desktop app updated too.
     let home = Home::new("plain-read");
+    let store = Connection::open(home.0.join("guard.db")).unwrap();
+    store
+        .execute_batch(
+            "create table guard_runtime_state (
+               state_key text primary key, session_id text, daemon_host text,
+               daemon_port integer, started_at text, last_heartbeat_at text);
+             insert into guard_runtime_state values
+               ('runtime', 'session-1', '127.0.0.1', 4100, 't0', 't1');",
+        )
+        .unwrap();
+    let payload = home.envelope("guard_store", "get_runtime_state");
+    let answer =
+        answered(&payload, &unknown_method_reply(), soon()).expect("this runtime answers the read");
+    assert_eq!(answer["status"], "ok", "{answer}");
+    assert_eq!(answer["payload"]["session_id"], "session-1");
+    assert_eq!(answer["payload"]["daemon_port"], 4100);
+    assert_eq!(answer["outbox_generation"], Value::Null);
+}
+
+#[test]
+fn a_read_that_commits_on_its_own_stays_with_the_resident() {
+    let home = Home::new("self-committing");
     for method in [
-        "get_sync_payload",
-        "count_receipts",
-        "guard_connect_latest_state",
+        "settle_claimed_native_allow",
+        "complete_codex_live_decision",
+        "run_storage_housekeeping",
     ] {
         assert!(method_kind(method) == Some(Kind::Read), "{method}");
         let payload = home.envelope("guard_store", method);
@@ -141,6 +164,15 @@ fn a_plain_read_stays_with_the_resident() {
             answered(&payload, &unknown_method_reply(), soon()).is_none(),
             "{method}"
         );
+    }
+}
+
+#[test]
+fn every_excluded_read_is_a_known_read() {
+    // A renamed method would otherwise drop out of the exclusion silently.
+    for method in crate::guard_store_op_kind::SELF_COMMITTING_READS {
+        assert!(method_kind(method) == Some(Kind::Read), "{method}");
+        assert!(!crate::guard_store_op_kind::answerable_in_isolation(method));
     }
 }
 

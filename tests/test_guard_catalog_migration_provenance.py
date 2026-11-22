@@ -271,20 +271,17 @@ def test_a_catalog_built_in_memory_is_not_attributed_to_the_packaged_resource() 
     ] not in {"in-process", "unattributed"}
 
 
-def _store_with_events(records: list[dict[str, object]]) -> sqlite3.Connection:
-    """A connection holding migration events in the order they were written."""
+def _store_with_events(tmp_path: Path, records: list[dict[str, object]]) -> GuardStore:
+    """A store holding migration events in the order they were written."""
 
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    connection.execute(
-        "create table guard_events (event_id integer primary key autoincrement, event_name text, payload_json text)"
-    )
-    for record in records:
-        connection.execute(
-            "insert into guard_events (event_name, payload_json) values (?, ?)",
-            (MIGRATED_EVENT, json.dumps(record)),
-        )
-    return connection
+    store = GuardStore(tmp_path / "guard-home")
+    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
+        for record in records:
+            connection.execute(
+                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+                (MIGRATED_EVENT, json.dumps(record), "2026-01-01T00:00:00Z"),
+            )
+    return store
 
 
 def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
@@ -301,16 +298,17 @@ def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
     """
 
     monkeypatch.setattr(version_module, "__version__", "3.45.0")
-    connection = _store_with_events(
+    store = _store_with_events(
+        tmp_path,
         [
             {"revision": 4, "catalog_digest": "catalog-x", "provenance": {"writer_version": "3.47.0"}},
             {"revision": 5, "catalog_digest": "catalog-y", "provenance": {"writer_version": "3.47.0"}},
             {"revision": 6, "catalog_digest": "catalog-x", "provenance": {"trigger": "authority-read-backfill"}},
-        ]
+        ],
     )
 
     provenance = migration_provenance(
-        recorded_writer_version(connection, "catalog-x"),
+        recorded_writer_version(store, "catalog-x"),
         "catalog-z",
         None,
         trigger="catalog-migration",
@@ -321,3 +319,33 @@ def test_a_backfill_over_an_attributed_revision_does_not_hide_the_downgrade(
 
     assert downgraded_from == "3.47.0"
     assert described["writer_version"] == "3.45.0"
+
+
+class _AnsweringStore:
+    def __init__(self, answer: object) -> None:
+        self.answer = answer
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    def _native_store_call(self, method: str, args: dict[str, object]) -> object:
+        self.calls.append((method, args))
+        return self.answer
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [({"writer_version": "3.47.0"}, "3.47.0"), ({"writer_version": None}, None)],
+)
+def test_the_writer_version_is_the_native_answer(answer: object, expected: str | None) -> None:
+    store = _AnsweringStore(answer)
+
+    assert recorded_writer_version(store, "catalog-x") == expected
+    assert store.calls == [("catalog_recorded_writer_version", {"catalog_digest": "catalog-x"})]
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [None, [], {}, {"writer_version": ""}, {"writer_version": 7}, {"writer_version": "3.47.0", "extra": 1}],
+)
+def test_a_malformed_native_answer_fails_the_lookup(answer: object) -> None:
+    with pytest.raises(sqlite3.DatabaseError):
+        recorded_writer_version(_AnsweringStore(answer), "catalog-x")

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from .native_context import _resolve_digest_home
+from .native_daemon_client import GuardSurfaceDaemonClient
 from .native_package_approval_hash import _evaluation_view, _transport
 from .native_package_evaluation_compose import NativePackageEvaluationComposeError, apply_package_evaluation_patch
 
@@ -104,21 +105,6 @@ def _hydrate(
         if ignored_integrity is not None:
             break
     authority = None
-    if decision is None and ignored_integrity is not None:
-        from .hook_review.policy_authority_client import resolve_package_policy
-
-        resolution = resolve_package_policy(
-            guard_home=store.guard_home,
-            harness=artifact.harness,
-            artifact_id=artifact.artifact_id,
-            artifact_hash=artifact_hash,
-            workspaces=policy_workspaces,
-            publisher=artifact.publisher,
-        )
-        authority = resolution.authority
-        if resolution.decision is not None:
-            decision = resolution.decision
-            ignored_integrity = None
     if ignored_integrity is None and authority is None:
         # Only the install that waited on these requests names them. The
         # resident decides whether the exact Cloud allow it reads applies and
@@ -162,9 +148,17 @@ def _hydrate(
 
 def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: Any, now: str) -> bool:
     if kind == "daemon" and authority is not None:
-        from .hook_review.policy_authority_client import claim_package_policy
-
-        return claim_package_policy(authority, decision)
+        if isinstance(authority, Mapping):
+            base_url = authority.get("base_url")
+            auth_token = authority.get("auth_token")
+            if isinstance(base_url, str) and isinstance(auth_token, str):
+                authority = GuardSurfaceDaemonClient(base_url, auth_token)
+        if not isinstance(authority, GuardSurfaceDaemonClient):
+            return False
+        try:
+            return authority.claim_policy_decision({"decision": decision})
+        except (OSError, RuntimeError, ValueError):
+            return False
     if kind == "exact_cloud":
         return store.consume_waited_exact_cloud_package_allow(decision, now=now)
     if kind == "legacy_local":
@@ -263,12 +257,16 @@ def _call(
     claim = payload.get("claim")
     disposition = payload.get("claim_disposition")
     reused = payload.get("reused")
+    decision = payload.get("decision")
+    authority = payload.get("authority")
     if (
-        set(payload) != {"patch", "claim", "claim_disposition", "reused"}
+        set(payload) != {"patch", "claim", "claim_disposition", "reused", "decision", "authority"}
         or not isinstance(reused, bool)
         or not isinstance(patch, dict)
         or (claim is not None and claim not in _CLAIM_KINDS)
         or (disposition is not None and disposition not in _DISPOSITIONS)
+        or (decision is not None and not isinstance(decision, dict))
+        or (authority is not None and not isinstance(authority, dict))
     ):
         raise _invalid()
     if claim is not None and not claim_saved_approval:
@@ -340,12 +338,43 @@ def native_resolve_stored_package_policy(
             "artifact_id": artifact.artifact_id,
             "artifact_hash": artifact_hash,
             "workspace_dir": str(workspace_dir),
+            "policy_workspaces": list(policy_workspaces),
             "claim_saved_approval": claim_saved_approval,
             **facts,
         }
+        if artifact.publisher is not None:
+            request["publisher"] = artifact.publisher
         if current_action is not None:
             request["current_action"] = current_action
         payload = _call(request, guard_home, evaluation=evaluation, claim_saved_approval=claim_saved_approval)
+        if isinstance(payload.get("authority"), dict):
+            authority = dict(payload["authority"])
+            request["daemon_authority"] = True
+        if isinstance(payload.get("decision"), dict):
+            daemon_lookup = request.get("decision") is None and request.get("ignored_integrity") is True
+            daemon_decision: dict[str, object] | None = None
+            if daemon_lookup or decision is None:
+                daemon_decision = dict(payload["decision"])
+                decision = daemon_decision
+                request["decision"] = daemon_decision
+            if daemon_lookup:
+                # The first resident call only discovers the daemon row. Rebuild
+                # the store-bound facts before asking Rust to classify reuse so
+                # daemon decisions follow the same freshness and bundle rules.
+                request["ignored_integrity"] = False
+                assert daemon_decision is not None
+                approval_request = _approval_request(store, daemon_decision)
+                if approval_request is not None:
+                    request["approval_request"] = approval_request
+                rules = _bundle_rules(store, daemon_decision)
+                if rules is not None:
+                    request["bundle_rules"] = rules
+                payload = _call(
+                    request,
+                    guard_home,
+                    evaluation=evaluation,
+                    claim_saved_approval=claim_saved_approval,
+                )
         claim = payload["claim"]
         if claim is None:
             break

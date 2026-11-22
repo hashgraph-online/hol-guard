@@ -86,17 +86,9 @@ fn lookups_and_help_proceed() {
             "type -t ls python3",
             "type -p git",
             "type -P git",
-            "type git",
-            "type -a node",
-            "type pr-approve-merge.sh 2>&1",
-            "command -v git",
-            "command -V git",
-            "command -pV git",
             "whence -p node",
             "whence -ap node",
             "whence -p -- node",
-            "command -v hol-guard 2>/dev/null",
-            "command -v -- node",
             "hol-guard risk-report --help",
             "hol-guard --help",
             "hol-guard -h",
@@ -114,7 +106,7 @@ fn lookups_and_help_proceed() {
 }
 
 #[test]
-fn executing_or_unproven_lookup_forms_still_ask() {
+fn definition_exposing_and_unproven_lookup_forms_still_ask() {
     let home = home();
     for harness in ["omp", "codex"] {
         for command in [
@@ -132,6 +124,20 @@ fn executing_or_unproven_lookup_forms_still_ask() {
             "type ~/.ssh/id_rsa",
             "type -x git",
             "type -a ~/.ssh/id_rsa",
+            "type git",
+            "type probe_func",
+            "type -a node",
+            "type -a probe_func",
+            "type -f probe_alias",
+            "type -ap git",
+            "command -v git",
+            "command -v probe_alias",
+            "command -v -- node",
+            "command -v hol-guard 2>/dev/null",
+            "command -V git",
+            "command -V probe_func",
+            "command -pV git",
+            "which hol-guard 2>/dev/null; type hol-guard 2>/dev/null; echo DONE",
             "type",
             "command -v",
             "hol-guard risk --help",
@@ -233,6 +239,40 @@ fn zsh_definition_lookup_can_emit_synthetic_markers() {
             !String::from_utf8_lossy(&output.stderr).contains("SYNTHETIC_GUARD_CANARY_91"),
             "{command}: PATH-only stderr exposed synthetic definition"
         );
+    }
+}
+
+/// The output itself, not merely the lookup syntax, can contain a marker from
+/// an inherited Bash function or alias. Use inert, synthetic values only.
+#[test]
+fn shell_lookup_output_cannot_bypass_guard_review() {
+    let home = home();
+    let startup = home.join("synthetic-shell-init.sh");
+    std::fs::write(
+        &startup,
+        "shopt -s expand_aliases\nalias probe_alias='echo SYNTHETIC_ALIAS_MARKER_z81'\nprobe_func() { echo SYNTHETIC_FUNCTION_MARKER_z81; }\n",
+    )
+    .unwrap();
+    for (command, marker) in [
+        ("type probe_func", "SYNTHETIC_FUNCTION_MARKER_z81"),
+        ("type -a probe_func", "SYNTHETIC_FUNCTION_MARKER_z81"),
+        ("type -f probe_alias", "SYNTHETIC_ALIAS_MARKER_z81"),
+        ("command -V probe_func", "SYNTHETIC_FUNCTION_MARKER_z81"),
+        ("command -v probe_alias", "SYNTHETIC_ALIAS_MARKER_z81"),
+    ] {
+        let output = Command::new("bash")
+            .arg("-c")
+            .arg(command)
+            .env("BASH_ENV", &startup)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{command}: {output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.contains(marker), "{command}: {stdout:?}");
+        for harness in HARNESSES {
+            let result = classify(&home, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
     }
 }
 

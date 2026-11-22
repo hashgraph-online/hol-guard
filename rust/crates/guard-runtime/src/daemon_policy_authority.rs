@@ -1,7 +1,7 @@
 //! Resident daemon policy-authority client (RTM-030).
 //!
 //! Rust port of
-//! `src/codex_plugin_scanner/guard/hook_review/policy_authority_client.py`
+//! `src/codex_plugin_scanner/guard/native_package_policy_resolve.py`
 //! (:17-:57), `src/codex_plugin_scanner/guard/native_daemon_client.py`
 //! (`GuardSurfaceDaemonClient` :184-:343, `_post` :434-:455,
 //! `resolve_policy_decision` :337, `claim_policy_decision` :340,
@@ -74,9 +74,9 @@ const PROCESS_QUERY_MAX_BYTES: usize = 1024 * 1024;
 #[cfg(unix)]
 const PROCESS_QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 /// Health-request deadline (manager.py:1206 uses `health_timeout=1.0`;
-/// policy_authority_client.py:35 uses 2s for the policy socket).
+/// native_package_policy_resolve.py uses 2s for the policy socket).
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(1);
-/// Policy request socket timeout (policy_authority_client.py:35).
+/// Policy request socket timeout (native_package_policy_resolve.py).
 const POLICY_TIMEOUT: Duration = Duration::from_secs(2);
 /// Trusted `ps` locations.
 #[cfg(unix)]
@@ -131,16 +131,16 @@ impl ResidentPolicyAuthority {
         Self { guard_home }
     }
 
-    /// `resolve_package_policy` (policy_authority_client.py:17-:45). Each
+    /// `resolve_package_policy` (native_package_policy_resolve.py). Each
     /// workspace is tried in order; the first `decision` dict wins.
-    fn resolve(
+    pub(crate) fn resolve_package_policy(
         &self,
         harness: &str,
         artifact_id: Option<&str>,
         artifact_hash: &str,
         workspaces: &[String],
         publisher: Option<&str>,
-    ) -> Option<(Value, DaemonAuthority)> {
+    ) -> Option<(Value, Value)> {
         let authority = self.load_authority()?;
         for workspace in workspaces {
             let mut payload = Map::new();
@@ -167,13 +167,13 @@ impl ResidentPolicyAuthority {
             let lookup = post_json(&authority, "/v1/policy/resolve", &Value::Object(payload))?;
             let decision = lookup.get("decision").filter(|d| d.is_object());
             if let Some(decision) = decision {
-                return Some((decision.clone(), authority));
+                return Some((decision.clone(), serialize_authority(&authority)));
             }
         }
         None
     }
 
-    /// `claim_package_policy` (policy_authority_client.py:48-:57) —
+    /// `claim_package_policy` (native_package_policy_resolve.py) —
     /// `claimed` is true only when the daemon returns `claimed == true`
     /// (client.py:340-:342).
     fn claim(&self, authority: &DaemonAuthority, decision: &Value) -> bool {
@@ -214,7 +214,7 @@ impl PolicyAuthorityApi for ResidentPolicyAuthority {
         // Fail-closed: any error returns an empty resolution.
         let _ = guard_home;
         let artifact_id_opt = (!artifact_id.is_empty()).then_some(artifact_id);
-        match self.resolve(
+        match self.resolve_package_policy(
             harness,
             artifact_id_opt,
             artifact_hash,
@@ -222,7 +222,7 @@ impl PolicyAuthorityApi for ResidentPolicyAuthority {
             publisher,
         ) {
             Some((decision, authority)) => DaemonPolicyResolution {
-                authority: Some(serialize_authority(&authority)),
+                authority: Some(authority),
                 decision: Some(decision),
             },
             None => DaemonPolicyResolution::default(),

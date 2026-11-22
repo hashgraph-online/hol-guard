@@ -164,9 +164,8 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # lookup. Containment cannot reach the home key, so it may be routed
         # there, but the case must never receive an unconditional Allow.
         "neg-type-lookup-of-credential-path",
-        # zsh's which/whence may print a function or alias definition from
-        # the caller's shell. Containment runs without access to the host
-        # shell and may be accepted, but an uncontained Allow is forbidden.
+        # Conservatively review shell definition-printing lookups from Bash and zsh;
+        # sandbox containment remains permitted only for these explicit cases.
         "python-version-filter-after-interpreter-lookup",
         "shell-type-lookup-after-which",
         "shell-lookup-chain",
@@ -174,6 +173,14 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "session-which-type-echo",
         "session-which-type-guard",
         "observed-cd-sibling-read-package",
+        "neg-command-V-shell-function-definition",
+        "neg-command-v-shell-alias-definition",
+        "neg-type-a-shell-function-definition",
+        "neg-type-f-shell-alias-definition",
+        "neg-type-shell-function-definition",
+        "shell-if-command-exists-discarded-output",
+        "shell-command-v-lookup",
+        "shell-type-and-command-describe-lookup",
         "neg-env-bare-set-then-list",
         # A directory the prefix names outside the workspace: a contained run
         # reaches none of it, so the build runs nothing the sandbox does not

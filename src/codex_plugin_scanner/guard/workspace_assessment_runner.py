@@ -16,6 +16,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import re
 import sqlite3
 import time
 from collections.abc import Callable, Mapping
@@ -72,6 +73,7 @@ _CONTENT_SCANS: Final = ("secrets", "skills", "hooks", "plugins", "workflows", "
 DETECTOR_SET_DIGEST: Final = hashlib.sha256(
     ("guard.workspace-detectors.v1\0" + "\0".join(DETECTOR_SET)).encode("utf-8")
 ).hexdigest()
+_SHA256_HEX: Final = re.compile(r"[0-9a-f]{64}")
 _SEVERITY_ORDER: Final = ("critical", "high", "medium", "low", "info", "unknown")
 
 
@@ -266,12 +268,11 @@ def feed_context_digest(store: Any) -> str:
     daemon can afford it on every poll.
     """
 
-    with store._connect() as connection:
-        rows = connection.execute(
-            "select workspace_id, payload_hash, policy_hash from guard_supply_chain_bundle_cache order by workspace_id"
-        ).fetchall()
-    encoded = json.dumps([[str(value) for value in row] for row in rows], separators=(",", ":"))
-    return hashlib.sha256(("guard.workspace-feed.v1\0" + encoded).encode("utf-8")).hexdigest()
+    method = "workspace_assessment_feed_digest"
+    digest = store._native_store_call(method, {})
+    if not isinstance(digest, str) or _SHA256_HEX.fullmatch(digest) is None:
+        raise RuntimeError(f"native {method} returned no answer")
+    return digest
 
 
 def coverage_summary(
