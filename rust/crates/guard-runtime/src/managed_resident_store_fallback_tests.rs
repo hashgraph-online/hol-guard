@@ -1,6 +1,7 @@
 //! A store read another install's resident predates, answered by this runtime.
 
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -29,8 +30,8 @@ impl Home {
         Self(home)
     }
 
-    fn envelope(&self, operation: &str, method: &str) -> Vec<u8> {
-        let request = json!({
+    fn request(&self, method: &str) -> Value {
+        json!({
             "schema": "guard-store-request.v1",
             "request_id": "guard-store-fallback",
             "store_path": self.0.join("guard.db").to_string_lossy(),
@@ -39,10 +40,13 @@ impl Home {
             "source": "default",
             "busy_timeout_ms": 5000,
             "args": {},
-        });
+        })
+    }
+
+    fn envelope(&self, operation: &str, method: &str) -> Vec<u8> {
         serde_json::to_vec(&json!({
             "operation": operation,
-            "request": request,
+            "request": self.request(method),
             "deadline_budget_ms": 5000,
         }))
         .unwrap()
@@ -76,13 +80,22 @@ fn store_reply(code: &str, message: &str) -> Vec<u8> {
     .unwrap()
 }
 
+fn soon() -> Instant {
+    Instant::now() + Duration::from_secs(5)
+}
+
+/// This runtime's answer, or `None` when the resident's reply stands.
+fn answered(payload: &[u8], response: &[u8], deadline: Instant) -> Option<Value> {
+    let out = reply(payload, response.to_vec(), deadline);
+    (out != response).then(|| serde_json::from_slice(&out).unwrap())
+}
+
 #[test]
 fn a_snapshot_read_the_resident_predates_is_answered_here() {
     let home = Home::new("snapshot");
     let payload = home.envelope("guard_store", "policy_bundle_trust_rows");
-    let answer = answer_unknown_store_read(&payload, &unknown_method_reply())
-        .expect("this runtime answers the read");
-    let answer: Value = serde_json::from_slice(&answer).unwrap();
+    let answer =
+        answered(&payload, &unknown_method_reply(), soon()).expect("this runtime answers the read");
     assert_eq!(answer["schema"], "guard-store-result.v1");
     assert_eq!(answer["status"], "ok", "{answer}");
     assert_eq!(answer["request_id"], "guard-store-fallback");
@@ -90,11 +103,52 @@ fn a_snapshot_read_the_resident_predates_is_answered_here() {
 }
 
 #[test]
-fn a_plain_read_the_resident_predates_is_answered_here() {
-    let home = Home::new("read");
-    let payload = home.envelope("guard_store", "get_sync_payload");
-    let answer = answer_unknown_store_read(&payload, &unknown_method_reply());
-    assert!(answer.is_some());
+fn the_answer_keeps_the_digest_of_the_request_as_sent() {
+    // The local busy wait is cut to the time left, which must not change the
+    // digest the caller binds the reply to.
+    let home = Home::new("digest");
+    let payload = home.envelope("guard_store", "policy_bundle_trust_rows");
+    let sent: GuardStoreRequestV1 =
+        serde_json::from_value(home.request("policy_bundle_trust_rows")).unwrap();
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    let answer = answered(&payload, &unknown_method_reply(), deadline).unwrap();
+    assert_eq!(
+        answer["request_sha256"],
+        json!(crate::guard_store_op::request_digest(&sent).unwrap())
+    );
+}
+
+#[test]
+fn a_spent_deadline_leaves_the_resident_reply() {
+    let home = Home::new("deadline");
+    let payload = home.envelope("guard_store", "policy_bundle_trust_rows");
+    assert!(answered(&payload, &unknown_method_reply(), Instant::now()).is_none());
+}
+
+#[test]
+fn a_plain_read_stays_with_the_resident() {
+    // Each can write: outbox finalization, a pending rollup rebuild, or an
+    // expired pairing.
+    let home = Home::new("plain-read");
+    for method in [
+        "get_sync_payload",
+        "count_receipts",
+        "guard_connect_latest_state",
+    ] {
+        assert!(method_kind(method) == Some(Kind::Read), "{method}");
+        let payload = home.envelope("guard_store", method);
+        assert!(
+            answered(&payload, &unknown_method_reply(), soon()).is_none(),
+            "{method}"
+        );
+    }
+}
+
+#[test]
+fn a_write_stays_with_the_resident() {
+    let home = Home::new("write");
+    let payload = home.envelope("guard_store", "upsert_policy");
+    assert!(answered(&payload, &unknown_method_reply(), soon()).is_none());
 }
 
 #[test]
@@ -110,38 +164,7 @@ fn any_other_resident_error_stands() {
         b"{\"error\":\"native_request_schema_unsupported\"}".to_vec(),
         b"not json".to_vec(),
     ] {
-        assert!(answer_unknown_store_read(&payload, &response).is_none());
-    }
-}
-
-#[test]
-fn a_write_stays_with_the_resident() {
-    let home = Home::new("write");
-    let payload = home.envelope("guard_store", "upsert_policy");
-    assert!(answer_unknown_store_read(&payload, &unknown_method_reply()).is_none());
-}
-
-#[test]
-fn a_read_that_takes_the_write_lock_itself_stays_with_the_resident() {
-    let home = Home::new("self-writing");
-    for method in WRITES_ON_ITS_OWN {
-        let payload = home.envelope("guard_store", method);
-        assert!(
-            answer_unknown_store_read(&payload, &unknown_method_reply()).is_none(),
-            "{method}"
-        );
-    }
-}
-
-#[test]
-fn every_self_writing_method_is_still_classified_as_a_read() {
-    // A method that leaves the read kind no longer needs the list; one that is
-    // renamed must be renamed here too, or the fallback would answer it.
-    for method in WRITES_ON_ITS_OWN {
-        assert!(
-            matches!(method_kind(method), Some(Kind::Read)),
-            "{method} is no longer a read-kind method"
-        );
+        assert!(answered(&payload, &response, soon()).is_none());
     }
 }
 
@@ -149,22 +172,12 @@ fn every_self_writing_method_is_still_classified_as_a_read() {
 fn a_method_this_runtime_does_not_know_either_stands() {
     let home = Home::new("unknown-here");
     let payload = home.envelope("guard_store", "a_method_from_a_later_release");
-    assert!(answer_unknown_store_read(&payload, &unknown_method_reply()).is_none());
+    assert!(answered(&payload, &unknown_method_reply(), soon()).is_none());
 }
 
 #[test]
 fn only_a_store_operation_is_answered() {
     let home = Home::new("operation");
     let payload = home.envelope("command_model", "policy_bundle_trust_rows");
-    assert!(answer_unknown_store_read(&payload, &unknown_method_reply()).is_none());
-}
-
-#[test]
-fn a_resident_of_this_runtime_keeps_its_reply() {
-    let home = Home::new("same-runtime");
-    let payload = home.envelope("guard_store", "policy_bundle_trust_rows");
-    let unknown = unknown_method_reply();
-    assert_eq!(reply(&payload, unknown.clone(), true), unknown);
-    let answered: Value = serde_json::from_slice(&reply(&payload, unknown, false)).unwrap();
-    assert_eq!(answered["status"], "ok", "{answered}");
+    assert!(answered(&payload, &unknown_method_reply(), soon()).is_none());
 }
