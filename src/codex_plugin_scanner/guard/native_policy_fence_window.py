@@ -6,10 +6,14 @@ import math
 import time
 import uuid
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import cast, final
 
+from .native_command_control_authority_io import (
+    NativeCommandControlAuthorityUnavailableError,
+    hold_command_control_authority_lock,
+)
 from .native_execution import _resident_request
 from .native_hook_review_binding import native_hook_review_binding
 
@@ -195,6 +199,27 @@ def native_review_fence(
         recording_only=recording_only,
         remaining_ms=remaining_ms,
     )
+    if result is None:
+        # Compatibility transport for an older installation without the new
+        # resident operation. It carries no policy decision and is removed
+        # once the minimum resident version includes review fencing.
+        remaining = 0.0 if deadline is None else max(0.0, deadline - time.monotonic())
+        with ExitStack() as resources:
+            try:
+                resources.enter_context(
+                    hold_command_control_authority_lock(
+                        guard_home, timeout_seconds=min(LEASE_WAIT_SECONDS, remaining), shared=True
+                    )
+                )
+            except NativeCommandControlAuthorityUnavailableError:
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise TimeoutError("native_review_fence_deadline") from None
+                yield None
+                return
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("native_review_fence_deadline")
+            yield True
+        return
     fenced = result.get("fenced") if result is not None else None
     if fenced is not True:
         if deadline is not None and time.monotonic() >= deadline:
