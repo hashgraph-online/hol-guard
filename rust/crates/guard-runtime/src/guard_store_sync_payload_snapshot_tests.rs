@@ -118,7 +118,15 @@ fn a_malformed_key_list_is_refused() {
         Value::Null,
         json!(too_many),
     ] {
-        assert!(read(&connection, keys.clone()).is_err(), "{keys}");
+        assert!(
+            matches!(
+                read(&connection, keys.clone()),
+                Err(StoreError::Invalid(
+                    "native_sync_payload_snapshot_keys_invalid"
+                ))
+            ),
+            "{keys}"
+        );
     }
     let most: Vec<String> = (0..MAX_KEYS).map(|index| format!("k{index}")).collect();
     assert!(read(&connection, json!(most)).is_ok());

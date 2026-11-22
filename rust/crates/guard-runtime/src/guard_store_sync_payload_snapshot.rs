@@ -43,7 +43,10 @@ pub(crate) fn dispatch(
 
 /// The requested keys, in request order.
 fn keys<'a>(args: &Args<'a>) -> StoreResult<Vec<&'a str>> {
-    let keys = args.strings("keys")?.ok_or(KEYS_INVALID)?;
+    let keys = args
+        .strings("keys")
+        .map_err(|_| KEYS_INVALID)?
+        .ok_or(KEYS_INVALID)?;
     if keys.is_empty() || keys.len() > MAX_KEYS || keys.iter().any(|key| key.is_empty()) {
         return Err(KEYS_INVALID);
     }
