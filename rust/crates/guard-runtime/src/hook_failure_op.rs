@@ -22,6 +22,7 @@ use serde_json::{json, Map, Value};
 
 use crate::bounded_hook_bridge_render::failure_output_for;
 use crate::claude_hook_bridge_render::py_strip;
+use crate::hook_fail_closed_envelopes::{envelope, event_kind, ENVELOPES};
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
 const DECIDING_EVENTS: [&str; 3] = ["pretooluse", "permissionrequest", "userpromptsubmit"];
@@ -70,11 +71,6 @@ fn text<'a>(fields: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'stat
     fields.get(key).and_then(Value::as_str).ok_or(ERR_INVALID)
 }
 
-/// The document and exit status for a hook whose review could not finish.
-const ENVELOPES: &str = include_str!(
-    "../../../../src/codex_plugin_scanner/guard/contracts/hook-fail-closed-envelopes.v1.json"
-);
-
 fn failure(
     harness: &str,
     event_name: &str,
@@ -106,25 +102,15 @@ fn failure(
     }
     let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
     let kind = event_kind(&contract, event_name);
-    let prompt = kind == "prompt";
-    let effective_reason = if prompt {
-        if reason.is_empty() {
-            contract["defaults"]["prompt_reason"]
-                .as_str()
-                .unwrap_or(reason)
-        } else {
-            reason
-        }
+    let effective_reason = if kind == "prompt" {
+        contract["defaults"]["prompt_reason"]
+            .as_str()
+            .unwrap_or(reason)
     } else {
         reason
     };
-    let effective_code = if prompt {
-        "native_prompt_unavailable"
-    } else {
-        reason_code.unwrap_or("native_hook_render_unavailable")
-    };
+    let effective_code = reason_code.unwrap_or("native_hook_render_unavailable");
     let document = envelope(
-        &contract,
         &kind,
         harness,
         &[
@@ -133,8 +119,8 @@ fn failure(
             ("$event_name", event_name),
         ],
     );
-    let rendered = ascii_json(&document);
-    if !rendered.is_empty() {
+    if document.as_object().is_some_and(|map| !map.is_empty()) {
+        let rendered = ascii_json(&document);
         let (_, exit_code) = failure_output_for(shape, event_name, effective_reason, false);
         return (rendered, exit_code);
     }
@@ -164,59 +150,6 @@ fn ascii_json(value: &Value) -> String {
         }
     }
     output
-}
-
-fn event_kind(contract: &Value, event: &str) -> String {
-    let compact: String = event
-        .trim()
-        .to_lowercase()
-        .chars()
-        .filter(|character| *character != '_' && *character != '-')
-        .collect();
-    contract["events"]
-        .get(&compact)
-        .and_then(Value::as_str)
-        .or_else(|| {
-            contract["event_prefixes"].as_object().and_then(|prefixes| {
-                prefixes
-                    .iter()
-                    .find(|(prefix, _)| compact.starts_with(prefix.as_str()))
-                    .and_then(|(_, kind)| kind.as_str())
-            })
-        })
-        .unwrap_or("lifecycle")
-        .to_owned()
-}
-
-fn envelope(contract: &Value, kind: &str, harness: &str, values: &[(&str, &str)]) -> Value {
-    let normalized = harness.trim().to_lowercase().replace('_', "-");
-    let table = &contract["envelopes"][kind];
-    let template = table
-        .get(normalized)
-        .or_else(|| table.get("*"))
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    fill(template, values)
-}
-
-fn fill(value: Value, values: &[(&str, &str)]) -> Value {
-    match value {
-        Value::String(text) => values
-            .iter()
-            .find(|(placeholder, _)| *placeholder == text)
-            .map_or(Value::String(text), |(_, value)| {
-                Value::String((*value).to_owned())
-            }),
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, value)| (key, fill(value, values)))
-                .collect(),
-        ),
-        Value::Array(items) => {
-            Value::Array(items.into_iter().map(|item| fill(item, values)).collect())
-        }
-        other => other,
-    }
 }
 
 #[cfg(test)]

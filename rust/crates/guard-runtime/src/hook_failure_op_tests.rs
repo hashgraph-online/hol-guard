@@ -135,6 +135,23 @@ fn a_reason_code_request_uses_the_shared_fail_closed_contract() {
 }
 
 #[test]
+fn a_reason_coded_prompt_uses_shared_guidance_and_prompt_code() {
+    let result = dispatch(&json!({
+        "harness": "copilot",
+        "event_name": "UserPromptSubmit",
+        "reason": "short outage",
+        "reason_code": "native_hook_worker_unavailable"
+    }))
+    .expect("a well-formed request");
+    let document: Value = serde_json::from_str(result["document"].as_str().unwrap()).unwrap();
+    assert_eq!(document["reason_code"], "native_prompt_unavailable");
+    assert_eq!(
+        document["message"],
+        "HOL Guard could not check this prompt, so it was blocked. If HOL Guard is not running or not responding, open HOL Guard and choose Troubleshoot Guard, then Restart Guard, or run hol-guard daemon recovery restart, then send the prompt again. For a custom Guard home, run hol-guard daemon recovery restart --guard-home <path>."
+    );
+}
+
+#[test]
 fn a_malformed_request_is_refused() {
     assert!(dispatch(&json!({"harness": "kimi", "event_name": "Stop"})).is_err());
     assert!(dispatch(&json!({"harness": 1, "event_name": "Stop", "reason": "x"})).is_err());
