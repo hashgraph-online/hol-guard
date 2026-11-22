@@ -95,6 +95,7 @@ run_case = installed_native_case_runner()
 _support = _sibling("installed_extension_probe_support", "support_missing")
 prove_installed_data_only_authoring = _support.prove_installed_data_only_authoring
 persisted_native_receipt_ids = _support.persisted_native_receipt_ids
+readable_native_receipt = _support.readable_native_receipt
 receipt_processed_count = _support.receipt_processed_count
 await_persisted_native_receipt = _support.await_persisted_native_receipt
 receipt_binding_diagnostic = _support.receipt_binding_diagnostic
@@ -423,11 +424,11 @@ def exercise(root: Path) -> dict[str, object]:
         )
         end = time.monotonic() + 5
         while time.monotonic() < end and any(
-            store.get_native_decision_receipt(identity) is None for identity in all_receipts
+            readable_native_receipt(store, identity) is None for identity in all_receipts
         ):
             time.sleep(0.02)
         require(
-            all(store.get_native_decision_receipt(identity) is not None for identity in all_receipts),
+            all(readable_native_receipt(store, identity) is not None for identity in all_receipts),
             "durable_receipts_missing",
         )
         stale_binding = ready(daemon, workspace, revision)

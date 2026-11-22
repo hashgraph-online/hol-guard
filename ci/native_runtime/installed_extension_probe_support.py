@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.native_approval_errors import (
     NATIVE_COMMAND_CONTROL_ERROR_CODES,
     NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 )
+from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -208,6 +209,19 @@ def persisted_native_receipt_ids(store: GuardStore) -> set[str]:
     return {row["decision_id"] for row in rows if isinstance(row["decision_id"], str)}
 
 
+def readable_native_receipt(store: GuardStore, decision_id: str) -> dict[str, object] | None:
+    """Read one receipt, treating a store that cannot answer yet as not persisted.
+
+    A poll then keeps waiting and, at its deadline, reports its own diagnostic
+    instead of stopping on the first unanswered read.
+    """
+
+    try:
+        return store.get_native_decision_receipt(decision_id)
+    except NativeGuardStoreUnavailable:
+        return None
+
+
 class _ReceiptProgressWriter(Protocol):
     def stats(self) -> Mapping[str, object]: ...
 
@@ -321,7 +335,7 @@ def await_persisted_native_receipt(
             if len(new_ids) > 1:
                 raise RuntimeError("installed_native_extensions_failed:receipt_persistence_ambiguous")
             if new_ids:
-                receipt = store.get_native_decision_receipt(next(iter(new_ids)))
+                receipt = readable_native_receipt(store, next(iter(new_ids)))
                 if receipt is not None:
                     return receipt
         time.sleep(0.02)
