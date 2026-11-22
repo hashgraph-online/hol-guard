@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 RUNTIME_MISSING = "HOL Guard's native runtime is missing, so Guard blocked this hook. Run `hol-guard repair`."
@@ -82,3 +83,29 @@ def native_stderr_hook_failure(
     ):
         return document, stderr, exit_code
     return _outage_stderr_failure(event_name)
+
+
+def native_hook_failure_document(
+    harness: str,
+    event_name: str,
+    reason: str,
+    *,
+    reason_code: str | None = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    """Decode the Rust-owned fail-closed document at the transport boundary."""
+
+    native = native_hook_failure(
+        harness,
+        event_name,
+        reason,
+        reason_code=reason_code,
+        deadline=deadline,
+    )
+    if native is None:
+        return None
+    try:
+        decoded = json.loads(native[0])
+    except (TypeError, ValueError):
+        return None
+    return dict(decoded) if isinstance(decoded, dict) else None
