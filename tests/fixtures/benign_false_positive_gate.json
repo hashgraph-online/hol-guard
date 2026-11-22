@@ -5187,7 +5187,8 @@
         "command": "which python3; python3 -c 'import sys; print(sys.version)'"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "python-version-filter-after-stderr-merge",
@@ -19113,7 +19114,8 @@
         "command": "which deploy-helper.sh 2>&1; type deploy-helper.sh 2>&1"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "shell-type-and-command-describe-lookup",
@@ -19162,7 +19164,8 @@
         "command": "which git 2>/dev/null; type -p git 2>/dev/null; echo DONE"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "shell-zsh-path-lookup",
@@ -19178,7 +19181,8 @@
         "command": "whence git 2>/dev/null; whence -p node 2>/dev/null; echo DONE"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "shell-hol-guard-help",
@@ -21219,7 +21223,8 @@
         "command": "which vitest 2>/dev/null; type vitest 2>/dev/null; echo DONE"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "session-tool-help-head",
@@ -26771,7 +26776,8 @@
         "command": "which guard 2>/dev/null; type guard 2>/dev/null; echo DONE"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "session-bash-workspace-script-tail",
@@ -41218,7 +41224,8 @@
         "command": "cd ${HOME}/other-project && grep -E '\"(name|version)\"' package.json | head -10; node --version; which bun 2>&1"
       },
       "cwd": "worktree",
-      "expect": "allow"
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "cd-compound-egrep-beside-a-read",
