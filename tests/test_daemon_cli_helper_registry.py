@@ -7,12 +7,34 @@ import sys
 
 _SCRIPT = """
 import sys
-from types import SimpleNamespace
+import tempfile
+from pathlib import Path
 
 from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
+from codex_plugin_scanner.guard.store import GuardStore
 
 assert "codex_plugin_scanner.guard.cli.commands_support" not in sys.modules
-print(HookWorker._claude_lifecycle_response(SimpleNamespace(store=None), "PostToolUse", {}))
+with tempfile.TemporaryDirectory() as directory:
+    worker = HookWorker(store=GuardStore(Path(directory) / "guard-home"), wait_for_native_policy=False)
+    try:
+        response = worker.review_http_payload(
+            payload={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "AskUserQuestion",
+                "session_id": "fresh-interpreter-session",
+                "tool_input": {"questions": []},
+                "tool_response": {"answers": {}},
+            },
+            params={},
+            default_harness="claude-code",
+            home_dir=Path(directory),
+            guard_home=worker.store.guard_home,
+            workspace=None,
+        )
+    finally:
+        worker.close()
+assert isinstance(response, dict)
+print("ok")
 """
 
 
@@ -28,4 +50,4 @@ def test_an_in_process_resident_answers_a_claude_turn_without_the_cli_loaded() -
     )
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "None"
+    assert result.stdout.strip() == "ok"

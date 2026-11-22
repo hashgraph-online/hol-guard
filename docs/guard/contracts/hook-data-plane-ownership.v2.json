@@ -440,8 +440,6 @@
     "src/codex_plugin_scanner/guard/local_cli_hook.py",
     "src/codex_plugin_scanner/guard/risk.py",
     "src/codex_plugin_scanner/guard/trusted_local_tools.py",
-    "src/codex_plugin_scanner/guard/native_claude_guard_question.py",
-    "src/codex_plugin_scanner/guard/native_claude_question_save.py",
     "src/codex_plugin_scanner/guard/native_memory_pattern.py",
     "src/codex_plugin_scanner/guard/native_guard_store.py",
     "src/codex_plugin_scanner/guard/native_skill_directory_identity.py",

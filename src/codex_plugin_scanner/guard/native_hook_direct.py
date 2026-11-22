@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 from .native_execution import _resident_request
 from .native_hook_edge import _decode_edge
@@ -23,6 +24,7 @@ def native_hook_direct(
     home_dir: Path | None,
     deadline: float | None,
     emergency_safe_only: bool = False,
+    lifecycle_only: bool = False,
 ) -> dict[str, object] | None:
     """Ask Rust to answer or defer one direct hook request."""
 
@@ -41,6 +43,8 @@ def native_hook_direct(
         "emergency_safe_only": emergency_safe_only,
         "payload": dict(payload),
     }
+    if lifecycle_only:
+        request["lifecycle_only"] = True
     try:
         response = _resident_request(
             operation="hook_direct",
@@ -61,7 +65,17 @@ def native_hook_direct(
         return {"outcome": "defer", "reason": response.get("reason")}
     if outcome == "answer":
         edge = response.get("edge")
-        decoded = _decode_edge(dict(edge)) if isinstance(edge, Mapping) else None
+        decoded = cast(dict[str, object] | None, _decode_edge(dict(edge))) if isinstance(edge, Mapping) else None
+        # Lifecycle answers are intentionally smaller than a review edge. The
+        # resident has no tool-review receipt to return, only the rendered
+        # harness response.
+        if decoded is None and isinstance(edge, Mapping) and set(edge) == {"harness_response"}:
+            rendered = edge.get("harness_response")
+            if isinstance(rendered, Mapping):
+                decoded = cast(
+                    dict[str, object],
+                    {"harness_response": {str(key): value for key, value in rendered.items()}},
+                )
         if decoded is not None:
             native_record_resident_success(status.identity.sha256, guard_home)
             return decoded

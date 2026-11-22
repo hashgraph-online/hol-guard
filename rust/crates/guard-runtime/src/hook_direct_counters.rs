@@ -82,8 +82,9 @@ const OUTCOMES: [Option<HookDirectDefer>; OUTCOME_SLOTS] = [
     Some(HookDirectDefer::Cursor(CursorDefer::SinkSnapshot)),
     Some(HookDirectDefer::GitContextReview),
     Some(HookDirectDefer::ExtensionTimedOut),
+    Some(HookDirectDefer::LifecycleUnsettled),
 ];
-const OUTCOME_SLOTS: usize = 41;
+const OUTCOME_SLOTS: usize = 42;
 const ANSWER: &str = "answer";
 
 /// The counting slot of a harness name.
@@ -161,6 +162,7 @@ fn outcome_slot(outcome: Option<HookDirectDefer>) -> usize {
         },
         HookDirectDefer::GitContextReview => 39,
         HookDirectDefer::ExtensionTimedOut => 40,
+        HookDirectDefer::LifecycleUnsettled => 41,
     }
 }
 
