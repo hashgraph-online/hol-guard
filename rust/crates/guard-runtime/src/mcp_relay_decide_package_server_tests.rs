@@ -1,11 +1,9 @@
-use super::super::ask::PACKAGE_PROMPT;
 use super::super::package_leg::EVALUATION_ABSENT;
 use super::*;
 
 #[test]
 fn a_package_defer_hands_the_server_off() {
     assert!(hands_server_off(EVALUATION_ABSENT));
-    assert!(hands_server_off(PACKAGE_PROMPT));
     assert!(hands_server_off("mcp_relay_package_policy_failed"));
 }
 

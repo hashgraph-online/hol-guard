@@ -551,6 +551,7 @@
       "src/pretool/planted_instructions.rs",
       "src/pretool/liveness_probes.rs",
       "src/pretool/network_facts.rs",
+      "src/pretool/status_facts.rs",
       "src/pretool/lockfile_install.rs",
       "src/pretool/lockfile_install_scan.rs",
       "src/pretool/lookup_reads.rs",

@@ -65,6 +65,11 @@ const BLOCK_SOURCE: &str = "policy-block";
 /// forward's record, which `_record_package_forward` records under the mode.
 const OBSERVED_KEY: &str = "observed";
 const OBSERVE_SOURCE: &str = "policy-observe";
+/// The forward the client's inline prompt approved, which the package lane
+/// records under that source rather than its policy action.
+pub(super) const INLINE_SOURCE: &str = "inline-approved";
+/// The tool decision's risk categories an inline-approved forward records.
+pub(crate) const RISK_KEY: &str = "risk_categories";
 
 /// A package record the resident can write the receipt of.
 pub(super) struct PlainPackage<'a> {
@@ -131,7 +136,8 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
                 && if observed {
                     call.source == OBSERVE_SOURCE
                 } else {
-                    call.source.strip_prefix("policy-") == Some(call.policy_action)
+                    call.source == INLINE_SOURCE
+                        || call.source.strip_prefix("policy-") == Some(call.policy_action)
                 } =>
         {
             true
@@ -146,6 +152,11 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
         _ => return None,
     };
     let package = package_facts(&record[PACKAGE_KEY], forward)?;
+    // Only an inline-approved forward records the tool decision's risk
+    // categories, which `_record_package_forward` is handed with it.
+    if package.contains_key(RISK_KEY) && !(forward && call.source == INLINE_SOURCE) {
+        return None;
+    }
     Some(PlainPackage {
         call,
         forward,
@@ -158,7 +169,7 @@ pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
 fn package_facts(package: &Value, forward: bool) -> Option<&Map<String, Value>> {
     let package = package.as_object()?;
     let bound = package.contains_key(POLICY_WORKSPACE_KEY);
-    if bound != forward || !keys_fit(package, &PACKAGE_KEYS, &[POLICY_WORKSPACE_KEY]) {
+    if bound != forward || !keys_fit(package, &PACKAGE_KEYS, &[POLICY_WORKSPACE_KEY, RISK_KEY]) {
         return None;
     }
     let filled = |key: &str| {
@@ -175,6 +186,7 @@ fn package_facts(package: &Value, forward: bool) -> Option<&Map<String, Value>> 
             .as_array()
             .is_some_and(|items| items.iter().all(Value::is_object))
         && string_list(&package["signals"])
+        && package.get(RISK_KEY).is_none_or(string_list)
         && package
             .get(POLICY_WORKSPACE_KEY)
             .is_none_or(|workspace| workspace.is_string() || workspace.is_null());
@@ -217,7 +229,10 @@ pub(super) fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option
         Some(_) => Some(project(&call, &artifact, &arguments)?),
     };
     let risk_categories: Vec<String> = match &projected {
-        None => Vec::new(),
+        None => package
+            .get(RISK_KEY)
+            .map(|categories| strings(categories).into_iter().map(str::to_owned).collect())
+            .unwrap_or_default(),
         Some(projected) => {
             let categories = projected.get("risk")?.get("risk_categories")?;
             if !string_list(categories) {
@@ -358,4 +373,4 @@ fn silent_review(
 
 #[cfg(test)]
 #[path = "mcp_relay_receipt_package_tests.rs"]
-mod tests;
+pub(crate) mod tests;

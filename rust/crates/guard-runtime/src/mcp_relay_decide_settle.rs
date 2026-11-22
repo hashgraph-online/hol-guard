@@ -240,6 +240,14 @@ pub(super) fn settle_package(
         answer,
         admitted.binding.review.approval_center_origin.as_deref(),
     )?;
+    let mut evidence = evidence;
+    // The forward an inline approval led to, as `_record_package_forward`
+    // records it. The observed forward is recorded without it.
+    let forwarded =
+        answer.block.is_none() && answer.decision_source != package_observe::OBSERVE_SOURCE;
+    if let Some(remembered) = request.inline.remembered.as_ref().filter(|_| forwarded) {
+        package_prompt::mark_forward(remembered, &mut evidence);
+    }
     match answer.block.clone() {
         // As for a tool call, the relay commits the ticket once the child
         // answered the forward.
