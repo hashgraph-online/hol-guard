@@ -21,6 +21,9 @@ mod workspace_fix_proposals;
 #[path = "guard_store_workspace_assessment_reads.rs"]
 mod workspace_assessment;
 
+#[path = "guard_store_catalog_writer_version.rs"]
+mod catalog_writer_version;
+
 const OAUTH_STATE_KEY: &str = "oauth_local_credentials";
 const MIRROR_STATE_KEYS: [&str; 3] = [
     "managed_policy_bundle_keyring_provenance",
@@ -42,6 +45,7 @@ pub(crate) fn handles(method: &str) -> bool {
         || assessment_admissions::handles(method)
         || workspace_fix_proposals::handles(method)
         || workspace_assessment::handles(method)
+        || catalog_writer_version::handles(method)
 }
 
 pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
@@ -64,6 +68,9 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
         }
         _ if workspace_assessment::handles(method) => {
             workspace_assessment::dispatch(connection, method, args)
+        }
+        _ if catalog_writer_version::handles(method) => {
+            catalog_writer_version::dispatch(connection, args)
         }
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
