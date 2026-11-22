@@ -49,7 +49,7 @@ def fetch_published_release_files(
         OSError,
         TimeoutError,
         urllib.error.URLError,
-        http.client.IncompleteRead,
+        http.client.HTTPException,
         json.JSONDecodeError,
         UnicodeDecodeError,
     ):

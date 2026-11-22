@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import io
 import json
 from contextlib import contextmanager
@@ -40,6 +41,8 @@ def _stub_pypi(monkeypatch: pytest.MonkeyPatch, version_answers: dict[str, objec
         answer = version_answers.get(url)
         if answer is None:
             raise OSError("not found")
+        if isinstance(answer, BaseException):
+            raise answer
         yield io.BytesIO(json.dumps(answer).encode("utf-8"))
 
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", fake_latest)
@@ -75,8 +78,9 @@ def test_reserved_alpha_published_on_pypi_is_offered(monkeypatch: pytest.MonkeyP
         _version_payload("3.61.0a20", yanked=True),
         _version_payload("3.61.0a21"),
         {"info": {"version": "3.61.0a20"}, "urls": []},
+        http.client.BadStatusLine("garbled"),
     ],
-    ids=["unpublished", "yanked", "wrong-version", "no-files"],
+    ids=["unpublished", "yanked", "wrong-version", "no-files", "bad-status-line"],
 )
 def test_reserved_alpha_without_pypi_files_stays_reserved(
     monkeypatch: pytest.MonkeyPatch,
