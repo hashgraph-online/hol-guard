@@ -74,6 +74,7 @@ def policy_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
     """Validate, activate and acknowledge a policy bundle, behind the approval gate."""
 
     from ..library_calls import LibraryCallError
+    from ..native_guard_store import NativeGuardStoreUnavailable
     from ..native_policy_bundle import (
         PolicyBundleNativeError,
         PolicyBundleNativeUnavailableError,
@@ -87,6 +88,9 @@ def policy_sync(store: GuardStore, args: Mapping[str, Any]) -> dict[str, object]
         return _policy_sync(store, payload)
     except _RejectedError as rejected:
         return rejected.reply
+    except NativeGuardStoreUnavailable:
+        # The store call did not run, so nothing was accepted or activated.
+        return _unavailable()
     except PolicyBundleNativeUnavailableError:
         # Without the resident's verdict nothing is accepted, activated, or
         # acknowledged; the caller gets a retryable outage.
@@ -118,7 +122,7 @@ def _validated_bundle(store: GuardStore, payload: dict[str, object], policy_bund
         raise _RejectedError(_unavailable())
     if validated is None:
         raise _RejectedError(_rejection(rejection_reason or "invalid_policy_bundle"))
-    admission_rejection = _policy_bundle_admission_rejection(store, existing, validated)
+    admission_rejection = _policy_bundle_admission_rejection(store, existing, validated, rows=rows)
     if admission_rejection == "unsupported_daemon_version":
         raise _RejectedError(_reply({"error": admission_rejection}, 400))
     if admission_rejection is not None:
@@ -241,7 +245,8 @@ def _policy_sync(store: GuardStore, payload: dict[str, object]) -> dict[str, obj
             policy_bundle=validated,
             policy_bundle_keyring=policy_bundle_keyring_payload(
                 trusted_keys,
-                workspace_id=store.get_cloud_workspace_id(),
+                # The workspace that validated this bundle, from the same snapshot.
+                workspace_id=trust_rows.workspace_id,
             ),
             cloud_exceptions=cloud_exceptions,
             policy_bundle_ack=ack,
