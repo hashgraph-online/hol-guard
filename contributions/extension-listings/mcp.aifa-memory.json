@@ -2,12 +2,12 @@
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "mcp.aifa-memory",
   "tagline": "Hosted Streamable HTTP memory for AI agents with per-user Bearer keys, secret masking, and optional AES-256-GCM Arweave anchoring.",
-  "summary": "Hosted Streamable HTTP memory at https://aifa.works/api/mcp for Claude, Cursor, VS Code, and other MCP clients. Discovery (initialize, tools/list) is public; every tools/call requires a per-user Bearer key (scoped memory-only keys supported). Read-only info tools keep Guard's usual handling; private memory, exports, billing, payouts, and webhooks stay on review.",
+  "summary": "Hosted Streamable HTTP memory at https://aifa.works/api/mcp for Claude, Cursor, VS Code, and other MCP clients. Per upstream HOSTED-POLICY.md, discovery (initialize, tools/list) is public and tools/call uses a per-user Bearer key (memory-only keys supported). Read-only info tools keep Guard's usual handling; private memory, exports, billing, payouts, and webhooks stay on review.",
   "category": "specialized-tools",
   "limitations": [
     "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
-    "All tools/call invocations (including memory_about, plans, and partner_kit) require a per-user Bearer key from https://aifa.works/mcp.",
-    "The hosted backend at aifa.works is closed source; public verification is provided via scripts/conformance.py and HOSTED-POLICY.md.",
+    "Per upstream HOSTED-POLICY.md, all tools/call invocations (including memory_about, plans, and partner_kit) require a per-user Bearer key from https://aifa.works/mcp.",
+    "The hosted backend at aifa.works is closed source; upstream policy and live verification script are published at https://github.com/MaksimGalatin/aifa-memory-mcp (HOSTED-POLICY.md and scripts/conformance.py).",
     "A maintainer profile is not a security certification or an official upstream endorsement."
   ],
   "documentationUrl": "https://github.com/MaksimGalatin/aifa-memory-mcp/blob/main/HOSTED-POLICY.md",
