@@ -1,4 +1,5 @@
 use super::{bindable_setting, code_loading_setting, project, project_reviewed};
+use crate::pretool::PathContext;
 
 #[test]
 fn inert_prefixes_are_removed_in_place() {
@@ -35,7 +36,7 @@ fn inert_prefixes_are_removed_in_place() {
         ("NODE_ENV=test node --test", "node --test"),
         ("env NODE_ENV=test ls", "ls"),
     ] {
-        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(project(command, PathContext::default()).as_deref(), Some(expected), "{command}");
     }
 }
 
@@ -49,7 +50,7 @@ fn commands_without_inert_prefix_are_not_projected() {
         // A name the shell itself reads is never ordinary, so it is reviewed.
         "REPORT_WINDOW=7d ls",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -99,7 +100,7 @@ fn execution_changing_prefixes_leave_the_command_untouched() {
         "API_KEY=abc tool run",
         "BASH_FUNC_ls%%='() { id; }' ls",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -121,7 +122,7 @@ fn settings_that_point_tools_at_files_or_code_are_never_inert() {
         "FEATURE=--evil ls",
         "WIDGET_MODULE=evil ls",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -133,7 +134,7 @@ fn guard_markers_cannot_be_unset() {
         "env -u CLAUDECODE git status",
         "env -u CODEX_SANDBOX git status",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -167,7 +168,7 @@ fn private_temp_settings_project_only_for_review() {
             project_reviewed(command, Default::default()).unwrap_or_else(|| panic!("{command}"));
         assert_eq!(reviewed.command, "bunx vitest run a.test.ts", "{command}");
         assert_eq!(reviewed.setting, "OUT_DIR", "{command}");
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
     for command in [
         r#"OUT_DIR="$HOME/report-test" bunx vitest run a.test.ts"#,
@@ -400,7 +401,7 @@ fn prefixes_before_guard_launchers_are_never_projected() {
         "env -u GH_TOKEN hol-guard pytest-contained -- pytest -q",
         "NO_COLOR=1 /usr/local/bin/hol-guard status",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -458,7 +459,11 @@ fn a_bare_exec_in_front_of_a_setting_is_read_past() {
             "git status && gh repo view o/r",
         ),
     ] {
-        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(
+            project(command, PathContext::default()).as_deref(),
+            Some(expected),
+            "{command}"
+        );
     }
 }
 
@@ -481,6 +486,59 @@ fn an_exec_the_projection_cannot_read_past_leaves_the_command_alone() {
         // same refusal the bare spelling reaches.
         "exec env -u PATH npm test",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
+    }
+}
+
+/// A setting whose value names a location inside the working directory is
+/// still a value the command reads for itself. The separator alone said
+/// nothing about what the command reaches, so a workspace output or data
+/// directory is projected away like any other ordinary setting.
+#[test]
+fn a_workspace_path_setting_is_projected_away() {
+    let context = PathContext {
+        cwd: Some("/work/site"),
+        ..PathContext::default()
+    };
+    for (command, expected) in [
+        ("OUT_DIR=build/out ls -la .", "ls -la ."),
+        ("DATA_DIR=./data ls", "ls"),
+        ("ARTIFACT_DIR=target/report ls -la .", "ls -la ."),
+        ("OUT_DIR=/work/site/build ls", "ls"),
+        ("OUT_DIR=/work/site ls", "ls"),
+    ] {
+        assert_eq!(
+            project(command, context).as_deref(),
+            Some(expected),
+            "{command}"
+        );
+    }
+    // Without a working directory there is nothing to measure the value
+    // against, so the prefix keeps the command unprojected.
+    assert_eq!(
+        project("OUT_DIR=/work/site/build ls", PathContext::default()),
+        None
+    );
+}
+
+/// A path value that leaves the working directory, or names a key store
+/// wherever it sits, keeps the command unprojected.
+#[test]
+fn a_setting_path_outside_the_workspace_is_not_projected() {
+    let context = PathContext {
+        cwd: Some("/work/site"),
+        ..PathContext::default()
+    };
+    for command in [
+        "OUT_DIR=../sibling/out ls -la .",
+        "OUT_DIR=build/../../sibling ls",
+        "OUT_DIR=/etc/ssl/certs ls",
+        "DATA_DIR=vendor/.ssh/id_rsa ls",
+        "DATA_DIR=vendor/.env ls",
+        // A sibling whose name merely starts with the working directory's is
+        // not inside it.
+        "OUT_DIR=/work/site-sibling/out ls",
+    ] {
+        assert_eq!(project(command, context), None, "{command}");
     }
 }

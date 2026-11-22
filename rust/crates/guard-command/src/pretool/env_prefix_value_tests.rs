@@ -3,6 +3,7 @@
 //! the projection may only read past a prefix whose value it can reproduce.
 
 use super::project;
+use crate::pretool::PathContext;
 
 #[test]
 fn a_heap_or_diagnostic_node_options_prefix_is_projected_away() {
@@ -32,7 +33,11 @@ fn a_heap_or_diagnostic_node_options_prefix_is_projected_away() {
             "npm test",
         ),
     ] {
-        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(
+            project(command, PathContext::default()).as_deref(),
+            Some(expected),
+            "{command}"
+        );
     }
     // Anything that can load code, open a port or name a file keeps the
     // command unprojected, so it still fails closed.
@@ -44,7 +49,7 @@ fn a_heap_or_diagnostic_node_options_prefix_is_projected_away() {
         "NODE_OPTIONS= npm test",
         "NODE_OPTIONS=--max-old-space-size=4096:--require=./hook.js npm test",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -66,7 +71,11 @@ fn a_screened_build_or_test_setting_is_removed_in_place() {
         ("RUSTFLAGS=-Dwarnings cargo test", "cargo test"),
         ("RUSTDOCFLAGS=-Dwarnings cargo doc", "cargo doc"),
     ] {
-        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(
+            project(command, PathContext::default()).as_deref(),
+            Some(expected),
+            "{command}"
+        );
     }
     // A value the list does not hold names a program, a plugin or a linker.
     for command in [
@@ -75,7 +84,7 @@ fn a_screened_build_or_test_setting_is_removed_in_place() {
         "PYTEST_ADDOPTS=-pevil .venv/bin/pytest -q",
         "RUSTFLAGS=-Clinker=./ld cargo test",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -104,7 +113,11 @@ fn a_pattern_in_a_setting_value_is_the_text_the_program_reads() {
             "npm test",
         ),
     ] {
-        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(
+            project(command, PathContext::default()).as_deref(),
+            Some(expected),
+            "{command}"
+        );
     }
 }
 
@@ -121,7 +134,7 @@ fn a_setting_value_the_shell_would_expand_is_still_not_projected() {
         "PATH=/tmp/* npm test",
         "NODE_OPTIONS=--require=./*.js npm test",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -139,7 +152,7 @@ fn an_env_argument_carries_its_pattern_only_inside_quotes() {
         // One quote has to cover the whole value, not part of it.
         "env DEBUG=app:'*' npm test",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }
 
@@ -157,7 +170,11 @@ fn a_zone_database_time_zone_is_projected_away() {
             "date -u +%FT%TZ && date +%H:%M",
         ),
     ] {
-        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+        assert_eq!(
+            project(command, PathContext::default()).as_deref(),
+            Some(expected),
+            "{command}"
+        );
     }
     // A value led by `:` or `/` names a file, and dots could climb out of
     // the zone directory, so these keep their review.
@@ -169,6 +186,6 @@ fn a_zone_database_time_zone_is_projected_away() {
         "TZ=America/ date",
         "TZ=America/-x date",
     ] {
-        assert_eq!(project(command), None, "{command}");
+        assert_eq!(project(command, PathContext::default()), None, "{command}");
     }
 }

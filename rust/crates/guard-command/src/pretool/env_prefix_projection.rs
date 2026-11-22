@@ -142,8 +142,8 @@ pub(super) struct ReviewedProjection {
 
 /// The command with every inert environment prefix removed, or `None` when
 /// there is nothing to remove or any prefix might change execution.
-pub(super) fn project(command: &str) -> Option<String> {
-    project_with(command, None, PathContext::default())
+pub(super) fn project(command: &str, context: PathContext<'_>) -> Option<String> {
+    project_with(command, None, context)
 }
 
 /// The command with its literal environment prefixes removed when at least
@@ -258,7 +258,7 @@ fn strip_prefixes(
                 return None;
             }
             if !(inert_assignment(name, value)
-                || !reviewed && ordinary_project_setting(name, value))
+                || !reviewed && ordinary_project_setting(name, value, context))
             {
                 search_path::review(setting.as_deref_mut(), &mut required, name, value, context)?;
             }
@@ -358,7 +358,7 @@ fn strip_env_options(
             return None;
         } else if let Some((name, assigned)) = assignment(token) {
             if !(inert_assignment(name, assigned)
-                || setting.is_none() && ordinary_project_setting(name, assigned))
+                || setting.is_none() && ordinary_project_setting(name, assigned, context))
             {
                 search_path::review(setting.as_deref_mut(), required, name, assigned, context)?;
             }
