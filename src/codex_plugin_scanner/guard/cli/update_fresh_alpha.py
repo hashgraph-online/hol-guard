@@ -18,7 +18,12 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 from typing import Any
+
+from packaging.version import InvalidVersion, Version
+
+from .update_release_candidates import newest_pypi_version
 
 _PYPI_VERSION_JSON_URL = "https://pypi.org/pypi/hol-guard/{version}/json"
 
@@ -88,7 +93,55 @@ def with_confirmed_release(
     return merged
 
 
+@dataclass(frozen=True)
+class ReservedAlphaConfirmation:
+    """The version to offer, the payload it came from, and any alpha still unpublished."""
+
+    version: str
+    payload: dict[str, object] | None
+    reserved_alpha: str | None
+
+
+def confirm_reserved_alpha(
+    payload: dict[str, object] | None,
+    latest_version: str,
+    *,
+    reserved_lookup: Callable[[str | None], str | None],
+    opener: Callable[[urllib.request.Request], AbstractContextManager[Any]],
+    read_bounded: Callable[..., bytes],
+    timeout: float,
+    network_errors: tuple[type[BaseException], ...] = (),
+) -> ReservedAlphaConfirmation:
+    """Offer the GitHub-reserved alpha when PyPI already serves files for it."""
+
+    published_alpha = newest_pypi_version(payload, include_stable=False, include_alpha=True)
+    reserved_alpha = reserved_lookup(published_alpha)
+    unchanged = ReservedAlphaConfirmation(latest_version, payload, reserved_alpha)
+    if reserved_alpha is None or not _is_newer(reserved_alpha, latest_version):
+        return unchanged
+    files = fetch_published_release_files(
+        reserved_alpha,
+        opener=opener,
+        read_bounded=read_bounded,
+        timeout=timeout,
+        network_errors=network_errors,
+    )
+    merged = with_confirmed_release(payload, reserved_alpha, files) if files else None
+    if merged is None:
+        return unchanged
+    return ReservedAlphaConfirmation(reserved_alpha, merged, None)
+
+
+def _is_newer(candidate: str, baseline: str) -> bool:
+    try:
+        return Version(candidate) > Version(baseline)
+    except InvalidVersion:
+        return False
+
+
 __all__ = [
+    "ReservedAlphaConfirmation",
+    "confirm_reserved_alpha",
     "fetch_published_release_files",
     "release_files_from_version_payload",
     "with_confirmed_release",
