@@ -159,7 +159,15 @@ fn workspace_path_value(value: &str, context: PathContext<'_>, first_command: bo
     } else {
         format!("{workspace}/{relative}")
     };
+    // `sensitive_location_text` looks for a credential's spelling inside the
+    // text, so it reads `vendor/.ssh/id_rsa` but not a value that stops at
+    // the store itself (`vendor/.ssh`, `vendor/.gnupg`) or names a key by a
+    // spelling its needles do not carry (`vendor/id_ecdsa`). A setting hands
+    // the program a location to read, so the resolved value faces the same
+    // screen a read argument does, which answers for the store and for the
+    // key file's own name.
     !crate::pretool::sensitive_location_text(&resolved)
+        && !crate::pretool::sensitive_read_path_argument(&resolved)
 }
 
 /// [`crate::pretool::generic::inert_tool_settings::inert_tool_setting`], reachable

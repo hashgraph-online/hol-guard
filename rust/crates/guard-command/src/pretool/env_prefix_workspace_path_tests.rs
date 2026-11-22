@@ -90,6 +90,12 @@ fn a_relative_value_is_read_only_in_the_first_simple_command() {
     };
     for command in [
         "cd /etc && DATA_DIR=ssl/private ls",
+        // A simple command this projection cannot read -- one that starts
+        // with a redirection -- still moves the shell, so the command after
+        // the separator is not the first one either.
+        ">/dev/null cd /etc && DATA_DIR=ssl/private ls",
+        "</dev/null cd .. && OUT_DIR=sibling/out ls",
+        "2>/dev/null cd /etc && DATA_DIR=ssl/private ls",
         "ls && OUT_DIR=build/out ls",
         "ls; OUT_DIR=build/out ls",
         "ls | OUT_DIR=build/out cat",
@@ -115,6 +121,42 @@ fn a_relative_value_is_read_only_in_the_first_simple_command() {
             "date -u +%Y-%m-%dT%H:%M:%SZ && TZ=America/Los_Angeles date +%H:%M",
             "date -u +%Y-%m-%dT%H:%M:%SZ && date +%H:%M",
         ),
+    ] {
+        assert_eq!(
+            project(command, context).as_deref(),
+            Some(expected),
+            "{command}"
+        );
+    }
+}
+
+/// The marker screen reads a credential's spelling inside the text, so it
+/// answers for `vendor/.ssh/id_rsa` but not for a value that stops at the
+/// store itself or names a key by a spelling the markers do not carry. The
+/// name screen reads the value's own last component and the directories
+/// above it, so neither shape is projected away.
+#[test]
+fn a_credential_store_or_key_name_the_markers_miss_is_refused() {
+    let context = PathContext {
+        cwd: Some("/work/site"),
+        ..PathContext::default()
+    };
+    for command in [
+        "DATA_DIR=vendor/.ssh ls",
+        "DATA_DIR=vendor/.gnupg ls",
+        "DATA_DIR=vendor/.aws ls",
+        "DATA_DIR=vendor/secrets ls",
+        "DATA_DIR=vendor/id_ecdsa ls",
+        "DATA_DIR=vendor/credentials.json ls",
+        "DATA_DIR=/work/site/vendor/.ssh ls",
+    ] {
+        assert_eq!(project(command, context), None, "{command}");
+    }
+    // The screens read credential names, not every directory a command is
+    // pointed at, so an ordinary workspace path is still projected away.
+    for (command, expected) in [
+        ("DATA_DIR=vendor/assets ls", "ls"),
+        ("DATA_DIR=vendor/report.json ls", "ls"),
     ] {
         assert_eq!(
             project(command, context).as_deref(),

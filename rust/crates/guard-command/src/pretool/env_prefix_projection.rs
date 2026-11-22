@@ -187,11 +187,18 @@ fn project_with(
     let mut command_start = true;
     // The caller's working directory is the one this command line started in.
     // A later simple command may run after a `cd`, so only the first one can
-    // read a relative setting value against it.
+    // read a relative setting value against it. The flag is cleared at the
+    // separator, not after a simple command is read: a leading redirection
+    // (`>/dev/null cd /etc && DATA_DIR=ssl/private ls`) keeps a command from
+    // being read here at all, and clearing it only on a read would leave the
+    // command after the `cd` holding the caller's working directory.
     let mut first_command = true;
     while index < tokens.len() {
         if tokens[index].is_control {
             command_start = COMMAND_SEPARATORS.contains(&tokens[index].value.as_str());
+            if command_start {
+                first_command = false;
+            }
             index += 1;
             continue;
         }
@@ -211,7 +218,6 @@ fn project_with(
                 first_command,
             },
         )?;
-        first_command = false;
     }
     if !removed.contains(&true) {
         return None;
