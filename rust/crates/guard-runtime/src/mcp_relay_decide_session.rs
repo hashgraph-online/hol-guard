@@ -19,7 +19,7 @@
 //! own config, as the proxy does (`mcp_relay_decide_session_config.rs`). An
 //! `ask` mode the binding carries without the approval center or review OAuth
 //! source the daemon binds with it keeps the session native
-//! (`mcp_relay_lane::hands_off`): the calls the resident decides without the
+//! (`mcp_relay_lane`): the calls the resident decides without the
 //! queue route still run, and each call it would queue is refused. The route
 //! is native under `safe-alternative`, and under `ask`
 //! (`mcp_relay_decide_ask.rs`).

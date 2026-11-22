@@ -37,8 +37,8 @@ use crate::claude_hook_bridge_http::remaining;
 use crate::managed_policy_load::ManagedPolicySource;
 use crate::mcp_relay_args::RelayArgs;
 use crate::mcp_relay_authority::{
-    blocked_response, no_decision_response, tool_name, ClaimTicket, ForwardTicket, RelayAuthority,
-    ToolCallVerdict,
+    blocked_response, no_decision_response, tool_name, undecided_response, ClaimTicket,
+    ForwardTicket, RelayAuthority, ToolCallVerdict,
 };
 use crate::mcp_relay_catalog::{CatalogSnapshot, RelayCatalog};
 use crate::mcp_relay_decide::inline::Reply as InlineReply;
@@ -454,8 +454,9 @@ impl RelayAuthority for ResidentRelayAuthority {
                 no_decision()
             }
             None => {
-                defer::note(&defer::reply_cause(output.as_deref()));
-                no_decision()
+                let cause = defer::reply_cause(output.as_deref());
+                defer::note(&cause);
+                ToolCallVerdict::Respond(undecided_response(id, params, &cause))
             }
         }
     }
