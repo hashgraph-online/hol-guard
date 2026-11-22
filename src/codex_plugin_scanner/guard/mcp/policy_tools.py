@@ -31,6 +31,7 @@ from ..policy_document_yaml import (
     format_policy_document_yaml,
     parse_policy_document_yaml,
 )
+from ..store_base import _POLICY_INTEGRITY_STATE_KEY
 from ..store_policy_document import PolicyImportMode
 from .policy_errors import PolicyToolError
 from .policy_store import (
@@ -151,17 +152,15 @@ def _write_plan_summary(
 
 
 def _read_policy_integrity_generation(store: GuardStore) -> int | None:
-    """Read the authoritative policy integrity generation via a real connection.
+    """Read the authoritative policy integrity generation through the native store.
 
-    Uses ``_load_policy_integrity_state`` on an actual SQLite connection
-    instead of passing ``None`` to ``_refresh_policy_integrity_state``.
+    The native ``get_sync_payload`` read answers the stored integrity state.
     Returns ``None`` when integrity state is unavailable (e.g. fresh DB
     with no key yet); staging proceeds without a generation binding in
     that degraded case.
     """
     try:
-        with store._connect() as connection:
-            state = store._load_policy_integrity_state(connection)
+        state = store._native_store_call("get_sync_payload", {"state_key": _POLICY_INTEGRITY_STATE_KEY})
         if not isinstance(state, dict):
             return None
         gen = state.get("generation")
