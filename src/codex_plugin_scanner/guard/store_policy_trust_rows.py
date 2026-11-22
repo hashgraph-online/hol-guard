@@ -87,11 +87,14 @@ class PolicyTrustRowsUnstableError(RuntimeError):
     """The trust rows kept changing while an oversized bundle was read; nothing was judged, so a retry is safe."""
 
 
-def _deferred_bundle(store: _NativeStore) -> object:
+_BUNDLE_KEYS = {"current": "policy_bundle", "last_good": "policy_bundle_last_good"}
+
+
+def _deferred_bundle(store: _NativeStore, role: str) -> object:
     """The bundle row read on its own; an unreadable row is absent, as the native reader treats it."""
 
     try:
-        return store.get_sync_payload("policy_bundle")
+        return store.get_sync_payload(_BUNDLE_KEYS[role])
     except ValueError:
         return None
 
@@ -99,25 +102,34 @@ def _deferred_bundle(store: _NativeStore) -> object:
 class StorePolicyTrustRowsMixin:
     """One consistent read of the policy bundle trust rows, and the Review keyring write."""
 
-    def policy_bundle_trust_rows(self: _NativeStore, *, keys_only: bool = False) -> PolicyBundleTrustRows:
+    def policy_bundle_trust_rows(
+        self: _NativeStore,
+        *,
+        keys_only: bool = False,
+        last_good: bool = False,
+    ) -> PolicyBundleTrustRows:
         """The bundle and every row it is judged against, read in one snapshot.
 
         ``keys_only`` leaves the bundle out for readers that need only the
-        keyrings. A bundle too large for one native reply is read on its own;
-        a second snapshot must then match the first, so the bundle and its
-        keyrings, checkpoint and workspace still come from the same sync.
+        keyrings. ``last_good`` puts the last good bundle in ``policy_bundle``
+        instead of the current one. A bundle too large for one native reply is
+        read on its own; a second snapshot must then match the first, so the
+        bundle and its keyrings, checkpoint and workspace still come from the
+        same sync.
         """
 
         if keys_only:
             return PolicyBundleTrustRows.from_native(
                 self._native_store_call("policy_bundle_trust_rows", {"keys_only": True})
             )
+        role = "last_good" if last_good else "current"
+        args: dict[str, object] = {"bundle": role}
         for _attempt in range(_DEFERRED_BUNDLE_ATTEMPTS):
-            answer = self._native_store_call("policy_bundle_trust_rows", {})
+            answer = self._native_store_call("policy_bundle_trust_rows", args)
             if not isinstance(answer, dict) or answer.get("policy_bundle_deferred") is not True:
                 return PolicyBundleTrustRows.from_native(answer)
-            bundle = _deferred_bundle(self)
-            if self._native_store_call("policy_bundle_trust_rows", {}) == answer:
+            bundle = _deferred_bundle(self, role)
+            if self._native_store_call("policy_bundle_trust_rows", args) == answer:
                 return PolicyBundleTrustRows.from_native(answer, policy_bundle=bundle)
         raise PolicyTrustRowsUnstableError("policy bundle trust rows kept changing while the bundle was read")
 

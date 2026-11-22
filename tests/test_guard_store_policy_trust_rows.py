@@ -76,6 +76,26 @@ def test_a_bundle_larger_than_one_reply_is_still_read(tmp_path: Path) -> None:
     assert rows.policy_bundle_keyring == {"keys": []}
 
 
+def test_last_good_puts_the_last_good_bundle_beside_the_same_keyrings(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload("policy_bundle", {"bundleVersion": "9"}, _NOW)
+    store.set_sync_payload("policy_bundle_last_good", {"bundleVersion": "7"}, _NOW)
+    store.set_sync_payload("policy_bundle_keyring", {"keys": []}, _NOW)
+    rows = store.policy_bundle_trust_rows(last_good=True)
+    assert rows.policy_bundle == {"bundleVersion": "7"}
+    assert rows.policy_bundle_keyring == {"keys": []}
+    assert store.policy_bundle_trust_rows().policy_bundle == {"bundleVersion": "9"}
+
+
+def test_a_last_good_bundle_larger_than_one_reply_is_read_from_its_own_row(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path)
+    last_good = {"bundleVersion": "7", "rules": "x" * (1536 * 1024)}
+    store.set_sync_payload("policy_bundle", {"bundleVersion": "9"}, _NOW)
+    store.set_sync_payload("policy_bundle_last_good", last_good, _NOW)
+    rows = store.policy_bundle_trust_rows(last_good=True)
+    assert rows.policy_bundle == last_good
+
+
 def test_trust_rows_that_never_settle_raise_a_retryable_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.store_policy_trust_rows import PolicyTrustRowsUnstableError
 
