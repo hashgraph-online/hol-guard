@@ -22,13 +22,9 @@ use serde_json::{json, Map, Value};
 
 use crate::bounded_hook_bridge_render::failure_output_for;
 use crate::claude_hook_bridge_render::py_strip;
-use crate::hook_fail_closed_envelopes::{envelope, event_kind, ENVELOPES};
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
-/// The envelope kinds the contract files a deciding event under: an event whose
-/// answer settles whether a tool call, a permission request or a prompt goes
-/// ahead. Everything else only reports on work that already finished.
-const DECIDING_KINDS: [&str; 3] = ["pre_tool", "permission", "prompt"];
+const DECIDING_EVENTS: [&str; 3] = ["pretooluse", "permissionrequest", "userpromptsubmit"];
 const GROK_OBSERVE_EVENTS: [&str; 6] = [
     "sessionstart",
     "sessionend",
@@ -58,14 +54,8 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .map(|value| value.as_str().ok_or(ERR_INVALID))
         .transpose()?;
     if on_stderr {
-        // Every spelling the contract files under a deciding kind is refused,
-        // not just the canonical three: a harness that calls its pre-tool event
-        // `PreToolCall`, or its permission event `PermissionRequestV2`, decides
-        // whether something runs exactly as the canonical spelling does, and a
-        // silent exit 0 would read as an allow.
-        let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
-        let kind = event_kind(&contract, event_name);
-        let (stderr, exit_code) = if DECIDING_KINDS.contains(&kind.as_str()) {
+        let compact = event_name.replace(['_', '-'], "").to_lowercase();
+        let (stderr, exit_code) = if DECIDING_EVENTS.contains(&compact.as_str()) {
             (reason, 2)
         } else {
             ("", 0)
@@ -79,6 +69,11 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
 fn text<'a>(fields: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'static str> {
     fields.get(key).and_then(Value::as_str).ok_or(ERR_INVALID)
 }
+
+/// The document and exit status for a hook whose review could not finish.
+const ENVELOPES: &str = include_str!(
+    "../../../../src/codex_plugin_scanner/guard/contracts/hook-fail-closed-envelopes.v1.json"
+);
 
 fn failure(
     harness: &str,
@@ -111,15 +106,21 @@ fn failure(
     }
     let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
     let kind = event_kind(&contract, event_name);
-    let effective_reason = if kind == "prompt" {
+    let prompt = kind == "prompt";
+    let effective_reason = if prompt {
         contract["defaults"]["prompt_reason"]
             .as_str()
             .unwrap_or(reason)
     } else {
         reason
     };
-    let effective_code = reason_code.unwrap_or("native_hook_render_unavailable");
+    let effective_code = if prompt {
+        "native_prompt_unavailable"
+    } else {
+        reason_code.unwrap_or("native_hook_render_unavailable")
+    };
     let document = envelope(
+        &contract,
         &kind,
         harness,
         &[
@@ -128,8 +129,8 @@ fn failure(
             ("$event_name", event_name),
         ],
     );
-    if document.as_object().is_some_and(|map| !map.is_empty()) {
-        let rendered = ascii_json(&document);
+    let rendered = ascii_json(&document);
+    if !rendered.is_empty() {
         let (_, exit_code) = failure_output_for(shape, event_name, effective_reason, false);
         return (rendered, exit_code);
     }
@@ -159,6 +160,59 @@ fn ascii_json(value: &Value) -> String {
         }
     }
     output
+}
+
+fn event_kind(contract: &Value, event: &str) -> String {
+    let compact: String = event
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|character| *character != '_' && *character != '-')
+        .collect();
+    contract["events"]
+        .get(&compact)
+        .and_then(Value::as_str)
+        .or_else(|| {
+            contract["event_prefixes"].as_object().and_then(|prefixes| {
+                prefixes
+                    .iter()
+                    .find(|(prefix, _)| compact.starts_with(prefix.as_str()))
+                    .and_then(|(_, kind)| kind.as_str())
+            })
+        })
+        .unwrap_or("lifecycle")
+        .to_owned()
+}
+
+fn envelope(contract: &Value, kind: &str, harness: &str, values: &[(&str, &str)]) -> Value {
+    let normalized = harness.trim().to_lowercase().replace('_', "-");
+    let table = &contract["envelopes"][kind];
+    let template = table
+        .get(normalized)
+        .or_else(|| table.get("*"))
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    fill(template, values)
+}
+
+fn fill(value: Value, values: &[(&str, &str)]) -> Value {
+    match value {
+        Value::String(text) => values
+            .iter()
+            .find(|(placeholder, _)| *placeholder == text)
+            .map_or(Value::String(text), |(_, value)| {
+                Value::String((*value).to_owned())
+            }),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, value)| (key, fill(value, values)))
+                .collect(),
+        ),
+        Value::Array(items) => {
+            Value::Array(items.into_iter().map(|item| fill(item, values)).collect())
+        }
+        other => other,
+    }
 }
 
 #[cfg(test)]

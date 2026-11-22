@@ -5,30 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 RUNTIME_MISSING = "HOL Guard's native runtime is missing, so Guard blocked this hook. Run `hol-guard repair`."
-# The events that decide whether something runs, taken from the fail-closed
-# envelope contract (`guard/contracts/hook-fail-closed-envelopes.v1.json`): every
-# spelling the contract files under `pre_tool`, `permission` or `prompt`. The
-# runtime reads the same contract (`hook_failure_op::dispatch`), and
-# `tests/test_native_hook_failure_detail.py` holds this table to it. A harness
-# spelling its pre-tool event `PreToolCall` or its permission event
-# `PermissionRequestV2` decides as much as the canonical spelling does, so an
-# outage has to refuse it too.
-_DECIDING_EVENTS = frozenset(
-    {
-        "pretool",
-        "pretoolcall",
-        "pretooluse",
-        "copilotpermissionrequest",
-        "permissionrequest",
-        "permissionrequestv2",
-        "userpromptsubmit",
-        "userpromptsubmitted",
-    }
-)
-_DECIDING_EVENT_PREFIXES = ("before",)
+# The runtime's table (`hook_failure_op::DECIDING_EVENTS`): the events that decide whether something runs.
+_DECIDING_EVENTS = frozenset({"pretooluse", "permissionrequest", "userpromptsubmit"})
 
 
-def outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
+def _outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
     """The runtime's stderr table for the moment it cannot be asked.
 
     A deciding event is refused with exit 2. An event that only reports on
@@ -36,12 +17,8 @@ def outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
     agent from stopping.
     """
 
-    # The runtime trims the event name before it classifies it, so a harness
-    # that writes `" PreToolUse"` is refused there. Classifying the untrimmed
-    # name here would let the same spelling pass this table silently, which is
-    # the one divergence that decides differently.
-    compact = event_name.strip().replace("_", "").replace("-", "").lower()
-    if compact in _DECIDING_EVENTS or compact.startswith(_DECIDING_EVENT_PREFIXES):
+    compact = event_name.replace("_", "").replace("-", "").lower()
+    if compact in _DECIDING_EVENTS:
         return "", RUNTIME_MISSING, 2
     return "", "", 0
 
@@ -66,7 +43,9 @@ def native_hook_failure(
         args: dict[str, Any] = {"harness": harness, "event_name": event_name, "reason": reason}
         if reason_code is not None:
             args["reason_code"] = reason_code
-        answer = native_runner_authority("hook_failure", args, deadline_monotonic=deadline)
+        answer = native_runner_authority(
+            "hook_failure", args, deadline_monotonic=deadline
+        )
     except Exception:
         return None
     document, exit_code = answer.get("document"), answer.get("exit_code")
@@ -93,7 +72,7 @@ def native_stderr_hook_failure(
             deadline_monotonic=deadline,
         )
     except Exception:
-        return outage_stderr_failure(event_name)
+        return _outage_stderr_failure(event_name)
     document, stderr, exit_code = answer.get("document"), answer.get("stderr"), answer.get("exit_code")
     if (
         isinstance(document, str)
@@ -102,4 +81,4 @@ def native_stderr_hook_failure(
         and not isinstance(exit_code, bool)
     ):
         return document, stderr, exit_code
-    return outage_stderr_failure(event_name)
+    return _outage_stderr_failure(event_name)

@@ -189,14 +189,21 @@ def test_every_event_kind_answers_from_the_shared_contract() -> None:
 
 
 def test_guard_home_uses_the_rust_hook_failure_renderer(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen: dict[str, object] = {}
+
+    def native_failure(*_args: object, **kwargs: object) -> tuple[str, int]:
+        seen.update(kwargs)
+        return '{"decision":"deny","reason_code":"native_hook_worker_unavailable"}', 2
+
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.hook_failure_bridge.native_hook_failure",
-        lambda *_args: ('{"decision":"deny","reason_code":"native_hook_worker_unavailable"}', 2),
+        native_failure,
     )
     assert hook_fail_closed.fail_closed_response("codex", "PreToolUse", guard_home=tmp_path) == {
         "decision": "deny",
         "reason_code": "native_hook_worker_unavailable",
     }
+    assert seen["reason_code"] == "native_hook_render_unavailable"
 
 
 def test_review_render_failure_drops_a_raw_approval_url(monkeypatch: pytest.MonkeyPatch) -> None:

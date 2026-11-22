@@ -97,7 +97,7 @@ def _bridge_hook_output(
         ):
             return stdout, stderr, exit_code
     if canonical == "muse":
-        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON)
+        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON, deadline=deadline)
     if canonical == "hermes":
         return _failure_output(canonical, event_name, _BRIDGE_BLOCK_REASON)
     return _failure_output(canonical, event_name, _RENDER_FAILURE_REASON)
@@ -131,6 +131,7 @@ def _unavailable_cli_response(
     reason_code: str,
     *,
     guard_home: Path | None = None,
+    deadline: float | None = None,
     worker_available: bool = False,
 ) -> dict[str, object]:
     response = availability_harness_response(
@@ -139,6 +140,7 @@ def _unavailable_cli_response(
         reason_code=reason_code,
         reason="HOL Guard could not complete the native hook decision safely.",
         guard_home=guard_home,
+        deadline=deadline,
     )
     # Without a worker the managed destination cannot be resolved.
     if not worker_available and withholds_structured_destination(harness=harness, event_name=event_name):
@@ -193,6 +195,7 @@ def try_native_hook_authority(
             event_name,
             "native_hook_worker_exception",
             guard_home=guard_home,
+            deadline=deadline,
             worker_available=worker is not None,
         )
         if worker is None:
@@ -298,7 +301,7 @@ def emit_hook_review(
     # fixed fail-closed document, and the exit status follows the outage
     # policy the bridges' fixed payload uses: block an event that may pause
     # the turn, and let any other continue.
-    fallback = fail_closed_response(canonical, event_name, guard_home=guard_home)
+    fallback = fail_closed_response(canonical, event_name, guard_home=guard_home, deadline=deadline)
     _ = stream.write(json.dumps(fallback, ensure_ascii=True, separators=(",", ":")) + "\n")
     if canonical == "claude-code":
         # Claude reads a hook's JSON only on exit 0; any other status discards
@@ -350,7 +353,11 @@ def route_native_hook(
                 payload, guard_home=context.guard_home, deadline=deadline
             )
             response = _unavailable_cli_response(
-                args.harness, event_name, "native_hook_worker_unavailable", guard_home=context.guard_home
+                args.harness,
+                event_name,
+                "native_hook_worker_unavailable",
+                guard_home=context.guard_home,
+                deadline=deadline,
             )
         event_name = event_name or canonical_hook_event_name(payload, guard_home=context.guard_home, deadline=deadline)
         return emit_hook_review(
@@ -366,7 +373,11 @@ def route_native_hook(
         _record_native_hook_exception(context.guard_home, harness=args.harness, event_name=event_name)
         _log_worker_exception(error, harness=args.harness)
         response = _unavailable_cli_response(
-            args.harness, event_name, "native_hook_worker_exception", guard_home=context.guard_home
+            args.harness,
+            event_name,
+            "native_hook_worker_exception",
+            guard_home=context.guard_home,
+            deadline=deadline,
         )
         return emit_hook_review(
             args.harness,
