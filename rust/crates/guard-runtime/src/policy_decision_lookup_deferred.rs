@@ -9,7 +9,7 @@ use guard_contracts::{
     canonical_utc_timestamp, PolicyDecisionLookupRequestV1, POLICY_DECISION_LOOKUP_REQUEST_SCHEMA,
 };
 
-use super::{canonical_json, evaluate_in_connection, flush_events};
+use super::{canonical_json, evaluate_in_connection};
 
 /// One audit event a lookup raised: its name, payload and the lookup's time.
 pub(crate) type AuditEvent = (String, Value, String);
@@ -30,7 +30,11 @@ pub(super) fn emit_events(
             );
             Ok(())
         }
-        None => flush_events(conn, events, current_time),
+        // `_flush_events`: a failed insert aborts the lookup rather than
+        // silently dropping the event.
+        None => events
+            .iter()
+            .try_for_each(|(name, payload)| insert_event(conn, name, payload, current_time)),
     }
 }
 
@@ -60,11 +64,21 @@ pub(crate) fn evaluate_non_consuming_deferred(
 /// Write events a deferred lookup raised, each at the time its lookup ran.
 /// A failed insert propagates, as it does for a lookup that writes its own.
 pub(crate) fn write_audit_events(conn: &Connection, events: &[AuditEvent]) -> rusqlite::Result<()> {
-    for (name, payload, occurred_at) in events {
-        conn.execute(
-            "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-            rusqlite::params![name, canonical_json(payload), occurred_at],
-        )?;
-    }
-    Ok(())
+    events
+        .iter()
+        .try_for_each(|(name, payload, occurred_at)| insert_event(conn, name, payload, occurred_at))
+}
+
+/// The one `guard_events` row every lookup audit event is written as.
+fn insert_event(
+    conn: &Connection,
+    name: &str,
+    payload: &Value,
+    occurred_at: &str,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
+        rusqlite::params![name, canonical_json(payload), occurred_at],
+    )
+    .map(|_| ())
 }
