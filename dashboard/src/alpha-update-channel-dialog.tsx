@@ -1,4 +1,4 @@
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent, FormEvent, RefObject } from "react";
 import { HiMiniXMark } from "react-icons/hi2";
 
 import { ApprovalProofFieldInputs, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
@@ -15,6 +15,7 @@ export type AlphaChannelDialogProps = {
   onConfirm: () => void;
   onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  confirmButtonRef?: RefObject<HTMLButtonElement | null>;
 };
 
 export function AlphaChannelDialog({
@@ -28,6 +29,7 @@ export function AlphaChannelDialog({
   onConfirm,
   onApprovalPasswordChange,
   onApprovalTotpCodeChange,
+  confirmButtonRef,
 }: AlphaChannelDialogProps) {
   const title = useAlpha ? "Return to stable updates" : "Try alpha updates";
   const description = useAlpha
@@ -88,6 +90,7 @@ export function AlphaChannelDialog({
           Cancel
         </button>
         <button
+          ref={confirmButtonRef}
           type="submit"
           disabled={confirmDisabled}
           className="min-h-10 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-60"

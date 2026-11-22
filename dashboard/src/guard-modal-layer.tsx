@@ -9,6 +9,7 @@ interface GuardModalLayerProps {
   children: ReactNode;
   onClose: () => void;
   panelClassName?: string;
+  initialFocusRef?: React.RefObject<HTMLElement | null>;
 }
 
 export function GuardModalLayer({
@@ -17,6 +18,7 @@ export function GuardModalLayer({
   children,
   onClose,
   panelClassName = "w-full max-w-2xl",
+  initialFocusRef,
 }: GuardModalLayerProps) {
   const [overlayRoot, setOverlayRoot] = useState<HTMLElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -24,7 +26,7 @@ export function GuardModalLayer({
   onCloseRef.current = onClose;
   const mounted = overlayRoot !== null;
 
-  useFocusTrap(mounted, panelRef);
+  useFocusTrap(mounted, panelRef, initialFocusRef);
 
   useEffect(() => {
     setOverlayRoot(ensureGuardOverlayRoot());
