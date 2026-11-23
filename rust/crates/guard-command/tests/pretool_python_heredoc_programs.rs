@@ -199,3 +199,51 @@ fn a_probe_whose_local_imports_are_not_all_read_keeps_its_review() {
         "{command}: {action}"
     );
 }
+
+/// Agents look before they probe. Readers that run before the program have
+/// finished when it starts and write nothing, so the chain earns what the
+/// program earns alone instead of falling through to a block.
+#[test]
+fn a_probe_after_plain_readers_runs_in_the_workspace_sandbox() {
+    let (root, _cleanup) = checkout("readers");
+    let body = "<<'PY'\nimport pkg\nprint(pkg.X)\nPY";
+    for command in [
+        format!("git diff --check && git diff && python3 - {body}"),
+        format!("ls pkg; python3 - {body}"),
+        format!("ls pkg\npython3 - {body}"),
+        format!("git log --oneline -- pkg | head -20; python3 - {body}"),
+        format!("rg -n X -g '*.py' && python3 {body}"),
+    ] {
+        let (action, reason) = outcome(&root, &command);
+        assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+    }
+}
+
+#[test]
+fn a_probe_after_a_writer_or_before_anything_keeps_its_review() {
+    let (root, _cleanup) = checkout("writers");
+    let body = "<<'PY'\nimport pkg\nprint(pkg.X)\nPY";
+    for command in [
+        // A writer before the program could change what it imports.
+        format!("sed -i 's/X = 1/X = 2/' pkg/__init__.py; python3 - {body}"),
+        format!("cp keys.py pkg/__init__.py && python3 - {body}"),
+        format!("git checkout -- pkg && python3 - {body}"),
+        format!("git diff --output=pkg/__init__.py && python3 - {body}"),
+        format!("ls > pkg/__init__.py; python3 - {body}"),
+        format!("cat pkg/remote.py > pkg/__init__.py; python3 - {body}"),
+        // A `cd` moves where its imports resolve.
+        format!("cd pkg; ls; python3 - {body}"),
+        // Readers do not admit what the program itself would not.
+        "ls; python3 - <<'PY'\nimport pkg.remote\nPY".to_string(),
+        "ls; python3 - <<'PY'\nimport pkg.stopper\nPY".to_string(),
+        // A command after the program could run what it prepares.
+        format!("ls; python3 - {body}\nls"),
+        format!("ls; python3 - {body}\ngit add -A"),
+    ] {
+        let (action, _) = outcome(&root, &command);
+        assert!(
+            action != "allow" && action != "sandbox-required",
+            "{command}: {action}"
+        );
+    }
+}
