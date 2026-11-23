@@ -223,6 +223,7 @@ mod printf_words;
 mod process_stops;
 mod property_list_reads;
 mod pytest_contained;
+mod shell_limits;
 mod sqlite_reads;
 mod status_facts;
 mod tool_bin_listing;

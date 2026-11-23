@@ -8,8 +8,9 @@
 //! `updatedInput` (0.131.0 or later). An older or unknown Codex keeps the
 //! denial with an update hint; anything this module cannot reproduce keeps
 //! the denial unchanged. Native authority is rechecked by the sink.
-//! A call that Codex's own macOS sandbox already confines runs as it is,
-//! since the sink cannot start inside that sandbox (`sandbox`).
+//! A call that Codex's own macOS or Linux sandbox already confines runs
+//! there behind a kernel check, since the sink cannot start inside that
+//! sandbox (`sandbox`).
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
