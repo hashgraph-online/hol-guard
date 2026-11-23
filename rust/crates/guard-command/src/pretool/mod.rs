@@ -179,6 +179,7 @@ mod git_remote_config;
 mod git_remote_ops;
 mod git_routes;
 mod git_session_probe;
+pub(crate) mod git_shortlog_reads;
 mod git_step_preserves;
 mod git_worktree;
 pub(crate) mod github_conversation;
