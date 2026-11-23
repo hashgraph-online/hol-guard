@@ -187,14 +187,24 @@ fn a_stderr_harness_refuses_only_where_something_would_run() {
         dispatch(&json!({"harness": "muse", "event_name": event, "reason": REASON, "stderr": true}))
             .expect("a well-formed request")
     };
-    for event in ["PreToolUse", "PermissionRequest", "user_prompt-submit"] {
+    for event in [
+        "PreToolUse",
+        "PreToolCall",
+        "pre_tool",
+        "BeforeToolUse",
+        "PermissionRequest",
+        "PermissionRequestV2",
+        "copilot-permission-request",
+        "user_prompt-submit",
+        "UserPromptSubmitted",
+    ] {
         assert_eq!(
             ask(event),
             json!({"document": "", "stderr": REASON, "exit_code": 2}),
             "{event}"
         );
     }
-    for event in ["PostToolUse", "SessionStart", "Stop"] {
+    for event in ["PostToolUse", "SessionStart", "Stop", "SubagentStop"] {
         assert_eq!(
             ask(event),
             json!({"document": "", "stderr": "", "exit_code": 0}),

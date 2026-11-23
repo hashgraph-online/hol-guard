@@ -30,3 +30,45 @@ def test_failure_detail_rejects_untrusted_text_and_structured_decisions():
     assert detail["decision"] is None
     assert detail["permission_decision"] is None
     assert "private payload" not in str(detail)
+
+
+def test_outage_refuses_every_deciding_event_spelling():
+    """A hook outage cannot answer, so no deciding spelling may exit silently."""
+
+    from codex_plugin_scanner.guard.hook_failure_bridge import RUNTIME_MISSING, outage_stderr_failure
+
+    for event in (
+        "PreToolUse",
+        "PreToolCall",
+        "pre_tool",
+        "BeforeToolUse",
+        "PermissionRequest",
+        "PermissionRequestV2",
+        "copilot-permission-request",
+        "user_prompt-submit",
+        "UserPromptSubmitted",
+    ):
+        assert outage_stderr_failure(event) == ("", RUNTIME_MISSING, 2), event
+    for event in ("PostToolUse", "SessionStart", "Stop", "SubagentStop"):
+        assert outage_stderr_failure(event) == ("", "", 0), event
+
+
+def test_outage_table_matches_the_fail_closed_envelope_contract():
+    """The outage table is the contract's deciding events, not a shorter list."""
+
+    import json
+
+    from codex_plugin_scanner.guard.hook_failure_bridge import (
+        _DECIDING_EVENT_PREFIXES,
+        _DECIDING_EVENTS,
+    )
+    from codex_plugin_scanner.guard.hook_review.hook_fail_closed import ENVELOPES_CONTRACT_PATH
+
+    contract = json.loads(ENVELOPES_CONTRACT_PATH.read_text(encoding="utf-8"))
+    deciding = {"pre_tool", "permission", "prompt"}
+    assert _DECIDING_EVENTS == {
+        event for event, kind in contract["events"].items() if kind in deciding
+    }
+    assert set(_DECIDING_EVENT_PREFIXES) == {
+        prefix for prefix, kind in contract["event_prefixes"].items() if kind in deciding
+    }

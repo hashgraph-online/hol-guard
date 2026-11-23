@@ -5,8 +5,27 @@ from __future__ import annotations
 from typing import Any
 
 RUNTIME_MISSING = "HOL Guard's native runtime is missing, so Guard blocked this hook. Run `hol-guard repair`."
-# The runtime's table (`hook_failure_op::DECIDING_EVENTS`): the events that decide whether something runs.
-_DECIDING_EVENTS = frozenset({"pretooluse", "permissionrequest", "userpromptsubmit"})
+# The events that decide whether something runs, taken from the fail-closed
+# envelope contract (`guard/contracts/hook-fail-closed-envelopes.v1.json`): every
+# spelling the contract files under `pre_tool`, `permission` or `prompt`. The
+# runtime reads the same contract (`hook_failure_op::dispatch`), and
+# `tests/test_native_hook_failure_detail.py` holds this table to it. A harness
+# spelling its pre-tool event `PreToolCall` or its permission event
+# `PermissionRequestV2` decides as much as the canonical spelling does, so an
+# outage has to refuse it too.
+_DECIDING_EVENTS = frozenset(
+    {
+        "pretool",
+        "pretoolcall",
+        "pretooluse",
+        "copilotpermissionrequest",
+        "permissionrequest",
+        "permissionrequestv2",
+        "userpromptsubmit",
+        "userpromptsubmitted",
+    }
+)
+_DECIDING_EVENT_PREFIXES = ("before",)
 
 
 def outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
@@ -18,7 +37,7 @@ def outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
     """
 
     compact = event_name.replace("_", "").replace("-", "").lower()
-    if compact in _DECIDING_EVENTS:
+    if compact in _DECIDING_EVENTS or compact.startswith(_DECIDING_EVENT_PREFIXES):
         return "", RUNTIME_MISSING, 2
     return "", "", 0
 

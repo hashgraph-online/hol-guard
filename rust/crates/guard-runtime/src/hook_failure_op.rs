@@ -25,7 +25,10 @@ use crate::claude_hook_bridge_render::py_strip;
 use crate::hook_fail_closed_envelopes::{envelope, event_kind, ENVELOPES};
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
-const DECIDING_EVENTS: [&str; 3] = ["pretooluse", "permissionrequest", "userpromptsubmit"];
+/// The envelope kinds the contract files a deciding event under: an event whose
+/// answer settles whether a tool call, a permission request or a prompt goes
+/// ahead. Everything else only reports on work that already finished.
+const DECIDING_KINDS: [&str; 3] = ["pre_tool", "permission", "prompt"];
 const GROK_OBSERVE_EVENTS: [&str; 6] = [
     "sessionstart",
     "sessionend",
@@ -55,8 +58,14 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .map(|value| value.as_str().ok_or(ERR_INVALID))
         .transpose()?;
     if on_stderr {
-        let compact = event_name.replace(['_', '-'], "").to_lowercase();
-        let (stderr, exit_code) = if DECIDING_EVENTS.contains(&compact.as_str()) {
+        // Every spelling the contract files under a deciding kind is refused,
+        // not just the canonical three: a harness that calls its pre-tool event
+        // `PreToolCall`, or its permission event `PermissionRequestV2`, decides
+        // whether something runs exactly as the canonical spelling does, and a
+        // silent exit 0 would read as an allow.
+        let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
+        let kind = event_kind(&contract, event_name);
+        let (stderr, exit_code) = if DECIDING_KINDS.contains(&kind.as_str()) {
             (reason, 2)
         } else {
             ("", 0)
