@@ -55,7 +55,7 @@ fn a_fresh_store_gains_every_family_and_its_versions() {
         );
     }
     let recorded = versions(&connection);
-    for version in [14, 22, 28, 30, 31, 32, 33, 34] {
+    for version in [14, 15, 17, 18, 22, 28, 30, 31, 32, 33, 34] {
         assert!(recorded.contains(&version), "{version}");
     }
 }
