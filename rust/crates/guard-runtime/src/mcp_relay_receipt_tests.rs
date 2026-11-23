@@ -304,6 +304,21 @@ fn a_safe_alternative_block_writes_its_receipt_then_a_silent_row() {
 }
 
 #[test]
+fn a_reviewed_block_without_optional_firewall_evidence_still_composes() {
+    let record = edited(
+        reviewed(record("block", "policy-safe-alternative", "review")),
+        |record| {
+            record["identity"]["artifact"]["metadata"]
+                .as_object_mut()
+                .unwrap()
+                .remove("mcpSkillFirewall");
+        },
+    );
+    assert!(is_plain(&record));
+    assert!(compose(HOME, &record, &stamp()).is_some());
+}
+
+#[test]
 fn a_silent_row_carries_the_decision_and_appended_evidence() {
     let record = edited(
         reviewed(record(

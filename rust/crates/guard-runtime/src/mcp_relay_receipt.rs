@@ -469,7 +469,7 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
         params: plain.params,
         artifact_name: name,
         description: artifact["metadata"]["tool_description"].as_str(),
-        firewall: Some(plain.firewall),
+        firewall: plain.firewall,
     };
     let (raw_command_text, firewall_evidence) =
         receipt_evidence(guard_home, &call, stamp, &risk_categories)?;

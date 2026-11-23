@@ -128,7 +128,7 @@ pub(super) struct Plain<'a> {
     pub(super) params: &'a Value,
     pub(super) artifact: &'a Map<String, Value>,
     pub(super) artifact_hash: &'a str,
-    pub(super) firewall: &'a Value,
+    pub(super) firewall: Option<&'a Value>,
     pub(super) decision: &'a Map<String, Value>,
     pub(super) append: &'a [Value],
     /// An ask or safe-alternative block's risk input: the proxy projects a
@@ -217,7 +217,14 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     let firewall = artifact["metadata"]
         .as_object()?
         .get("mcpSkillFirewall")
-        .filter(|firewall| firewall.is_object())?;
+        .filter(|firewall| firewall.is_object());
+    // Forward receipts must carry the firewall evidence that authenticated
+    // the tool artifact. A blocked call remains recordable when an older
+    // catalog path did not attach that display-only evidence, so connector
+    // setup and ordinary review rows cannot disappear from the inbox.
+    if firewall.is_none() && !queued && !reviewed {
+        return None;
+    }
     let projected_risk = if queued || reviewed {
         Some(risk_input(artifact, call.params, &record["arguments"])?)
     } else {
