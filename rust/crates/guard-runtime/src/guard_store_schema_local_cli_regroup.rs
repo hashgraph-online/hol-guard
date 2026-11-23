@@ -8,6 +8,8 @@
 //! resolved or deleted. The regroup is best effort: any store error rolls the
 //! moves back and the schema bump continues.
 
+use std::io::Write;
+
 use rusqlite::types::Value as SqlValue;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -37,27 +39,43 @@ const DECIDED: &str =
 const MOVE: &str = "update approval_requests set queue_group_id = ?1 where request_id = ?2";
 
 /// Regroup the pending reviews that tie to one undecided CLI; returns how
-/// many moved. A store error leaves every row as it was.
+/// many moved. A store error, including a failed release, rolls every move
+/// back, leaves no savepoint open and is reported on stderr, as the Python
+/// step logs its warning.
 pub(super) fn regroup(connection: &Connection) -> usize {
-    if connection
+    let outcome = connection
         .execute_batch("savepoint connector_regroup")
-        .is_err()
-    {
-        return 0;
-    }
-    let Ok(moved) = apply(connection) else {
-        let _ = connection.execute_batch(
-            "rollback to savepoint connector_regroup; release savepoint connector_regroup",
-        );
-        return 0;
-    };
-    if connection
-        .execute_batch("release savepoint connector_regroup")
-        .is_err()
-    {
-        return 0;
-    }
-    moved
+        .and_then(|()| {
+            apply(connection)
+                .and_then(|moved| {
+                    connection.execute_batch("release savepoint connector_regroup")?;
+                    Ok(moved)
+                })
+                .inspect_err(|_| {
+                    let _ = connection.execute_batch(
+                        "rollback to savepoint connector_regroup; \
+                         release savepoint connector_regroup",
+                    );
+                })
+        });
+    outcome.unwrap_or_else(|error| {
+        skipped(&error);
+        0
+    })
+}
+
+/// `Connector review regroup skipped (...)`: the error's kind, never its
+/// text, which can quote stored rows.
+fn skipped(error: &rusqlite::Error) {
+    let kind = error
+        .sqlite_error_code()
+        .map_or_else(|| "store error".to_owned(), |code| format!("{code:?}"));
+    // `eprintln!` panics on a closed stderr; a lost line must not fail the
+    // migration.
+    let _ = writeln!(
+        std::io::stderr(),
+        "Connector review regroup skipped ({kind})"
+    );
 }
 
 fn apply(connection: &Connection) -> rusqlite::Result<usize> {
