@@ -19,7 +19,6 @@ from .native_policy_integrity_rows import (
     native_reconcile_policy_integrity_generation,
     native_verify_policy_rows,
 )
-from .policy_integrity import POLICY_INTEGRITY_VERSION
 
 # ruff: noqa: F403,F405
 from .store_base import *
@@ -776,48 +775,6 @@ class StoreSecretPolicyIntegrityMixin:
         with self._connect() as connection:
             return self._load_policy_integrity_state_cache_marker(connection)
 
-    @staticmethod
-    def _store_policy_integrity_state(
-        connection: sqlite3.Connection,
-        payload: Mapping[str, object],
-        *,
-        now: str,
-    ) -> None:
-        connection.execute(
-            """
-            insert into sync_state (state_key, payload_json, updated_at)
-            values (?, ?, ?)
-            on conflict(state_key) do update set
-              payload_json = excluded.payload_json,
-              updated_at = excluded.updated_at
-            """,
-            (
-                _POLICY_INTEGRITY_STATE_KEY,
-                json.dumps(payload, sort_keys=True, separators=(",", ":")),
-                now,
-            ),
-        )
-
-    @staticmethod
-    def _count_legacy_local_policy_rows(connection: sqlite3.Connection) -> int:
-        row = connection.execute(
-            f"""
-            select count(*) as total
-            from policy_decisions
-            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
-              and (
-                integrity_version is null
-                or integrity_version != {POLICY_INTEGRITY_VERSION}
-                or payload_hash is null
-                or payload_mac is null
-                or integrity_key_id is null
-                or signed_at is null
-              )
-            """,
-            _REMOTE_POLICY_SOURCE_PARAMS,
-        ).fetchone()
-        return int(row["total"]) if row is not None else 0
-
     def _begin_policy_integrity_generation(self, trusted_state: Mapping[str, object]) -> int:
         """Persist the pending generation; return the one it advances from.
 
@@ -879,7 +836,6 @@ class StoreSecretPolicyIntegrityMixin:
         secret_material: tuple[bytes | None, str | None] | None = None,
         allow_cutover_resign: bool = True,
     ) -> dict[str, object]:
-        existing = self._load_policy_integrity_state(connection) or {}
         warnings = self._policy_integrity_path_warnings()
         prefetched_trusted_state = getattr(
             self,
@@ -933,7 +889,7 @@ class StoreSecretPolicyIntegrityMixin:
                 )
             except RuntimeError:
                 warnings.append(POLICY_INTEGRITY_REASON_CONTROL_UNAVAILABLE)
-        has_only_signed_rows = self._count_legacy_local_policy_rows(connection) == 0
+        has_only_signed_rows = self._native_legacy_policy_row_count() == 0
         if (
             not warnings
             and trusted_state is not None
@@ -959,10 +915,25 @@ class StoreSecretPolicyIntegrityMixin:
             "key_id": key_id,
             "mode": mode,
         }
-        if payload != existing:
-            self._store_policy_integrity_state(connection, payload, now=now)
+        # The resident stores the state only when it differs from the stored
+        # one, so listeners hear of a change exactly once.
+        if self._native_record_policy_integrity_state(payload, now=now):
             self._queue_policy_integrity_state_notification(connection, payload)
         return payload
+
+    def _native_legacy_policy_row_count(self) -> int:
+        reply = self._native_store_call("count_legacy_policy_rows", {})
+        count = reply.get("legacy_rows") if isinstance(reply, dict) else None
+        if type(count) is not int:
+            raise RuntimeError("Guard could not count the unsigned policy rows.")
+        return count
+
+    def _native_record_policy_integrity_state(self, payload: Mapping[str, object], *, now: str) -> bool:
+        reply = self._native_store_call("record_policy_integrity_state", {"payload": dict(payload), "now": now})
+        changed = reply.get("changed") if isinstance(reply, dict) else None
+        if type(changed) is not bool:
+            raise RuntimeError("Guard could not record the policy integrity state.")
+        return changed
 
     def _prepare_startup_prefetched_policy_integrity_state(self) -> None:
         try:
