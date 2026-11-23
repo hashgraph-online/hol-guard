@@ -389,6 +389,12 @@ fn outbox_generation(connection: &Connection) -> StoreResult<i64> {
 #[path = "guard_store_vault_key.rs"]
 mod vault_key;
 
+// The native schema chain is built up behind its parity tests before the
+// store open calls it.
+#[allow(dead_code)]
+#[path = "guard_store_schema.rs"]
+pub(crate) mod schema;
+
 #[cfg(test)]
 pub(crate) fn method_is_snapshot_for_test(method: &str) -> bool {
     method_kind(method) == Some(Kind::Snapshot)
