@@ -261,6 +261,10 @@ fn segment_proofs(
                         | "pr"
                         | "shuf"
                         | "iconv"
+                        // A property-list question names the document it reads,
+                        // so its coverage takes the same session proof `cat`
+                        // takes.
+                        | "plutil"
                 ))
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.
@@ -510,6 +514,11 @@ pub(super) fn exact_safe_segment_with_context(
         || super::status_facts::safe_status_fact(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
         || super::liveness_probes::safe_liveness_probe(basename, &segment.arguments)
+        || super::property_list_reads::safe_property_list_read(
+            basename,
+            &segment.arguments,
+            context,
+        )
         || super::preference_reads::safe_preference_read(basename, &segment.arguments)
         || super::manager_usage::safe_manager_segment(basename, model, segment, context)
     {

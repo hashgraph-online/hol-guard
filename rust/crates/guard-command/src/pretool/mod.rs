@@ -220,6 +220,7 @@ mod postgres_reads;
 mod preference_reads;
 mod printf_words;
 mod process_stops;
+mod property_list_reads;
 mod pytest_contained;
 mod sqlite_reads;
 mod status_facts;
