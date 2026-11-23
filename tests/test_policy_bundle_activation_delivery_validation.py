@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -54,12 +53,9 @@ def test_managed_delivery_base_match_rejects_missing_catalog_digest(tmp_path: Pa
 
 
 def test_delivery_acknowledgement_rejects_missing_device_identity(tmp_path: Path) -> None:
-    with (
-        sqlite3.connect(":memory:") as connection,
-        pytest.raises(ValueError, match="device identity"),
-    ):
+    with pytest.raises(ValueError, match="device identity"):
         encoded_delivery_acknowledgement(
-            connection,
+            None,
             delivery={},
             policy_bundle={},
             published_authority=_authority(tmp_path),

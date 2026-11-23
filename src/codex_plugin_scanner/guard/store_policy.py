@@ -41,6 +41,7 @@ from .store_policy_activation_preflight import (
     encoded_policy_activation_payloads,
     policy_checkpoint_rejection,
 )
+from .store_policy_activation_view import read_policy_activation_view
 
 if TYPE_CHECKING:
     from .managed_controls_policy_fields import ParsedManagedControlsPolicy
@@ -96,6 +97,8 @@ _ACTIVATION_OBSERVED_KEYS = (
     MANAGED_CONTROLS_REVISION_STATE_KEY,
 )
 _CONTINUITY_CHANGED = "custom_extension_continuity_changed_during_activation"
+# Written only by a managed activation; read so every payload key has its stored text.
+_MANAGED_KEYS = (MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY, MANAGED_CONTROLS_LAST_GOOD_STATE_KEY)
 
 
 class _PolicyActivationChangedError(Exception):
@@ -366,12 +369,7 @@ class StorePolicyMixin:
         partially activated bundle behind.
         """
 
-        def reject(
-            reason: str,
-            connection: sqlite3.Connection | None = None,
-        ) -> None:
-            if connection is not None:
-                connection.rollback()
+        def reject(reason: str) -> None:
             if raise_on_rejection:
                 raise PolicyBundleActivationRejectionError(reason)
             return None
@@ -403,7 +401,7 @@ class StorePolicyMixin:
         # transaction. The protected header is rechecked under its lease below.
         self.read_extension_control_authority_for_registry(registry)
 
-        with self._extension_control_authority_lock(), self._connect() as connection:
+        with self._extension_control_authority_lock():
             require_current(self, _key(cast("GuardStore", self)), activation_digest)
             managed_base_authority = self._read_extension_control_authority_locked(
                 registry.catalog_digest,
@@ -416,75 +414,55 @@ class StorePolicyMixin:
             if continuity_rejection is not None:
                 return reject(continuity_rejection)
             if custom_extension_continuity is not None:
-                ensure_local_cli_schema(connection)
-                connection.commit()
-            # A read transaction, not a write lock: the resident writes the
+                with self._connect() as connection:
+                    ensure_local_cli_schema(connection)
+                    connection.commit()
+            # One native snapshot, not a write lock: the resident writes the
             # activation only while the snapshot and every observed value are
             # still the ones read here, and otherwise this attempt runs again.
-            connection.execute("begin")
-            observed: dict[str, str | None] = {}
-            for state_key in _ACTIVATION_OBSERVED_KEYS:
-                observed_row = connection.execute(
-                    "select payload_json from sync_state where state_key = ?", (state_key,)
-                ).fetchone()
-                observed[state_key] = None if observed_row is None else str(observed_row["payload_json"])
-            authority_row = connection.execute(
-                "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
-            ).fetchone()
-            managed_base_snapshot = (
-                None
-                if authority_row is None
-                else (
-                    int(authority_row["revision"]),
-                    str(authority_row["snapshot_digest"]),
-                )
+            view = read_policy_activation_view(
+                cast("GuardStore", self), (*_ACTIVATION_OBSERVED_KEYS, *encoded_payloads, *_MANAGED_KEYS)
             )
+            observed = {state_key: view.text(state_key) for state_key in _ACTIVATION_OBSERVED_KEYS}
+            managed_base_snapshot = view.authority
             managed_authority_key: bytes | None = None
             managed_revision = 0
             if managed_controls_policy is not None:
                 if managed_controls_policy.cloud_projection_digest is not None and managed_controls_delivery is None:
-                    return reject("missing_policy_bundle_delivery", connection)
+                    return reject("missing_policy_bundle_delivery")
                 if managed_base_authority.health is not AuthorityHealth.PROTECTED:
-                    return reject("managed_controls_authority_unprotected", connection)
+                    return reject("managed_controls_authority_unprotected")
                 if managed_base_snapshot is None:
-                    return reject("managed_controls_authority_snapshot_missing", connection)
+                    return reject("managed_controls_authority_snapshot_missing")
                 managed_authority_key = self._authority_key(required=True)
                 if managed_authority_key is None:
-                    return reject("managed_controls_authority_key_unavailable", connection)
-            try:
-                checkpoint_rejection = policy_checkpoint_rejection(connection, policy_bundle, verdicts)
-            except ResidentVerdictRequiredError:
-                connection.rollback()
-                raise
+                    return reject("managed_controls_authority_key_unavailable")
+            checkpoint_rejection = policy_checkpoint_rejection(
+                view.text("policy_bundle_acceptance_checkpoint"), policy_bundle, verdicts
+            )
             if checkpoint_rejection is not None:
-                return reject(checkpoint_rejection, connection)
-            active_row = connection.execute(
-                "select payload_json from sync_state where state_key = ?",
-                (MANAGED_CONTROLS_ACTIVE_STATE_KEY,),
-            ).fetchone()
-            revision_row = connection.execute(
-                "select payload_json from sync_state where state_key = ?",
-                (MANAGED_CONTROLS_REVISION_STATE_KEY,),
-            ).fetchone()
+                return reject(checkpoint_rejection)
+            active_row = view.text(MANAGED_CONTROLS_ACTIVE_STATE_KEY)
+            revision_row = view.text(MANAGED_CONTROLS_REVISION_STATE_KEY)
             if (active_row is not None or revision_row is not None) and managed_authority_key is None:
                 managed_authority_key = self._authority_key(required=True)
                 if managed_authority_key is None:
-                    return reject("managed_controls_authority_key_unavailable", connection)
+                    return reject("managed_controls_authority_key_unavailable")
             previous_revision = 0
             previous_bundle_hash: object = None
             active_managed_layers = ()
             if revision_row is not None:
                 assert managed_authority_key is not None
                 try:
-                    revision_state = json.loads(str(revision_row["payload_json"]))
+                    revision_state = json.loads(revision_row)
                     previous_revision = self._managed_revision(revision_state, key=managed_authority_key)
                 except (json.JSONDecodeError, ExtensionControlAuthorityError):
-                    return reject("managed_controls_revision_state_invalid", connection)
+                    return reject("managed_controls_revision_state_invalid")
             if active_row is not None:
                 assert managed_base_authority is not None
                 assert managed_authority_key is not None
                 try:
-                    previous_active = json.loads(str(active_row["payload_json"]))
+                    previous_active = json.loads(active_row)
                     active_managed_layers, active_revision = self._managed_activation(
                         previous_active, key=managed_authority_key
                     )
@@ -497,29 +475,25 @@ class StorePolicyMixin:
                             layer for layer in composed.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD
                         )
                 except (json.JSONDecodeError, ExtensionControlAuthorityError):
-                    return reject("managed_controls_activation_state_invalid", connection)
+                    return reject("managed_controls_activation_state_invalid")
                 if revision_row is not None and active_revision != previous_revision:
-                    return reject("managed_controls_revision_state_mismatch", connection)
+                    return reject("managed_controls_revision_state_mismatch")
                 previous_revision = active_revision
                 previous_bundle_hash = previous_active.get("bundleHash")
             if managed_controls_delivery is not None:
                 if managed_controls_policy is None or managed_base_authority is None:
-                    return reject("managed_controls_delivery_policy_missing", connection)
-                try:
-                    cloud_valid = revalidate_cloud_policy(
-                        connection,
-                        policy=managed_controls_policy,
-                        policy_bundle=policy_bundle,
-                        guard_home=self.guard_home,
-                        registry=registry,
-                        capabilities=managed_controls_negotiated_capabilities,
-                        verdicts=verdicts,
-                    )
-                except ResidentVerdictRequiredError:
-                    connection.rollback()
-                    raise
+                    return reject("managed_controls_delivery_policy_missing")
+                cloud_valid = revalidate_cloud_policy(
+                    view.text("runtime_session_summary"),
+                    policy=managed_controls_policy,
+                    policy_bundle=policy_bundle,
+                    guard_home=self.guard_home,
+                    registry=registry,
+                    capabilities=managed_controls_negotiated_capabilities,
+                    verdicts=verdicts,
+                )
                 if not cloud_valid:
-                    return reject("policy_local_view_invalid", connection)
+                    return reject("policy_local_view_invalid")
                 current_authority = composed_managed_authority(
                     managed_base_authority,
                     managed_layers=active_managed_layers,
@@ -531,7 +505,7 @@ class StorePolicyMixin:
                     policy=managed_controls_policy,
                     base_authority=current_authority,
                 ):
-                    return reject("managed_controls_delivery_mismatch", connection)
+                    return reject("managed_controls_delivery_mismatch")
             if managed_controls_policy is not None:
                 assert managed_base_authority is not None
                 assert managed_base_snapshot is not None
@@ -588,21 +562,18 @@ class StorePolicyMixin:
                 )
             if managed_controls_delivery is not None:
                 if published_authority is None:
-                    return reject("managed_controls_delivery_authority_missing", connection)
+                    return reject("managed_controls_delivery_authority_missing")
                 try:
                     encoded_payloads["policy_bundle_ack"] = encoded_delivery_acknowledgement(
-                        connection,
+                        view.text("policy_bundle_ack"),
                         delivery=managed_controls_delivery,
                         policy_bundle=policy_bundle,
                         published_authority=published_authority,
                         observed_at=normalized_now,
                         verdicts=verdicts,
                     )
-                except ResidentVerdictRequiredError:
-                    connection.rollback()
-                    raise
                 except (json.JSONDecodeError, TypeError, ValueError):
-                    return reject("managed_controls_delivery_ack_invalid", connection)
+                    return reject("managed_controls_delivery_ack_invalid")
             # Cloud re-signs the bundle it serves on every sync. Re-writing the
             # enforcement already in force leaves the native fence open, so
             # readers do not republish an identical policy every sync. Managed
@@ -614,9 +585,8 @@ class StorePolicyMixin:
                 or custom_extension_continuity is not None
                 or active_row is not None
                 or revision_row is not None
-                or activation_changes_enforcement(connection, payloads=encoded_payloads, rows=rows)
+                or activation_changes_enforcement(view.stored, view.remote_rows, payloads=encoded_payloads, rows=rows)
             )
-            connection.rollback()
             if managed_controls_delivery is None:
                 # Only a managed delivery decides from these two.
                 del observed["runtime_session_summary"], observed["policy_bundle_ack"]
