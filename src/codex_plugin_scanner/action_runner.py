@@ -26,6 +26,7 @@ from .github_reporting import (
     should_manage_pr_comment,
     upsert_pr_comment,
 )
+from .guard_coverage_bridge import build_guard_coverage_bridge, guard_coverage_markdown_lines
 from .hol_ci_report import build_ci_report_body, report_folder, send_ci_report
 from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, max_severity
 from .quality_artifact import build_quality_artifact, write_quality_artifact
@@ -323,6 +324,7 @@ def _build_step_summary_lines(
     findings: tuple[Finding, ...] = (),
     publish_hint_repository: str = "",
     publish_hint_plugin_dir: str = "",
+    guard_coverage: dict[str, object] | None = None,
 ) -> tuple[str, ...]:
     lines = ["## HOL AI Plugin Scanner", "", f"- Mode: {mode}"]
     lines.append(f"- Scope: {scope}")
@@ -350,6 +352,8 @@ def _build_step_summary_lines(
     if mode in {"scan", "lint", "submit"}:
         lines.extend(_build_findings_summary_lines(findings))
         lines.extend(contributor_review_lines(findings))
+    if guard_coverage is not None:
+        lines.extend(["", *guard_coverage_markdown_lines(guard_coverage)])
     if publish_hint_repository and mode != "submit":
         lines.extend(
             _build_publish_hint_lines(
@@ -458,6 +462,7 @@ def main() -> int:
     skipped_target_count: int | None = None
     pr_comment_body = ""
     summary_findings: tuple[Finding, ...] = ()
+    summary_guard_coverage: dict[str, object] | None = None
 
     def finish(return_code: int) -> int:
         output_values["report_path"] = report_path_value
@@ -513,6 +518,7 @@ def main() -> int:
                     findings=summary_findings,
                     publish_hint_repository=pr_comment_listing_repository,
                     publish_hint_plugin_dir=plugin_dir,
+                    guard_coverage=summary_guard_coverage,
                 ),
             )
         output_values["action_exit_code"] = str(return_code)
@@ -545,6 +551,7 @@ def main() -> int:
             _baseline_path,
         ) = _scan_with_policy(args, Path(plugin_dir).resolve())
         summary_findings = result.findings
+        summary_guard_coverage = build_guard_coverage_bridge(result)
         scan_scope = getattr(result, "scope", "plugin")
         if scan_scope == "repository":
             local_plugin_count = len(result.plugin_results)
