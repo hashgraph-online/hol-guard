@@ -487,3 +487,102 @@ fn fsck_reads_the_pager_keys_of_the_commands_it_runs() {
         }
     }
 }
+
+/// A `pager.<child>` key that only says "page" leaves the program to the rest
+/// of Git's pager chain, and the child reads `core.pager` from the repository
+/// itself. A `PAGER` that pages nothing does not settle that: the configured
+/// program still runs ahead of it, so the check keeps its review until someone
+/// reads `core.pager` too. An empty or `cat` setting names no program, and a
+/// `GIT_PAGER` that pages nothing stops the child before it reads either.
+#[test]
+fn an_enabled_fsck_child_reads_the_configured_core_pager() {
+    let root = std::env::temp_dir().join(format!("guard-git-fsck-core-{}", std::process::id()));
+    let home = root.join("home");
+    let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    assert!(std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()
+        .unwrap()
+        .success());
+    let config = repository.join(".git/config");
+    let enabled = github_controls("enabled");
+    for (settings, git_pager_disabled, expected) in [
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\ncommit-graph = true\n",
+            false,
+            "deny",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\nrefs = true\n",
+            false,
+            "deny",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\ncommit-graph = true\n",
+            true,
+            "allow",
+        ),
+        (
+            "[core]\npager = cat\n[pager]\ncommit-graph = true\n",
+            false,
+            "allow",
+        ),
+        (
+            "[core]\npager = \n[pager]\ncommit-graph = true\n",
+            false,
+            "allow",
+        ),
+    ] {
+        std::fs::write(&config, settings).unwrap();
+        // `GIT_PAGER` answers only where the session actually carries it, so
+        // the row that turns it off names it too.
+        let mut environment_names: Vec<String> = vec!["GIT_CONFIG_NOSYSTEM".into(), "PAGER".into()];
+        if git_pager_disabled {
+            environment_names.push("GIT_PAGER".into());
+        }
+        let context = guard_contracts::GuardExecutionEnvironmentV1 {
+            path: std::env::var("PATH").unwrap(),
+            environment_names,
+            environment_digest: "0".repeat(64),
+            home: None,
+            git_pager_disabled,
+            pager_disabled: true,
+            xdg_config_home: None,
+            git_config_no_system: true,
+            ..Default::default()
+        };
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":"git fsck --no-progress"}}),
+            Some(&enabled),
+            None,
+            guard_command::pretool::PathContext {
+                literal_words: &[],
+                guard_home: None,
+                home_dir: home.to_str(),
+                cwd: repository.to_str(),
+                cdpath_unset: false,
+                rustup_override_absent: false,
+                go_toolchain_inert: false,
+                cargo_config_inert: false,
+                npm_config_inert: false,
+                pip_config_inert: false,
+                python_environment_inert: false,
+                shell_home_matches: false,
+                ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
+                openssl_config_absent: false,
+                psql_environment: Default::default(),
+                creates_nothing: false,
+            },
+            Some(&context),
+        );
+        assert_eq!(result.decision, expected, "core pager child: {settings}");
+    }
+}

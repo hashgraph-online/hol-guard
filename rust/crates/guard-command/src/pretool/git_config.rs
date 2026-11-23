@@ -715,6 +715,12 @@ fn probe(
                         .all(|argument| argument.starts_with('-'))))
                 && !remaining.iter().any(|argument| argument == "--no-index"),
         )?;
+    // A child told to page with no program of its own reads `core.pager`
+    // itself, so the setting is read before the loop takes the map.
+    let core_pager = effective
+        .get("core.pager")
+        .copied()
+        .filter(|pager| !pager.is_empty() && *pager != "cat");
     for (key, value) in effective {
         let disabled = disabled_boolean(value);
         let unsafe_value = match key {
@@ -768,10 +774,11 @@ fn probe(
                 // Git runs `commit-graph verify`, `refs verify` and
                 // `multi-pack-index verify` from inside `fsck`, and each child
                 // reads its own `pager.<command>` key. None of them pages by
-                // default and none inherits `core.pager` through the parent,
-                // so only one of those keys starts a program there -- but when
-                // one does, the program runs from a read that `pager.fsck`
-                // alone proved quiet. Measured on Git 2.53.
+                // default, so only one of those keys starts a program there --
+                // but when one does, the program runs from a read that
+                // `pager.fsck` alone proved quiet. A child the key enables
+                // reads the rest of Git's pager chain for itself, `core.pager`
+                // included. Measured on Git 2.53.
                 let fsck_child = operation == "fsck"
                     && matches!(
                         key,
@@ -790,9 +797,13 @@ fn probe(
                         }
                     } else if enabled_boolean(value) {
                         // A child told to page with no program of its own
-                        // falls back to `$PAGER` or Git's default, so the
-                        // environment decides whether anything runs.
-                        !no_pager && !environment_pager.is_some_and(|disabled| disabled)
+                        // reads `core.pager` itself, and only falls back to
+                        // `$PAGER` or Git's default when that setting is
+                        // absent. The parent's own key proved nothing about
+                        // either, so both decide whether a program runs.
+                        !no_pager
+                            && (core_pager.is_some()
+                                || !environment_pager.is_some_and(|disabled| disabled))
                     } else {
                         // A program named by the key itself overrides the
                         // environment, exactly as the parent's own key does.
