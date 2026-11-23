@@ -102,7 +102,7 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                     let active_options = &arguments[1..option_end];
                     match arguments[0].as_str() {
                         "diff" | "diff-files" | "diff-index" | "diff-tree" | "log"
-                        | "whatchanged" | "range-diff" | "show" => {
+                        | "whatchanged" | "show" => {
                             !(active_options
                                 .iter()
                                 .any(|argument| argument == "--no-ext-diff")
@@ -110,6 +110,13 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                                     .iter()
                                     .any(|argument| argument == "--no-textconv"))
                         }
+                        // `range-diff` reads each range through an inner
+                        // `git log -p` it builds itself, and it does not pass
+                        // its own `--no-ext-diff` or `--no-textconv` down to
+                        // that child. A configured `diff.<driver>.textconv`
+                        // therefore still runs with both switches on the
+                        // command line, so only the probe clears this read.
+                        "range-diff" => true,
                         // A clean filter is the only helper hash-object runs.
                         "hash-object" => {
                             !super::git_hash_object::filters_disabled(&arguments[1..])

@@ -47,12 +47,17 @@ fn the_change_listings_ask_for_the_configuration_probe() {
         "git range-diff main...HEAD",
         "git range-diff --creation-factor=80 main...HEAD",
         "git range-diff --no-textconv main...HEAD",
+        // `range-diff` assembles an inner `git log -p` and passes neither
+        // switch down to it, so both switches on its own command line leave
+        // a configured textconv driver reachable and the probe still has to
+        // answer.
+        "git range-diff --no-ext-diff --no-textconv main...HEAD",
     ] {
         assert!(probes(command), "{command}");
     }
     for command in [
         "git whatchanged --no-ext-diff --no-textconv -3",
-        "git range-diff --no-ext-diff --no-textconv main...HEAD",
+        "git whatchanged --no-ext-diff --no-textconv --oneline -5",
     ] {
         assert!(!probes(command), "{command}");
     }

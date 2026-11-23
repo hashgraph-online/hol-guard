@@ -49,13 +49,24 @@ fn a_helper_or_an_output_file_keeps_its_review() {
     }
 }
 
-/// Without the configuration probe the pair stays unproven unless the
+/// Without the configuration probe `whatchanged` stays unproven unless the
 /// command turns both helpers off itself, exactly as `git log` does: a
 /// configured `diff.external` or `diff.<driver>.textconv` would otherwise
 /// start a program the command never named.
+///
+/// `range-diff` gets no such spelling. It reads each range through an inner
+/// `git log -p` that it assembles itself, and it does not pass its own
+/// `--no-ext-diff` or `--no-textconv` down to that child, so a configured
+/// `diff.<driver>.textconv` still runs with both switches on the command
+/// line. Only the configuration probe clears that read.
 #[test]
 fn an_unprobed_listing_needs_both_helpers_turned_off() {
-    for text in ["whatchanged", "range-diff main...HEAD"] {
+    for text in [
+        "whatchanged",
+        "range-diff main...HEAD",
+        "range-diff --no-ext-diff --no-textconv main...HEAD",
+        "range-diff --no-ext-diff --no-textconv --no-dual-color main...HEAD",
+    ] {
         assert!(
             !safe_git_arguments(&arguments(text), false, PathContext::default()),
             "{text}"
@@ -63,7 +74,7 @@ fn an_unprobed_listing_needs_both_helpers_turned_off() {
     }
     for text in [
         "whatchanged --no-ext-diff --no-textconv",
-        "range-diff --no-ext-diff --no-textconv main...HEAD",
+        "whatchanged --no-ext-diff --no-textconv -3",
     ] {
         assert!(
             safe_git_arguments(&arguments(text), false, PathContext::default()),

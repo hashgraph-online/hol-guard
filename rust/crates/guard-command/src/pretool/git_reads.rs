@@ -356,7 +356,13 @@ pub(super) fn safe_git_arguments(
     }
     // These read through the diff machinery, so without the
     // configuration probe only the spelling that turns the external driver
-    // and the textconv filter off is proven. A `-C` route that discovers no
+    // and the textconv filter off is proven. `range-diff` is excluded from
+    // that spelling below: it reads each range through an inner `git log -p`
+    // it assembles itself and passes neither switch down to that child, so a
+    // configured `diff.<driver>.textconv` still runs with both switches on
+    // the command line. Only the probe clears a range comparison.
+    //
+    // A `-C` route that discovers no
     // repository needs neither: Git dies in its own setup before it reads a
     // diff, textconv, pager or filter setting, so there is no configured
     // helper for the options to turn off. `git cherry` runs no helper of its
@@ -382,7 +388,7 @@ pub(super) fn safe_git_arguments(
     );
     if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
-            || (diff_family && helpers_off)
+            || (diff_family && subcommand != "range-diff" && helpers_off)
             || super::git_helper_context::arguments_route_to_no_repository(with_route, context))
     {
         return false;
@@ -457,45 +463,5 @@ mod change_listing_tests;
 mod config_pattern_tests;
 
 #[cfg(test)]
-mod tests {
-    use super::names_refused_option;
-
-    /// Git takes any unambiguous prefix of a long option, so a read that
-    /// disables both helpers in full can turn one back on in an abbreviation
-    /// the screen never compared against.
-    #[test]
-    fn an_abbreviated_helper_names_the_option_it_resolves_to() {
-        for word in [
-            "--textconv",
-            "--textcon",
-            "--textc",
-            "--ext-diff",
-            "--ext-d",
-            "--output",
-            "--outp",
-            "--output=/tmp/changed.patch",
-            "-o",
-        ] {
-            assert!(names_refused_option(word), "{word}");
-        }
-    }
-
-    /// `--text` is the comparison verbs' own "treat the file as text", and
-    /// Git answers an exact spelling with the option that owns it, so reading
-    /// it as a prefix of `--textconv` would refuse an ordinary read.
-    #[test]
-    fn a_word_a_verb_spells_in_full_is_not_an_abbreviation() {
-        for word in [
-            "--text",
-            "--no-textconv",
-            "--no-ext-diff",
-            "--oneline",
-            "--topo-order",
-            "--",
-            "-O",
-            "HEAD",
-        ] {
-            assert!(!names_refused_option(word), "{word}");
-        }
-    }
-}
+#[path = "git_reads_option_name_tests.rs"]
+mod option_name_tests;
