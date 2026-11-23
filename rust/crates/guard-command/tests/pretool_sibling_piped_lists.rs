@@ -33,6 +33,7 @@ fn a_list_of_bounded_runs_in_a_sibling_worktree_runs_contained() {
     for command in [
         format!("cd {wt} && bun run test 2>&1 | tail -4 && bun run smoke 2>&1 | tail -4"),
         format!("cd {wt} && bun run test | head -n 20 && bun run build"),
+        format!("cd {wt} && bun run test | grep fail && bun run smoke"),
         format!("cd {wt} && bun run build && bun run test 2>&1 | tail -12"),
         format!("cd {wt}; bun run test 2>&1 | tail -4 && bun run smoke | tail -4"),
         format!("cd {wt} && bun run test && bun run smoke"),
@@ -52,7 +53,6 @@ fn other_pipes_in_a_sibling_worktree_list_keep_their_review() {
     package(&session.worktree);
     let wt = session.worktree.display();
     for command in [
-        format!("cd {wt} && bun run test | grep fail && bun run smoke"),
         format!("cd {wt} && bun run test | tail -4 | head -2 && bun run smoke"),
         format!("cd {wt} && bun run test | tail -f && bun run smoke"),
         format!("cd {wt} && bun run test | tail -4 notes.txt && bun run smoke"),

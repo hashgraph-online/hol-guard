@@ -4,7 +4,7 @@
 //! module; what the leg owns is the request a package call is decided from, so
 //! these cover the fields a call is refused for missing.
 
-use super::super::{identity, subject};
+use super::super::{resolve::identity, subject};
 use super::*;
 
 use guard_command::package_intent_parser::parse_package_intent;
@@ -122,6 +122,29 @@ fn leg(edit: impl FnOnce(&mut McpRelayDecideRequestV1)) -> Result<Packaged, &'st
 #[test]
 fn a_whole_package_call_is_decided_against_the_store() {
     assert_eq!(leg(|_| {}).err(), Some(STORE_ABSENT));
+}
+
+#[test]
+fn a_readable_store_without_saved_rows_still_reaches_the_package_policy() {
+    // Only a store that cannot be read has no package policy; one with no
+    // saved row resolves it with every lookup missing, as the proxy does.
+    let request = request();
+    let view = view();
+    let identity =
+        identity(&request, &view, CONTROL.to_owned(), None).expect("the identity is built");
+    let connection = rusqlite::Connection::open_in_memory().expect("an empty store opens");
+    let empty = super::super::store::empty(&connection, &request.guard_home)
+        .expect("an empty store has evidence");
+    let inputs = package_inputs(
+        &request,
+        &view,
+        Some(&empty),
+        CONTROL,
+        &identity,
+        &intent(),
+        request.package_evaluation.as_ref(),
+    );
+    assert!(inputs.is_ok());
 }
 
 #[test]

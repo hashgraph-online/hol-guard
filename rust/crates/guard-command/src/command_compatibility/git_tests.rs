@@ -392,6 +392,28 @@ fn read_plumbing_answers_to_the_porcelain_owner_it_belongs_to() {
     }
 }
 
+/// `git whatchanged` is `git log` with each commit's raw diff attached, and
+/// `git range-diff` prints the comparison `git diff` owns across two ranges
+/// of commits that are already recorded. Neither had an owner of its own, so
+/// each fell to the blanket attribution every unnamed subcommand reaches,
+/// which reports all forty-three git rules as uncertain and sends an everyday
+/// read to review. Each now answers to the read permission it belongs to, so
+/// the permission a user disables works on the spelling they disabled it for.
+#[test]
+fn the_change_listings_answer_to_the_read_owner_they_belong_to() {
+    for (command, rule_id) in [
+        ("git whatchanged -3", "command.git.log"),
+        ("git whatchanged --oneline -5", "command.git.log"),
+        ("git range-diff main...HEAD", "command.git.diff"),
+        ("git range-diff HEAD~1...HEAD", "command.git.diff"),
+    ] {
+        let matches = observations(command).rule_matches;
+        assert_eq!(matches.len(), 1, "{command}");
+        assert_eq!(matches[0].rule_id, rule_id, "{command}");
+        assert!(!matches[0].uncertainty, "{command}");
+    }
+}
+
 /// `git annotate` is `git blame` printed in another format: the same walk,
 /// the same options and the same `blame.*` settings. Without an owner it fell
 /// to the blanket attribution every unnamed subcommand reaches, which reports

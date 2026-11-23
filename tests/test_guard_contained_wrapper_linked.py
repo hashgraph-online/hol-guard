@@ -47,6 +47,14 @@ def test_relative_cd_into_a_sibling_root_peels_an_and_list(tmp_path: Path) -> No
         home=home,
         cwd=workspace,
     ) == ("npm test 2>&1 | tail -n 4 && npm run build | head -n 5", worktree.resolve(), None)
+    # A matcher stage reads what the run before it printed, so it is one of the
+    # stages the list keeps as issued.
+    assert peel_contained_wrapper(
+        "cd ../project-report && npm test | grep fail && npm run build",
+        workspace=workspace,
+        home=home,
+        cwd=workspace,
+    ) == ("npm test | grep fail && npm run build", worktree.resolve(), None)
     # A single command after the cd keeps the bounded filter.
     assert peel_contained_wrapper(
         "cd ../project-report && npm test 2>&1 | tail -5", workspace=workspace, home=home, cwd=workspace
@@ -79,7 +87,6 @@ def test_a_sequence_after_cd_into_a_sibling_root_peels_like_an_and_list(tmp_path
         "cd .. && pytest -q",
         # Lists other than plain `&&` words, each bounded by at most one `head` or `tail`.
         "cd ../project-report && npm test && npm run build 2>&1",
-        "cd ../project-report && npm test | grep fail && npm run build",
         "cd ../project-report && npm test | tail -4 | head -2 && npm run build",
         "cd ../project-report && npm test | tail -f && npm run build",
         "cd ../project-report && npm test | tail -4 notes.txt && npm run build",

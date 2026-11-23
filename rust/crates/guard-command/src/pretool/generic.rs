@@ -1403,6 +1403,16 @@ fn evaluate_envelope(
         deadline,
         execution_environment,
     );
+    // An Oh My Pi built-in mounted as a bash command runs in its own shell as a
+    // tool call Guard reviews; the sandbox shell has no such command.
+    super::omp_tool_commands::settle(
+        &mut result,
+        command_model,
+        harness,
+        event,
+        payload,
+        execution_environment,
+    );
     super::workspace_contained::convert(
         &mut result,
         &pre_floor,

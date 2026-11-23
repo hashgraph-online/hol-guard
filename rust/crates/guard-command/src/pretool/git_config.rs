@@ -194,6 +194,8 @@ fn raw_paging(
             | "diff-index"
             | "diff-tree"
             | "log"
+            | "whatchanged"
+            | "range-diff"
             | "show"
             | "blame"
             | "annotate"
@@ -594,13 +596,28 @@ fn probe(
         .map(String::as_str)
         .filter(|value| value.starts_with('-'))
         .collect::<Vec<_>>();
-    let textconv_runs = !no_textconv && textconv::may_run(rendering, &option_flags);
+    // `range-diff` reads each range through an inner `git log -p` it builds
+    // itself and passes neither of its own switches down to that child, so a
+    // configured `diff.<driver>.textconv` still runs with `--no-textconv` on
+    // the command line. For that one rendering the switch proves nothing and
+    // only `may_run` decides.
+    let textconv_runs =
+        (!no_textconv || rendering == "range-diff") && textconv::may_run(rendering, &option_flags);
     // An external driver renders a diff, so only a read that renders one can
     // start it. A tag listing, a clean preview, a ref listing or an ignore
     // check prints names, and a configured driver leaves all of them alone.
     let renders_diff = matches!(
         rendering,
-        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "reflog" | "stash"
+        "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
+            | "log"
+            | "whatchanged"
+            | "range-diff"
+            | "show"
+            | "reflog"
+            | "stash"
     );
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {

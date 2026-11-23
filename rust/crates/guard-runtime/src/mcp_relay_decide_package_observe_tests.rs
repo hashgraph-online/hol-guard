@@ -82,6 +82,7 @@ fn resolved(artifact_hash: Option<&str>) -> Resolved {
             summary: "installs a package".to_owned(),
             risk_categories: Vec::new(),
         }),
+        connector_setup: None,
         mode: "observe".to_owned(),
         redaction_level: Some("partial".to_owned()),
     }

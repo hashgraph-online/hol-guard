@@ -10,14 +10,14 @@ legacy shadow must not be activated here when ``sync_receipts`` would refuse it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION
+from codex_plugin_scanner.guard.native_policy_document import NativePolicyDocumentError
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
-from codex_plugin_scanner.guard.policy_document_types import PolicyCompilationError
-from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.runtime import runner_native_sync as native_sync
 from codex_plugin_scanner.guard.runtime import runner_policy_shadow as shadow
 from codex_plugin_scanner.guard.store import GuardStore
@@ -31,6 +31,25 @@ def _store(tmp_path: Path) -> GuardStore:
     return store
 
 
+def _answer(asked: list[str] | None = None, **fields: object) -> Callable[..., object]:
+    answer: dict[str, object] = {
+        "decisions": [],
+        "rejection": None,
+        "rule_id": None,
+        "mismatch": None,
+        "total": 0,
+        "next": None,
+        **fields,
+    }
+
+    def _query(query: str, _body: dict[str, object], **_kwargs: object) -> object:
+        if asked is not None:
+            asked.append(query)
+        return answer
+
+    return _query
+
+
 def test_daemon_answers_a_compile_rejection_with_its_code(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -38,15 +57,14 @@ def test_daemon_answers_a_compile_rejection_with_its_code(
     _enable(monkeypatch)
     store = _store(tmp_path)
     bundle, delivery = _fixture(store)
-
-    def _uncompilable(*_args: object, **_kwargs: object) -> object:
-        raise PolicyCompilationError("unsupported_rule_action", "rule-7")
-
-    monkeypatch.setattr(runner, "compile_policy_bundle_document", _uncompilable)
+    asked: list[str] = []
+    query = _answer(asked, rejection="canonical_compile_unsupported_rule_action", rule_id="rule-7")
+    monkeypatch.setattr(shadow, "policy_query", query)
     status, response = _sync(store, bundle=bundle, delivery=delivery)
 
     assert status == 400, response
     assert response["error"] == "canonical_compile_unsupported_rule_action"
+    assert asked == ["bundle_candidate"]
     assert store.get_sync_payload("policy_bundle") is None
     assert store.get_sync_payload("policy_bundle_ack") is None
 
@@ -58,39 +76,69 @@ def test_daemon_refuses_a_candidate_the_resident_cannot_shadow(
     _enable(monkeypatch)
     store = _store(tmp_path)
     bundle, delivery = _fixture(store)
-
-    def _no_verdict(*_args: object, **_kwargs: object) -> tuple[tuple[str, ...], str | None]:
-        raise NativeRunnerAuthorityError("unavailable")
-
-    monkeypatch.setattr(shadow, "policy_shadow_verdict", _no_verdict)
+    mismatch = {"canonicalRows": 1, "legacyRows": 0, "reasonCodes": ["native_shadow_unavailable"], "status": "mismatch"}
+    monkeypatch.setattr(shadow, "policy_query", _answer(rejection="native_shadow_unavailable", mismatch=mismatch))
     status, response = _sync(store, bundle=bundle, delivery=delivery)
 
     assert status == 400, response
     assert response["error"] == "native_shadow_unavailable"
+    assert store.list_events(event_name="policy_bundle/shadow_mismatch")[-1]["payload"] == mismatch
     assert store.get_sync_payload("policy_bundle") is None
     assert store.get_sync_payload("policy_bundle_ack") is None
 
 
-def test_daemon_applies_an_evaluate_candidate_without_asking_for_a_verdict(
+@pytest.mark.parametrize(
+    "failure",
+    [
+        NativePolicyDocumentError("native_policy_document_unavailable"),
+        ValueError("policy_document_query_invalid"),
+    ],
+)
+def test_daemon_answers_an_unreachable_candidate_query_with_503(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+) -> None:
+    # An outage, or a runtime that predates the query, is no verdict about the
+    # bundle: the device keeps its policy and the daemon reports the outage.
+    _enable(monkeypatch)
+    store = _store(tmp_path)
+    bundle, delivery = _fixture(store)
+
+    def _down(*_args: object, **_kwargs: object) -> object:
+        raise failure
+
+    monkeypatch.setattr(shadow, "policy_query", _down)
+    status, response = _sync(store, bundle=bundle, delivery=delivery)
+
+    assert status == 503, response
+    assert response["error"] == NATIVE_UNAVAILABLE_REJECTION
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.get_sync_payload("policy_bundle_ack") is None
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {"decisions": [], "rejection": None},
+        {"decisions": [{"harness": "codex"}], "rejection": None, "rule_id": None, "mismatch": None},
+        {"decisions": [], "rejection": None, "rule_id": None, "mismatch": {"status": "mismatch"}},
+    ],
+)
+def test_daemon_refuses_a_malformed_candidate_answer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    answer: object,
 ) -> None:
     _enable(monkeypatch)
     store = _store(tmp_path)
     bundle, delivery = _fixture(store)
-    asked: list[object] = []
-
-    def _no_verdict(*args: object, **_kwargs: object) -> tuple[tuple[str, ...], str | None]:
-        asked.append(args)
-        raise NativeRunnerAuthorityError("unavailable")
-
-    monkeypatch.setattr(shadow, "policy_shadow_source", lambda *_args, **_kwargs: (None, True))
-    monkeypatch.setattr(shadow, "policy_shadow_verdict", _no_verdict)
+    monkeypatch.setattr(shadow, "policy_query", lambda *_args, **_kwargs: answer)
     status, response = _sync(store, bundle=bundle, delivery=delivery)
 
-    assert status == 200, response
-    assert asked == []
-    assert isinstance(store.get_sync_payload("policy_bundle_ack"), dict)
+    assert status == 503, response
+    assert store.get_sync_payload("policy_bundle") is None
 
 
 def test_daemon_refuses_a_shadow_mismatch_on_a_rollout_device(
@@ -100,12 +148,13 @@ def test_daemon_refuses_a_shadow_mismatch_on_a_rollout_device(
     _enable(monkeypatch)
     store = _store(tmp_path)
     bundle, delivery = _fixture(store)
+    monkeypatch.setattr(native_sync, "canonical_policy_enforcement_enabled", lambda **_kwargs: True)
+    mismatch = {"canonicalRows": 1, "legacyRows": 1, "reasonCodes": ["action"], "status": "mismatch"}
     monkeypatch.setattr(
         shadow,
-        "policy_shadow_verdict",
-        lambda *_args, **_kwargs: (("decision_rows_differ",), "canonical_shadow_mismatch"),
+        "policy_query",
+        _answer(rejection="canonical_shadow_mismatch", mismatch=mismatch),
     )
-    monkeypatch.setattr(native_sync, "canonical_policy_enforcement_enabled", lambda **_kwargs: True)
     status, response = _sync(store, bundle=bundle, delivery=delivery)
 
     assert status == 400, response

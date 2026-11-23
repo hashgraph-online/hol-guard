@@ -1,38 +1,24 @@
-//! The MCP servers whose relay sessions the resident hands to the proxy.
-//!
-//! The relay cannot hand a call back once the MCP server runs, so a call the
-//! resident does not decide is refused rather than proxied. A server whose
-//! calls the resident could not settle therefore runs under the Python proxy
-//! instead.
-//!
-//! The resident decides a call that installs or runs a package itself
-//! (`mcp_relay_decide_package.rs`), so a tool the package parser reads as a
-//! shell (`_SHELL_TOOL_NAMES`) and a tool whose input schema declares a key
-//! the proxy reads as the command (`_command_argument`) no longer hold their
-//! server back; a package call the lane cannot settle defers, and that defer
-//! marks the server for the proxy the same way an unknown server's first
-//! session does. A Composio tool is decided there too: the resident reads the
-//! provider catalog hash its identity binds from the store. A definition with
-//! no usable name does not hold its server back either: the relay never sends
-//! a call to a missing or empty name and refuses it, so the server's named
-//! tools stay on the relay.
+//! The MCP servers whose catalog a relay session has reported.
 //!
 //! The relay learns a catalog only after it started the server, so the
-//! resident remembers each server's catalog for later sessions:
+//! resident remembers each reported server for later sessions: the native
+//! relay and the Python proxy both report the catalog they serve. A server no
+//! session reported yet is unknown, and its first session starts native and
+//! reports it.
 //!
-//! - the Python proxy reports a server's catalog once it has the whole of it;
-//! - `mcp_relay_decide` marks a server when it defers a call to the package
-//!   policy, which covers a command the schema did not declare;
-//! - the native relay reports the catalog it relays the same way, so an
-//!   unknown server's session starts native and reports it.
+//! The resident decides every call itself (`mcp_relay_decide`), including a
+//! call that installs or runs a package (`mcp_relay_decide_package.rs`), and
+//! refuses whatever it cannot settle. No catalog or decide therefore hands a
+//! server to the proxy any more: a package call the lane cannot settle is
+//! refused in place, and a tool definition with no usable name names no tool
+//! the relay sends a call for (`sendable_name`).
 //!
-//! A mark never clears while the resident runs. The registry is bounded: a
-//! server past the bound stays unknown. It only steers which launcher runs.
-//! Each call is still admitted by `mcp_relay_decide`, which refuses whatever
-//! it does not decide, so a wrong or missing report can refuse a call but
+//! The registry is bounded: a server past the bound stays unknown. It only
+//! steers how a session starts. Each call is still admitted by
+//! `mcp_relay_decide`, so a wrong or missing report can refuse a call but
 //! never allow one.
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
@@ -42,8 +28,6 @@ pub(crate) const MCP_RELAY_SERVER_REPORT_FEATURE: &str = "mcp-relay-server-repor
 pub(crate) const REPORT_SCHEMA: &str = "guard-mcp-relay-server-report-result.v1";
 /// No session reported the server's catalog yet.
 pub(crate) const SERVER_UNKNOWN: &str = "mcp_relay_session_server_unknown";
-/// The server offers a tool whose calls the proxy decides.
-pub(crate) const SERVER_PROXY_TOOLS: &str = "mcp_relay_session_server_proxy_tools";
 const MAX_SERVERS: usize = 1024;
 const MAX_KEY_BYTES: usize = 8 * 1024;
 
@@ -66,47 +50,45 @@ pub(crate) struct RelayServerV1 {
 pub(crate) struct McpRelayServerReportRequestV1 {
     pub(crate) guard_home: String,
     pub(crate) server: RelayServerV1,
-    /// The tool definitions of the server's whole catalog. Both reporters
-    /// still send them, so the request keeps accepting them, but no
-    /// definition changes which launcher a later session runs.
-    #[serde(rename = "tools")]
-    pub(crate) _tools: Vec<Value>,
+    /// The tool definitions of the server's whole catalog. The report keeps
+    /// the field for the wire contract; recording a server reads none of it.
+    #[allow(dead_code)]
+    pub(crate) tools: Vec<Value>,
 }
 
-/// Each reported server and whether it offers a tool the proxy decides.
+/// Each reported server.
 #[derive(Debug, Default)]
 pub(crate) struct RelayServers {
-    servers: Mutex<HashMap<String, bool>>,
+    servers: Mutex<HashSet<String>>,
 }
 
 impl RelayServers {
-    /// Record a server; a mark is never cleared.
-    pub(crate) fn record(&self, server: &RelayServerV1, proxy_tools: bool) -> bool {
+    /// Record a server; `false` when it cannot be remembered.
+    pub(crate) fn record(&self, server: &RelayServerV1) -> bool {
         let Some(key) = key(server) else {
             return false;
         };
         let Ok(mut servers) = self.servers.lock() else {
             return false;
         };
-        if let Some(marked) = servers.get_mut(&key) {
-            *marked |= proxy_tools;
+        if servers.contains(&key) {
             return true;
         }
         if servers.len() >= MAX_SERVERS {
             return false;
         }
-        servers.insert(key, proxy_tools);
+        servers.insert(key);
         true
     }
 
-    /// `Ok` when a session of `server` can run under the relay.
+    /// `Ok` when a session reported `server` before.
     pub(crate) fn relayable(&self, server: &RelayServerV1) -> Result<(), &'static str> {
         let key = key(server).ok_or(SERVER_UNKNOWN)?;
         let servers = self.servers.lock().map_err(|_| SERVER_UNKNOWN)?;
-        match servers.get(&key) {
-            None => Err(SERVER_UNKNOWN),
-            Some(true) => Err(SERVER_PROXY_TOOLS),
-            Some(false) => Ok(()),
+        if servers.contains(&key) {
+            Ok(())
+        } else {
+            Err(SERVER_UNKNOWN)
         }
     }
 }
@@ -121,10 +103,7 @@ pub(crate) fn report(
     request: &McpRelayServerReportRequestV1,
     servers: &RelayServers,
 ) -> Result<Vec<u8>, String> {
-    // A catalog report only makes the server known. No definition in it
-    // marks the server: a call the relay cannot send is refused, and only a
-    // call the resident defers (`mark_package_server`) marks it.
-    let recorded = servers.record(&request.server, false);
+    let recorded = servers.record(&request.server);
     serde_json::to_vec(&json!({"schema": REPORT_SCHEMA, "recorded": recorded}))
         .map_err(|_| "mcp_relay_server_report_encoding_failed".to_owned())
 }

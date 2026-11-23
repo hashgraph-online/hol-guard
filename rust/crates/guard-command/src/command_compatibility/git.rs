@@ -323,12 +323,12 @@ pub(super) fn inspection_arguments<'a>(
     let subcommand = remaining.first().map(String::as_str);
     let admitted = match subcommand {
         Some(
-            "status" | "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "cherry"
-            | "show" | "blame" | "annotate" | "describe" | "reflog" | "branch" | "hash-object"
-            | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree" | "config" | "grep"
-            | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" | "shortlog"
-            | "check-ignore" | "count-objects" | "check-attr" | "name-rev" | "show-branch"
-            | "check-ref-format" | "var" | "patch-id" | "stripspace",
+            "status" | "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "whatchanged"
+            | "range-diff" | "cherry" | "show" | "blame" | "annotate" | "describe" | "reflog"
+            | "branch" | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote"
+            | "worktree" | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref"
+            | "rev-list" | "shortlog" | "check-ignore" | "count-objects" | "check-attr"
+            | "name-rev" | "show-branch" | "check-ref-format" | "var" | "patch-id" | "stripspace",
         ) => true,
         // Both also have a spelling that opens a file the caller names, so
         // each is admitted only on the grammar that reads its own pipe.
@@ -526,17 +526,18 @@ fn routed_with_route<'a>(
 /// The owner a read subcommand answers to when it has no declarative rule of
 /// its own.
 ///
-/// `diff-tree`, `diff-index` and `diff-files` print the comparison `diff` owns,
-/// `cherry`
-/// lists the commits `log` owns and `annotate` is `blame` in another output
-/// format, built from the same walk and reading the same `blame.*` settings. Without this each would fall to the catch-all
+/// `diff-tree`, `diff-index`, `diff-files` and `range-diff` print the
+/// comparison `diff` owns, `cherry` lists the commits `log` owns,
+/// `whatchanged` is `log` with each commit's raw diff attached, and `annotate`
+/// is `blame` in another output format, built from the same walk and reading
+/// the same `blame.*` settings. Without this each would fall to the catch-all
 /// below, which leaves every git rule uncertain and sends an ordinary read to
 /// review; naming the owner instead keeps the permission a user disables
 /// working on the spelling they disabled it for.
 fn read_owner(command: &str) -> &str {
     match command {
-        "diff-tree" | "diff-index" | "diff-files" => "diff",
-        "cherry" => "log",
+        "diff-tree" | "diff-index" | "diff-files" | "range-diff" => "diff",
+        "cherry" | "whatchanged" => "log",
         "annotate" => "blame",
         other => other,
     }

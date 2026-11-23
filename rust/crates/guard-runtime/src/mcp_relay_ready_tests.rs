@@ -1,5 +1,5 @@
 use super::{evaluate, McpRelayReadyRequestV1, MCP_RELAY_READY_SCHEMA};
-use crate::mcp_relay_servers::{RelayServerV1, SERVER_PROXY_TOOLS, SERVER_UNKNOWN};
+use crate::mcp_relay_servers::{RelayServerV1, SERVER_UNKNOWN};
 use crate::policy_store::policy_store_direct_lane::tests::{
     binding, fixture, push, write_current_ack, Fixture,
 };
@@ -54,10 +54,7 @@ fn server(harness: &str) -> RelayServerV1 {
 
 /// Ask for a server whose catalog was reported without a proxy tool.
 fn ask(fixture: &Fixture, workspace: &str, harness: &str) -> Value {
-    fixture
-        .store
-        .mcp_relay_servers()
-        .record(&server(harness), false);
+    fixture.store.mcp_relay_servers().record(&server(harness));
     ask_for(fixture, workspace, harness, server(harness))
 }
 
@@ -168,19 +165,8 @@ fn a_server_without_a_clean_catalog_report_is_not_ready() {
         ask_for(&fixture, &workspace, "codex", server("codex")),
         not_ready(SERVER_UNKNOWN)
     );
-    fixture
-        .store
-        .mcp_relay_servers()
-        .record(&server("codex"), true);
-    assert_eq!(
-        ask_for(&fixture, &workspace, "codex", server("codex")),
-        not_ready(SERVER_PROXY_TOOLS)
-    );
     // A server named for another harness is never this session's.
-    fixture
-        .store
-        .mcp_relay_servers()
-        .record(&server("cursor"), false);
+    fixture.store.mcp_relay_servers().record(&server("cursor"));
     assert_eq!(
         ask_for(&fixture, &workspace, "codex", server("cursor")),
         not_ready(SERVER_UNKNOWN)

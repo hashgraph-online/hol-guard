@@ -305,3 +305,28 @@ fn a_waited_exact_cloud_allow_for_changed_content_is_reviewed_again() {
     assert_eq!(payload["reused"], json!(false));
     assert_eq!(payload["claim"], Value::Null);
 }
+
+/// A read-only resolution reports the row it read, so a caller recording the
+/// reuse records that row, including one the daemon's authority resolved.
+#[test]
+fn an_unclaimed_resolution_reports_the_row_it_read() {
+    let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
+    let find = |name: &str| {
+        let mut vector = vectors
+            .iter()
+            .find(|item| item["name"] == name)
+            .unwrap()
+            .clone();
+        vector["request"]["claim_saved_approval"] = json!(false);
+        request(&vector, None)
+    };
+    let saved = find("durable_allow_no_claim_requested");
+    let resolution = resolve_unclaimed_resolution(&saved).unwrap();
+    assert!(saved.decision.is_some());
+    assert_eq!(resolution.decision, saved.decision);
+    // An integrity-ignored lookup the daemon resolves nothing for reads no row.
+    let ignored = find("ignored_integrity_no_daemon");
+    let resolution = resolve_unclaimed_resolution(&ignored).unwrap();
+    assert_eq!(resolution.decision, None);
+    assert!(!resolution.reused);
+}

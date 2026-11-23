@@ -135,15 +135,52 @@ pub(super) fn precheck(
     }
 }
 
-/// `package_compose` over the freshly re-resolved tool and package policies.
+/// `package_compose` over the freshly re-resolved tool and package policies,
+/// with no inline approval in hand. Production always carries the inline
+/// flag, so only the route tests spell the plain call.
+#[cfg(test)]
 pub(super) fn compose(
     mode: &str,
     tool: &Decision,
     policy: &PackagePolicy,
 ) -> Result<Decided, &'static str> {
+    compose_with_inline_approval(mode, tool, policy, false)
+}
+
+/// Compose a package call after the client approved this call inline.
+///
+/// The approval authorizes this call only. It is carried separately from the
+/// durable `saved_action` fields, so a provider action with `remember = false`
+/// still reaches the package lane without persisting a provider-wide allow.
+pub(super) fn compose_with_inline_approval(
+    mode: &str,
+    tool: &Decision,
+    policy: &PackagePolicy,
+    inline_approved: bool,
+) -> Result<Decided, &'static str> {
+    let mut tool_facts = crate::mcp_tool_policy_proxy::facts(tool);
+    // The approval answers a review. A fresh block or sandbox-required tool
+    // policy is not something the prompt offered, so it still stops the call.
+    let fresh = tool.current_action.unwrap_or(tool.action);
+    let terminal = matches!(
+        fresh,
+        guard_command::effect_decision::GuardAction::Block
+            | guard_command::effect_decision::GuardAction::SandboxRequired
+    );
+    if inline_approved && !terminal {
+        let saved_tool_block =
+            (tool_facts.saved_action.as_deref() == Some("block")).then(|| "block".to_owned());
+        tool_facts.action = "allow".to_owned();
+        tool_facts.source = "inline-approved".to_owned();
+        tool_facts.current_action = None;
+        tool_facts.saved_action = saved_tool_block;
+        tool_facts.approval_reuse_status = None;
+        tool_facts.approval_reuse_reason_code = None;
+        tool_facts.has_pending = false;
+    }
     let answer = crate::mcp_proxy_package::package_compose(&McpPackageComposeQueryV1 {
         mode: mode.to_owned(),
-        tool: crate::mcp_tool_policy_proxy::facts(tool),
+        tool: tool_facts,
         package: package_facts(policy)?,
     });
     match kind(&answer)? {
@@ -193,7 +230,7 @@ pub(super) fn package_facts(policy: &PackagePolicy) -> Result<McpPackageFactsV1,
 }
 
 /// `_has_saved_package_block(evaluation.reasons)`.
-fn saved_policy_blocks(policy: &PackagePolicy) -> bool {
+pub(super) fn saved_policy_blocks(policy: &PackagePolicy) -> bool {
     policy
         .evaluation
         .get("reasons")

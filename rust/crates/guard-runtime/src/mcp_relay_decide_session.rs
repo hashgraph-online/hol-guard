@@ -14,14 +14,15 @@
 //!   whose rows are all bound to other harnesses hands nothing off: no lookup
 //!   here reads one.
 //!
-//! A blocked-request mode the bound configs do not resolve to one the queue
-//! route answers natively, or a receipt redaction level the configs do not
-//! agree on, keeps the session native (`mcp_relay_lane::hands_off`): the
-//! calls the resident decides without the queue route still run, and each
-//! call it would queue is refused. The route is native under
-//! `safe-alternative`, and under `ask` (`mcp_relay_decide_ask.rs`), which
-//! also needs the approval center and the review OAuth source the daemon
-//! binds with it.
+//! A blocked-request mode or receipt redaction level the bound configs do
+//! not agree on is not checked here: each call reads it from the session's
+//! own config, as the proxy does (`mcp_relay_decide_session_config.rs`). An
+//! `ask` mode the binding carries without the approval center or review OAuth
+//! source the daemon binds with it keeps the session native
+//! (`mcp_relay_lane`): the calls the resident decides without the
+//! queue route still run, and each call it would queue is refused. The route
+//! is native under `safe-alternative`, and under `ask`
+//! (`mcp_relay_decide_ask.rs`).
 //!
 //! Extension layers the publisher could not read hand nothing off either. The
 //! call is decided with the layers marked unavailable. Contributed tools are
@@ -48,7 +49,6 @@ use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 /// `blocked_request_mode`, under which the queue route blocks natively.
 const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
 const SESSION_REVIEW_MODE: &str = "mcp_relay_session_review_mode";
-const SESSION_REDACTION_UNBOUND: &str = "mcp_relay_session_redaction_unbound";
 
 /// `Ok` when the binding and store leave every call to the resident.
 pub(crate) fn session_decidable(
@@ -56,7 +56,8 @@ pub(crate) fn session_decidable(
     guard_home: &str,
     harness: &str,
 ) -> Result<(), &'static str> {
-    let view = view::harness_view(binding.mcp_relay.as_ref(), harness)?;
+    // A view that does not bind the harness defers every call.
+    view::harness_view(binding.mcp_relay.as_ref(), harness)?;
     let review = &binding.review;
     let queue_native = match review.blocked_request_mode.as_deref() {
         Some(SAFE_ALTERNATIVE_MODE) => true,
@@ -66,13 +67,12 @@ pub(crate) fn session_decidable(
         Some(ASK_MODE) => {
             review.approval_center_origin.is_some() && review.review_oauth_source.is_some()
         }
-        _ => false,
+        // Each call reads the session config's mode instead.
+        None => true,
+        Some(_) => false,
     };
     if !queue_native {
         return Err(SESSION_REVIEW_MODE);
-    }
-    if view.receipt_redaction_level.is_none() {
-        return Err(SESSION_REDACTION_UNBOUND);
     }
     if let Some(connection) = store::open(Path::new(guard_home))? {
         store::saved(&connection, binding, guard_home, harness)?;

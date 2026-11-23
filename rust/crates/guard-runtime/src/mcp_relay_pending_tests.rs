@@ -128,3 +128,29 @@ fn an_oversized_record_is_not_held() {
         .hold(json!({"blob": large}), Instant::now())
         .is_none());
 }
+
+#[test]
+fn a_reserved_slot_is_kept_from_every_other_hold() {
+    let pending = PendingRelayEvidence::default();
+    let now = Instant::now();
+    let slot = pending.reserve(now).expect("an empty hold reserves");
+    let mut held = 0;
+    while pending.hold(json!({"n": held}), now).is_some() {
+        held += 1;
+    }
+    assert_eq!(held, MAX_HELD_RECORDS - 1);
+    assert!(pending.reserve(now).is_none());
+    assert!(slot.hold(json!({"observed": true}), now).is_some());
+}
+
+#[test]
+fn an_unspent_slot_is_returned() {
+    let pending = PendingRelayEvidence::default();
+    let now = Instant::now();
+    drop(pending.reserve(now).expect("an empty hold reserves"));
+    let mut held = 0;
+    while pending.hold(json!({"n": held}), now).is_some() {
+        held += 1;
+    }
+    assert_eq!(held, MAX_HELD_RECORDS);
+}

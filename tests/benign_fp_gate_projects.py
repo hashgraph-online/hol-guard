@@ -491,6 +491,52 @@ def pnpm_monorepo(root: Path) -> None:
     _node_package(root, "typescript", version, ("tsc",))
 
 
+def workspace_base_monorepo(root: Path) -> None:
+    """A workspace whose packages keep their type-check settings in a shared base.
+
+    This is the layout nearly every monorepo converges on: one
+    `tsconfig.base.json` at the checkout root, and a package whose own config
+    extends it and declares `"noEmit": true` beside the override it needs. The
+    type check runs from the package directory, so the answer about emitting
+    lives one directory above the run, which is the shape that turned an
+    ordinary type check into an approval prompt.
+    """
+
+    version = _NODE_TOOLS["typescript"][0]
+    manifest = {
+        "private": True,
+        "workspaces": ["packages/*"],
+        "devDependencies": {"typescript": f"^{version}"},
+    }
+    _write(root / "package.json", json.dumps(manifest) + "\n")
+    base = {"compilerOptions": {"strict": True, "skipLibCheck": True, "module": "esnext"}}
+    _write(root / "tsconfig.base.json", json.dumps(base) + "\n")
+    package = root / "packages" / "app"
+    project = {
+        "extends": "../../tsconfig.base.json",
+        "compilerOptions": {"noEmit": True},
+        "include": ["src/**/*.ts"],
+    }
+    _write(package / "tsconfig.json", json.dumps(project) + "\n")
+    _write(package / "src" / "index.ts", "export const ready = true;\n")
+    # The control for the same layout: a second base that turns on
+    # `incremental`, and a package that extends it. tsc then writes a
+    # build-info file beside the project whatever the package says about
+    # emitting, so reading the chain across the checkout root has to keep that
+    # run's review rather than admit it with the no-emit one.
+    incremental = {"compilerOptions": {"strict": True, "incremental": True}}
+    _write(root / "tsconfig.incremental.json", json.dumps(incremental) + "\n")
+    tool = root / "packages" / "tool"
+    tool_project = {
+        "extends": "../../tsconfig.incremental.json",
+        "compilerOptions": {"noEmit": True},
+        "include": ["src/**/*.ts"],
+    }
+    _write(tool / "tsconfig.json", json.dumps(tool_project) + "\n")
+    _write(tool / "src" / "index.ts", "export const ready = true;\n")
+    _node_package(root, "typescript", version, ("tsc",))
+
+
 def _pnpm_monorepo_lockfile(version: str) -> str:
     """The lockfile pnpm writes for that tree: an importer each, both releases listed once."""
     legacy = _PNPM_LEGACY_TYPESCRIPT

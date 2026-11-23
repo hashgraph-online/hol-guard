@@ -14,7 +14,7 @@ const PATH: &str = "/usr/bin:/bin";
 const PACKAGE_HASH: &str = "guard-approval-context:v1:fedcba9876543210";
 
 /// The package request's artifact as the gate built it for `workspace`.
-fn artifact(workspace: &Path) -> GuardArtifact {
+pub(crate) fn artifact(workspace: &Path) -> GuardArtifact {
     let intent = crate::mcp_relay_decide::parse_package_intent(
         "bash",
         &json!({"command": COMMAND}),
@@ -26,7 +26,7 @@ fn artifact(workspace: &Path) -> GuardArtifact {
 }
 
 /// A queued package record as `package_receipt::record` leaves it.
-fn record(workspace: &Path, outcome: &str, source: &str, action: &str) -> Value {
+pub(crate) fn record(workspace: &Path, outcome: &str, source: &str, action: &str) -> Value {
     let mut record = tool_record(outcome, source, action);
     record["kind"] = json!("mcp_package_call");
     record["tool_name"] = json!("bash");
@@ -495,3 +495,6 @@ fn a_safe_alternative_block_that_is_not_reviewable_adds_no_row() {
     assert!(row.is_none());
     let _ = std::fs::remove_dir_all(&workspace);
 }
+
+#[path = "mcp_relay_receipt_package_group_tests.rs"]
+mod group;
