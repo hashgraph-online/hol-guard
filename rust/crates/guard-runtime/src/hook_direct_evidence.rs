@@ -409,7 +409,32 @@ impl DirectEvidenceQueue {
     /// acknowledgement. The native commit path must see them first so it can
     /// write their receipt before acknowledging the cursor.
     fn acknowledge_and_peek_for_commit(&self, max_records: usize) -> Peeked {
-        self.acknowledge_and_peek_with(None, None, max_records, true)
+        let Ok(state) = self.state.lock() else {
+            return Peeked {
+                records: Vec::new(),
+                remaining: 0,
+                through: None,
+                settled: Vec::new(),
+            };
+        };
+        let native_count = state.records.iter().filter(|record| record.native).count();
+        let records = state
+            .records
+            .iter()
+            .filter(|record| record.native)
+            .take(max_records)
+            .map(|record| Paged {
+                seq: record.seq,
+                record: record.record.clone(),
+                activity: record.activity,
+            })
+            .collect();
+        Peeked {
+            records,
+            remaining: native_count.saturating_sub(max_records),
+            through: None,
+            settled: Vec::new(),
+        }
     }
 
     fn acknowledge_and_peek_with(
