@@ -19,8 +19,6 @@ fn temp_root(label: &str) -> PathBuf {
 fn the_printing_queries_are_read_and_the_writing_ones_are_not() {
     for arguments in [
         "version",
-        "env",
-        "env -json",
         "env GOPATH",
         "env GOROOT GOMODCACHE",
         "env -json GOVERSION",
@@ -28,6 +26,19 @@ fn the_printing_queries_are_read_and_the_writing_ones_are_not() {
         assert!(read_only_query(&words(arguments)), "go {arguments}");
     }
     for arguments in [
+        // A full environment dump can invoke the configured C compiler.
+        "env",
+        "env -json",
+        // Go 1.23.2 invokes CC while computing these values, including in
+        // JSON mode. No setting below may receive a direct read proof.
+        "env CGO_CFLAGS",
+        "env CGO_CPPFLAGS",
+        "env CGO_CXXFLAGS",
+        "env CGO_FFLAGS",
+        "env CGO_LDFLAGS",
+        "env PKG_CONFIG",
+        "env GOGCCFLAGS",
+        "env -json CGO_CFLAGS",
         // These write the stored environment file.
         "env -w GOTOOLCHAIN=local",
         "env -u GOFLAGS",
@@ -171,6 +182,11 @@ fn the_probe_reads_the_queries_only_where_nothing_selects_a_toolchain() {
 
     assert!(safe_go_probe(&words("version"), context(true)));
     assert!(safe_go_probe(&words("env GOPATH"), context(true)));
+    // Even with a fixed official Go toolchain, the full env dump and
+    // compiler-related keys can execute CC. They are not inert reads.
+    for arguments in ["env", "env -json", "env CGO_CFLAGS", "env -json PKG_CONFIG"] {
+        assert!(!safe_go_probe(&words(arguments), context(true)), "go {arguments}");
+    }
     // An inherited selector is read before anything stored, so it settles
     // the question on its own.
     assert!(!safe_go_probe(&words("version"), context(false)));
