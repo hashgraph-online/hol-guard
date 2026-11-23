@@ -92,6 +92,11 @@ WORKSPACE_TSC_CASE = "omp-native-workspace-npx-tsc"
 # the no-emit mode in the file, so the command line carries no option at all and
 # the run is proven read-only from the project it names.
 WORKSPACE_TSC_GENERATED_PROJECT_CASE = "omp-native-workspace-tsc-generated-project"
+# The same checker started in the subdirectory the command named rather than in
+# the directory the call was made from. Bun takes that directory as an option of
+# its own, so the run only reaches the named subdirectory when the option
+# travels with it.
+WORKSPACE_TSC_NAMED_DIRECTORY_CASE = "omp-native-workspace-runner-named-directory"
 # The same checker closed the way an agent closes a filtered run: the output is
 # bounded and the line after it prints the checker's own status, which `$?`
 # cannot reach past the filter and `${PIPESTATUS[0]}` can.
@@ -166,6 +171,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_TSC_CASE,
         WORKSPACE_TSC_GENERATED_PROJECT_CASE,
         WORKSPACE_TSC_STATUS_REPORT_CASE,
+        WORKSPACE_TSC_NAMED_DIRECTORY_CASE,
         WORKSPACE_PNPM_TSC_CASE,
         WORKSPACE_SHARED_BASE_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
@@ -540,6 +546,29 @@ _TYPESCRIPT_FILES = {
 }
 
 
+# The subdirectory the named-directory case asks the checker to start in.
+TSC_NAMED_DIRECTORY = "app"
+# The one line that checker prints. It names the directory the run started in,
+# so a launch that lost the named directory prints the project root instead.
+TSC_DIRECTORY_MARKER = f"tsc {_TYPESCRIPT_VERSION} checked the project in {TSC_NAMED_DIRECTORY}"
+_TSC_DIRECTORY_FILES = {
+    **_TYPESCRIPT_FILES,
+    # The named directory has to exist before the run can start in it, and it
+    # carries its own project so the directory is a real place to check from.
+    f"{TSC_NAMED_DIRECTORY}/tsconfig.json": (
+        '{\n  "extends": "../tsconfig.json",\n  "include": ["src"]\n}\n'
+    ),
+    f"{TSC_NAMED_DIRECTORY}/src/panel.ts": "export const panel = { rows: 2 };\n",
+    # `path.basename(process.cwd())` is the whole oracle: only a run that
+    # carried the named directory reports it.
+    "node_modules/typescript/bin/tsc": (
+        "#!/usr/bin/env node\n"
+        "const path = require('path');\n"
+        f"console.log(`tsc {_TYPESCRIPT_VERSION} checked the project in ${{path.basename(process.cwd())}}`);\n"
+    ),
+}
+
+
 # The project a type-check script generates: it names the same sources and keeps
 # the no-emit mode in the file, which is the whole reason the run carries no
 # `--noEmit` of its own.
@@ -842,6 +871,13 @@ _INSTALLS = {
         "tsc",
         _TYPESCRIPT_FILES,
         TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_TSC_NAMED_DIRECTORY_CASE: _Install(
+        "tsc",
+        _TSC_DIRECTORY_FILES,
+        TSC_DIRECTORY_MARKER,
         package="typescript",
         entry="bin/tsc",
     ),

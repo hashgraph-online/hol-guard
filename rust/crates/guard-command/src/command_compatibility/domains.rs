@@ -503,7 +503,7 @@ pub(super) fn observe(
             && !crate::pretool::dd_reads::proven_read_segment(command, segment, context))
             || (executable == "find"
                 && !is_contained_compile_check_arguments(arguments)
-                && crate::read_only_fanout::find_exec(arguments).is_none()
+                && !crate::read_only_fanout::find_exec_modeled(arguments, Some(&segment.text))
                 && option(
                     arguments,
                     &["-delete", "-exec", "-execdir", "-ok", "-okdir"],

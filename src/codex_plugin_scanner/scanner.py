@@ -114,7 +114,20 @@ def _summarize_package(package: NormalizedPackage) -> PackageSummary:
         manifest_path=str(package.manifest_path) if package.manifest_path is not None else None,
         name=package.name,
         version=package.version,
+        components=tuple(sorted(name for name, values in package.components.items() if values)),
     )
+
+
+def _summarize_codex_plugin(plugin_dir: Path) -> PackageSummary:
+    package = _build_adapter_map()[Ecosystem.CODEX].parse(
+        PackageCandidate(
+            ecosystem=Ecosystem.CODEX,
+            package_kind="single-plugin",
+            root_path=plugin_dir,
+            manifest_path=plugin_dir / ".codex-plugin" / "plugin.json",
+        )
+    )
+    return _summarize_package(package)
 
 
 def _rebase_finding(finding: Finding, plugin_dir: Path, repo_root: Path) -> Finding:
@@ -206,16 +219,7 @@ def _scan_single_plugin(plugin_dir: Path, options: ScanOptions) -> ScanResult:
         scope="plugin",
         trust_report=trust_report,
         ecosystems=("codex",),
-        packages=(
-            PackageSummary(
-                ecosystem="codex",
-                package_kind="single-plugin",
-                root_path=str(plugin_dir),
-                manifest_path=str(plugin_dir / ".codex-plugin" / "plugin.json"),
-                name=None,
-                version=None,
-            ),
-        ),
+        packages=(_summarize_codex_plugin(plugin_dir),),
     )
 
 

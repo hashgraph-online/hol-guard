@@ -223,6 +223,7 @@ mod printf_words;
 mod process_stops;
 mod property_list_reads;
 mod pytest_contained;
+mod shell_limits;
 mod sqlite_reads;
 mod status_facts;
 mod tool_bin_listing;
@@ -347,6 +348,7 @@ pub mod generic;
 mod package_scripts_disabled;
 pub use package_scripts_disabled::{held_command_installs, no_script_install_command};
 
+pub use directory_targets::inherited_session;
 pub use generic::bindable_setting;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;

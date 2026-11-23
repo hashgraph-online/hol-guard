@@ -290,6 +290,35 @@ fn interpolates(value: &str) -> bool {
         })
 }
 
+/// Whether a match that crossed a line break swallowed a line holding a
+/// credential assignment of its own. The match consumed that line's first
+/// word, so the rule cannot match its key again, and the softeners judge the
+/// swallowed word instead: `if not password:` followed by
+/// `password = "..."` reads as a self-named value and would pass unread.
+fn next_line_flagged(
+    matched: &str,
+    rest_of_line: &str,
+    suppress_samples: bool,
+    documentation_sample_context: bool,
+) -> bool {
+    let Some(index) = matched.find([':', '=']) else {
+        return false;
+    };
+    let swallowed = matched[index + 1..].trim_start_matches([' ', '\t']);
+    if !swallowed.starts_with(['\r', '\n']) {
+        return false;
+    }
+    let line = format!("{}{}", swallowed.trim_start(), rest_of_line);
+    PATTERNS
+        .iter()
+        .position(|def| def.classifier == "credential-assignment")
+        .is_some_and(|rule| {
+            counted_matches(rule, &line, suppress_samples, documentation_sample_context)
+                .next()
+                .is_some()
+        })
+}
+
 fn is_sample(
     classifier: &str,
     matched: &str,
@@ -309,8 +338,19 @@ fn is_sample(
         return url_credential::password(matched).is_some_and(url_credential::is_placeholder);
     }
     if classifier == "credential-assignment"
+        && next_line_flagged(
+            matched,
+            rest_of_line,
+            suppress_samples,
+            documentation_sample_context,
+        )
+    {
+        return false;
+    }
+    if classifier == "credential-assignment"
         && (field_copy::is_field_copy(matched, rest_of_line)
             || guard_link::is_guard_link(matched, preceding)
+            || code_value::is_block_header(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)

@@ -386,6 +386,7 @@ impl NativeCommandProgram {
             dispatch::admission_indexes(&raw.extensions, &rules);
         Ok(Self {
             baseline_allow_permissions,
+            extension_name_sets: std::sync::OnceLock::new(),
             extension_rule_indices,
             rule_indices,
             program_digest: raw.program_digest,

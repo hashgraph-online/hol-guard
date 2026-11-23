@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from .guard_coverage_bridge import build_guard_coverage_bridge, guard_coverage_text_lines
 from .models import GRADE_LABELS, ScanResult, Severity
 from .version import __version__
 
@@ -73,6 +74,9 @@ def build_plain_text(result: ScanResult) -> str:
         for integration in result.integrations:
             lines.append(f"  - {integration.name}: {integration.status} - {integration.message}")
         lines.append("")
+    guard_coverage = build_guard_coverage_bridge(result)
+    if guard_coverage is not None:
+        lines.extend(guard_coverage_text_lines(guard_coverage))
     separator = "━" * 37
     label = GRADE_LABELS.get(result.grade, "Unknown")
     lines += [separator, f"Final Score: {result.score}/100 ({result.grade} - {label})", separator]

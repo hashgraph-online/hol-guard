@@ -36,14 +36,15 @@ pub(crate) const OBJECT_NAME_PLACEHOLDER: &str = "0123456789abcdef0123456789abcd
 
 /// Children worth proving at all. Each still has to pass its own read-only
 /// proof with the file operand appended; this list adds no admission.
-const CHILDREN: [&str; 10] = [
-    "cat", "head", "tail", "wc", "grep", "rg", "ls", "stat", "od", "echo",
+const CHILDREN: [&str; 11] = [
+    "cat", "head", "tail", "wc", "grep", "rg", "ls", "stat", "od", "echo", "basename",
 ];
 
 /// Children that print counts, metadata or their own arguments, never file
 /// contents. `echo` opens nothing at all: `find src -exec echo {} +` prints
-/// the paths the walk found, which is what `ls` already prints.
-const METADATA_CHILDREN: [&str; 4] = ["wc", "ls", "stat", "echo"];
+/// the paths the walk found, which is what `ls` already prints. `basename`
+/// opens nothing either and prints the last component of each path.
+const METADATA_CHILDREN: [&str; 5] = ["wc", "ls", "stat", "echo", "basename"];
 
 const MAX_ROOTS: usize = 8;
 const MAX_PATTERN_BYTES: usize = 256;
@@ -303,6 +304,28 @@ pub(crate) fn find_exec(arguments: &[String]) -> Option<FindExec<'_>> {
         return None;
     }
     child_listed(child).then_some(FindExec { shape, child })
+}
+
+/// Whether the parser can treat `find ... -exec CHILD {}` as a read-only
+/// fanout.
+///
+/// A `basename` child joins the fanout only when every root that names a
+/// shell parameter is written as a path segment inside double quotes, which
+/// is what `text` (the segment as written) shows and the parsed words no
+/// longer do. Written bare, the value is split on IFS and a word of it could
+/// become a find action, so that walk keeps the unmodeled reading it had
+/// before `basename` was a fanout child. Without the text the parameter roots
+/// stay unmodeled too.
+pub(crate) fn find_exec_modeled(arguments: &[String], text: Option<&str>) -> bool {
+    find_exec(arguments).is_some_and(|exec| {
+        let basename = exec
+            .child
+            .first()
+            .is_some_and(|name| executable_basename(name) == "basename");
+        !basename
+            || !exec.shape.roots.iter().any(|root| root.contains('$'))
+            || text.is_some_and(crate::native_command_controls::parameters_only_root_paths)
+    })
 }
 
 fn bounded_count(value: &str) -> bool {

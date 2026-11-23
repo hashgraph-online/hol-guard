@@ -327,3 +327,27 @@ fn a_subcommand_directory_option_is_read_against_the_workspace() {
     }
     let _ = std::fs::remove_dir_all(&outside);
 }
+
+#[test]
+fn cargo_answers_a_manifest_question_inside_the_sandbox() {
+    let ws = package("cargo-manifest-question");
+    for command in [
+        "cargo locate-project",
+        "cargo locate-project --workspace",
+        "cargo locate-project --message-format=json",
+        "cargo pkgid",
+        "cargo pkgid app-portal",
+        "cargo metadata --no-deps --format-version 1",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+}

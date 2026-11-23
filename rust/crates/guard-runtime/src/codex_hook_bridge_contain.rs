@@ -8,8 +8,9 @@
 //! `updatedInput` (0.131.0 or later). An older or unknown Codex keeps the
 //! denial with an update hint; anything this module cannot reproduce keeps
 //! the denial unchanged. Native authority is rechecked by the sink.
-//! A call that Codex's own macOS sandbox already confines runs as it is,
-//! since the sink cannot start inside that sandbox (`sandbox`).
+//! A call that Codex's own macOS or Linux sandbox already confines runs
+//! there behind a kernel check, since the sink cannot start inside that
+//! sandbox (`sandbox`).
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -23,6 +24,7 @@ use super::approval::pending_pretool_approval;
 use super::{BridgeConfig, Prepared, Route, STATE_FILE};
 use crate::codex_hook_bridge_direct::unquote_plus;
 use crate::codex_hook_response::{codex_hook_response, fail_closed, PRE_TOOL_USE};
+use crate::hook_decision_containment_route::{host_platform, host_runs};
 use crate::hook_direct::contained::{unprojected_sink_command, NativeSink};
 use crate::hook_env_stamp::dumps;
 use crate::pyjson::{self, PyVal};
@@ -36,13 +38,6 @@ const REQUEST_SCHEMA: &str = "guard-contained-test-request.v1";
 const MAX_REQUEST_BYTES: usize = 1_048_576;
 const PRE_TOOL_EVENTS: [&str; 2] = ["PreToolUse", "pre_tool_use"];
 const SHELL_TOOLS: [&str; 4] = ["Bash", "bash", "run_terminal_command", "run_command"];
-const WINDOWS_PROFILES: [&str; 5] = [
-    "python-eval-readonly-v1",
-    "node-eval-readonly-v1",
-    "node-build-output-v1",
-    "node-tool-readonly-v1",
-    "pytest-readonly-v2",
-];
 
 /// What `route_codex_containment` made of a sandbox requirement.
 #[derive(Debug, PartialEq)]
@@ -191,18 +186,18 @@ fn contain(
     }
 }
 
-/// `platform_contains(response)`: macOS runs every contained profile, Linux
-/// the workspace sandbox, Windows installed Python and Node scripts, a
-/// project's own pytest, Vite builds and local lint, typecheck and format
-/// checks in an AppContainer.
+/// `platform_contains(response)`: whether this host's sink runs the profile,
+/// read from the table the resident's `containment_sink` answers from. macOS
+/// runs every contained profile, Linux the workspace sandbox and each
+/// read-only profile under a bubblewrap mount, Windows installed Python and
+/// Node scripts, a project's own pytest, Vite builds and local lint,
+/// typecheck and format checks in an AppContainer.
 fn platform_contains(profile: Option<&str>) -> bool {
-    if cfg!(target_os = "macos") {
-        return true;
-    }
-    if cfg!(target_os = "linux") {
-        return profile == Some("workspace-contained-v1");
-    }
-    cfg!(windows) && profile.is_some_and(|profile| WINDOWS_PROFILES.contains(&profile))
+    contains_on(host_platform(), profile)
+}
+
+fn contains_on(platform: &str, profile: Option<&str>) -> bool {
+    profile.is_some_and(|profile| host_runs(platform, profile))
 }
 
 /// `str(state.parent)` when the state path is an absolute
@@ -517,6 +512,9 @@ pub(crate) fn discard(request: &Path) {
 
 #[path = "codex_hook_bridge_contain_codex.rs"]
 mod codex;
+#[cfg(test)]
+#[path = "codex_hook_bridge_contain_host_tests.rs"]
+mod host_tests;
 #[path = "codex_hook_bridge_contain_sandbox.rs"]
 mod sandbox;
 #[cfg(all(test, unix))]

@@ -153,6 +153,7 @@ pub(super) fn tested_glob_operand(value: &str, context: super::PathContext<'_>) 
         && expanded_path(value, context)
             .is_some_and(|path| std::fs::symlink_metadata(path).is_err_and(|error| absent(&error)))
         && (safe_reads::glob_file_matches(value, context).is_some()
+            || safe_reads::directory_glob_file_matches(value, context).is_some()
             || search::safe_unmatched_glob_operand(value, context, false))
 }
 
@@ -215,12 +216,19 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
                 ) || hidden_listing::absent_repository_hidden_path(
                     &expanded, ancestor, home, cwd,
                 ) || private_temporary;
+                // A missing name below a tool's own directory in the home
+                // directory (`lib` below `~/.nvm/versions/node/v24.9.0`).
+                let home_tool_ancestor = hidden_listing::absent_below_home_tool_directory(
+                    &expanded, ancestor, home, cwd,
+                );
                 // The owner's private temporary root itself (`$TMPDIR`) sits
                 // in a location the listing screens deny, but nobody else can
                 // put an entry there, so a missing name below it is enough.
                 return !missing.is_empty()
                     && spelled
-                    && (private_temporary || listable_ancestor(ancestor, context));
+                    && (private_temporary
+                        || listable_ancestor(ancestor, context)
+                        || home_tool_ancestor);
             }
             Err(error) if absent(&error) => {
                 let Some(name) = ancestor.file_name() else {

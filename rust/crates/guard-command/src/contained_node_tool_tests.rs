@@ -4,11 +4,11 @@ use super::{
     writes_or_chains, NodeToolRoute, ToolMode,
 };
 
-fn words(command: &[&str]) -> Vec<String> {
+pub(super) fn words(command: &[&str]) -> Vec<String> {
     command.iter().map(|word| (*word).to_string()).collect()
 }
 
-fn route(command: &[&str]) -> NodeToolRoute {
+pub(super) fn route(command: &[&str]) -> NodeToolRoute {
     node_tool_route(&words(command), None, false, None)
 }
 
@@ -16,7 +16,7 @@ fn windows_route(command: &[&str]) -> NodeToolRoute {
     node_tool_route(&words(command), None, true, None)
 }
 
-fn tool(route: &NodeToolRoute) -> Option<(&'static str, Vec<String>, ToolMode)> {
+pub(super) fn tool(route: &NodeToolRoute) -> Option<(&'static str, Vec<String>, ToolMode)> {
     match route {
         NodeToolRoute::Tool {
             name,

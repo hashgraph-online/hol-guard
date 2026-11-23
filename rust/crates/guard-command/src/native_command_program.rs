@@ -314,6 +314,20 @@ pub struct NativeCommandProgram {
     rule_indices: BTreeMap<String, usize>,
     extension_rule_indices: Vec<Vec<usize>>,
     baseline_allow_permissions: BTreeSet<String>,
+    /// Each extension's names, worked out from its rules on first use. The
+    /// program never changes once admitted, so neither do they.
+    extension_name_sets: OnceLock<Vec<ExtensionNameSet>>,
+}
+
+/// The program names an extension's own rules settle.
+#[derive(Debug)]
+struct ExtensionNameSet {
+    /// Its executables and every name a rule's matcher must run.
+    known: BTreeSet<String>,
+    /// Some rule's matcher can run a program it does not name.
+    unbounded: bool,
+    /// Some rule has no matcher and stands for the compatibility names.
+    compatibility: bool,
 }
 
 pub fn packaged_command_program() -> Result<Arc<NativeCommandProgram>, &'static str> {
@@ -425,18 +439,11 @@ impl NativeCommandProgram {
         extension_index: usize,
         compatibility: Option<&[&str]>,
     ) -> Option<BTreeSet<String>> {
-        let mut names: BTreeSet<String> = self.extensions[extension_index]
-            .executables
-            .iter()
-            .map(|name| lowercase_for_ascii_comparison(basename(name)))
-            .collect();
-        for rule in self.extension_rules(extension_index) {
-            match rule.matcher {
-                Some(node) => names.extend(self.required_executables(node, 0)?),
-                None => names.extend(compatibility?.iter().map(|name| (*name).to_owned())),
-            }
+        let set = &self.extension_name_sets()[extension_index];
+        if set.unbounded || (set.compatibility && compatibility.is_none()) {
+            return None;
         }
-        Some(names)
+        Some(self.extension_known_names(extension_index, compatibility))
     }
 
     /// The names `extension_names` lists, leaving out rules that can match
@@ -446,23 +453,45 @@ impl NativeCommandProgram {
         extension_index: usize,
         compatibility: Option<&[&str]>,
     ) -> BTreeSet<String> {
-        let mut names: BTreeSet<String> = self.extensions[extension_index]
-            .executables
-            .iter()
-            .map(|name| lowercase_for_ascii_comparison(basename(name)))
-            .collect();
-        for rule in self.extension_rules(extension_index) {
-            match rule.matcher {
-                Some(node) => names.extend(self.required_executables(node, 0).unwrap_or_default()),
-                None => names.extend(
-                    compatibility
-                        .unwrap_or_default()
-                        .iter()
-                        .map(|name| (*name).to_owned()),
-                ),
-            }
+        let set = &self.extension_name_sets()[extension_index];
+        let mut names = set.known.clone();
+        if set.compatibility {
+            names.extend(
+                compatibility
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|name| (*name).to_owned()),
+            );
         }
         names
+    }
+
+    fn extension_name_sets(&self) -> &[ExtensionNameSet] {
+        self.extension_name_sets.get_or_init(|| {
+            (0..self.extensions.len())
+                .map(|index| {
+                    let mut set = ExtensionNameSet {
+                        known: self.extensions[index]
+                            .executables
+                            .iter()
+                            .map(|name| lowercase_for_ascii_comparison(basename(name)))
+                            .collect(),
+                        unbounded: false,
+                        compatibility: false,
+                    };
+                    for rule in self.extension_rules(index) {
+                        match rule.matcher {
+                            Some(node) => match self.required_executables(node, 0) {
+                                Some(names) => set.known.extend(names),
+                                None => set.unbounded = true,
+                            },
+                            None => set.compatibility = true,
+                        }
+                    }
+                    set
+                })
+                .collect()
+        })
     }
 
     /// Executables one of which a match of `node` must run. Alternatives need
