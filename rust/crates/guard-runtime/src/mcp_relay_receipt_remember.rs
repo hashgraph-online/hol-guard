@@ -281,6 +281,10 @@ fn signed(
         "version": 1,
     });
     if !put(home, &mut secrets, &control_ref, &pending) {
+        // The vault may hold the pending state while the keyring copy was not
+        // brought in step. Put the vault back, or every later save would find
+        // a pending generation and refuse.
+        restore_vault(&mut secrets, &control_ref, &current);
         return None;
     }
     args.insert(
@@ -333,6 +337,12 @@ fn control_state(
         "version": 1,
     });
     put(home, secrets, control_ref, &initial).then_some(initial)
+}
+
+fn restore_vault(secrets: &mut EncryptedFileSecretStore, control_ref: &str, state: &Value) {
+    if let Ok(serialized) = serde_json::to_string(state) {
+        let _ = secrets.set_secret(control_ref, &serialized);
+    }
 }
 
 fn put(
