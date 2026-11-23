@@ -17575,6 +17575,57 @@
       "requires_sandbox": true
     },
     {
+      "id": "home-sibling-cd-jest-sequenced-runs",
+      "fix_area": "containment",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && node node_modules/jest/bin/jest.js 2>&1 | head -20; node node_modules/jest/bin/jest.js --ci 2>&1 | tail -5"
+      },
+      "cwd": "worktree",
+      "requires_sandbox": true,
+      "expect": "allow"
+    },
+    {
+      "id": "home-sibling-cd-jest-sequenced-entry",
+      "fix_area": "containment",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project; node node_modules/jest/bin/jest.js --ci 2>&1 | head -30; node node_modules/jest/bin/jest.js 2>&1 | tail -5"
+      },
+      "cwd": "worktree",
+      "requires_sandbox": true,
+      "expect": "allow"
+    },
+    {
+      "id": "home-sibling-cd-jest-sequenced-plain-runs",
+      "fix_area": "containment",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project; node node_modules/jest/bin/jest.js --ci; node node_modules/jest/bin/jest.js"
+      },
+      "cwd": "worktree",
+      "requires_sandbox": true,
+      "expect": "allow"
+    },
+    {
       "id": "gauntlet-sibling-ls-missing-github-workflows",
       "fix_area": "shell",
       "harnesses": [

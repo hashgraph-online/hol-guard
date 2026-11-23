@@ -104,3 +104,83 @@ fn a_list_outside_that_grammar_keeps_its_review() {
     }
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
+
+/// Two or more runs after a sibling `cd`, the later ones written after a
+/// `;`, stay contained below the root.
+///
+/// An agent that steps into a checkout beside the session and reads two
+/// things from it writes the second read after a `;`, so it runs whatever
+/// the first one reported. That list had no core and went to review, while
+/// the same two steps joined by `&&` ran contained. The sink runs this shape
+/// as the text spelled it, `cd` included, with the sandbox rooted at the
+/// repository, so a step after the `;` runs there whether or not the `cd`
+/// arrived -- and every path it names is read against the root as well as
+/// the `cd` target.
+#[test]
+fn a_sequenced_list_after_a_sibling_cd_stays_contained() {
+    let (home, main, tree) = fixture();
+    worktree_packages(&main, &tree);
+    for command in [
+        format!("cd {0}/scripts && ./report.sh; ./report.sh", tree.display()),
+        format!("cd {0}/scripts; ./report.sh; ./report.sh", tree.display()),
+        format!(
+            "cd {0}/scripts && ./report.sh | head; ./report.sh | head -5",
+            tree.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh 2>&1 | head -20; ./report.sh | tail -5",
+            tree.display()
+        ),
+    ] {
+        assert_eq!(
+            contained(&reason("omp", &home, &main, &command)),
+            host(),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
+/// A sequenced list keeps the grammar the joined one keeps.
+///
+/// The `;` buys nothing else: a step naming a path outside the trees the
+/// sandbox mounts, a redirection the sink hands no shell, a stage that is
+/// not a bound, a second `cd`, or a `||` arm that runs exactly when the step
+/// before it failed, all keep their review.
+#[test]
+fn a_sequenced_list_outside_that_grammar_keeps_its_review() {
+    let (home, main, tree) = fixture();
+    worktree_packages(&main, &tree);
+    let projects = main.parent().unwrap().to_path_buf();
+    for command in [
+        format!(
+            "cd {0}/scripts && ./report.sh; ./report.sh {1}/plain",
+            tree.display(),
+            projects.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh; ./report.sh > out.txt",
+            tree.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh; ./report.sh | head | tail -2",
+            tree.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh; cd {1}/plain && ./report.sh",
+            tree.display(),
+            projects.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh; ./report.sh || ./report.sh",
+            tree.display()
+        ),
+    ] {
+        assert!(
+            !contained(&reason("omp", &home, &main, &command)),
+            "{command}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+

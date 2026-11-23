@@ -20,7 +20,8 @@ mod github_metadata_text;
 mod jq_filter_text;
 pub(super) use cwd::{
     after_read_prefix, cwd_read_executable, exact_safe_absolute_cd_chain, exact_safe_cwd_compound,
-    git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
+    git_read_cwd_compound_context, sequenced_list_cwd_context, verified_cwd_compound_context,
+    verified_cwd_list_context,
 };
 
 /// The leading `cd <dir>` of a list whose separators leave the steps after it
