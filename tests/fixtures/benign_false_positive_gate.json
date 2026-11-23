@@ -14832,6 +14832,74 @@
       "expect": "allow"
     },
     {
+      "id": "read-prefix-numbered-then-cd-git-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo scan | nl && cd ${HOME}/other-project && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "read-prefix-awk-then-cd-git-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk '{ print NR }' ${HOME}/other-project/package.json && cd ${HOME}/other-project && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "read-prefix-numfmt-then-cd-git-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "numfmt --to=iec 1024 && cd ${HOME}/other-project && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-write-prefix-then-cd-git-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo scan | tee ${HOME}/.gitconfig && cd ${HOME}/other-project && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "cd-dir-bracket-test-if-read",
       "fix_area": "shell",
       "harnesses": [
@@ -34378,6 +34446,142 @@
       "expect": "allow"
     },
     {
+      "id": "shell-echo-labels-a-workspace-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo \"readme lines: $(wc -l README.md)\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-printf-labels-a-workspace-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printf '%s\\n' \"first line: $(head -1 README.md)\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-echo-labels-a-credential-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo \"key: $(cat ~/.aws/credentials)\""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-echo-label-after-cd-into-ssh",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.ssh && echo \"$(cat id_rsa)\""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-printf-format-from-a-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printf \"$(cat README.md)\""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-bare-print-of-a-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "printf '%s' \"$(cat README.md)\""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-echo-label-removes-a-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo \"$(rm README.md)\""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-echo-label-piped-to-shell",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo \"$(cat README.md)\" | sh"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "yq-piped-document",
       "fix_area": "read",
       "harnesses": [
@@ -34528,6 +34732,86 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+          "id": "cargo-locate-project",
+          "fix_area": "shell",
+          "harnesses": [
+                "codex",
+                "zcode",
+                "claude-code",
+                "omp"
+          ],
+          "tool": "shell",
+          "tool_input": {
+                "command": "cargo locate-project"
+          },
+          "cwd": "worktree",
+          "expect": "allow"
+    },
+    {
+          "id": "cargo-locate-project-workspace",
+          "fix_area": "shell",
+          "harnesses": [
+                "codex",
+                "zcode",
+                "claude-code",
+                "omp"
+          ],
+          "tool": "shell",
+          "tool_input": {
+                "command": "cargo locate-project --workspace"
+          },
+          "cwd": "worktree",
+          "expect": "allow"
+    },
+    {
+          "id": "cargo-pkgid-names-the-package",
+          "fix_area": "shell",
+          "harnesses": [
+                "codex",
+                "zcode",
+                "claude-code",
+                "omp"
+          ],
+          "tool": "shell",
+          "tool_input": {
+                "command": "cargo pkgid"
+          },
+          "cwd": "worktree",
+          "expect": "allow"
+    },
+    {
+          "id": "cargo-locate-project-outside-manifest",
+          "fix_area": "shell",
+          "harnesses": [
+                "codex",
+                "zcode",
+                "claude-code",
+                "omp"
+          ],
+          "tool": "shell",
+          "tool_input": {
+                "command": "cargo locate-project --manifest-path ../other/Cargo.toml"
+          },
+          "cwd": "worktree",
+          "expect": "not_allow"
+    },
+    {
+          "id": "cargo-audit-fetches-advisories",
+          "fix_area": "shell",
+          "harnesses": [
+                "codex",
+                "zcode",
+                "claude-code",
+                "omp"
+          ],
+          "tool": "shell",
+          "tool_input": {
+                "command": "cargo audit"
+          },
+          "cwd": "worktree",
+          "expect": "not_allow"
     },
     {
       "id": "setting-path-naming-a-keyring-directory-is-not-allowed",
@@ -40509,6 +40793,70 @@
       "tool": "shell",
       "tool_input": {
         "command": "cd app && npx tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-named-directory-separate-word",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bunx --cwd app tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-named-directory-joined-word",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bunx --cwd=app tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-named-directory-absolute-subdirectory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bunx --cwd ${WORKTREE}/app tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-named-directory-absolute-same-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bunx --cwd ${WORKTREE} tsc --noEmit"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -68181,137 +68529,76 @@
       "expect": "not_allow"
     },
     {
-      "id": "shell-echo-labels-a-workspace-read",
+      "id": "hidden-toolchain-glob-package-manifests",
       "fix_area": "shell",
       "harnesses": [
         "codex",
-        "zcode",
         "claude-code",
-        "omp",
-        "cursor"
+        "omp"
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "echo \"readme lines: $(wc -l README.md)\""
+        "command": "cat ~/.nvm/versions/node/v25.2.1/lib/node_modules/*/package.json"
       },
       "cwd": "worktree",
       "expect": "allow"
     },
     {
-      "id": "shell-printf-labels-a-workspace-read",
+      "id": "hidden-toolchain-loop-package-manifests",
       "fix_area": "shell",
       "harnesses": [
         "codex",
-        "zcode",
         "claude-code",
-        "omp",
-        "cursor"
+        "omp"
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "printf '%s\\n' \"first line: $(head -1 README.md)\""
+        "command": "for package_dir in ~/.nvm/versions/node/v25.2.1/lib/node_modules/*; do if [ -f \"$package_dir/package.json\" ]; then printf '%s\\n' \"$package_dir\"; sed -n '1,80p' \"$package_dir/package.json\"; fi; done"
       },
       "cwd": "worktree",
       "expect": "allow"
     },
     {
-      "id": "neg-echo-labels-a-credential-read",
+      "id": "neg-hidden-toolchain-glob-into-hidden-folder",
       "fix_area": "shell",
       "harnesses": [
         "codex",
-        "zcode",
         "claude-code",
-        "omp",
-        "cursor"
+        "omp"
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "echo \"key: $(cat ~/.aws/credentials)\""
+        "command": "cat ~/.toolbox/*/config"
       },
       "cwd": "worktree",
       "expect": "not_allow"
     },
     {
-      "id": "neg-echo-label-after-cd-into-ssh",
+      "id": "neg-hidden-toolchain-loop-into-hidden-folder",
       "fix_area": "shell",
       "harnesses": [
         "codex",
-        "zcode",
         "claude-code",
-        "omp",
-        "cursor"
+        "omp"
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "cd ~/.ssh && echo \"$(cat id_rsa)\""
+        "command": "for d in ~/.toolbox/*; do cat \"$d/config\"; done"
       },
       "cwd": "worktree",
       "expect": "not_allow"
     },
     {
-      "id": "neg-printf-format-from-a-read",
+      "id": "neg-hidden-toolchain-loop-deletes",
       "fix_area": "shell",
       "harnesses": [
         "codex",
-        "zcode",
         "claude-code",
-        "omp",
-        "cursor"
+        "omp"
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "printf \"$(cat README.md)\""
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
-      "id": "neg-bare-print-of-a-read",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "printf '%s' \"$(cat README.md)\""
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
-      "id": "neg-echo-label-removes-a-file",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "echo \"$(rm README.md)\""
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
-      "id": "neg-echo-label-piped-to-shell",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "zcode",
-        "claude-code",
-        "omp",
-        "cursor"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "echo \"$(cat README.md)\" | sh"
+        "command": "for d in ~/.nvm/versions/node/v25.2.1/lib/node_modules/*; do rm -rf \"$d\"; done"
       },
       "cwd": "worktree",
       "expect": "not_allow"

@@ -72,6 +72,18 @@ pub(in crate::pretool) fn glob_file_matches(
     glob_words(value, context).filter(|words| !words.is_empty())
 }
 
+/// The words a pattern with a wildcard directory expands to, such as
+/// `packages/*/package.json`, when every one of them clears the literal read
+/// proof; `None` otherwise, including when nothing matches. A copy keeps the
+/// single-directory model of [`glob_file_matches`]; a file test only needs to
+/// know each match is one a reader may name.
+pub(in crate::pretool) fn directory_glob_file_matches(
+    value: &str,
+    context: super::super::PathContext<'_>,
+) -> Option<Vec<String>> {
+    directory_globs::directory_glob_matches(value, context)
+}
+
 /// Every word the pattern expands to, which is empty when the directory was
 /// listed in full and no name matched.
 fn glob_words(value: &str, context: super::super::PathContext<'_>) -> Option<Vec<String>> {

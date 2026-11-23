@@ -300,8 +300,11 @@ fn spaced_value(value: &str) -> bool {
 /// `wc -l *.ts` and a loop that runs `wc -l` over `*.ts` are the same work, so
 /// the loop must not keep a review the written-out command does not get.
 ///
-/// A pattern that starts at the root or reaches above the working directory
-/// names matches outside the directory the loop runs in, so it keeps its
+/// A pattern that starts at the root, or at the home directory a leading `~/`
+/// names, is handed to the body as the same absolute word, so the body's
+/// proofs decide it exactly as they decide `cat /etc/*.conf` or
+/// `cat ~/.aws/*` written out, both of which keep their review there. A
+/// pattern that reaches above the working directory with `..` keeps its
 /// review. So does one that opens with `-`, which the body's program reads as
 /// an option when the pattern matches nothing and the shell passes the word
 /// on, and one that opens with `[`, whose bracket expression is a character
@@ -324,7 +327,7 @@ fn spaced_value(value: &str) -> bool {
 fn pattern_value(value: &str) -> bool {
     value.len() <= MAX_WORD_BYTES
         && value.contains(['*', '?', '['])
-        && !value.starts_with(['/', '-', '['])
+        && !value.starts_with(['-', '['])
         // `..` reaches above the working directory, so the matches would sit
         // outside it.
         && !value.split('/').any(|segment| segment == "..")

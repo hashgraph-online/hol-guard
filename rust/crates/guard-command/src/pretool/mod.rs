@@ -290,6 +290,7 @@ mod shell_script;
 mod sink_peel;
 mod stderr_merge;
 mod stdin_filter_options;
+mod stdin_filter_sort;
 mod stdin_filters;
 mod symlink_writes;
 mod tool_inventory_reads;
