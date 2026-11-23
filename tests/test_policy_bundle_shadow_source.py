@@ -163,3 +163,51 @@ def test_a_malformed_answer_refuses_the_candidate(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(candidate, "policy_query", lambda *_args, **_kwargs: answer)
 
     assert _ask() == candidate.CandidateAnswer([], NATIVE_UNAVAILABLE_REJECTION, None, None)
+
+
+class _ShiftingStore:
+    def __init__(self, *payloads: object) -> None:
+        self.payloads = list(payloads)
+        self.events: list[str] = []
+
+    def get_sync_payload(self, _key: str) -> object:
+        return self.payloads.pop(0)
+
+    def add_event(self, name: str, _payload: object, _now: str) -> None:
+        self.events.append(name)
+
+
+def _decide(store: _ShiftingStore) -> tuple[list[PolicyDecision], str | None, str | None]:
+    from codex_plugin_scanner.guard.runtime import runner
+
+    return runner.policy_bundle_candidate_decisions(
+        cast(Any, store),
+        {"contractVersion": "guard-policy-bundle.v2"},
+        is_v2=True,
+        device_id="device-1",
+        device_name="Workstation",
+        canonical_enforcement=True,
+        existing_policy_bundle=None,
+        now="2026-01-01T00:00:00Z",
+    )
+
+
+def _answer_one_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _query(_query: str, _body: dict[str, object], **_kwargs: object) -> object:
+        return {"decisions": [_ROW], "rejection": None, "rule_id": None, "mismatch": None, "total": 1, "next": None}
+
+    monkeypatch.setattr(candidate, "policy_query", _query)
+
+
+def test_a_legacy_shadow_that_changes_during_the_query_voids_the_verdict(monkeypatch: pytest.MonkeyPatch) -> None:
+    _answer_one_row(monkeypatch)
+    store = _ShiftingStore({"bundleVersion": 1}, {"bundleVersion": 2})
+
+    assert _decide(store) == ([], NATIVE_UNAVAILABLE_REJECTION, None)
+
+
+def test_an_unchanged_legacy_shadow_keeps_the_verdict(monkeypatch: pytest.MonkeyPatch) -> None:
+    _answer_one_row(monkeypatch)
+    store = _ShiftingStore({"bundleVersion": 1}, {"bundleVersion": 1})
+
+    assert _decide(store) == ([PolicyDecision(**_ROW)], None, None)

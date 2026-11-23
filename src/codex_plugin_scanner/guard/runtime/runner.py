@@ -359,18 +359,23 @@ def policy_bundle_candidate_decisions(
     fails to compile is reported here rather than raised at the caller, which
     on the daemon route would otherwise drop the request without a response.
     The resident answers the whole question in one query; when it cannot, the
-    candidate is refused as ``native_policy_bundle_unavailable``.
+    candidate is refused as ``native_policy_bundle_unavailable``. A legacy
+    shadow that changes while the resident answers voids the verdict, which
+    was reached against the copy it was sent.
     """
 
+    stored_legacy = store.get_sync_payload("policy_bundle_legacy_last_good") if is_v2 else None
     answer = _shadow.policy_bundle_candidate(
         policy_bundle,
         is_v2=is_v2,
         device_id=device_id,
         device_name=device_name,
         canonical_enforcement=canonical_enforcement,
-        stored_legacy=store.get_sync_payload("policy_bundle_legacy_last_good") if is_v2 else None,
+        stored_legacy=stored_legacy,
         existing=existing_policy_bundle if is_v2 else None,
     )
+    if is_v2 and store.get_sync_payload("policy_bundle_legacy_last_good") != stored_legacy:
+        return [], NATIVE_UNAVAILABLE_REJECTION, None
     if answer.mismatch is not None:
         store.add_event("policy_bundle/shadow_mismatch", answer.mismatch, now)
     return answer.decisions, answer.rejection, answer.rule_id
