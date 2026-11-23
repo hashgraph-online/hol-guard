@@ -164,6 +164,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # lookup. Containment cannot reach the home key, so it may be routed
         # there, but the case must never receive an unconditional Allow.
         "neg-type-lookup-of-credential-path",
+        # Resolving a credential-named path that is not there: the name alone
+        # keeps the review, and a contained run reaches none of the roots the
+        # path could name, so nothing reports whether the file exists.
+        "shell-realpath-absent-credential-name",
         # Conservatively review shell definition-printing lookups from Bash and zsh;
         # sandbox containment remains permitted only for these explicit cases.
         "python-version-filter-after-interpreter-lookup",
