@@ -177,7 +177,12 @@ def test_hermes_bridge_fails_closed_without_resident(tmp_path: Path, monkeypatch
         guard_home=tmp_path / "guard-home",
         deadline=None,
     )
-    assert json.loads(stdout) == {"decision": "block", "reason": "HOL Guard blocked this action."}
+    assert json.loads(stdout) == {
+        "decision": "block",
+        "reason": "HOL Guard blocked this action.",
+        "policy_action": "block",
+        "reason_code": "native_hook_render_unavailable",
+    }
     assert stderr == ""
     assert code == 2
 
@@ -196,7 +201,12 @@ def test_hermes_bridge_render_stops_at_the_hook_deadline(tmp_path: Path, monkeyp
         guard_home=tmp_path / "guard-home",
         deadline=time.monotonic() - 0.01,
     )
-    assert json.loads(stdout) == {"decision": "block", "reason": "HOL Guard blocked this action."}
+    assert json.loads(stdout) == {
+        "decision": "block",
+        "reason": "HOL Guard blocked this action.",
+        "policy_action": "block",
+        "reason_code": "native_hook_render_unavailable",
+    }
     assert code == 2
 
 

@@ -103,21 +103,29 @@ def _bridge_hook_output(
             and not isinstance(exit_code, bool)
         ):
             return stdout, stderr, exit_code
+    # The review is over; what is left is writing the refusal the harness
+    # reads. A deadline the review already spent would leave that render no
+    # budget at all, and a hook with no document on its wire is a worse
+    # outcome than a late one, so the fail-closed render keeps the same
+    # delivery floor a decided answer gets.
+    failure_deadline = _delivery_deadline(deadline)
     if canonical == "muse":
-        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON, deadline=deadline)
+        return native_stderr_hook_failure(
+            canonical, event_name, _BRIDGE_BLOCK_REASON, deadline=failure_deadline
+        )
     if canonical == "hermes":
         return _failure_output(
             canonical,
             event_name,
             _BRIDGE_BLOCK_REASON,
-            deadline=deadline,
+            deadline=failure_deadline,
             reason_code="native_hook_render_unavailable",
         )
     return _failure_output(
         canonical,
         event_name,
         _RENDER_FAILURE_REASON,
-        deadline=deadline,
+        deadline=failure_deadline,
         reason_code="native_hook_render_unavailable",
     )
 
