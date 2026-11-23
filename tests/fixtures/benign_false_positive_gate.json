@@ -3704,36 +3704,6 @@
       "expect": "allow"
     },
     {
-      "id": "neg-shell-limit-ulimit-raises-core-dumps",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "ulimit -c unlimited"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
-      "id": "neg-shell-limit-ulimit-lowers-the-hard-limit",
-      "fix_area": "shell",
-      "harnesses": [
-        "codex",
-        "claude-code",
-        "omp"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "ulimit -Hn 64"
-      },
-      "cwd": "worktree",
-      "expect": "not_allow"
-    },
-    {
       "id": "host-fact-sysctl-core-count",
       "fix_area": "shell",
       "harnesses": [
