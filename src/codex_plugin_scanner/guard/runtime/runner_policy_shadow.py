@@ -33,8 +33,9 @@ _DECISION_KEYS = frozenset(
         "expires_at",
     }
 )
-_REQUIRED_TEXT = ("harness", "artifact_id", "source")
-_OPTIONAL_TEXT = ("artifact_hash", "workspace", "publisher", "reason", "owner", "expires_at")
+_REQUIRED_KEYS = frozenset({"harness", "scope", "action"})
+_REQUIRED_TEXT = ("harness",)
+_OPTIONAL_TEXT = ("artifact_id", "artifact_hash", "workspace", "publisher", "reason", "owner", "expires_at")
 _SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _ACTIONS = frozenset({"allow", "warn", "block", "review", "sandbox-required", "require-reapproval"})
 # Every page carries at least one row, so a verdict never needs more pages
@@ -138,12 +139,15 @@ def _page(answer: object) -> dict[str, object] | None:
 
 
 def _decision(row: object) -> bool:
-    if not isinstance(row, dict) or set(row) != _DECISION_KEYS:
+    """A row `PolicyDecision` accepts: optional fields may be absent or null."""
+
+    if not isinstance(row, dict) or not _REQUIRED_KEYS <= set(row) <= _DECISION_KEYS:
         return False
     fields = cast(dict[str, object], row)
     return (
         all(isinstance(fields[key], str) for key in _REQUIRED_TEXT)
-        and all(_optional_text(fields[key]) for key in _OPTIONAL_TEXT)
+        and all(_optional_text(fields.get(key)) for key in _OPTIONAL_TEXT)
+        and isinstance(fields.get("source", "local"), str)
         and fields["scope"] in _SCOPES
         and fields["action"] in _ACTIONS
     )

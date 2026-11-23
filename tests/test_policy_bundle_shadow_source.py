@@ -150,6 +150,8 @@ def test_pages_that_disagree_refuse_the_candidate(
         _verdict(decisions=[{**_ROW, "scope": "everywhere"}], total=1),
         _verdict(decisions=[{**_ROW, "harness": None}], total=1),
         _verdict(decisions=[{**_ROW, "reason": 7}], total=1),
+        _verdict(decisions=[{"harness": "codex", "scope": "artifact"}], total=1),
+        _verdict(decisions=[{**_ROW, "source": None}], total=1),
         _verdict(rejection=7),
         _verdict(total=-1),
         _verdict(total=True),
@@ -163,6 +165,17 @@ def test_a_malformed_answer_refuses_the_candidate(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(candidate, "policy_query", lambda *_args, **_kwargs: answer)
 
     assert _ask() == candidate.CandidateAnswer([], NATIVE_UNAVAILABLE_REJECTION, None, None)
+
+
+_LEGACY_ROW: dict[str, Any] = {"harness": "codex", "scope": "harness", "action": "allow", "source": "policy-bundle"}
+_UNSELECTED_ROW: dict[str, Any] = {**_ROW, "artifact_id": None, "scope": "harness"}
+
+
+@pytest.mark.parametrize("row", [_LEGACY_ROW, _UNSELECTED_ROW], ids=["legacy-omits-fields", "no-artifact-selector"])
+def test_rows_the_native_producers_emit_are_kept(monkeypatch: pytest.MonkeyPatch, row: dict[str, Any]) -> None:
+    monkeypatch.setattr(candidate, "policy_query", lambda *_args, **_kwargs: _verdict(decisions=[row], total=1))
+
+    assert _ask() == candidate.CandidateAnswer([PolicyDecision(**row)], None, None, None)
 
 
 class _ShiftingStore:
