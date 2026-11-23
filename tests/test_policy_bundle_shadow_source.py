@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -50,7 +50,7 @@ def test_the_request_carries_the_candidate_and_both_shadows(monkeypatch: pytest.
 
     def _query(query: str, body: dict[str, object], **_kwargs: object) -> object:
         sent.append((query, body))
-        return {"decisions": [_ROW], "rejection": None, "rule_id": None, "mismatch": mismatch}
+        return {"decisions": [_ROW], "rejection": None, "rule_id": None, "mismatch": mismatch, "total": 1, "next": None}
 
     monkeypatch.setattr(candidate, "policy_query", _query)
     answer = _ask(stored_legacy={"bundleVersion": 1}, existing="not-a-bundle")
@@ -67,6 +67,7 @@ def test_the_request_carries_the_candidate_and_both_shadows(monkeypatch: pytest.
                 "canonical_enforcement": True,
                 "stored_legacy": {"bundleVersion": 1},
                 "existing": "not-a-bundle",
+                "offset": 0,
             },
         )
     ]
@@ -81,6 +82,8 @@ def test_a_refusal_keeps_its_code_and_rule(monkeypatch: pytest.MonkeyPatch) -> N
             "rejection": "canonical_compile_unsupported_policy_effect",
             "rule_id": "warn-only",
             "mismatch": None,
+            "total": 0,
+            "next": None,
         },
     )
 
@@ -100,15 +103,60 @@ def test_an_unanswered_query_refuses_the_candidate(monkeypatch: pytest.MonkeyPat
     assert _ask() == candidate.CandidateAnswer([], NATIVE_UNAVAILABLE_REJECTION, None, None)
 
 
+def _verdict(**fields: Any) -> dict[str, Any]:
+    return {"decisions": [], "rejection": None, "rule_id": None, "mismatch": None, "total": 0, "next": None, **fields}
+
+
+def test_the_decisions_are_collected_page_by_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    second: dict[str, Any] = {**_ROW, "artifact_id": "memory:exact-shell-command:y"}
+    pages = {0: _verdict(decisions=[_ROW], total=2, next=1), 1: _verdict(decisions=[second], total=2)}
+    offsets: list[object] = []
+
+    def _query(_query: str, body: dict[str, object], **_kwargs: object) -> object:
+        offsets.append(body["offset"])
+        return pages[cast(int, body["offset"])]
+
+    monkeypatch.setattr(candidate, "policy_query", _query)
+
+    assert _ask().decisions == [PolicyDecision(**_ROW), PolicyDecision(**second)]
+    assert offsets == [0, 1]
+
+
+@pytest.mark.parametrize(
+    "pages",
+    [
+        {0: _verdict(decisions=[_ROW], total=2, next=1), 1: _verdict(decisions=[_ROW], total=3)},
+        {0: _verdict(decisions=[_ROW], total=2, next=1), 1: _verdict(decisions=[_ROW], total=2, rejection="x")},
+        {0: _verdict(decisions=[_ROW], total=2, next=2)},
+        {0: _verdict(decisions=[_ROW], total=2)},
+    ],
+)
+def test_pages_that_disagree_refuse_the_candidate(
+    monkeypatch: pytest.MonkeyPatch, pages: dict[int, dict[str, Any]]
+) -> None:
+    monkeypatch.setattr(candidate, "policy_query", lambda _query, body, **_kwargs: pages[cast(int, body["offset"])])
+
+    assert _ask() == candidate.CandidateAnswer([], NATIVE_UNAVAILABLE_REJECTION, None, None)
+
+
 @pytest.mark.parametrize(
     "answer",
     [
         [],
-        {"decisions": [], "rejection": None, "rule_id": None},
-        {"decisions": "rows", "rejection": None, "rule_id": None, "mismatch": None},
-        {"decisions": [{"harness": "codex", "unknown": 1}], "rejection": None, "rule_id": None, "mismatch": None},
-        {"decisions": [], "rejection": 7, "rule_id": None, "mismatch": None},
-        {"decisions": [], "rejection": None, "rule_id": None, "mismatch": {"status": "mismatch"}},
+        {"decisions": [], "rejection": None, "rule_id": None, "mismatch": None},
+        _verdict(decisions="rows"),
+        _verdict(decisions=[{"harness": "codex", "unknown": 1}], total=1),
+        _verdict(decisions=[{**_ROW, "action": "unexpected"}], total=1),
+        _verdict(decisions=[{**_ROW, "scope": "everywhere"}], total=1),
+        _verdict(decisions=[{**_ROW, "harness": None}], total=1),
+        _verdict(decisions=[{**_ROW, "reason": 7}], total=1),
+        _verdict(rejection=7),
+        _verdict(total=-1),
+        _verdict(total=True),
+        _verdict(mismatch={"status": "mismatch"}),
+        _verdict(mismatch={"canonicalRows": "1", "legacyRows": 0, "reasonCodes": [], "status": "mismatch"}),
+        _verdict(mismatch={"canonicalRows": 1, "legacyRows": 0, "reasonCodes": [1], "status": "mismatch"}),
+        _verdict(mismatch={"canonicalRows": 1, "legacyRows": 0, "reasonCodes": [], "status": "match"}),
     ],
 )
 def test_a_malformed_answer_refuses_the_candidate(monkeypatch: pytest.MonkeyPatch, answer: object) -> None:

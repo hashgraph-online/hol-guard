@@ -2,6 +2,8 @@
 //! page of the policy-bundle authority's `build_decisions` verdict, asked
 //! in process, with the codes `native_policy_bundle` turns its failures into.
 
+use std::time::Instant;
+
 use guard_contracts::{PolicyBundleAuthorityRequestV1, POLICY_BUNDLE_AUTHORITY_REQUEST_SCHEMA};
 use serde_json::{json, Map, Value};
 
@@ -18,11 +20,12 @@ const MAX_PAGES: usize = 4_096;
 /// The persisted-decision field maps the bundle authorizes on this device,
 /// or the rejection code: the authority's own code when it refuses the
 /// bundle, else `native_policy_bundle_unavailable` for an answer that cannot
-/// be trusted.
+/// be trusted. A query past its deadline stops between pages, unavailable.
 pub(super) fn materialized_rows(
     bundle: &Map<String, Value>,
     device_id: &str,
     device_name: &str,
+    deadline: Instant,
 ) -> Result<Vec<Value>, String> {
     let bundle_chunks = chunks(bundle).ok_or_else(|| LIMIT_BYTES.to_owned())?;
     let unavailable = || UNAVAILABLE.to_owned();
@@ -30,6 +33,9 @@ pub(super) fn materialized_rows(
     let mut offset: u64 = 0;
     let mut total: Option<Value> = None;
     for _ in 0..MAX_PAGES {
+        if Instant::now() >= deadline {
+            return Err(unavailable());
+        }
         let page = authority(json!({
             "bundle_chunks": bundle_chunks,
             "device_id": device_id,

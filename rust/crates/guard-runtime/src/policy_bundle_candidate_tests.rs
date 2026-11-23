@@ -178,7 +178,14 @@ fn an_evaluate_candidate_has_nothing_to_drift_from() {
     );
     assert_eq!(
         answer,
-        json!({"decisions": [], "rejection": null, "rule_id": null, "mismatch": null})
+        json!({
+            "decisions": [],
+            "rejection": null,
+            "rule_id": null,
+            "mismatch": null,
+            "total": 0,
+            "next": null,
+        })
     );
 }
 
@@ -249,4 +256,53 @@ fn a_compiled_row_that_would_not_build_a_decision_is_malformed() {
         bad["decision"][key] = value;
         assert_eq!(super::canonical_decision(&bad), None, "{key}");
     }
+}
+
+#[test]
+fn a_page_stops_at_its_byte_budget_and_names_the_next_offset() {
+    let wide = json!({"reason": "x".repeat(3 * 1024 * 1024)});
+    let rows = vec![wide.clone(), wide.clone(), wide.clone(), json!({})];
+    let (first, next) = super::page(&rows, 0).unwrap();
+    assert_eq!((first.len(), next), (2, Some(2)));
+    let (second, next) = super::page(&rows, 2).unwrap();
+    assert_eq!((second.len(), next), (2, None));
+    let huge = vec![json!({"reason": "x".repeat(9 * 1024 * 1024)}), json!({})];
+    assert_eq!(super::page(&huge, 0).unwrap().0.len(), 1);
+    assert_eq!(super::page(&rows, 4).unwrap(), (&rows[4..], None));
+    assert!(super::page(&rows, 5).is_none());
+}
+
+#[test]
+fn an_answer_reports_its_total_and_an_offset_past_it_is_a_value_error() {
+    let answer = ask(
+        &legacy("2026-11-20T10:00:00Z"),
+        false,
+        false,
+        &Value::Null,
+        &Value::Null,
+    );
+    assert_eq!(answer["total"], 1);
+    assert_eq!(answer["next"], Value::Null);
+    let input = json!({
+        "bundle": legacy("2026-11-20T10:00:00Z"),
+        "is_v2": false,
+        "device_id": "device-1",
+        "device_name": "Workstation",
+        "canonical_enforcement": false,
+        "offset": 2,
+    });
+    let answer = super::super::query(super::QUERY, &input, deadline()).unwrap();
+    assert_eq!(answer["error"]["type"], "ValueError");
+}
+
+#[test]
+fn an_expired_query_stops_before_the_next_page() {
+    let bundle = legacy("2026-11-20T10:00:00Z");
+    let rows = super::legacy::materialized_rows(
+        bundle.as_object().unwrap(),
+        "device-1",
+        "Workstation",
+        Instant::now(),
+    );
+    assert_eq!(rows, Err(super::UNAVAILABLE.to_owned()));
 }

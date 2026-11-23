@@ -5,8 +5,12 @@
 //! shadow choice, the legacy materialization and the shadow verdict.
 //!
 //! `{"bundle", "is_v2", "device_id", "device_name", "canonical_enforcement",
-//! "stored_legacy", "existing"}` answers `{"decisions", "rejection",
-//! "rule_id", "mismatch"}`. `decisions` are persisted-decision field maps.
+//! "stored_legacy", "existing", "offset"?}` answers `{"decisions",
+//! "rejection", "rule_id", "mismatch", "total", "next"}`. `decisions` are
+//! persisted-decision field maps, one page of them: a page holds at most
+//! `PAGE_BYTES` of serialized rows, `total` counts every row and `next` is
+//! the offset of the following page, or `null` on the last one. Python asks
+//! again from `next`, so no single answer outgrows the result wire.
 //! `rejection` is `null` when the candidate may be activated. `rule_id` names
 //! the rule a canonical compile failure came from. `mismatch` is the
 //! `policy_bundle/shadow_mismatch` event payload Python records, or `null`.
@@ -27,7 +31,7 @@ const COMPILE_PREFIX: &str = "canonical_compile_";
 /// `NATIVE_UNAVAILABLE_REJECTION`: an outage never reads as a verdict.
 const UNAVAILABLE: &str = "native_policy_bundle_unavailable";
 const SHADOW_UNAVAILABLE: &str = "native_shadow_unavailable";
-const FIELDS: [&str; 7] = [
+const FIELDS: [&str; 8] = [
     "bundle",
     "is_v2",
     "device_id",
@@ -35,7 +39,11 @@ const FIELDS: [&str; 7] = [
     "canonical_enforcement",
     "stored_legacy",
     "existing",
+    "offset",
 ];
+/// Serialized decision bytes one answer page carries; a single larger row
+/// still travels alone.
+const PAGE_BYTES: usize = 8 * 1024 * 1024;
 /// `PolicyDecision`'s fields; a compiled row naming any other is malformed.
 const DECISION_FIELDS: [&str; 11] = [
     "harness",
@@ -72,12 +80,13 @@ type Refusal = (String, Option<String>);
 /// Answers the query in the envelope the other policy-document queries use:
 /// `{"ok": ...}`, or a `ValueError` for a request it cannot read.
 pub(super) fn query(input: &Value, deadline: Instant) -> Value {
-    let request = input
+    let answer = input
         .as_object()
         .filter(|fields| fields.keys().all(|key| FIELDS.contains(&key.as_str())))
-        .and_then(Request::read);
-    match request {
-        Some(request) => json!({"ok": request.answer(deadline)}),
+        .and_then(Request::read)
+        .and_then(|request| request.answer(deadline));
+    match answer {
+        Some(answer) => json!({"ok": answer}),
         None => json!({"error": {
             "type": "ValueError",
             "message": "policy_document_bundle_candidate_invalid",
@@ -93,6 +102,7 @@ struct Request<'a> {
     canonical_enforcement: bool,
     stored_legacy: &'a Value,
     existing: &'a Value,
+    offset: usize,
 }
 
 impl<'a> Request<'a> {
@@ -107,24 +117,28 @@ impl<'a> Request<'a> {
             canonical_enforcement: flag("canonical_enforcement")?,
             stored_legacy: fields.get("stored_legacy").unwrap_or(&Value::Null),
             existing: fields.get("existing").unwrap_or(&Value::Null),
+            offset: match fields.get("offset") {
+                None => 0,
+                Some(offset) => usize::try_from(offset.as_u64()?).ok()?,
+            },
         })
     }
 
-    fn answer(&self, deadline: Instant) -> Value {
-        match self.decide(deadline) {
-            Ok((decisions, rejection, mismatch)) => json!({
-                "decisions": decisions,
-                "rejection": rejection,
-                "rule_id": null,
-                "mismatch": mismatch,
-            }),
-            Err((code, rule_id)) => json!({
-                "decisions": [],
-                "rejection": code,
-                "rule_id": rule_id,
-                "mismatch": null,
-            }),
-        }
+    /// One page of the verdict, or `None` for an offset past the last row.
+    fn answer(&self, deadline: Instant) -> Option<Value> {
+        let (decisions, rejection, rule_id, mismatch) = match self.decide(deadline) {
+            Ok((decisions, rejection, mismatch)) => (decisions, rejection, None, mismatch),
+            Err((code, rule_id)) => (Vec::new(), Some(code), rule_id, Value::Null),
+        };
+        let (page, next) = page(&decisions, self.offset)?;
+        Some(json!({
+            "decisions": page,
+            "rejection": rejection,
+            "rule_id": rule_id,
+            "mismatch": mismatch,
+            "total": decisions.len(),
+            "next": next,
+        }))
     }
 
     fn decide(&self, deadline: Instant) -> Result<(Vec<Value>, Option<String>, Value), Refusal> {
@@ -182,7 +196,8 @@ impl<'a> Request<'a> {
         if bundle.get("contractVersion").and_then(Value::as_str) == Some(CANONICAL_CONTRACT) {
             return canonical_rows(bundle, self.device_id, self.device_name, deadline);
         }
-        materialized_rows(bundle, self.device_id, self.device_name).map_err(|code| (code, None))
+        materialized_rows(bundle, self.device_id, self.device_name, deadline)
+            .map_err(|code| (code, None))
     }
 
     /// The shadow's rows. A shadow that no longer compiles cannot show
@@ -226,6 +241,23 @@ impl<'a> Request<'a> {
             ),
         }
     }
+}
+
+/// The rows from `offset` that fit in `PAGE_BYTES`, at least one, and the
+/// offset after them when rows remain.
+fn page(rows: &[Value], offset: usize) -> Option<(&[Value], Option<usize>)> {
+    let rest = rows.get(offset..)?;
+    let mut bytes = 0usize;
+    let mut count = 0usize;
+    for row in rest {
+        bytes = bytes.saturating_add(row.to_string().len());
+        if count > 0 && bytes > PAGE_BYTES {
+            break;
+        }
+        count += 1;
+    }
+    let end = offset + count;
+    Some((&rest[..count], (end < rows.len()).then_some(end)))
 }
 
 fn object_or_null(value: &Value) -> Value {

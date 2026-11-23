@@ -32,7 +32,15 @@ def _store(tmp_path: Path) -> GuardStore:
 
 
 def _answer(asked: list[str] | None = None, **fields: object) -> Callable[..., object]:
-    answer: dict[str, object] = {"decisions": [], "rejection": None, "rule_id": None, "mismatch": None, **fields}
+    answer: dict[str, object] = {
+        "decisions": [],
+        "rejection": None,
+        "rule_id": None,
+        "mismatch": None,
+        "total": 0,
+        "next": None,
+        **fields,
+    }
 
     def _query(query: str, _body: dict[str, object], **_kwargs: object) -> object:
         if asked is not None:
