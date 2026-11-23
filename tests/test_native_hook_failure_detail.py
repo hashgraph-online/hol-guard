@@ -51,6 +51,10 @@ def test_outage_refuses_every_deciding_event_spelling():
         assert outage_stderr_failure(event) == ("", RUNTIME_MISSING, 2), event
     for event in ("PostToolUse", "SessionStart", "Stop", "SubagentStop"):
         assert outage_stderr_failure(event) == ("", "", 0), event
+    # The runtime trims the event name before classifying it, so a padded
+    # spelling has to be refused here too rather than exiting silently.
+    for event in (" PreToolUse", "PreToolUse\n", "\tPermissionRequest "):
+        assert outage_stderr_failure(event) == ("", RUNTIME_MISSING, 2), event
 
 
 def test_outage_table_matches_the_fail_closed_envelope_contract():

@@ -370,3 +370,37 @@ def test_protection_display_name_skips_blank_runtime_label() -> None:
         )
         == "Protected"
     )
+
+
+def test_the_fail_closed_render_gets_one_delivery_floor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A spent hook budget buys the refusal one delivery floor, not two.
+
+    ``emit_hook_review`` floors the deadline on the way in. Flooring it again
+    for the fail-closed render would give that render a second full budget and
+    let the document land past the hook's own deadline.
+    """
+
+    recorded: list[float | None] = []
+
+    def record(*_args: object, **kwargs: object) -> tuple[str, int]:
+        deadline = kwargs.get("deadline")
+        assert deadline is None or isinstance(deadline, float)
+        recorded.append(deadline)
+        return "{}", 2
+
+    monkeypatch.setattr(commands_hook_native_authority, "native_cli_hook_emit", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(commands_hook_native_authority, "native_hook_failure", record)
+    started = time.monotonic()
+    code = commands_hook_native_authority.emit_hook_review(
+        "hermes",
+        {"policy_action": "allow", "reason": "ok"},
+        event_name="PreToolUse",
+        guard_home=tmp_path / "guard-home",
+        output_stream=io.StringIO(),
+        deadline=started - 5.0,
+    )
+    assert code == 2
+    assert len(recorded) == 1
+    floored = recorded[0]
+    assert floored is not None
+    assert floored <= started + commands_hook_native_authority._DELIVERY_BUDGET_SECONDS + 0.5

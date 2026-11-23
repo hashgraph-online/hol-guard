@@ -36,7 +36,11 @@ def outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
     agent from stopping.
     """
 
-    compact = event_name.replace("_", "").replace("-", "").lower()
+    # The runtime trims the event name before it classifies it, so a harness
+    # that writes `" PreToolUse"` is refused there. Classifying the untrimmed
+    # name here would let the same spelling pass this table silently, which is
+    # the one divergence that decides differently.
+    compact = event_name.strip().replace("_", "").replace("-", "").lower()
     if compact in _DECIDING_EVENTS or compact.startswith(_DECIDING_EVENT_PREFIXES):
         return "", RUNTIME_MISSING, 2
     return "", "", 0
