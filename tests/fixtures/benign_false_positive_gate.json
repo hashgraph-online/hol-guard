@@ -45656,7 +45656,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "git shortlog -sn --since=2.weeks"
+        "command": "git shortlog -sn --since=2.weeks HEAD"
       },
       "cwd": "worktree",
       "expect": "allow"
