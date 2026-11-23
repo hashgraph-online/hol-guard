@@ -238,8 +238,10 @@ fn string_end(characters: &[char], start: usize) -> Option<usize> {
 
 /// The index of the `/` closing the regular expression opening at `start`.
 /// Some awks end a regular expression at a `/` inside a bracket expression
-/// and others do not, so a bracket expression holding `/`, `\` or `[`, or
-/// opening with `]`, is refused.
+/// and others do not, so a bracket expression holding `/` or `\`, or opening
+/// with `]`, is refused. A `[` inside one is read only as the opening of a
+/// POSIX character class such as `[[:space:]]`, which every awk delimits the
+/// same way; any other `[` keeps its refusal.
 fn regex_end(characters: &[char], start: usize) -> Option<usize> {
     let mut index = start + 1;
     loop {
@@ -257,7 +259,16 @@ fn regex_end(characters: &[char], start: usize) -> Option<usize> {
                 loop {
                     match *characters.get(index)? {
                         ']' if index > open => break,
-                        '/' | '\\' | '[' | ']' | '\n' => return None,
+                        // `[[:space:]]` is a character class, not a nested
+                        // bracket expression. Reading the class is what makes
+                        // the `]` that follows it the bracket expression's
+                        // own, so the regular expression ends where every awk
+                        // ends it.
+                        '[' => match bracket_class_end(characters, index) {
+                            Some(end) => index = end + 1,
+                            None => return None,
+                        },
+                        '/' | '\\' | ']' | '\n' => return None,
                         _ => index += 1,
                     }
                 }
@@ -266,6 +277,40 @@ fn regex_end(characters: &[char], start: usize) -> Option<usize> {
         }
         index += 1;
     }
+}
+
+/// The POSIX character class names a bracket expression may hold. Every awk
+/// reads these the same way, and each name is a fixed word of lower-case
+/// letters, so a class cannot carry the `/`, `\` or `[` whose reading the
+/// surrounding screen refuses to guess at.
+const BRACKET_CLASSES: [&str; 12] = [
+    "alnum", "alpha", "blank", "cntrl", "digit", "graph", "lower", "print", "punct", "space",
+    "upper", "xdigit",
+];
+
+/// The index of the `]` closing a `[:name:]` class opening at `start`, or
+/// `None` when the `[` opens anything else. A collating symbol (`[.`) or an
+/// equivalence class (`[=`) keeps its refusal: awks disagree about them, and
+/// the content between the delimiters is not a fixed word.
+fn bracket_class_end(characters: &[char], start: usize) -> Option<usize> {
+    if characters.get(start + 1) != Some(&':') {
+        return None;
+    }
+    let name_start = start + 2;
+    let mut index = name_start;
+    while characters
+        .get(index)
+        .is_some_and(|character| character.is_ascii_lowercase())
+    {
+        index += 1;
+    }
+    if characters.get(index) != Some(&':') || characters.get(index + 1) != Some(&']') {
+        return None;
+    }
+    let name: String = characters[name_start..index].iter().collect();
+    BRACKET_CLASSES
+        .contains(&name.as_str())
+        .then_some(index + 1)
 }
 
 #[cfg(test)]
@@ -295,6 +340,45 @@ mod tests {
             "NR==FNR{was[$1]=1; next} ($1 in was)==0 && FILENAME==ARGV[3]{print \"NEW MISS \" $0}",
         ] {
             assert!(safe_program(program), "{program}");
+        }
+    }
+
+    /// A bracket expression holding a POSIX character class is the ordinary
+    /// way to spell "whitespace" or "a digit" in awk, and every awk ends the
+    /// regular expression at the same `/`. Refusing the class left a plain
+    /// line filter unreadable.
+    #[test]
+    fn program_screen_reads_posix_character_classes() {
+        for program in [
+            "length($0) > 85 && /^[[:space:]]*\"/",
+            "/^[[:space:]]*$/ {print NR}",
+            "$1 ~ /^[[:digit:]]+$/ {print $2}",
+            "/[[:alpha:]][[:alnum:]_]*/ {print}",
+            "/[^[:space:]]/ {print FNR}",
+            "/[[:upper:][:digit:]-]/ {print}",
+            "{ n = $1 / 2; if ($0 ~ /[[:punct:]]/) print n }",
+        ] {
+            assert!(safe_program(program), "{program}");
+        }
+    }
+
+    /// Reading the class does not widen the screen: the code after a
+    /// correctly delimited regular expression is still read, and a word that
+    /// is not a class keeps the refusal a bracket a `[` opens already has.
+    #[test]
+    fn a_character_class_neither_hides_code_nor_admits_another_bracket() {
+        for program in [
+            "{ print /[[:space:]]/ | \"sh\" }",
+            "/[[:space:]]/ { print > \"out.txt\" }",
+            "/[[:bogus:]]/ {print}",
+            "/[[:SPACE:]]/ {print}",
+            "/[[.a.]]/ {print}",
+            "/[[=a=]]/ {print}",
+            "/[[:space:/:]]/ {print}",
+            "/[[:space:]/ {print}",
+            "/[[[:space:]]/ {print}",
+        ] {
+            assert!(!safe_program(program), "{program}");
         }
     }
 
