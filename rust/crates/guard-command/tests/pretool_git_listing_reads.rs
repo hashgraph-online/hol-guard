@@ -128,6 +128,55 @@ fn listing_inspections_are_proven_reads() {
     }
 }
 
+/// `git fsck` walks the objects the repository already holds and reports the
+/// ones that are damaged, dangling or unreachable. It opens no working-tree
+/// file, starts no program the configuration names and writes nothing, so an
+/// agent checking a repository's health reads it the way every other listing
+/// is read. `--lost-found` is the one spelling that writes - it saves the
+/// dangling objects into the repository - and it keeps its review.
+#[test]
+fn an_object_store_check_is_a_proven_read() {
+    let session = session("fsck-reads");
+    for cwd in [&session.primary, &session.worktree] {
+        for command in [
+            "git fsck",
+            "git fsck --no-progress",
+            "git fsck --connectivity-only",
+            "git fsck --strict --no-progress",
+            "git fsck --dangling --unreachable",
+            "git fsck --full --cache --no-reflogs",
+            "git fsck --name-objects",
+            "git status --short && git fsck --no-progress",
+        ] {
+            let result = session.evaluate_at(command, cwd);
+            assert_eq!(
+                result.minimum_action, "allow",
+                "{command}: {}",
+                result.reason_code
+            );
+        }
+        for command in [
+            // Writing the dangling objects into the repository is the one
+            // spelling that leaves files behind.
+            "git fsck --lost-found",
+            // A named object starts the walk somewhere this pass has not
+            // modelled, and an unknown option is not a flag at all.
+            "git fsck HEAD",
+            "git fsck --unknown-option",
+            // A bundle is not read letter by letter here, so only the
+            // spellings in the list are proven.
+            "git fsck -vq",
+        ] {
+            let result = session.evaluate_at(command, cwd);
+            assert_ne!(
+                result.minimum_action, "allow",
+                "{command}: {}",
+                result.reason_code
+            );
+        }
+    }
+}
+
 #[test]
 fn repository_report_inspections_are_proven_reads() {
     let session = session("report-reads");

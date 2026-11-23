@@ -217,6 +217,7 @@ fn raw_paging(
             | "check-ignore"
             | "count-objects"
             | "check-attr"
+            | "fsck"
             | "sparse-checkout"
             | "rev-parse"
             | "ls-files"
@@ -262,6 +263,7 @@ fn raw_paging(
             | "check-ignore"
             | "count-objects"
             | "check-attr"
+            | "fsck"
             | "sparse-checkout"
             | "rev-parse"
             | "ls-files"
@@ -635,7 +637,7 @@ fn probe(
         // `pager.*` key can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
         | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
-        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
+        | "check-attr" | "fsck" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
         | "diff-index" | "diff-files" | "name-rev" | "show-branch" | "check-ref-format"
         | "symbolic-ref" | "var" | "patch-id" | "stripspace" | "check-mailmap"
         | "interpret-trailers" => false,

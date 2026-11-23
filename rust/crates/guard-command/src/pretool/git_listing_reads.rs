@@ -1,15 +1,17 @@
 //! The git subcommands that only print: `check-ignore`,
-//! `count-objects`, `check-attr`, `sparse-checkout list`, `rev-parse` and
-//! `ls-files`.
+//! `count-objects`, `check-attr`, `fsck`, `sparse-checkout list`, `rev-parse`
+//! and `ls-files`.
 //!
 //! `check-ignore` answers which ignore rule a path matches, `count-objects`
 //! reports how much the object store holds, `check-attr` answers which
-//! attributes apply to a path, `sparse-checkout list` prints the patterns the
-//! working tree is already narrowed to, `rev-parse` prints what a revision the
-//! caller named resolves to, and `ls-files` prints the paths the index already
-//! holds. `git shortlog` prints too, and is read next door in
-//! [`super::git_shortlog_reads`]. None writes a ref, an object or a file, and
-//! none reads a file's contents. All still run under the repository's
+//! attributes apply to a path, `fsck` reports which of the objects the
+//! repository already holds are damaged, dangling or unreachable,
+//! `sparse-checkout list` prints the patterns the working tree is already
+//! narrowed to, `rev-parse` prints what a revision the caller named resolves
+//! to, and `ls-files` prints the paths the index already holds. `git shortlog`
+//! prints too, and is read next door in [`super::git_shortlog_reads`]. None
+//! writes a ref, an object or a file, and none reads a file's contents. All
+//! still run under the repository's
 //! configuration, so the configuration probe clears them before the read is
 //! proven, and options outside these lists keep their review.
 
@@ -23,6 +25,33 @@ const COUNT_OBJECTS_FLAGS: [&str; 4] = ["-v", "--verbose", "-H", "--human-readab
 /// `check-attr` flags. `--cached` reads the attributes from the index instead
 /// of the work tree, and the rest change what is printed.
 const CHECK_ATTR_FLAGS: [&str; 4] = ["-a", "--all", "--cached", "-z"];
+
+/// `fsck` flags that only choose how much of the object store is walked and
+/// how much of the walk is printed.
+///
+/// `--lost-found` is not here. It writes every dangling object it finds into
+/// `.git/lost-found`, which is the one `fsck` spelling that leaves files
+/// behind, so it keeps its review. Operands are not admitted either: a named
+/// object is a spelling this grammar has not modelled.
+const FSCK_FLAGS: [&str; 17] = [
+    "-v",
+    "--verbose",
+    "--progress",
+    "--no-progress",
+    "--strict",
+    "--no-strict",
+    "--full",
+    "--no-full",
+    "--connectivity-only",
+    "--dangling",
+    "--no-dangling",
+    "--unreachable",
+    "--cache",
+    "--no-reflogs",
+    "--tags",
+    "--root",
+    "--name-objects",
+];
 
 /// Whether the listing reads the index, which can start `core.fsmonitor`.
 /// `check-ignore` consults the index unless `--no-index` is given; a shortlog
@@ -43,6 +72,9 @@ pub(crate) fn reads_index(subcommand: &str, rest: &[String]) -> bool {
         "rev-parse" | "show" | "cat-file" => {
             options(rest).any(|argument| argument.starts_with(':'))
         }
+        // A check reads the index as one of the roots it walks from, so it
+        // can start `core.fsmonitor` the way every other index read does.
+        "fsck" => true,
         // A count walks the object store and never the index.
         _ => false,
     }
@@ -123,6 +155,7 @@ pub(crate) fn read_form(subcommand: &str, rest: &[String]) -> bool {
         "shortlog" => super::git_shortlog_reads::read_form(rest),
         "check-ignore" => check_ignore_read_form(rest),
         "count-objects" => count_objects_read_form(rest),
+        "fsck" => fsck_read_form(rest),
         "check-attr" => check_attr_read_form(rest),
         "sparse-checkout" => sparse_checkout_read_form(rest),
         "rev-parse" => rev_parse_read_form(rest),
@@ -348,6 +381,18 @@ fn count_objects_read_form(rest: &[String]) -> bool {
     rest.iter().all(|argument| {
         COUNT_OBJECTS_FLAGS.contains(&argument.as_str()) || short_bundle(argument, "vH")
     })
+}
+
+/// `git fsck` walks the objects the repository already holds and reports the
+/// ones that are damaged, dangling or unreachable. It opens no working-tree
+/// file, runs no program the configuration names and writes nothing - with
+/// one exception, `--lost-found`, which writes the dangling objects it finds
+/// into `.git/lost-found` and is left out of [`FSCK_FLAGS`] for that reason.
+/// The grammar is the flag list and nothing else; an operand names an object
+/// to start the walk from, which this pass has not modelled.
+fn fsck_read_form(rest: &[String]) -> bool {
+    rest.iter()
+        .all(|argument| FSCK_FLAGS.contains(&argument.as_str()))
 }
 
 /// `git check-attr` prints which attributes apply to the paths it is given.
