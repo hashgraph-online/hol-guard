@@ -45,6 +45,14 @@ mod local_cli_regroup;
 mod local_cli_sql;
 #[path = "guard_store_schema_objects.rs"]
 mod objects;
+#[path = "guard_store_schema_outbox.rs"]
+mod outbox;
+#[path = "guard_store_schema_outbox_insert_sql.rs"]
+mod outbox_insert_sql;
+#[path = "guard_store_schema_outbox_sql.rs"]
+mod outbox_sql;
+#[path = "guard_store_schema_outbox_update_sql.rs"]
+mod outbox_update_sql;
 #[path = "guard_store_schema_requests.rs"]
 mod requests;
 #[path = "guard_store_schema_shadow.rs"]
@@ -223,7 +231,8 @@ pub(crate) fn ensure_families(connection: &Connection, now: &str) -> StoreResult
     families::ensure_workflow_capabilities(connection, now)?;
     shadow::ensure_shadow(connection, now)?;
     requests::ensure_requests_through_approvals(connection, now)?;
-    approvals::ensure_approval_queue(connection, now)
+    approvals::ensure_approval_queue(connection, now)?;
+    outbox::ensure_review_outbox(connection, now)
 }
 
 #[cfg(test)]
@@ -261,6 +270,10 @@ mod approvals_tests;
 #[cfg(test)]
 #[path = "guard_store_schema_columns_tests.rs"]
 mod columns_tests;
+
+#[cfg(test)]
+#[path = "guard_store_schema_outbox_tests.rs"]
+mod outbox_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_requests_tests.rs"]
