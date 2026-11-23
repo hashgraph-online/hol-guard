@@ -174,9 +174,7 @@ class ResidentEvidenceDrain:
         except (TypeError, ValueError):
             decoded = None
         self.last_failure = (
-            decoded.get("failure")
-            if isinstance(decoded, dict) and isinstance(decoded.get("failure"), str)
-            else None
+            decoded.get("failure") if isinstance(decoded, dict) and isinstance(decoded.get("failure"), str) else None
         )
         pages, count, more, failed = batch
         self.pages += pages
