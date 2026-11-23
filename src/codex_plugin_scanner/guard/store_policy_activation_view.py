@@ -46,7 +46,10 @@ def read_policy_activation_view(store: _NativeStore, state_keys: Iterable[str]) 
         raise _malformed()
     stored: dict[str, str | None] = {}
     for key in keys:
-        value = sync_state.get(key)
+        # An absent row is an explicit null; an omitted key is a broken reply.
+        if key not in sync_state:
+            raise _malformed()
+        value = sync_state[key]
         if value is not None and not isinstance(value, str):
             raise _malformed()
         stored[key] = value

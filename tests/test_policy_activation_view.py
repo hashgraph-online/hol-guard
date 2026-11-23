@@ -54,9 +54,10 @@ def test_a_missing_authority_snapshot_reads_as_none() -> None:
         None,
         {"sync_state": [], "authority": None, "remote_rows": []},
         {"sync_state": {"policy": 1}, "authority": None, "remote_rows": []},
-        {"sync_state": {}, "authority": None, "remote_rows": [{}]},
-        {"sync_state": {}, "authority": {"revision": True, "snapshot_digest": "d"}, "remote_rows": []},
-        {"sync_state": {}, "authority": {"revision": 1}, "remote_rows": []},
+        {"sync_state": {}, "authority": None, "remote_rows": []},
+        {"sync_state": {"policy": None}, "authority": None, "remote_rows": [{}]},
+        {"sync_state": {"policy": None}, "authority": {"revision": True, "snapshot_digest": "d"}, "remote_rows": []},
+        {"sync_state": {"policy": None}, "authority": {"revision": 1}, "remote_rows": []},
     ],
 )
 def test_a_malformed_reply_is_refused(reply: object) -> None:

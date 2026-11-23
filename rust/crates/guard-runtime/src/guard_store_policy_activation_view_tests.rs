@@ -93,5 +93,8 @@ fn a_malformed_key_list_is_refused() {
 
 #[test]
 fn the_view_is_read_as_one_snapshot() {
-    assert_eq!(method_kind("policy_activation_view"), Some(Kind::Snapshot));
+    assert!(matches!(
+        method_kind("policy_activation_view"),
+        Some(Kind::Snapshot)
+    ));
 }
