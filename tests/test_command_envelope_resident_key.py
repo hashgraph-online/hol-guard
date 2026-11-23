@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import command_capability
+from codex_plugin_scanner.guard.runtime import command_capability_keys as command_capability
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
 
 

@@ -461,9 +461,9 @@ def native_command_capability_runtime(
         )
     # The borrowed resident's vault is not the test store's, so the envelope op
     # must sign with the store's own key rather than read the resident's.
-    from codex_plugin_scanner.guard.runtime import command_capability
+    from codex_plugin_scanner.guard.runtime import command_capability_keys
 
-    monkeypatch.setattr(command_capability, "_resident_reads_key", lambda _store: False)
+    monkeypatch.setattr(command_capability_keys, "_resident_reads_key", lambda _store: False)
     return _native_context_home
 
 

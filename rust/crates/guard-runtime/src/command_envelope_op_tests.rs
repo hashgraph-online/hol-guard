@@ -218,13 +218,18 @@ fn the_resident_signs_with_the_key_in_its_own_vault() {
     assert_eq!(signed["result"]["keyId"], Value::from(key_id.clone()));
     let mut caller = request(COMMAND_ENVELOPE_ACTION_VERIFY, signed["result"].clone());
     caller.integrity_key_b64 = Some(key_b64);
-    caller.integrity_key_id = Some(key_id);
+    caller.integrity_key_id = Some(key_id.clone());
     assert_eq!(answered(&caller)["accepted"], Value::Bool(true));
     let verified = evaluate(
         &resident(COMMAND_ENVELOPE_ACTION_VERIFY, signed["result"].clone()),
         Some(home.path()),
     );
-    assert_eq!(verified["result"], grant());
+    // Verifying strips only the signature: the envelope keeps the key id it
+    // was signed under.
+    assert_eq!(verified["accepted"], Value::Bool(true));
+    let mut expected = grant();
+    expected["keyId"] = Value::from(key_id);
+    assert_eq!(verified["result"], expected);
 }
 
 #[test]
