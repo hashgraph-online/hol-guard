@@ -50,6 +50,7 @@ import pytest
 from ci.gauntlet.edge_clone_fixtures import write_edge_clone
 from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
+from ci.gauntlet.source_output_fixtures import FALLBACK_SOURCES
 from ci.gauntlet.source_output_fixtures import SOURCES as TOKEN_SOURCES
 from tests import codex_containment_route
 from tests.benign_fp_gate_configs import write_parent_design_tokens, write_parent_documents
@@ -284,8 +285,9 @@ def build_fixture(root: Path) -> BenignFixture:
     # The live Gauntlet's placeholder docs and field-copy source, read by its shell cases.
     _write(worktree / "docs" / "review-notes.md", REVIEW_NOTES)
     _write(worktree / "dashboard" / "src" / "session.js", SESSION_SOURCE)
-    # The live Gauntlet's token-handling sources (redirect route, link worker, HMAC helper).
-    for relative, text in TOKEN_SOURCES.items():
+    # The live Gauntlet's token-handling sources (redirect route, link worker, HMAC
+    # helper) and its Python link helper.
+    for relative, text in {**TOKEN_SOURCES, **FALLBACK_SOURCES}.items():
         _write(worktree / relative, text)
     # The test beside that source: a project file whose name reads like a
     # credential, named by the runner a session runs over it.

@@ -10,7 +10,10 @@ with synthetic names; none holds a credential, a key or a real value.
 * a click-tracking redirect route that validates a token and a target;
 * a reminder worker that builds links carrying signed tokens;
 * an HMAC helper that signs and verifies attribution tokens and names its key
-  only through the environment.
+  only through the environment;
+* a Python link helper that copies credential fields with a fallback
+  (``password=dest.password or self.password)``) and tests them in block
+  headers (``if self.password:``).
 """
 
 from __future__ import annotations
@@ -91,3 +94,35 @@ export function verifyAttributionToken(token: string, expected: string): boolean
 """
 
 SOURCES = {ROUTE_PATH: ROUTE_SOURCE, WORKER_PATH: WORKER_SOURCE, HELPER_PATH: HELPER_SOURCE}
+
+FALLBACK_PATH = "scripts/links.py"
+FALLBACK_SOURCE = """\
+from urllib.parse import quote
+
+
+class Link:
+    def __init__(self, scheme, host, username=None, password=None):
+        self.scheme = scheme
+        self.host = host
+        self.username = username
+        self.password = password
+
+    def navigate(self, dest):
+        return Link(
+            scheme=dest.scheme or self.scheme,
+            host=dest.host or self.host,
+            username=dest.username or self.username,
+            password=dest.password or self.password)
+
+    def userinfo(self):
+        parts = [quote(self.username or "")]
+        if self.password:
+            parts.append(quote(self.password))
+        return ":".join(parts)
+
+
+def check_prompt(prompt, output):
+    if prompt == "Confirm Password":
+        assert "Confirm Password: " in output
+"""
+FALLBACK_SOURCES = {FALLBACK_PATH: FALLBACK_SOURCE}
