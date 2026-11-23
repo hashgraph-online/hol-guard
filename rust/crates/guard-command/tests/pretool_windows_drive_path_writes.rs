@@ -107,6 +107,7 @@ fn action(session: &Session, command: &str) -> String {
             literal_words: &[],
             cdpath_unset: false,
             rustup_override_absent: false,
+            go_toolchain_inert: false,
             cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,

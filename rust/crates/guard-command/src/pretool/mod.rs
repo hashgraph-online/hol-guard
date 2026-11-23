@@ -17,6 +17,11 @@ pub struct PathContext<'a> {
     /// No inherited `RUSTUP_TOOLCHAIN` or `RUSTUP_HOME` can change which
     /// toolchain the rustup proxy runs. Literal contexts leave this false.
     pub rustup_override_absent: bool,
+    /// No inherited `GOTOOLCHAIN`, `GOROOT`, proxy, checksum-database or
+    /// module-cache variable can choose which Go toolchain answers a query,
+    /// where it is fetched from or whether it is verified. Literal contexts
+    /// leave this false.
+    pub go_toolchain_inert: bool,
     /// No inherited Cargo registry, transport, credential or alias variable
     /// can move the registry a Cargo query contacts, the index it reads or
     /// the credential provider it starts. Literal contexts leave this false.
@@ -184,6 +189,7 @@ mod git_step_preserves;
 mod git_worktree;
 pub(crate) mod github_conversation;
 mod glob_words;
+mod go_toolchain;
 mod guard_diagnostics;
 mod guard_home_option;
 pub use guard_home_option::{guard_approval_inspection_command, guard_safety_guide_read_command};

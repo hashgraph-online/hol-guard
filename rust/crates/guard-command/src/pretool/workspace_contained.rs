@@ -540,6 +540,17 @@ pub(super) fn convert(
         // A printed Social Security number lands in the transcript whether
         // or not the sandbox runs the print.
         || model.is_some_and(|model| super::literal_ssn_echo::echoes_ssn(&model.normalized_text))
+        // A bare Go environment dump, or a compiler-dependent named setting,
+        // can launch a configured compiler. Containment does not replace the
+        // explicit review required by these commands.
+        || model.is_some_and(|model| {
+            model.segments.iter().any(|segment| {
+                segment.executable.as_deref().map(super::executable_basename) == Some("go")
+                    && super::go_toolchain::env_requires_approval_even_when_contained(
+                        &segment.arguments,
+                    )
+            })
+        })
         // The sandbox writes anywhere in the workspace, so a hook overwritten
         // with a do-nothing script, or renamed away, stays switched off once
         // the contained run ends.
