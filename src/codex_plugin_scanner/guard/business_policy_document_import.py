@@ -100,7 +100,7 @@ def refuse_legacy_import_over_business_source(store: GuardStore) -> None:
         raise NativePolicySnapshotError("native_business_policy_removal_requires_authority")
 
 
-def _approved_install_digest(
+def approved_install_digest(
     store: GuardStore,
     document: GuardPolicyDocument,
     mutation: BusinessSourceMutation,
@@ -135,7 +135,7 @@ def apply_business_document_on_connection(
     """Install inside a caller's own transaction (MCP request apply, recovery)."""
     from .store_policy_document import PolicyDocumentImportResult
 
-    digest = _approved_install_digest(
+    digest = approved_install_digest(
         store, document, mutation, mode=mode, now=now, approval_gate_grant=approval_gate_grant
     )
     result = store._import_policy_rows_on_connection(
@@ -170,7 +170,7 @@ def import_business_document(
     with approved_business_source_mutation(
         store, document, mode=mode, now=now, approval_gate_grant=approval_gate_grant
     ) as mutation:
-        digest = _approved_install_digest(
+        digest = approved_install_digest(
             store, document, mutation, mode=mode, now=now, approval_gate_grant=approval_gate_grant
         )
         args = store.policy_import_args(document, [], mode="replace", now=now, digest=digest, vault_key=True)
