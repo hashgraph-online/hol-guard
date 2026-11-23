@@ -431,6 +431,15 @@ fn printed_values_judge_the_inner_command_on_its_own() {
 fn values_used_as_more_than_output_stay_opaque() {
     for command in [
         // The inner command would run somewhere other than where it is judged.
+        // Shell builtins can also rebind HOME/PATH before the read.
+        "printf -v HOME '%s' /tmp/inert; echo \"label: $(cat ~/marker)\"",
+        "printf -vPATH '%s' /tmp/inert; echo \"label: $(cat marker)\"",
+        "read HOME; echo \"label: $(cat ~/marker)\"",
+        "mapfile HOME; echo \"label: $(cat marker)\"",
+        "readarray HOME; echo \"label: $(cat marker)\"",
+        "getopts a opt; echo \"label: $(cat marker)\"",
+        "let HOME=1; echo \"label: $(cat marker)\"",
+        "trap 'HOME=/tmp/inert' DEBUG; echo \"label: $(cat ~/marker)\"",
         "cd ~/.ssh && echo \"$(cat id_rsa)\"",
         "pushd ~/.ssh; echo \"$(cat id_rsa)\"",
         "HOME=/etc; echo \"$(cat ~/passwd)\"",
