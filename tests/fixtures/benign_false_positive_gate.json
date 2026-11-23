@@ -68015,6 +68015,24 @@
       "cwd": "worktree",
       "expect": "not_allow",
       "contained_ok": true
+    },
+    {
+      "id": "descriptor-sink-inside-subshell-group",
+      "fix_area": "shell",
+      "harnesses": ["omp", "claude-code", "codex"],
+      "tool": "shell",
+      "tool_input": { "command": "ls -la && (cat package.json 2>/dev/null || true) && (find . -maxdepth 2 -type f | sort | head -80)" },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-descriptor-sink-group-hides-delete",
+      "fix_area": "shell",
+      "harnesses": ["omp", "claude-code", "codex"],
+      "tool": "shell",
+      "tool_input": { "command": "(cat package.json 2>/dev/null; rm -rf src) && ls" },
+      "cwd": "worktree",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [

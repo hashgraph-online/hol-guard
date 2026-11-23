@@ -342,3 +342,55 @@ fn a_brace_group_the_shell_may_not_have_run_carries_no_directory_out_of_it() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// A descriptor sink inside a group opens no file: `2>/dev/null` and `2>&1`
+/// stay on the command they follow once the brackets are blanked. Agents
+/// write `ls && (cat package.json 2>/dev/null || true) && (find . | head)` to
+/// look around a project, and any `>` in a group sent the whole list to the
+/// compound-shell refusal unless the group happened to end the command.
+#[test]
+fn a_descriptor_sink_inside_a_group_reads_as_written() {
+    let nonce = crate::unique_nanos::unique_nanos();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/command-group-fixtures")
+        .join(format!("sinks-{}-{nonce}", std::process::id()));
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    let project = root.join("project");
+    std::fs::write(project.join("package.json"), "{}\n").unwrap();
+    std::fs::write(project.join(".env"), "SYNTHETIC_ONLY=fixture\n").unwrap();
+
+    for harness in ["omp", "claude-code", "codex"] {
+        for (command, allowed) in [
+            (
+                "ls -la && (cat package.json 2>/dev/null || true) && (find . -maxdepth 2 -type f | sort | head -80)",
+                true,
+            ),
+            ("(cat package.json 2>/dev/null || true) && ls -la", true),
+            ("(cat package.json 2>&1) && (ls)", true),
+            ("(cat package.json >/dev/null) && ls", true),
+            ("(cat package.json 2>>/dev/null) && ls", true),
+            ("{ cat package.json 2>/dev/null; } && ls", true),
+            // Only the null device and descriptor copies are sinks.
+            ("(cat package.json 2>/dev/nullx) && ls", false),
+            // A closing brace is not a metacharacter, so `>&1}` names the
+            // file `1}` and writes it.
+            ("(cat package.json >&1}) && ls", false),
+            ("{ cat package.json >&1} ; } && ls", false),
+            ("(cat package.json >& out) && ls", false),
+            ("(cat package.json 2>/dev/null </dev/null) && ls", false),
+            // A sink after the group belongs to the child the blanked text loses.
+            ("(cat package.json) 2>/dev/null && ls", false),
+            // The list inside still decides.
+            ("(cat .env 2>/dev/null) && ls", false),
+            ("(cat package.json 2>/dev/null; rm package.json) && ls", false),
+        ] {
+            assert_eq!(
+                evaluate(harness, command, &project) == "allow",
+                allowed,
+                "{harness}: {command}"
+            );
+        }
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
