@@ -215,6 +215,14 @@ pub(super) fn blank_top_level_groups(chars: &[char]) -> Option<Vec<char>> {
                 last_significant = Some(index - 1);
                 continue;
             }
+            // A descriptor sink opens no file and stays on the command it
+            // follows once the brackets are blanked, so it reads as written.
+            '>' if inert_sink_end(chars, index).is_some() => {
+                let end = inert_sink_end(chars, index)?;
+                last_significant = Some(end);
+                index = end + 1;
+                continue;
+            }
             // An expansion, a redirect or a substitution owns the bracket
             // beside it, so this pass reads none of them.
             '`' | '<' | '>' | '$' => return None,
@@ -316,6 +324,7 @@ fn group_close(chars: &[char], open: usize) -> Option<usize> {
         match chars[index] {
             '\\' => index += 1,
             '\'' | '"' => index = quoted_word_end(chars, index)?,
+            '>' if inert_sink_end(chars, index).is_some() => index = inert_sink_end(chars, index)?,
             '`' | '<' | '>' | '$' | '(' => return None,
             ')' => return Some(index),
             _ => {}
@@ -347,6 +356,7 @@ fn brace_group_close(
         match chars[index] {
             '\\' => index += 1,
             '\'' | '"' => index = quoted_word_end(chars, index)?,
+            '>' if inert_sink_end(chars, index).is_some() => index = inert_sink_end(chars, index)?,
             '`' | '<' | '>' | '$' | '(' | ')' | '{' => return None,
             '}' => return Some(index),
             _ => {}
@@ -373,6 +383,47 @@ fn brace_list_terminator(chars: &[char], open: usize, close: usize) -> Option<us
         .rposition(|value| !matches!(*value, ' ' | '\t' | '\r'))?;
     let terminator = open + 1 + last;
     (chars[terminator] == ';').then_some(terminator)
+}
+
+/// The index of the last character of an inert descriptor sink whose `>` is
+/// at `at`: `>/dev/null`, `>>/dev/null` or a descriptor copy such as `>&1` or
+/// `>&-`, with any descriptor number or `&` before the `>` already read as an
+/// ordinary character. Such a sink opens no file and feeds no input, so the
+/// command it belongs to runs the same programs with or without the brackets
+/// around it. Any other target is `None`.
+fn inert_sink_end(chars: &[char], at: usize) -> Option<usize> {
+    let mut index = at + 1;
+    if chars.get(index) == Some(&'>') {
+        index += 1;
+    }
+    // Only a metacharacter or the end of the line ends the target word. A
+    // closing brace does not: bash reads `>&1}` as a redirect to a file named
+    // `1}`, which writes.
+    let boundary = |position: usize| {
+        chars
+            .get(position)
+            .is_none_or(|value| value.is_whitespace() || matches!(*value, ';' | '&' | '|' | ')'))
+    };
+    if chars.get(index) == Some(&'&') && index == at + 1 {
+        let start = index + 1;
+        let mut end = start;
+        while chars.get(end).is_some_and(char::is_ascii_digit) {
+            end += 1;
+        }
+        if end == start && chars.get(start) == Some(&'-') {
+            end += 1;
+        }
+        return (end > start && boundary(end)).then(|| end - 1);
+    }
+    while chars
+        .get(index)
+        .is_some_and(|value| matches!(*value, ' ' | '\t'))
+    {
+        index += 1;
+    }
+    let target: Vec<char> = "/dev/null".chars().collect();
+    let end = index + target.len();
+    (chars.get(index..end) == Some(target.as_slice()) && boundary(end)).then(|| end - 1)
 }
 
 /// The index of the quote that closes the word opened at `open`.
