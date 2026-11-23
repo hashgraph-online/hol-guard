@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 # pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -287,128 +285,6 @@ class StorePolicyDocumentMixin:
             normalized_rows.append((compiled, artifact_id, artifact_hash, workspace, publisher))
         return normalized_rows
 
-    def _import_policy_rows_on_connection(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        document: GuardPolicyDocument,
-        compiled_rows: tuple[CompiledPolicyRow, ...],
-        normalized_rows: list[tuple[CompiledPolicyRow, str | None, str | None, str | None, str | None]],
-        mode: PolicyImportMode,
-        now: str,
-        digest: str,
-        secret_material: tuple[bytes | None, str | None],
-    ) -> PolicyDocumentImportResult:
-        """Write policy rows on a caller-owned connection (already in BEGIN IMMEDIATE).
-
-        The caller is responsible for commit/rollback. Only the business
-        source import uses it, because its source swap shares the request's
-        transaction; local imports go through the resident's
-        ``import_policy_rows``.
-        """
-        next_control_state: dict[str, object] | None = None
-        inserted_ids: set[int] = set()
-        replaced = 0
-        state = self._refresh_policy_integrity_state(
-            connection,
-            now=now,
-            create_key=True,
-            secret_material=secret_material,
-            allow_cutover_resign=False,
-        )
-        if mode == "replace":
-            cursor = connection.execute("delete from policy_decisions where source = 'policy-yaml-import'")
-            replaced += max(cursor.rowcount, 0)
-
-        for compiled, artifact_id, artifact_hash, workspace, publisher in normalized_rows:
-            decision = compiled.decision
-            if mode == "merge":
-                cursor = connection.execute(
-                    """
-                    delete from policy_decisions
-                    where source = 'policy-yaml-import'
-                      and harness = ? and scope = ? and coalesce(artifact_id, '') = coalesce(?, '')
-                      and coalesce(artifact_hash, '') = coalesce(?, '')
-                      and coalesce(workspace, '') = coalesce(?, '')
-                      and coalesce(publisher, '') = coalesce(?, '')
-                    """,
-                    (
-                        decision.harness,
-                        decision.scope,
-                        artifact_id,
-                        artifact_hash,
-                        workspace,
-                        publisher,
-                    ),
-                )
-                replaced += max(cursor.rowcount, 0)
-            cursor = connection.execute(
-                """
-                insert into policy_decisions (
-                  harness, scope, artifact_id, artifact_hash, workspace, publisher, action, reason,
-                  owner, source, expires_at, policy_document_schema_version, policy_document_id,
-                  policy_document_digest, policy_rule_id, policy_provenance_json, updated_at,
-                  integrity_version, integrity_generation, payload_hash, payload_mac,
-                  integrity_key_id, signed_at
-                )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    decision.harness,
-                    decision.scope,
-                    artifact_id,
-                    artifact_hash,
-                    workspace,
-                    publisher,
-                    decision.action,
-                    decision.reason,
-                    decision.owner,
-                    decision.source,
-                    decision.expires_at,
-                    document.api_version,
-                    document.metadata.id,
-                    digest,
-                    compiled.rule_id,
-                    compiled.provenance_json,
-                    now,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ),
-            )
-            if cursor.lastrowid is None:
-                raise RuntimeError("Guard policy decision row was not inserted.")
-            inserted_ids.add(cursor.lastrowid)
-
-        if state.get("mode") == "protected":
-            key, key_id = secret_material
-            if key is not None and key_id is not None:
-                trusted_state = self._load_policy_integrity_control_state(create=True)
-                if trusted_state is not None:
-                    next_control_state = self._advance_policy_integrity_generation(
-                        connection,
-                        now=now,
-                        key=key,
-                        key_id=key_id,
-                        trusted_state=trusted_state,
-                        force_sign_decision_ids=inserted_ids,
-                    )
-
-        if (
-            next_control_state is not None
-            and self._finalize_policy_integrity_control_state(next_control_state) is False
-        ):
-            raise RuntimeError("Guard policy integrity control state could not be finalized.")
-        return PolicyDocumentImportResult(
-            document_id=document.metadata.id,
-            digest=digest,
-            inserted=len(inserted_ids),
-            replaced=replaced,
-        )
-
     def policy_creation_import_args(
         self,
         document: GuardPolicyDocument,
@@ -429,8 +305,8 @@ class StorePolicyDocumentMixin:
         from .business_policy_document_import import has_business_rules, refuse_legacy_import_over_business_source
 
         if has_business_rules(document):
-            # MCP must hold the source-owner lease outside its request/status
-            # transaction and call apply_business_document_on_connection.
+            # A business source goes through the source owner's mutation
+            # (`mcp/policy_apply.py`), never through these rows.
             raise ValueError("native_business_source_transaction_owner_required")
         normalized_rows = self._normalize_compiled_rows(compiled_rows)
         _validate_compiled_document_rows(document, compiled_rows)

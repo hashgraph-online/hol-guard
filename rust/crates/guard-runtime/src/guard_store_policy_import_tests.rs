@@ -11,9 +11,9 @@ use crate::guard_store_policy_upsert::tests::{
     dump, generation, key, key_id, signed_rows, store, verifies_at,
 };
 
-const NOW: &str = "2026-10-16T09:00:00Z";
+pub(super) const NOW: &str = "2026-10-16T09:00:00Z";
 
-fn request_store() -> Connection {
+pub(super) fn request_store() -> Connection {
     let connection = store(&signed_rows());
     connection
         .execute_batch(
@@ -53,7 +53,7 @@ fn row(artifact_id: &str) -> Value {
     })
 }
 
-fn import_args(mode: &str, rows: Vec<Value>, signed: bool) -> Map<String, Value> {
+pub(super) fn import_args(mode: &str, rows: Vec<Value>, signed: bool) -> Map<String, Value> {
     let mut args = json!({
         "mode": mode,
         "now": NOW,
@@ -283,7 +283,7 @@ fn a_resolved_or_missing_request_is_refused() {
     assert_eq!(reply, json!({"error": "policy_request_not_found"}));
 }
 
-fn witness(connection: &Connection) -> Option<String> {
+pub(super) fn witness(connection: &Connection) -> Option<String> {
     connection
         .query_row(
             "select payload_json from sync_state where state_key = 'business_source_installation_v1'",

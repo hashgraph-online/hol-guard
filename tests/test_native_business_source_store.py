@@ -48,7 +48,12 @@ def _install(store, candidate, grant, *, commit=True):
         store._connect() as connection,
     ):
         connection.execute("begin immediate")
-        mutation.stage_on_connection(connection, now=grant.issued_at)
+        # The install's own witness write, as the resident stages it.
+        connection.execute(
+            "insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?) "
+            "on conflict(state_key) do update set payload_json=excluded.payload_json, updated_at=excluded.updated_at",
+            (owner.INSTALLATION_STATE_KEY, mutation.witness_text(), grant.issued_at),
+        )
         if commit:
             connection.commit()
         else:

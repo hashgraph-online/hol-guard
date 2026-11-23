@@ -7,6 +7,7 @@ document approval is mandatory; provider credentials and actors are unrelated.
 from datetime import datetime, timezone
 
 from . import native_business_source_store as owner
+from .mcp.policy_errors import PolicyToolError
 from .native_business_source_anchor_bridge import build_business_source_anchor, verify_business_source_anchor
 from .native_business_source_bridge import _consumer, _deadline, _remaining, verify_business_source_record
 from .native_business_source_retention import (
@@ -20,7 +21,7 @@ from .policy_document_authority import policy_import_approval_binding
 
 
 def recover_committed_business_source(
-    store, document, *, approval_gate_grant, deadline_monotonic=None, stage_request_recovery=None
+    store, document, *, approval_gate_grant, deadline_monotonic=None, recovery_request_id=None
 ):
     """Finish the exact prepared document, never restore an older source or replay work."""
     deadline = _deadline(deadline_monotonic)
@@ -93,27 +94,16 @@ def recover_committed_business_source(
         owner._write_private(store, owner.ANCHOR_FILE_NAME, closed.anchor_bytes, owner.MAX_ANCHOR_BYTES, deadline)
         write_retained_business_source_anchor(store, closed.anchor_bytes)
         owner._write_private(store, owner.SOURCE_FILE_NAME, candidate, owner.MAX_RECORD_BYTES, deadline)
-        if witness != owner._witness(committed) or stage_request_recovery is not None:
-            from .business_policy_document_import import apply_business_document_on_connection
-
-            with store._connect() as connection:
-                connection.execute("begin immediate")
-                if owner._read_witness(connection) != witness:
-                    raise owner._error("native_business_source_current_digest_changed")
-                now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-                if witness != owner._witness(committed):
-                    apply_business_document_on_connection(
-                        store,
-                        document,
-                        owner.BusinessSourceMutation(source, committed),
-                        mode="replace",
-                        now=now,
-                        approval_gate_grant=approval_gate_grant,
-                        connection=connection,
-                    )
-                if stage_request_recovery is not None:
-                    stage_request_recovery(connection, source.source_digest, now)
-                connection.commit()
+        if witness != owner._witness(committed) or recovery_request_id is not None:
+            _land_recovery(
+                store,
+                document,
+                owner.BusinessSourceMutation(source, committed),
+                witness=witness,
+                install=witness != owner._witness(committed),
+                recovery_request_id=recovery_request_id,
+                approval_gate_grant=approval_gate_grant,
+            )
         if owner._database_witness(store) != owner._witness(committed):
             raise owner._error("native_business_source_transaction_not_committed")
         if (
@@ -127,3 +117,37 @@ def recover_committed_business_source(
         write_retained_business_source_anchor(store, committed.anchor_bytes)
         owner._write_private(store, owner.ANCHOR_FILE_NAME, committed.anchor_bytes, owner.MAX_ANCHOR_BYTES, deadline)
         return source
+
+
+def _land_recovery(store, document, mutation, *, witness, install, recovery_request_id, approval_gate_grant):
+    """The store's half in one native transaction.
+
+    The resident refuses unless the witness read above is still the stored
+    one. It then installs the source when its witness is not yet committed,
+    and records the request's recovery marker when a request is named.
+    """
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    args = {"now": now, "expected_witness": None if witness is None else witness.decode("utf-8")}
+    if install:
+        from .business_policy_document_import import approved_install_digest
+
+        digest = approved_install_digest(
+            store, document, mutation, mode="replace", now=now, approval_gate_grant=approval_gate_grant
+        )
+        args.update(store.policy_import_args(document, [], mode="replace", now=now, digest=digest, vault_key=True))
+        args["business_witness"] = mutation.witness_text()
+    if recovery_request_id is not None:
+        args["recovery_request"] = {"request_id": recovery_request_id, "source_digest": mutation.source.source_digest}
+    try:
+        payload = store._native_store_call("recover_business_policy_source", args)
+    except ValueError as error:
+        if str(error) == "candidate_digest_mismatch":
+            raise PolicyToolError(
+                "candidate_digest_mismatch", "The stored request changed. Refresh before recovery."
+            ) from None
+        if str(error) == "native_business_source_current_digest_changed":
+            raise owner._error("native_business_source_current_digest_changed") from None
+        raise
+    if not isinstance(payload, dict):
+        raise owner._error()
+    store.finalize_policy_import(payload.get("next_control_state"))

@@ -360,6 +360,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "resign_policy_rows"
         | "import_policy_rows"
         | "apply_mcp_policy_request"
+        | "recover_business_policy_source"
         | "stage_mcp_policy_request"
         | "expire_mcp_policy_request"
         | "decline_mcp_policy_request"

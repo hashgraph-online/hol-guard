@@ -49,15 +49,11 @@ def handle_business_policy_recovery(handler, request_id, payload):
                 require_fresh_totp=True,
             ),
         )
-        from ..mcp.policy_recovery_state import stage_request_recovery
-
         source = recover_committed_business_source(
             store,
             document,
             approval_gate_grant=grant,
-            stage_request_recovery=lambda connection, digest, now: stage_request_recovery(
-                connection, request_id, digest, now
-            ),
+            recovery_request_id=request_id,
         )
     except ApprovalGateError as error:
         handler._write_approval_gate_error(error)
