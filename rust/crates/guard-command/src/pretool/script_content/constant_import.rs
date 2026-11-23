@@ -32,6 +32,44 @@ static CONSTANT_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     .unwrap()
 });
 
+/// A mention of the import functions' names.
+static IMPORT_FUNCTION_NAME: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b(?:__import__|import_module)\b").unwrap());
+
+/// `from importlib import ..., import_module, ...`, which binds the name to
+/// the import function itself.
+static FROM_IMPORTLIB: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)(?:^|[;:])[ \t]*from[ \t]+importlib[ \t]+import[ \t]+\(?([\w, \t]*)").unwrap()
+});
+
+/// Whether every mention of `__import__` and `import_module` in `code` is a
+/// call or `from importlib import import_module`. A name is evaluated to
+/// its current binding, so once the program assigns, defines, receives or
+/// imports something else under either name, a call of it is not known to
+/// be an import, and stays dynamic.
+fn import_functions_unshadowed(code: &str) -> bool {
+    let imported: Vec<(usize, usize)> = FROM_IMPORTLIB
+        .captures_iter(code)
+        .filter_map(|captures| captures.get(1))
+        .filter(|names| {
+            !names
+                .as_str()
+                .split(',')
+                .any(|name| name.split_whitespace().nth(1) == Some("as"))
+        })
+        .map(|names| (names.start(), names.end()))
+        .collect();
+    IMPORT_FUNCTION_NAME.find_iter(code).all(|found| {
+        let called = code[found.end()..].trim_start().starts_with('(');
+        let before = code[..found.start()].trim_end();
+        let defined = before.ends_with("def") || before.ends_with("class");
+        let from_importlib = imported
+            .iter()
+            .any(|(start, end)| *start <= found.start() && found.end() <= *end);
+        (called && !defined) || from_importlib
+    })
+}
+
 const STAYS_DYNAMIC: &[&str] = &[
     "os",
     "posix",
@@ -83,7 +121,12 @@ pub(super) fn held(code: &str, host_module: impl Fn(&str) -> bool) -> bool {
 
 /// `code` with each constant-name import replaced by the module it names, so
 /// the dynamic-code screen sees only the calls whose module it cannot read.
+/// Nothing is replaced when either import function's name may be bound to
+/// something else.
 pub(super) fn without_constant_imports(code: &str) -> Cow<'_, str> {
+    if !import_functions_unshadowed(code) {
+        return Cow::Borrowed(code);
+    }
     CONSTANT_IMPORT.replace_all(code, |captures: &Captures<'_>| {
         let (Some(whole), Some(call)) = (captures.get(0), captures.name("call")) else {
             return String::new();
@@ -137,6 +180,33 @@ mod tests {
         ] {
             assert_eq!(as_statements(code), "", "{code}");
             assert!(without_constant_imports(code).contains("import"), "{code}");
+        }
+    }
+
+    #[test]
+    fn a_call_of_a_rebound_import_name_stays_dynamic() {
+        for code in [
+            "from importlib import import_module as load\nimport_module = lambda _: load('o' + 's')\np = import_module('json')",
+            "def import_module(name):\n    return load('os')\np = import_module('json')",
+            "def f(import_module):\n    return import_module('json')",
+            "from helpers import import_module\np = import_module('json')",
+            "from importlib import reload as import_module\np = import_module('json')",
+            "for import_module in loaders:\n    import_module('json')",
+            "builtins.__import__ = hook\nm = __import__('json')",
+            "globals()['__import__'] = hook\nm = __import__('json')",
+            "x = lambda __import__: __import__('json')",
+        ] {
+            assert!(without_constant_imports(code).contains("('json')"), "{code}");
+        }
+        for code in [
+            "from importlib import import_module\nj = import_module('json')",
+            "from importlib import (reload, import_module)\nj = import_module('json')",
+            "import importlib\nj = importlib.import_module('json')",
+        ] {
+            assert!(
+                !without_constant_imports(code).contains("('json')"),
+                "{code}"
+            );
         }
     }
 

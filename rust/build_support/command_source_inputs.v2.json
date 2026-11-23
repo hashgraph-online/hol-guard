@@ -654,6 +654,7 @@
       "src/pretool/script_content/host_reach.rs",
       "src/pretool/script_content/host_reach_literals.rs",
       "src/pretool/script_content/host_reach_shell.rs",
+      "src/pretool/script_content/host_reach_signals.rs",
       "src/pretool/script_content/launch.rs",
       "src/pretool/script_content/loopback.rs",
       "src/pretool/script_content/loopback_bases.rs",

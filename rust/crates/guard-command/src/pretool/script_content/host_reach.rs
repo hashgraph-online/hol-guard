@@ -44,7 +44,6 @@
 //! hold: the program runs in the same sandbox, and the command line it is
 //! given is read here like any other string.
 
-use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -53,11 +52,14 @@ use regex::Regex;
 mod literals;
 #[path = "host_reach_shell.rs"]
 mod shell;
+#[path = "host_reach_signals.rs"]
+mod signals;
 
 use super::system_files::lexical;
 use super::{code_lines, Language};
 use literals::{format_template, literal_value, spec_fill};
 use shell::{command_reaches, git_config_list_writes, unquote};
+use signals::signals_processes;
 
 const HOST_MODULES: &str = "psutil|pyperclip|pynput|pyautogui|mss|ctypes|PIL|keyboard|mouse|Xlib|Quartz|AppKit|win32api|win32gui|win32con|winreg";
 
@@ -71,33 +73,6 @@ static HOST_MODULE: LazyLock<Regex> = LazyLock::new(|| {
     ))
     .unwrap()
 });
-
-/// `from os import kill` and its siblings, including the parenthesized form
-/// spread over several lines, which make the call bare.
-static SIGNAL_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(concat!(
-        r"\bfrom\s+(?:os|signal)\s+import\s+",
-        r"(?:\([^)]*\b(?:kill|killpg|pthread_kill)\b[^)]*\)",
-        r"|[\w, \t\\]*\b(?:kill|killpg|pthread_kill)\b)",
-    ))
-    .unwrap()
-});
-
-/// `from os import *`, after which a bare `kill(` is the signal call.
-static SIGNAL_STAR_IMPORT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\bfrom\s+(?:os|signal)\s+import\s+\*").unwrap());
-
-static BARE_SIGNAL_CALL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)(?:^|[^.\w])(?:kill|killpg|pthread_kill)\s*\(").unwrap());
-
-/// A signal call on a receiver; the receiver is checked against `os`,
-/// `signal` and the names they are imported as.
-static SIGNAL_CALL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\b(\w+)\s*\.\s*(?:kill|killpg|pthread_kill)\s*\(").unwrap());
-
-/// The body of an `import` statement, to find `import os as proc`.
-static IMPORT_STATEMENT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)(?:^|[;:])[ \t]*import[ \t]+([^\n;#]+)").unwrap());
 
 /// A call that runs code built at run time. `eval(` and its siblings count
 /// as a bare name or through `builtins`, so a method such as
@@ -431,39 +406,9 @@ fn names_outside_path(code: &str, keep_docstrings: bool) -> bool {
     false
 }
 
-/// Names `os` and `signal` are reachable under: themselves and their
-/// `import ... as` aliases.
-fn signal_receivers(code: &str) -> BTreeSet<&str> {
-    let mut names = BTreeSet::from(["os", "signal"]);
-    for statement in IMPORT_STATEMENT.captures_iter(code) {
-        let body = statement.get(1).map_or("", |body| body.as_str());
-        for item in body.split(',') {
-            let parts: Vec<&str> = item.split_whitespace().collect();
-            if let [module, "as", alias] = parts.as_slice() {
-                if matches!(*module, "os" | "signal") {
-                    names.insert(alias);
-                }
-            }
-        }
-    }
-    names
-}
-
-fn signals_processes(code: &str) -> bool {
-    if SIGNAL_IMPORT.is_match(code)
-        || (SIGNAL_STAR_IMPORT.is_match(code) && BARE_SIGNAL_CALL.is_match(code))
-    {
-        return true;
-    }
-    let receivers = signal_receivers(code);
-    SIGNAL_CALL
-        .captures_iter(code)
-        .any(|call| receivers.contains(&call[1]))
-}
-
 /// Whether the Python `source` reaches past the workspace in a way the
 /// sandbox does not take away. `keep_docstrings` when some source the
-/// program loads reads docstrings back (`docstrings::read`).
+/// program loads reads docstrings back (`docstrings::read_any`).
 pub(in crate::pretool) fn python_reaches_host(source: &str, keep_docstrings: bool) -> bool {
     let code = code_lines(Language::Python, source);
     HOST_MODULE.is_match(&code)

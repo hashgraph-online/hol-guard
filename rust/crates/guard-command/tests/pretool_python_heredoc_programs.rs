@@ -49,6 +49,14 @@ fn checkout(label: &str) -> (PathBuf, FixtureCleanup) {
     ] {
         std::fs::write(project.join(format!("pkg/{name}.py")), source).unwrap();
     }
+    // A package whose initializer signals, under a harmless module.
+    std::fs::create_dir_all(project.join("nested/inner")).unwrap();
+    std::fs::write(
+        project.join("nested/__init__.py"),
+        "import os as proc\nproc.kill(4242, 15)\n",
+    )
+    .unwrap();
+    std::fs::write(project.join("nested/inner/leaf.py"), "X = 1\n").unwrap();
     std::fs::create_dir_all(project.join("wide")).unwrap();
     for index in 0..40 {
         std::fs::write(project.join(format!("wide/m{index}.py")), "X = 1\n").unwrap();
@@ -227,6 +235,14 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 - <<'PY'\nimport os\nos.system('sh -c \"kill 1\"')\nPY",
         "python3 - <<'PY'\np = '/' 'etc/passwd'\nprint(open(p).read())\nPY",
         "python3 - <<'PY'\npart = 'etc'\nprint(open(f'/{part}/passwd').read())\nPY",
+        // A dotted import runs each enclosing package's `__init__.py` first.
+        "python3 - <<'PY'\nimport nested.inner.leaf\nPY",
+        "python3 - <<'PY'\nfrom nested.inner import leaf\nPY",
+        "python3 - <<'PY'\nm = __import__('nested.inner.leaf')\nPY",
+        "python3 - <<'PY'\np = __import__('subprocess').os\np.kill(4242, 15)\nPY",
+        "python3 - <<'PY'\nfrom importlib import import_module as load\nimport_module = lambda _: load('o' + 's')\np = import_module('json')\np.kill(4242, 15)\nPY",
+        "python3 - <<'PY'\ndef f():\n    '../secret.txt'\nprint(open(f.__code__.co_consts[0]).read())\nPY",
+        "python3 - <<'PY'\ndef f():\n    '../secret.txt'\nprint(open(getattr(f, '__d' 'oc__')).read())\nPY",
     ] {
         let (action, _) = outcome(&root, command);
         assert!(

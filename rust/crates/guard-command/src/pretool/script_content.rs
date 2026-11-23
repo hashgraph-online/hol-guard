@@ -752,7 +752,7 @@ fn assess_programs(
             continue;
         };
         let mut found = Findings::default();
-        let docstrings_read = sources.iter().any(|source| docstrings::read(source));
+        let docstrings_read = docstrings::read_any(&sources);
         for source in &sources {
             let code = code_lines(language, source);
             found.network |= match language {
@@ -1144,21 +1144,38 @@ fn python_imports(source: &str, root: &Path, directory: &Path) -> Vec<PathBuf> {
                     !part.is_empty() && part.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
                 })
         })
-        .filter_map(|(dots, module)| {
+        .flat_map(|(dots, module)| {
             let base = match dots {
-                0 => root,
-                _ => directory.ancestors().nth(dots - 1)?,
+                0 => Some(root),
+                _ => directory.ancestors().nth(dots - 1),
             };
-            let relative = module.replace('.', "/");
-            [
-                base.join(format!("{relative}.py")),
-                base.join(&relative).join("__init__.py"),
-            ]
-            .into_iter()
-            .find(|candidate| candidate.is_file())
+            base.map(|base| python_module_files(base, &module))
+                .unwrap_or_default()
         })
         .filter_map(|path| std::fs::canonicalize(path).ok())
         .collect()
+}
+
+/// The files Python runs to import the dotted `module` from `base`: each
+/// enclosing package's `__init__.py`, outermost first, then the module
+/// itself. A package without `__init__.py` is a namespace package, which
+/// runs nothing.
+fn python_module_files(base: &Path, module: &str) -> Vec<PathBuf> {
+    let parts: Vec<&str> = module.split('.').collect();
+    let mut files: Vec<PathBuf> = (1..parts.len())
+        .map(|depth| base.join(parts[..depth].join("/")).join("__init__.py"))
+        .filter(|candidate| candidate.is_file())
+        .collect();
+    let relative = parts.join("/");
+    files.extend(
+        [
+            base.join(format!("{relative}.py")),
+            base.join(&relative).join("__init__.py"),
+        ]
+        .into_iter()
+        .find(|candidate| candidate.is_file()),
+    );
+    files
 }
 
 fn extension(path: &Path) -> String {

@@ -9,24 +9,59 @@
 //! a path unless the program asks for it, so the screen skips docstrings:
 //! a plain string (no `f` prefix, whose fields would run) that is the first
 //! statement of a module or of a block, alone on its line, outside any
-//! bracket. When the program or any module it loads reads `__doc__` or
-//! calls `getdoc`, every string stays in the scan.
+//! bracket, holding prose (some whitespace), so a docstring that is only a
+//! path still counts. When the program or any module it loads can read a
+//! docstring back (`__doc__`, `getdoc`, a code object's constants, an
+//! attribute named at run time), every string stays in the scan.
 
 use std::sync::LazyLock;
 
 use regex::Regex;
 
 /// A statement that only copies one docstring onto another
-/// (`wrapper.__doc__ = wrapped.__doc__`): the value stays a docstring.
+/// (`wrapper.__doc__ = wrapped.__doc__`): the value stays a docstring,
+/// unless the program defines a hook that runs on assignment.
 static DOC_COPY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^[ \t]*[\w.]+\.__doc__[ \t]*=[ \t]*[\w.]+\.__doc__[ \t]*$").unwrap()
 });
 
-/// Whether `code` reads docstrings back as values, other than to copy one
-/// onto another.
+/// Code that hands back a docstring's value: by name, through a code
+/// object's constants, or through an attribute or namespace lookup whose
+/// name the scan cannot read as plain text (`getattr(f, '__d' 'oc__')`).
+static READS_DOCSTRING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"__doc__|\bgetdoc\b|\bfunc_doc\b|\bco_consts\b|\b__code__\b|\bfunc_code\b",
+        r"|\b__getattribute__\b|\battrgetter\b|\b__dict__\b|\b(?:vars|globals|locals)\s*\(",
+        r#"|\bgetattr(?:_static)?\s*\((?:[^,()]|\([^()]*\))*,\s*(?:[^'"\s]|"[^"]*"\s*[^\s,)]|'[^']*'\s*[^\s,)])"#,
+    ))
+    .unwrap()
+});
+
+/// A definition that runs user code when an attribute is assigned, which
+/// would see the value of a copied docstring.
+static ASSIGNMENT_HOOK: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b(?:__setattr__|__set__|setter|property)\b").unwrap());
+
+/// Whether any of `sources` reads docstrings back as values. Copying one
+/// docstring onto another is not a read, unless some source defines an
+/// assignment hook that could receive the copied value.
+pub(in crate::pretool) fn read_any<S: AsRef<str>>(sources: &[S]) -> bool {
+    let hooked = sources
+        .iter()
+        .any(|source| ASSIGNMENT_HOOK.is_match(source.as_ref()));
+    sources.iter().any(|source| {
+        let source = source.as_ref();
+        if hooked {
+            READS_DOCSTRING.is_match(source)
+        } else {
+            READS_DOCSTRING.is_match(&DOC_COPY.replace_all(source, ""))
+        }
+    })
+}
+
+/// Whether `code`, a program with no other source, reads docstrings back.
 pub(in crate::pretool) fn read(code: &str) -> bool {
-    let code = DOC_COPY.replace_all(code, "");
-    code.contains("__doc__") || code.contains("getdoc")
+    read_any(&[code])
 }
 
 /// `items` without the docstrings of `code`. `span` gives each item's
@@ -78,6 +113,7 @@ pub(super) fn without<T>(code: &str, items: Vec<T>, span: impl Fn(&T) -> (usize,
             && code[start..end]
                 .trim_start_matches(['r', 'R', 'u', 'U', 'b', 'B'])
                 .starts_with(['"', '\''])
+            && code[start..end].contains(char::is_whitespace)
             && code[end..].split('\n').next().is_some_and(|rest| {
                 let rest = rest.trim_start();
                 rest.is_empty() || rest.starts_with('#')
@@ -94,7 +130,7 @@ pub(super) fn without<T>(code: &str, items: Vec<T>, span: impl Fn(&T) -> (usize,
 
 #[cfg(test)]
 mod tests {
-    use super::{read, without};
+    use super::{read, read_any, without};
 
     fn strings(code: &str) -> Vec<String> {
         let spans: Vec<(usize, usize)> =
@@ -115,8 +151,8 @@ mod tests {
             "\"\"\"Module.\n\n.. [1] see the docs\n\"\"\"\nimport json\n",
             "def f():\n    \"\"\"Wrap it.\n\n    .. deprecated:: 11.0\n    \"\"\"\n    return 1\n",
             "class A:\n    r'''Raw ../doc'''  # note\n",
-            "def f(\n    a,  # (\n):\n    '..'\n",
-            "x = 1  # (\"a\" b)\n\ndef f():\n    '..'\n",
+            "def f(\n    a,  # (\n):\n    '.. note'\n",
+            "x = 1  # (\"a\" b)\n\ndef f():\n    '.. note'\n",
         ] {
             let found = strings(code);
             assert!(
@@ -138,6 +174,8 @@ mod tests {
             ("x = \\\n    '/etc/passwd'\n", "'/etc/passwd'"),
             ("d = {'k':\n    '/etc/passwd'}\n", "'/etc/passwd'"),
             ("if x: '/etc/passwd'\n", "'/etc/passwd'"),
+            ("def f():\n    '../secret.txt'\n", "'../secret.txt'"),
+            ("def f():\n    \"\"\"~/.ssh/id_rsa\"\"\"\n", "~/.ssh/id_rsa"),
             (
                 "# say \"\"\" here\nx = 1\n\"\"\"\ndef f():\n    '/etc/passwd'\n",
                 "'/etc/passwd'",
@@ -160,8 +198,33 @@ mod tests {
             "print(open(f.__doc__).read())\n",
             "a.__doc__ = b.__doc__\nopen(a.__doc__)\n",
             "import inspect\ninspect.getdoc(f)\n",
+            "print(open(f.__code__.co_consts[0]).read())\n",
+            "print(open(getattr(f, '__d' 'oc__')).read())\n",
+            "print(open(getattr(f, '__d' + 'oc__')).read())\n",
+            "print(open(getattr(f, name)).read())\n",
+            "print(open(object.__getattribute__(f, n)).read())\n",
+            "print(open(operator.attrgetter(n)(f)).read())\n",
+            "print(open(vars(C)[n]).read())\n",
         ] {
             assert!(read(code), "{code}");
         }
+        for code in [
+            "x = getattr(obj, 'name')\n",
+            "x = getattr(obj, \"name\", None)\n",
+            "x = getattr(load(a, b), 'name')\n",
+        ] {
+            assert!(!read(code), "{code}");
+        }
+    }
+
+    #[test]
+    fn a_copy_into_an_assignment_hook_is_a_read() {
+        let sink = "class Sink:\n    def __setattr__(self, name, value):\n        print(open(value).read())\n";
+        let copy = "sink = Sink()\nsink.__doc__ = f.__doc__\n";
+        assert!(!read_any(&[copy]));
+        assert!(read_any(&[format!("{sink}{copy}")]));
+        assert!(read_any(&[sink, copy]));
+        let descriptor = "class D:\n    def __set__(self, obj, value):\n        open(value)\n";
+        assert!(read_any(&[descriptor, copy]));
     }
 }
