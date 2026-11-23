@@ -4,6 +4,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use super::{dispatch, handles, read};
+use crate::guard_store_args::Args;
 use crate::guard_store_op_kind::{method_kind, Kind};
 
 fn store() -> Connection {
@@ -50,7 +51,12 @@ fn the_read_is_routed_as_a_snapshot() {
 }
 
 fn schema_state(connection: &Connection) -> serde_json::Value {
-    dispatch(connection, "extension_control_schema_state").expect("schema state")
+    dispatch(
+        connection,
+        "extension_control_schema_state",
+        &Args(&serde_json::Map::new()),
+    )
+    .expect("schema state")
 }
 
 #[test]

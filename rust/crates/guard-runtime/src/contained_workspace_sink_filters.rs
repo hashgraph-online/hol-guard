@@ -1,12 +1,11 @@
 //! The output filters a peeled wrapper runs over its core's captured output,
 //! as Guard's own sink runs them.
 //!
-//! Native authority chose the chain: at most three `head`, `tail`, `grep`,
-//! `rg` or `cut` stages, each reading only standard input. Head and tail
-//! shorten the text in process, by lines or by bytes. Every other stage runs
-//! as the installed binary, located by ownership rather than by the caller's
-//! `PATH`, with an environment built here, on the text the core already
-//! produced. The text stays bytes throughout, so a cut in the middle of a
+//! Native authority chose the chain: at most three stages, each reading only
+//! standard input. Head and tail shorten the text in process, by lines or by
+//! bytes. Every other stage runs as the installed binary, located by
+//! ownership rather than by the caller's `PATH`, with an environment built
+//! here, on the text the core already produced. The text stays bytes throughout, so a cut in the middle of a
 //! character reaches the next stage, and the output, exactly as the pipeline
 //! would have left it.
 
@@ -24,7 +23,14 @@ use super::output::Shaping;
 use super::{Failure, Outcome};
 
 const GREP_BINARIES: [&str; 2] = ["/usr/bin/grep", "/bin/grep"];
-const CUT_BINARIES: [&str; 2] = ["/usr/bin/cut", "/bin/cut"];
+/// The directories the rest of the filters ship in. Every one of them is part
+/// of the system image on both platforms the sink runs on, so none is looked
+/// for in a package manager's directories the way `rg` is.
+const SYSTEM_DIRECTORIES: [&str; 2] = ["/usr/bin", "/bin"];
+/// The filters located by name in [`SYSTEM_DIRECTORIES`]. Native authority
+/// has already held each one to a grammar that gives it no operand, so each
+/// reads the captured text on its standard input and opens nothing.
+const SYSTEM_FILTERS: [&str; 7] = ["cut", "wc", "cat", "sort", "uniq", "tr", "sed"];
 /// ripgrep ships from a package manager rather than the system image, so it
 /// is looked for in the ordinary install directories.
 const RG_DIRECTORIES: [&str; 6] = [
@@ -156,7 +162,7 @@ pub(crate) fn matched_within(
         "grep" => trusted_grep().map(|binary| (binary, None)),
         "egrep" => trusted_grep().map(|binary| (binary, Some("-E"))),
         "fgrep" => trusted_grep().map(|binary| (binary, Some("-F"))),
-        "cut" => trusted_cut().map(|binary| (binary, None)),
+        name if SYSTEM_FILTERS.contains(&name) => trusted_system(name).map(|binary| (binary, None)),
         _ => return Err(unsupported()),
     };
     let Some((binary, switch)) = located else {
@@ -242,11 +248,15 @@ fn trusted_grep() -> Option<PathBuf> {
     trusted_system_binary(&GREP_BINARIES.map(Path::new))
 }
 
-/// The system `cut`, held to the same test as the system `grep`: both ship in
-/// the system image, so neither is looked for in a package manager's
-/// directories.
-fn trusted_cut() -> Option<PathBuf> {
-    trusted_system_binary(&CUT_BINARIES.map(Path::new))
+/// A system filter named `name`, held to the same test as the system `grep`:
+/// a root-owned regular file nobody else can rewrite, in one of the
+/// directories the system image puts it in.
+fn trusted_system(name: &str) -> Option<PathBuf> {
+    let candidates: Vec<PathBuf> = SYSTEM_DIRECTORIES
+        .iter()
+        .map(|directory| Path::new(directory).join(name))
+        .collect();
+    trusted_system_binary(&candidates.iter().map(PathBuf::as_path).collect::<Vec<_>>())
 }
 
 fn trusted_system_binary(candidates: &[&Path]) -> Option<PathBuf> {

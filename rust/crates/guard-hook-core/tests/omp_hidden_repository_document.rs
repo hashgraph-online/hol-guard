@@ -3,6 +3,7 @@
 //! checkout or from a linked worktree `git worktree add` left in `/tmp`.
 //! PreToolUse admits the read; the output review repeats that proof and
 //! still scans the file, instead of withholding the result as unreviewable.
+//! The same holds for a linked worktree's `gitdir` pointer below `.git`.
 #![cfg(unix)]
 
 use guard_contracts::NativeHookRequestV1;
@@ -166,4 +167,37 @@ fn other_hidden_files_and_other_repositories_stay_unreviewable() {
             path.display()
         );
     }
+}
+
+#[test]
+fn a_linked_worktree_gitdir_pointer_keeps_its_output() {
+    let layout = layout();
+    let pointer = layout.main.join(".git/worktrees/app-fix/gitdir");
+    let text = std::fs::read_to_string(&pointer).unwrap();
+    for cwd in [&layout.main, &layout.linked] {
+        let result = review_post_tool(&read_result(&layout, cwd, &pointer, &text));
+        assert_eq!(
+            result.model_output_action,
+            "allow_original",
+            "from {}: {result:?}",
+            cwd.display()
+        );
+        assert_eq!(result.reason_code, "source_full_scan_allow", "{result:?}");
+    }
+}
+
+#[test]
+fn a_gitdir_pointer_is_still_scanned_and_screened() {
+    let layout = layout();
+    let pointer = layout.main.join(".git/worktrees/app-fix/gitdir");
+    // One absolute line passes the pointer screen, so the scan still runs.
+    let planted = format!("/{}\n", token());
+    std::fs::write(&pointer, &planted).unwrap();
+    let result = review_post_tool(&read_result(&layout, &layout.main, &pointer, &planted));
+    assert_eq!(result.reason_code, "source_secret_match", "{result:?}");
+    // More than one line is not a pointer, so the output stays withheld.
+    let two_lines = format!("{}\nextra\n", layout.linked.join(".git").display());
+    std::fs::write(&pointer, &two_lines).unwrap();
+    let result = review_post_tool(&read_result(&layout, &layout.main, &pointer, &two_lines));
+    assert_ne!(result.model_output_action, "allow_original", "{result:?}");
 }

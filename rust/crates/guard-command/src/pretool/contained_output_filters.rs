@@ -1,8 +1,8 @@
 //! Output filters after a contained core: `| head -N`, `| tail -N`, the same
 //! two bounded by bytes (`-c N`), spelled with `-n N` or left to the ten
-//! lines both programs print when no count is given, a `grep` or `rg`
-//! that only reads its standard input, and a `cut` that keeps part of each
-//! line, chained up to three deep.
+//! lines both programs print when no count is given, and the text filters
+//! that read standard input and nothing else -- `grep`, `rg`, `cut`, `wc`,
+//! `cat`, `sort`, `uniq`, `tr` and `sed` -- chained up to three deep.
 //!
 //! The execution sink (`contained_output_filters.py`) peels the same chain,
 //! runs the core contained and applies the filters to its captured output.
@@ -47,6 +47,26 @@ const CUT_VALUED: &[&str] = &["-b", "-c", "-f", "-d"];
 /// including a lone `-`, is a file `cat` opens, which `text_filter` refuses.
 const CAT_SWITCHES: &str = "AbeEnstTuv";
 
+/// `wc`'s switches, which only choose which of its counts it prints: lines,
+/// characters, bytes, words and the longest line. None of them takes a value,
+/// and every operand is a file `wc` opens, which `text_filter` refuses.
+const WC_SWITCHES: &str = "clmwL";
+
+/// `sort`'s switches. `-o` names a file to write, `-T` a directory to write
+/// temporary files in and `-S` sizes a buffer, so none of the three is here.
+const SORT_SWITCHES: &str = "bcdfghiMnrsuVz";
+
+/// The options carrying `sort`'s key and its field separator, each taking a
+/// value attached or as the word after.
+const SORT_VALUED: &[&str] = &["-k", "-t"];
+
+/// `uniq`'s switches: which repeated lines it prints and how it compares them.
+const UNIQ_SWITCHES: &str = "cdiuz";
+
+/// The options telling `uniq` how much of each line to skip before comparing,
+/// each taking a count.
+const UNIQ_VALUED: &[&str] = &["-f", "-s", "-w"];
+
 #[path = "contained_sed_script.rs"]
 pub(in crate::pretool) mod sed_script;
 
@@ -74,17 +94,20 @@ pub(super) fn filter_stage(segment: &CommandSegmentV1, source: &str) -> bool {
     }
     match segment.executable.as_deref() {
         Some("head" | "tail") => head_tail_arguments(&segment.arguments),
-        Some("grep" | "egrep" | "fgrep") => stdin_arguments(&segment.arguments, GREP_SWITCHES),
-        Some("rg") => stdin_arguments(&segment.arguments, RG_SWITCHES),
-        Some("cut") => text_filter(&segment.arguments, CUT_SWITCHES, CUT_VALUED),
-        _ => false,
+        Some(program) => matcher_stage(program, &segment.arguments),
+        None => false,
     }
 }
 
-/// Whether `program <arguments>` is a matcher reading only standard input.
+/// Whether `program <arguments>` is a stage reading only standard input,
+/// leaving aside `head` and `tail`, which the sink shortens itself.
 ///
 /// The sink's own peel reads a stage from the command text rather than from a
-/// parsed segment, so it asks this directly.
+/// parsed segment, so it asks this directly. The runtime then runs the stage
+/// as the installed binary, located by ownership, with an environment it
+/// builds and the captured text alone on its standard input. Every program
+/// here therefore has to read standard input and nothing else: each one opens
+/// an operand as a file, and `text_filter` refuses an operand outright.
 pub(in crate::pretool) fn matcher_stage(program: &str, arguments: &[String]) -> bool {
     match program {
         "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
@@ -93,6 +116,27 @@ pub(in crate::pretool) fn matcher_stage(program: &str, arguments: &[String]) -> 
         // which `text_filter` refuses, so the runtime can run it over the
         // captured text exactly as the pipeline would have.
         "cut" => text_filter(arguments, CUT_SWITCHES, CUT_VALUED),
+        // `wc` counts what it is given; without an operand it counts standard
+        // input and prints nothing but numbers. `| wc -l` is how an agent
+        // asks how long a runner's output was.
+        "wc" => text_filter(arguments, WC_SWITCHES, &[]),
+        // `cat` with no operand copies standard input through, and its
+        // switches only change how the bytes are spelled. Agents reach for
+        // `| cat -A` or `| cat -v` to make a runner's escape codes legible.
+        "cat" => text_filter(arguments, CAT_SWITCHES, &[]),
+        // `-o` and `-T` name a file and a directory to write, and `-S` sizes a
+        // buffer, so none of the three is a switch here.
+        "sort" => text_filter(arguments, SORT_SWITCHES, SORT_VALUED),
+        "uniq" => text_filter(arguments, UNIQ_SWITCHES, UNIQ_VALUED),
+        // `tr` has no file operand at all: it reads standard input whatever it
+        // is given, so its operands are the character sets they look like.
+        "tr" => true,
+        // `sed` with no file operand reads standard input. Counting operands
+        // is not enough on its own, because a script opens files and runs
+        // programs by itself, so every script goes through
+        // `sed_script::text_filter_script` as well, which refuses `r`, `R`,
+        // `w`, `W`, the `s///w` flag and GNU's `e`.
+        "sed" => sed_arguments(arguments),
         _ => false,
     }
 }
@@ -202,37 +246,14 @@ fn stdin_arguments(arguments: &[String], switches: &str) -> bool {
 ///
 /// A rejoined stage is never peeled off and applied in process, so the sink
 /// cannot vouch for what it reads: it is the shell in the containment root
-/// that runs it. Each program here therefore has to read standard input and
-/// nothing else. `head`, `tail` and the matchers already have that reading,
-/// and the rest earn it by taking no operand, because every one of them opens
-/// an operand as a file. Anything else -- a shell, an interpreter, `xargs` --
-/// would make the program that finally runs a different one from the program
-/// the containment proof screened.
+/// that runs it. A stage that may be rejoined is therefore exactly a stage
+/// that may be peeled, plus the two the sink shortens itself. Anything else
+/// -- a shell, an interpreter, `xargs` -- would make the program that finally
+/// runs a different one from the program the containment proof screened.
 pub(in crate::pretool) fn rejoined_stage(program: &str, arguments: &[String]) -> bool {
     match program {
         "head" | "tail" => head_tail_arguments(arguments),
-        "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
-        "rg" => stdin_arguments(arguments, RG_SWITCHES),
-        "wc" => text_filter(arguments, "clmwL", &[]),
-        // `cat` with no operand copies standard input through, and its
-        // switches only change how the bytes are spelled. Agents reach for
-        // `| cat -A` or `| cat -v` to make a runner's escape codes legible.
-        "cat" => text_filter(arguments, CAT_SWITCHES, &[]),
-        "cut" => text_filter(arguments, CUT_SWITCHES, CUT_VALUED),
-        // `-o` and `-T` name a file and a directory to write, and `-S` sizes a
-        // buffer, so none of the three is a switch here.
-        "sort" => text_filter(arguments, "bcdfghiMnrsuVz", &["-k", "-t"]),
-        "uniq" => text_filter(arguments, "cdiuz", &["-f", "-s", "-w"]),
-        // `tr` has no file operand at all: it reads standard input whatever it
-        // is given, so its operands are the character sets they look like.
-        "tr" => true,
-        // `sed` with no file operand reads standard input, and the stage runs
-        // under the sandbox's own shell inside the containment root -- the
-        // same place the same `sed` already runs when no directory change
-        // precedes it. Agents reach for `| sed -n '/BEGIN/,/END/p'` to cut
-        // one block out of a long runner log.
-        "sed" => sed_arguments(arguments),
-        _ => false,
+        _ => matcher_stage(program, arguments),
     }
 }
 

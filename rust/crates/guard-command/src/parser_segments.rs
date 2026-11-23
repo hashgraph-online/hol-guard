@@ -85,6 +85,10 @@ fn split_execution_segments_inner(
     let mut group_index = 0usize;
     let mut pipeline_index = 0usize;
     let mut index = 0usize;
+    // Whether the last separator the scan passed carries the list onto what
+    // follows it. `A &&`, `A ||` and `A |` all need a command behind them, so
+    // a line break after one of them is a continuation rather than an ending.
+    let mut continues = false;
 
     while index < chars.len() {
         let current = chars[index];
@@ -228,6 +232,7 @@ fn split_execution_segments_inner(
                     segment_start = index + 1;
                     group_index += 1;
                     pipeline_index = 0;
+                    continues = false;
                 } else {
                     push_segment(
                         &chars,
@@ -241,6 +246,7 @@ fn split_execution_segments_inner(
                     segment_start = index + 1;
                     group_index += 1;
                     pipeline_index = 0;
+                    continues = true;
                 }
             }
             '|' => {
@@ -276,8 +282,20 @@ fn split_execution_segments_inner(
                     pipeline_index += 1;
                 }
                 segment_start = index + 1;
+                continues = true;
             }
             ';' | '\n' => {
+                // A line break behind another separator ends nothing of its
+                // own: the shell reads `A;` and the newline after it as one
+                // ending, and `A |` or `A &&` carries its list onto the next
+                // line. Only the newline spelling may stand on an empty span
+                // that way. `A; ;` and a `;` opening a line are both syntax
+                // errors, so those keep failing here.
+                if current == '\n' && trimmed_bounds(&chars, segment_start, index).is_none() {
+                    segment_start = index + 1;
+                    index += 1;
+                    continue;
+                }
                 push_segment(
                     &chars,
                     segment_start,
@@ -289,6 +307,7 @@ fn split_execution_segments_inner(
                 segment_start = index + 1;
                 group_index += 1;
                 pipeline_index = 0;
+                continues = false;
             }
             _ => {}
         }
@@ -301,6 +320,7 @@ fn split_execution_segments_inner(
     // `ls;` is `ls`: one `;` or newline may end the command. A dangling `&&`,
     // `||` or `|` still continues it, and `ls; ;` still fails.
     let terminated = segment_start > 0
+        && !continues
         && matches!(chars[segment_start - 1], ';' | '\n')
         && chars[segment_start..]
             .iter()
@@ -444,6 +464,10 @@ mod ansi_c_tests;
 #[cfg(test)]
 #[path = "parser_segments_arithmetic_tests.rs"]
 mod arithmetic_tests;
+
+#[cfg(test)]
+#[path = "parser_segments_line_break_tests.rs"]
+mod line_break_tests;
 
 #[cfg(test)]
 #[path = "parser_segments_pipe_tests.rs"]

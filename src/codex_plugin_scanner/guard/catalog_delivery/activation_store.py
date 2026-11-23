@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 from ..native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY, NativePolicySnapshotError
-from ..store_extension_control_authority_schema import (
-    PACK_ACTIVATION_SCHEMA_VERSION,
-    extension_control_schema_marker_is_compatible,
-)
 from . import activation_baseline, lifecycle
 from .activation_record import open_record, verify_header
 from .state_paths import resolved_guard_home
@@ -55,27 +51,37 @@ def read_slot(store):
     return row
 
 
+_PENDING_FIELDS = frozenset({"record_json", "record_digest", "record_mac"})
+
+
+def pending_records(store):
+    """The pending activation records, read by the native store, in revision order.
+
+    Each record is returned unauthenticated for the lifecycle op to verify.
+    Any other answer shape, or a record field that is not text, is refused
+    rather than dropped, because a dropped record would let cleanup evict a
+    pack a pending activation still needs.
+    """
+    method = "list_command_pack_pending_records"
+    answer = store._native_store_call(method, {})
+    items = answer.get("items") if isinstance(answer, dict) and set(answer) == {"items"} else None
+    if not isinstance(items, list):
+        raise NativePolicySnapshotError(f"native {method} returned no answer")
+    for item in items:
+        if (
+            not isinstance(item, dict)
+            or set(item) != _PENDING_FIELDS
+            or not all(isinstance(item[name], str) for name in _PENDING_FIELDS)
+        ):
+            raise NativePolicySnapshotError(f"native {method} returned no answer")
+    return items
+
+
 def _slot_types(row):
     revision = row["revision"]
     if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
         return False
     return all(isinstance(row[name], str) for name in _SLOT_FIELDS[1:])
-
-
-def _row(connection):
-    marker = connection.execute(
-        "select version, checksum from extension_control_schema_migration where singleton=1"
-    ).fetchone()
-    if marker is None or not extension_control_schema_marker_is_compatible(marker["version"], marker["checksum"]):
-        raise NativePolicySnapshotError("native_command_pack_schema_invalid")
-    if marker["version"] < PACK_ACTIVATION_SCHEMA_VERSION:
-        return None
-    value = connection.execute("""select * from extension_command_pack_activation where singleton=1
-        and length(cast(record_json as blob)) between 1 and 65536
-        and length(record_digest)=64 and length(record_mac)=64""").fetchone()
-    if value is None:
-        raise NativePolicySnapshotError("native_command_pack_activation_missing")
-    return value
 
 
 @lifecycle.one_runtime
