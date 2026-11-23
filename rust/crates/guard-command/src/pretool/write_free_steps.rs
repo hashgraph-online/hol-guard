@@ -12,10 +12,13 @@
 /// Every word must reach the program as written (`words_as_written`), and a
 /// redirect that names a file keeps review.
 pub(super) fn writes_nothing(segment: &crate::CommandSegmentV1) -> bool {
-    let quiet = ["2>&1", "2>/dev/null", ">/dev/null"]
-        .iter()
-        .fold(segment.text.clone(), |text, quiet| text.replace(quiet, ""));
-    if quiet.contains('>')
+    // A redirection must be the entire shell word. String replacement
+    // would silently erase the prefix of `2>/dev/nullx`, even though that
+    // opens a real output file rather than the harmless null device.
+    if segment
+        .text
+        .split_ascii_whitespace()
+        .any(|word| word.contains('>') && !matches!(word, "2>&1" | "2>/dev/null" | ">/dev/null"))
         || !segment.wrapper_chain.is_empty()
         || segment.path_overridden
         || !words_as_written(&segment.text)
