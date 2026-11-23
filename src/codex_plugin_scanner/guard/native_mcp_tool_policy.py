@@ -253,7 +253,8 @@ def _is_non_recognition(payload: dict[str, Any]) -> bool:
     """Only a review that nothing but non-recognition caused may name a connector."""
     quiet = not (payload["signals"] or payload["risk_categories"] or payload["pending_approval_reuse_decision"])
     return (
-        (payload["action"], payload["policy_action"]) == ("review", "review")
+        payload["action"] in {"allow", "warn", "review"}
+        and payload["policy_action"] in {"allow", "warn", "review"}
         and quiet
         and payload["source"] in _NON_RECOGNITION_SOURCES
         and payload["approval_reuse_claim_disposition"] is None

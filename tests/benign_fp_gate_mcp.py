@@ -359,7 +359,10 @@ def drain_report(worker: HookWorker) -> dict[str, object]:
     return {
         "drain": None
         if drain is None
-        else {name: getattr(drain, name, None) for name in ("pages", "records", "failures")},
+        else {
+            name: getattr(drain, name, None)
+            for name in ("pages", "records", "failures", "last_failure")
+        },
         "transport": callable(transport) and transport() is not None,
         "bound": getattr(publisher, "_direct_lane_evidence_bound", None),
         # Which receipts the drain wrote, so a missing review row names its step.

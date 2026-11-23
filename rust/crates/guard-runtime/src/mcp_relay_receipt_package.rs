@@ -282,11 +282,12 @@ pub(super) fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option
                     redaction_level,
                 },
             )?;
-            // A connector setup's group, as the ask path sets it, so the
-            // row joins its connector card instead of a derived group.
             if let Some(group) = group {
-                let item = args.get_mut("items")?.get_mut(0)?.as_object_mut()?;
-                item.insert("queue_group_id".to_owned(), json!(group));
+                args["items"]
+                    .as_array_mut()?
+                    .first_mut()?
+                    .as_object_mut()?
+                    .insert("queue_group_id".to_owned(), json!(group));
             }
             Some(args)
         });

@@ -89,14 +89,28 @@ fn resolve_saved(
         guard_home: &request.guard_home,
         controls: admitted.snapshot.command_extensions.as_ref(),
     };
-    let decision = run_policy(&subject, saved, connection, &catalog)?;
+    let mut decision = run_policy(&subject, saved, connection, &catalog)?;
     let connector_setup = crate::mcp_tool_policy_connector::connector_setup_with_catalog(
         &subject,
         &decision,
         Some(&catalog),
     );
-    // A readable store with no saved row still resolves the package policy,
-    // every lookup missing; only an unreadable store has none.
+    if connector_setup.is_some()
+        && matches!(
+            decision.action,
+            guard_command::effect_decision::GuardAction::Allow
+                | guard_command::effect_decision::GuardAction::Warn
+        )
+        && matches!(
+            decision.policy_action(),
+            guard_command::effect_decision::GuardAction::Allow
+                | guard_command::effect_decision::GuardAction::Warn
+        )
+    {
+        decision.action = guard_command::effect_decision::GuardAction::Review;
+        decision.source = "heuristic".to_owned();
+        decision.summary = "This MCP connector has not been set up on this device.".to_owned();
+    }
     let empty;
     let saved = match (saved, connection, leg.is_some()) {
         (None, Some(connection), true) => {

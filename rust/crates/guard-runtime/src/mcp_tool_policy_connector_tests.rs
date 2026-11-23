@@ -166,6 +166,20 @@ fn unrecognised_stdio_server_names_its_launch_identity() {
 }
 
 #[test]
+fn an_unrecognised_stdio_server_is_setup_even_when_the_risk_policy_allows_it() {
+    let home = home();
+    let subject = subject(stdio(&home));
+    let decision = Decision::plain(Current {
+        action: GuardAction::Allow,
+        source: "heuristic".to_owned(),
+        signals: Vec::new(),
+        summary: "No risk was found.".to_owned(),
+        risk_categories: Vec::new(),
+    });
+    assert!(connector_setup(&subject, &decision).is_some());
+}
+
+#[test]
 fn unrecognised_remote_server_identity_carries_no_url_or_query() {
     let home = home();
     let plain = remote(&home, "https://mcp.example.test/mcp");

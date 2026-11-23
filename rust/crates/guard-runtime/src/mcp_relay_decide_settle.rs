@@ -3,7 +3,25 @@
 use super::package_route::ToolLeg;
 use super::*;
 use serde_json::json;
+use std::path::Path;
 use std::time::Instant;
+
+const DEFAULT_APPROVAL_CENTER_ORIGIN: &str = "http://127.0.0.1:4781";
+
+pub(super) fn approval_center_origin(guard_home: &str, bound: Option<&str>) -> String {
+    if let Some(bound) = bound.filter(|origin| !origin.trim().is_empty()) {
+        return bound.to_owned();
+    }
+    crate::daemon_policy_authority::load_authenticated_daemon_state(Path::new(guard_home))
+        .and_then(|state| {
+            state
+                .get("port")
+                .and_then(Value::as_u64)
+                .filter(|port| (1..=u64::from(u16::MAX)).contains(port))
+                .map(|port| format!("http://127.0.0.1:{port}"))
+        })
+        .unwrap_or_else(|| DEFAULT_APPROVAL_CENTER_ORIGIN.to_owned())
+}
 
 /// Answer a forward or block route and queue or hold its evidence; a claimed
 /// call's evidence also carries what the post-claim check appended.
@@ -69,9 +87,10 @@ pub(super) fn settle(
             // The center lets the resident write the row itself; the daemon
             // links a row to its own origin and ignores it.
             let mut fields = json!({"redaction_level": redaction_level});
-            if let Some(center) = center {
-                fields["approval_center_url"] = json!(center);
-            }
+            fields["approval_center_url"] = json!(approval_center_origin(
+                &request.guard_home,
+                center.as_deref()
+            ));
             if let Some(setup) = resolved.connector_setup.as_ref() {
                 if let Some(group) = setup.get("queue_group_id").and_then(Value::as_str) {
                     fields["queue_group_id"] = json!(group);
@@ -303,6 +322,12 @@ pub(super) fn settle_package(
         }
     };
     let identity = serde_json::to_value(&resolved.identity).map_err(|_| IDENTITY_FAILED)?;
+    let center = answer.redaction_level.as_ref().map(|_| {
+        approval_center_origin(
+            &request.guard_home,
+            admitted.binding.review.approval_center_origin.as_deref(),
+        )
+    });
     let evidence = package_receipt::record(
         request,
         &identity,
@@ -310,7 +335,7 @@ pub(super) fn settle_package(
         &packaged.artifact,
         &packaged.workspace,
         answer,
-        admitted.binding.review.approval_center_origin.as_deref(),
+        center.as_deref(),
     )?;
     let mut evidence = evidence;
     // The forward an inline approval led to, as `_record_package_forward`

@@ -23,3 +23,17 @@ fn a_claim_after_its_own_write_reads_rows_at_that_generation() {
     store::after_own_write(&mut unnamed, 1);
     assert_eq!(unnamed["generation"], 1);
 }
+
+/// `evidence_is_bound` compares the shipped state with the persisted payload
+/// whole, so `mode` takes part in the comparison. The bound evidence
+/// therefore ships the published state itself; the protected-mode transform
+/// belongs to row verification alone, and a store persisted as degraded would
+/// never match a state rewritten to protected.
+#[test]
+fn the_bound_state_keeps_the_mode_the_store_persisted() {
+    let published = json!({"generation": 3, "enforcement": "enforce", "mode": "degraded"});
+    let verification = store::verification_state(&published);
+    assert_eq!(verification["mode"], json!("protected"));
+    assert_ne!(verification, published);
+    assert_eq!(published["mode"], json!("degraded"));
+}
