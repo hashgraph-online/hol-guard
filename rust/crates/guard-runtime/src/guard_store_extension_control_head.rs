@@ -79,6 +79,8 @@ fn recovery_transition(connection: &Connection, revision: i64) -> StoreResult<Va
     if !table_exists(connection, TRANSITION_TABLE)? {
         return Ok(json!({"revision": null}));
     }
+    // Resume the current unfinished transition before considering its successor,
+    // matching the Python recovery reader's revision ordering.
     let row = query_one(
         connection,
         &format!(
