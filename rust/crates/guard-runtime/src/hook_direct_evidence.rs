@@ -455,4 +455,3 @@ mod tests;
 
 #[path = "hook_direct_evidence_reserve.rs"]
 mod reserve;
-pub(crate) use reserve::Reserved;

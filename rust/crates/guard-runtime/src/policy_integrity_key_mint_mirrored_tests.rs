@@ -341,9 +341,9 @@ fn a_marked_vault_is_preferred_without_reading_the_keyring() {
     let home = home("vault-preferred");
     let mut store = vault(&home.0);
     store.ensure_ready().expect("ready");
-    assert!(!vault_preferred(&store, &key_ref(&home.0)));
+    assert!(!vault_preferred(&mut store, &key_ref(&home.0)));
     assert!(prefer_vault(&mut store, &key_ref(&home.0)));
-    assert!(vault_preferred(&vault(&home.0), &key_ref(&home.0)));
+    assert!(vault_preferred(&mut vault(&home.0), &key_ref(&home.0)));
 }
 
 #[cfg(unix)]
