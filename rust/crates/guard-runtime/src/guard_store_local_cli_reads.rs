@@ -40,7 +40,7 @@ pub(crate) fn dispatch(
 ) -> StoreResult<Value> {
     match method {
         _ if command_pack_activation::handles(method) => {
-            command_pack_activation::dispatch(connection, method, args)
+            command_pack_activation::dispatch(connection, method)
         }
         "read_local_cli_revision" => Ok(Value::from(authority_revision(connection)?)),
         "read_local_cli_surface" => read_surface(connection, args.str("cli_id")?),

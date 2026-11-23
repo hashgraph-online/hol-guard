@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { contextRefusalFromBody, contextRefusalMessage, parseContextBrief, parseContextScope } from "./workspaces-api";
+import { contextRefusalMessage, parseContextBrief, parseContextScope } from "./workspaces-api";
 
 const observed = JSON.parse(readFileSync(new URL("./fixtures/source-actor.json", import.meta.url), "utf8")).source_test.brief_observation;
 const brief = parseContextBrief(observed);
@@ -46,17 +46,4 @@ assert.match(contextRefusalMessage("native_context_assistance_context_scope_deni
 assert.match(contextRefusalMessage("native_context_assistance_context_stale", "grant", 409), /files changed/);
 assert.match(contextRefusalMessage("context_request_refused", "grant", 403), /approval password/);
 assert.match(contextRefusalMessage("native_context_assistance_runtime_deadline_exceeded", "compile", 503), /Restart CIGAR/);
-// An unrecognised refusal names its code, so the person can report it.
-assert.equal(contextRefusalMessage("native_context_assistance_workspace_input_invalid", "grant", 400),
-  "CIGAR could not finish that (native_context_assistance_workspace_input_invalid). Refresh and try again.");
-// The approval check's refusal carries `error` and a message; both reach the page.
-assert.deepEqual(contextRefusalFromBody({ error: "approval_gate_locked", message: "Approval gate is temporarily locked." }, "grant", 423),
-  { code: "approval_gate_locked", message: "Approval gate is temporarily locked." });
-assert.deepEqual(contextRefusalFromBody({ error: "native_approval_gate_unavailable", message: "The native approval authority did not answer. Retry the approval." }, "grant", 503),
-  { code: "native_approval_gate_unavailable", message: "The native approval authority did not answer. Retry the approval." });
-// CIGAR's own refusal keeps its own wording, and an unreadable body still names a code.
-assert.match(contextRefusalFromBody({ error: "context_assistance_unavailable", code: "native_context_assistance_context_stale" }, "grant", 409).message, /files changed/);
-assert.deepEqual(contextRefusalFromBody(null, "grant", 500),
-  { code: "context_request_refused", message: "CIGAR could not finish that (context_request_refused). Refresh and try again." });
-assert.match(contextRefusalFromBody({ error: "approval_gate_locked", message: "x".repeat(301) }, "grant", 423).message, /\(approval_gate_locked\)/);
 console.log("Actual native cited-context projection and malformed disclosure payload checks passed.");

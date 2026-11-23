@@ -7,7 +7,6 @@ import json
 import os
 import tempfile
 import time
-from typing import Any
 
 from ..native_command_control_authority_io import require_exclusive_command_control_mutation_lease
 from ..native_command_control_authority_store import _key
@@ -105,7 +104,7 @@ def migrate_installed(store, authority):
 
 
 @contextlib.contextmanager
-def legacy_transport(store):
+def legacy_transport(store, connection=None):
     """Keep the legacy evidence request within the native payload bound.
 
     An install accumulates one authority transition per policy save and the
@@ -114,7 +113,7 @@ def legacy_transport(store):
     file beside the request instead; the native side authenticates every
     record exactly as it does inline, and the file never outlives the call.
     """
-    evidence = legacy_evidence(store)
+    evidence = legacy_evidence(store, connection)
     history = evidence["legacy_history"]
     if sum(len(item["record"]) for item in history if item) <= LEGACY_HISTORY_INLINE_BYTES:
         yield evidence
@@ -155,32 +154,64 @@ def _discard_orphaned_spills(directory):
                     os.unlink(entry.path)
 
 
-def legacy_evidence(store) -> dict[str, Any]:
+def legacy_evidence(store, connection=None):
     """Transport retained credential/SQL envelopes; native code binds them."""
-    from . import activation_baseline, activation_store, legacy_rows
+    from . import activation_baseline, activation_store
 
+    if connection is None:
+        with store._connect() as opened:
+            return legacy_evidence(store, opened)
     key = store._authority_key(required=False)
     anchor = store._secret_store().get_secret(store._anchor_ref())
     # This untrusted revision only selects SQL evidence. Rust authenticates the
     # original protected envelope before giving any selected row authority.
     observed_revision = None if anchor is None else json.loads(json.loads(anchor)["record"])["revision"]
-    rows = legacy_rows.evidence_rows(store, observed_revision)
-    active = activation_store.read_slot(store)
+    row = connection.execute("select * from extension_control_authority_snapshot where singleton=1").fetchone()
+
+    def envelope(row, prefix):
+        return (
+            None
+            if row is None
+            else dict(record=row[prefix + "_json"], digest=row[prefix + "_digest"], mac=row[prefix + "_mac"])
+        )
+
+    active = activation_store._row(connection)
     if active is not None and activation_baseline.is_baseline(active["record_json"]):
         activation_baseline.verify(active, _key(store))
         active = None
-    history = [] if rows.snapshot_revision is None else legacy_rows.history(store, rows.snapshot_revision)
+    pending = transition = None
+    if (
+        observed_revision is not None
+        and connection.execute(
+            "select 1 from sqlite_master where type='table' and name='extension_command_pack_pending'"
+        ).fetchone()
+    ):
+        pending = connection.execute(
+            "select * from extension_command_pack_pending where control_revision=?", (observed_revision,)
+        ).fetchone()
+        if pending is not None:
+            transition = connection.execute(
+                "select * from extension_control_authority_transition where revision=?", (observed_revision,)
+            ).fetchone()
+    history = (
+        []
+        if row is None
+        else connection.execute(
+            "select * from extension_control_authority_transition where revision < ? order by revision desc",
+            (row["revision"],),
+        ).fetchall()
+    )
     return dict(
         legacy_key=None if key is None else key.hex(),
         legacy_anchor=None if anchor is None else json.loads(anchor),
-        legacy_snapshot=rows.snapshot,
-        legacy_activation=None
-        if active is None
-        else dict(record=active["record_json"], digest=active["record_digest"], mac=active["record_mac"]),
-        legacy_history=history,
-        legacy_transition=rows.transition,
-        legacy_next_snapshot=rows.next_snapshot,
-        legacy_pending=rows.pending,
+        legacy_snapshot=envelope(row, "snapshot"),
+        legacy_activation=envelope(active, "record"),
+        legacy_history=[envelope(item, "snapshot") for item in history],
+        legacy_transition=envelope(transition, "transition"),
+        legacy_next_snapshot=envelope(transition, "snapshot"),
+        legacy_pending=None
+        if pending is None
+        else dict(activation=envelope(pending, "record"), link=envelope(pending, "link")),
     )
 
 

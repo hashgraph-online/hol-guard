@@ -19,9 +19,10 @@ from codex_plugin_scanner.guard import native_execution, native_mcp_tool_policy
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact, build_tool_call_hash
 from codex_plugin_scanner.guard.models import PolicyDecision
-from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context
+from tests.mcp_stdio_fixture_support import child_command as _child_command
+from tests.mcp_stdio_fixture_support import harness_context as _context
 
 pytestmark = [pytest.mark.usefixtures("bundle_first_cloud"), pytest.mark.usefixtures("package_intent_native")]
 
@@ -32,24 +33,20 @@ _SCENARIOS = ("empty", "exact_block", "exact_allow", "artifact_review", "other_w
 
 def _subject(tmp_path: Path, store: GuardStore, context, scenario: str):
     config = GuardConfig(mode="enforce", guard_home=context.guard_home, workspace=context.workspace_dir)
-    proxy = CodexMcpGuardProxy(
-        server_name="workspace-tools",
-        command=_child_command(tmp_path / "marker.json"),
-        context=context,
-        store=store,
-        config=config,
-        source_scope="project",
-        config_path=str(context.workspace_dir / ".codex" / "config.toml"),
+    command = _child_command(tmp_path / "marker.json")
+    config_path = str(context.workspace_dir / ".codex" / "config.toml")
+    identity = build_mcp_server_identity(
+        config_path=config_path, command=command[0], args=tuple(command[1:]), transport="stdio", env={}
     )
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace-tools",
         tool_name="dangerous_delete",
         source_scope="project",
-        config_path=proxy.config_path,
+        config_path=config_path,
         transport="stdio",
-        server_fingerprint={"command": proxy.command, "transport": "stdio"},
-        server_identity=proxy.server_identity,
+        server_fingerprint={"command": command, "transport": "stdio"},
+        server_identity=identity,
         tool_schema={"type": "object", "properties": {"target": {"type": "string"}}},
         tool_description="Dangerous delete",
     )

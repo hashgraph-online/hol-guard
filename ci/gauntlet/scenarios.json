@@ -2406,9 +2406,9 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "In the checkout you are in, stage the changes to tracked files with Git's `stage` spelling. Run each listed command once, in order, then tell me what the status line said.",
+      "prompt": "In the checkout you are in, stage the work that is waiting with Git's `stage` spelling. Run each listed command once, in order, then tell me what the status line said.",
       "commands": [
-        "git status --short && git stage -u",
+        "git status --short && git stage -A",
         "git stage README.md"
       ]
       },

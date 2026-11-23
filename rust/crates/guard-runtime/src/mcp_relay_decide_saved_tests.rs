@@ -322,16 +322,22 @@ fn the_cached_bundle_is_judged_at_the_callers_time() {
 }
 
 #[test]
-fn an_unpublished_or_moved_integrity_state_defers() {
+fn an_unpublished_mismatched_or_moved_integrity_state_defers() {
     let (home, connection) = guard_home("unverifiable");
     decide(&connection, "artifact", "block", None, "approval-gate");
     let mut unbound = binding();
     unbound.integrity_key = None;
-    let mut degraded = binding();
-    if let Some(state) = degraded.policy_integrity_state.as_mut() {
-        state.degraded_reasons.push("keyring".to_owned());
+    let mut unpublished = binding();
+    unpublished.policy_integrity_state = None;
+    let mut other_key = binding();
+    if let Some(state) = other_key.policy_integrity_state.as_mut() {
+        state.key_id = Some("another-key".to_owned());
     }
-    for binding in [unbound, degraded] {
+    let mut observed = binding();
+    if let Some(state) = observed.policy_integrity_state.as_mut() {
+        state.enforcement = "observe".to_owned();
+    }
+    for binding in [unbound, unpublished, other_key, observed] {
         assert_eq!(
             read(&home, &binding, |_| ()).err(),
             Some("mcp_relay_saved_policy_unverifiable")
@@ -348,6 +354,56 @@ fn an_unpublished_or_moved_integrity_state_defers() {
         read(&home, &binding(), |_| ()).err(),
         Some("mcp_relay_saved_policy_unverifiable")
     );
+}
+
+/// The proxy's lookup evidence carries a degraded state as it is, and the
+/// lookup judges it. The store reads natively under it, as long as it still
+/// holds the state the daemon published. A local row is refused, and the
+/// audit event recording that is collected for the relay to write later.
+#[test]
+fn a_degraded_integrity_state_reads_natively_and_collects_the_refusal() {
+    let (home, connection) = guard_home("degraded");
+    decide(
+        &connection,
+        "artifact",
+        "block",
+        None,
+        "cloud-signed-memory",
+    );
+    let mut state = integrity_state();
+    state.degraded_reasons.push("keyring".to_owned());
+    state.mode = "degraded".to_owned();
+    let mut degraded = binding();
+    degraded.policy_integrity_state = Some(state.clone());
+    assert!(store::published_integrity(&degraded).is_err());
+    assert_eq!(
+        read(&home, &degraded, |_| ()).err(),
+        Some("mcp_relay_saved_policy_unverifiable"),
+        "the store still holds the protected state"
+    );
+    sync_state(
+        &connection,
+        "policy_integrity",
+        &serde_json::to_string(&state).unwrap(),
+    );
+    let policy = read(&home, &degraded, |saved| {
+        let saved = saved.expect("saved rows");
+        assert!(!saved.has_local_policy);
+        saved.answer(&policy_need(ARTIFACT, None)).unwrap()
+    })
+    .unwrap();
+    assert_eq!(policy["decision"]["action"], "block");
+    decide(&connection, "artifact", "block", None, "approval-gate");
+    let audit = read(&home, &degraded, |saved| {
+        let saved = saved.expect("saved rows");
+        assert!(saved.has_local_policy);
+        saved.answer(&policy_need(ARTIFACT, None)).unwrap();
+        saved.audit.borrow().clone()
+    })
+    .unwrap();
+    assert!(audit
+        .iter()
+        .any(|(name, _, _)| name == "rule.ignored.local_integrity"));
 }
 
 #[test]
@@ -399,6 +455,33 @@ fn a_need_the_proxy_would_reject_fails() {
         saved.expect("saved rows").answer(&need)
     });
     assert_eq!(answer.unwrap(), Err(POLICY_NEED));
+}
+
+/// An approved package call saves its allow and is decided again before the
+/// daemon republishes: the rows were re-signed at the new generation, which
+/// the second pass reads instead of the published one.
+#[test]
+fn a_second_pass_reads_rows_at_its_own_write_generation() {
+    let (home, connection) = guard_home("own-write");
+    decide(&connection, "artifact", "block", None, "approval-gate");
+    let mut state = integrity_state();
+    state.generation = Some(0);
+    let published = serde_json::to_string(&state).unwrap();
+    sync_state(&connection, "policy_integrity", &published);
+    let mut stale = binding();
+    stale.policy_integrity_state = Some(state);
+    let reader = store::open(&home).unwrap().expect("store");
+    let mut saved = store::saved(&reader, &stale, home.to_str().unwrap(), HARNESS)
+        .unwrap()
+        .expect("saved rows");
+    let before = saved.answer(&policy_need(ARTIFACT, None));
+    assert!(!matches!(&before, Ok(answer) if !answer["decision"].is_null()));
+    saved.read_after_own_write(1);
+    let after = saved.answer(&policy_need(ARTIFACT, None)).unwrap();
+    assert_eq!(after["decision"]["action"], "block");
+    // A published generation already past the write is kept.
+    saved.read_after_own_write(0);
+    assert_eq!(saved.integrity_state["generation"], 1);
 }
 
 #[cfg(unix)]

@@ -16,7 +16,7 @@ const VECTORS: &str = include_str!("../testdata/policy_integrity_generation/vect
 
 /// The live schema, as `store_connection_schema.py` creates it: `decision_id`
 /// has to be the row id for the insert to report the row it wrote.
-const SCHEMA: &str = "create table policy_decisions (
+pub(crate) const SCHEMA: &str = "create table policy_decisions (
   decision_id integer primary key autoincrement,
   harness text not null,
   scope text not null,

@@ -145,6 +145,39 @@ fn rejects_missing_or_empty_required_flags() {
     }
 }
 
+/// Every harness the coverage matrix names for a package command launches the
+/// one relay: its proxy command only picks the harness, the default transport
+/// and whether the client can be prompted. The package lane after that reads
+/// the same request for each of them.
+#[test]
+fn every_harness_proxy_command_starts_the_relay() {
+    for (proxy, harness, transport, elicits) in [
+        ("cursor-mcp-proxy", "cursor", "stdio", true),
+        ("opencode-mcp-proxy", "opencode", "local", false),
+        ("hermes-mcp-proxy", "hermes", "stdio", true),
+    ] {
+        let parsed = parse(&base(proxy)).unwrap();
+        assert_eq!(parsed.harness, harness);
+        assert_eq!(parsed.transport, transport);
+        assert_eq!(parsed.elicitation_capable, elicits);
+        assert_eq!(parsed.command, "npx");
+    }
+}
+
+/// A managed Hermes server with no config file launches without
+/// `--config-path`; every other harness still requires it.
+#[test]
+fn a_hermes_server_may_omit_its_config_path() {
+    let tokens = base("hermes-mcp-proxy");
+    let position = tokens
+        .iter()
+        .position(|token| token == "--config-path")
+        .unwrap();
+    let mut missing = tokens;
+    missing.drain(position..position + 2);
+    assert_eq!(parse(&missing).unwrap().config_path, "");
+}
+
 #[test]
 fn keeps_an_explicit_home() {
     let mut tokens = base("codex-mcp-proxy");

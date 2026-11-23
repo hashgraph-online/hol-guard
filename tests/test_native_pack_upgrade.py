@@ -273,8 +273,9 @@ def test_history_past_the_request_bound_migrates_through_a_spilled_chain(tmp_pat
     from pathlib import Path
 
     store = legacy_store(tmp_path, monkeypatch, revisions=4)
-    # Three predecessors under the head: a real chain for the walk to read.
-    assert len(lifecycle_store.legacy_evidence(store)["legacy_history"]) == 3
+    with store._connect() as connection:
+        # Three predecessors under the head: a real chain for the walk to read.
+        assert len(lifecycle_store.legacy_evidence(store, connection)["legacy_history"]) == 3
     monkeypatch.setattr(lifecycle_store, "LEGACY_HISTORY_INLINE_BYTES", -1)
     requested: dict = {}
     invoke = lifecycle.invoke

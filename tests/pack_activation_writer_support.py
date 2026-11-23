@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePo
 from codex_plugin_scanner.guard.store_extension_control_authority_schema import (
     ensure_extension_control_authority_schema,
 )
-from tests.native_activation_support import slot_row
 
 
 @lifecycle.one_runtime
@@ -43,7 +42,7 @@ def write_in_transaction(store, connection, draft, *, verifier_key, recorded_at,
     if type(now) is not int or not admission_is_current(header, now):
         raise NativePolicySnapshotError("native_command_pack_draft_expired")
     ensure_extension_control_authority_schema(connection)
-    current = slot_row(connection)
+    current = activation_store._row(connection)
     if current is not None and activation_baseline.is_baseline(current["record_json"]):
         activation_baseline.verify(current, verifier_key)
         current = None

@@ -5,22 +5,25 @@
 //! none of them, each lookup misses and the diagnostic has nothing to explain.
 //! With saved rows the resident reads them itself, on one read-only snapshot,
 //! with the integrity evidence the proxy would ship: the key and state the
-//! daemon published, which the store must still hold, protected. Remote
+//! daemon published, which the store must still hold. Remote
 //! rows need no more evidence than the proxy ships: the lookup never serves a
 //! cloud-sync or team-policy row and verifies no remote row's integrity. A
 //! policy-bundle row this harness's lookups reach, an integrity state other
-//! than the published protected one, a newer or unknown schema, and a store it
-//! cannot read all defer the call.
+//! than the published one, a newer or unknown schema, and a store it cannot
+//! read all defer the call. The audit events a lookup raises on the snapshot
+//! are collected and written once the snapshot is released (`write_audit`).
 
 use crate::local_store_read::{
     open_read_only_cached, schema_version, table_exists, CachedConnection, STORE_FILE_NAME,
     SUPPORTED_SCHEMA_VERSION,
 };
 use crate::policy_bundle_store_identities::cached_bundle_authority;
+use crate::policy_decision_lookup_op::{write_audit_events, AuditEvent};
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Value};
+use std::cell::RefCell;
 use std::path::Path;
 use zeroize::Zeroizing;
 
@@ -28,8 +31,16 @@ pub(super) const STORE_UNREADABLE: &str = "mcp_relay_store_unreadable";
 /// A store schema newer than this runtime reads, which the proxy of the same
 /// release still serves.
 pub(super) const STORE_NEWER: &str = "mcp_relay_store_newer";
+/// The cached policy bundle's authority could not be read. The call is
+/// refused; the session stays native.
 pub(super) const SAVED_REMOTE: &str = "mcp_relay_saved_remote_policy";
+/// The daemon published no integrity evidence the saved rows can be read
+/// with, or the store holds another state. The call is refused; the session
+/// stays native and the next call reads what the daemon republishes.
 const SAVED_UNVERIFIABLE: &str = "mcp_relay_saved_policy_unverifiable";
+/// The audit events a lookup raised could not be written. The proxy's lookup
+/// fails the same way when its own audit write does.
+pub(super) const AUDIT_UNWRITTEN: &str = "mcp_relay_saved_audit_unwritten";
 /// `REMOTE_POLICY_SOURCES` (`policy_integrity.py`).
 const REMOTE_SOURCES_SQL: &str = "('cloud-sync', 'team-policy', 'policy-bundle', \
      'policy-bundle-canonical', 'cloud-signed-memory')";
@@ -69,6 +80,34 @@ pub(crate) struct Saved<'c> {
     /// The validated bundle every lookup of this call matches Cloud
     /// exceptions against, read on the first lookup that needs it.
     pub(super) exception_bundle: guard_contracts::CloudExceptionBundle,
+    /// The audit events this call's lookups raised, which the snapshot cannot
+    /// take; the caller writes them once it holds a writable connection.
+    pub(super) audit: RefCell<Vec<AuditEvent>>,
+}
+
+impl Saved<'_> {
+    /// The audit events this call's lookups raised, in the order they ran.
+    pub(super) fn into_audit(self) -> Vec<AuditEvent> {
+        self.audit.into_inner()
+    }
+    /// Read the rows at the generation the relay's own remembered allow was
+    /// just finalized at, when the daemon has not republished it yet. That
+    /// write re-signed every local row at its generation, so the published
+    /// one would read them all as a rollback. A published generation already
+    /// past it is kept: a later write re-signed the rows again.
+    pub(super) fn read_after_own_write(&mut self, generation: u64) {
+        after_own_write(&mut self.integrity_state, generation);
+    }
+}
+
+/// Raise a published integrity state to the generation the relay's own
+/// remembered allow was finalized at, unless a later write already moved it
+/// past that generation.
+pub(super) fn after_own_write(state: &mut Value, generation: u64) {
+    let published = state.get("generation").and_then(Value::as_u64);
+    if published.is_none_or(|published| published < generation) {
+        state["generation"] = Value::from(generation);
+    }
 }
 
 /// `None` when the store holds no saved row, so every lookup misses; the
@@ -109,7 +148,7 @@ pub(crate) fn saved_at<'c>(
     if !has_local_policy && !has_remote_policy && !has_local_once {
         return Ok(None);
     }
-    let (integrity_state, key) = published_integrity(binding)?;
+    let (integrity_state, key) = lookup_integrity(binding)?;
     if shape.stored_integrity_state()?.as_ref() != Some(&integrity_state) {
         return Err(SAVED_UNVERIFIABLE);
     }
@@ -139,11 +178,62 @@ pub(crate) fn saved_at<'c>(
         key_id: key.key_id.clone(),
         bundle_identities,
         exception_bundle: Default::default(),
+        audit: RefCell::new(Vec::new()),
     }))
 }
 
+/// Write the audit events a call's lookups raised, in one transaction on the
+/// writable store, once the read snapshot is released. Under a degraded state
+/// these record each local row the lookup refused (`rule.ignored.local_integrity`),
+/// as the proxy's lookup records them.
+pub(super) fn write_audit(guard_home: &str, events: &[AuditEvent]) -> Result<(), &'static str> {
+    if events.is_empty() {
+        return Ok(());
+    }
+    let mut connection = super::claim::open_for_claim(guard_home)?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(|_| AUDIT_UNWRITTEN)?;
+    write_audit_events(&transaction, events).map_err(|_| AUDIT_UNWRITTEN)?;
+    transaction.commit().map_err(|_| AUDIT_UNWRITTEN)
+}
+
+/// The integrity state and key a saved lookup reads with, as the proxy's
+/// lookup evidence carries them (`policy_lookup_evidence`): the state the
+/// daemon refreshed, protected or degraded, and the key that state names.
+/// The lookup itself judges a degraded state, exactly as it does for the
+/// proxy, and the audit events it raises for refused local rows are written
+/// after the snapshot (`write_audit`). A claim procures the
+/// same evidence (`_claim_integrity_evidence`), so the claim and the package
+/// spend read with it too.
+/// Without a key, or with a state that names another key, the saved rows
+/// cannot be verified, so the call is refused.
+pub(crate) fn lookup_integrity(
+    binding: &DirectLaneBinding,
+) -> Result<
+    (
+        Value,
+        &crate::policy_store::policy_store_direct_lane::DirectLaneIntegrityKey,
+    ),
+    &'static str,
+> {
+    let (Some(state), Some(key)) = (
+        binding.policy_integrity_state.as_ref(),
+        binding.integrity_key.as_ref(),
+    ) else {
+        return Err(SAVED_UNVERIFIABLE);
+    };
+    if state.enforcement != "enforce" || state.key_id.as_deref() != Some(key.key_id.as_str()) {
+        return Err(SAVED_UNVERIFIABLE);
+    }
+    let state = serde_json::to_value(state).map_err(|_| SAVED_UNVERIFIABLE)?;
+    Ok((state, key))
+}
+
 /// The integrity state and key the daemon published, when they are the
-/// protected, enforced, cut-over state its key signs.
+/// protected, enforced, cut-over state its key signs. The relay's lookups and
+/// claims read with `lookup_integrity`; the Codex live-authority evidence
+/// still asks for the protected state.
 pub(crate) fn published_integrity(
     binding: &DirectLaneBinding,
 ) -> Result<

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..mcp_server_client import ManagedMcpServer, proxy_process_env, stable_mcp_server_identifier
-from ..synced_policy import synced_policy_payload as _synced_policy_payload
+from .commands_mcp_relay_launch import relay_argv, relay_proxy_command, run_relay
 
 def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
     summary = artifact.metadata.get("request_summary")
@@ -62,39 +62,6 @@ def _server_env(server: dict[str, object]) -> dict[str, str]:
         return {}
     return {str(key): value for key, value in env.items() if isinstance(key, str) and isinstance(value, str)}
 
-def _serve_hermes_stdio_proxy(
-    *,
-    context: HarnessContext,
-    store: GuardStore,
-    config,
-    server_name: str,
-    command: list[str],
-    source_scope: str,
-    config_path: str,
-    server_id: str | None,
-    server_env_keys: tuple[str, ...],
-) -> int:
-    def current_config() -> GuardConfig:
-        local_config = load_guard_config(context.guard_home, workspace=context.workspace_dir)
-        return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
-
-    # The relay prompts inline for any client that declares elicitation, as this proxy does.
-    proxy = ElicitationMcpGuardProxy(
-        harness="hermes",
-        server_name=server_name,
-        command=command,
-        context=context,
-        store=store,
-        config=config,
-        source_scope=source_scope,
-        config_path=config_path,
-        transport="stdio",
-        server_id=server_id,
-        server_env_keys=server_env_keys,
-        current_config_provider=current_config,
-    )
-    return proxy.serve()
-
 def _run_hermes_mcp_proxy(
     *,
     args: argparse.Namespace,
@@ -110,17 +77,7 @@ def _run_hermes_mcp_proxy(
         if not server_name or config_path is None:
             print("Guard Hermes MCP proxy needs --server-name and --config-path with --command.", file=sys.stderr)
             return 2
-        return _serve_hermes_stdio_proxy(
-            context=context,
-            store=store,
-            config=config,
-            server_name=server_name,
-            command=[server_command, *list(getattr(args, "server_args", []))],
-            source_scope=getattr(args, "source_scope", "project"),
-            config_path=config_path,
-            server_id=getattr(args, "server_id", None),
-            server_env_keys=tuple(getattr(args, "server_env_keys", ())),
-        )
+        return relay_proxy_command("hermes-mcp-proxy", args, guard_home=context.guard_home)
     server_key = getattr(args, "server", None)
     if not server_key:
         print("Guard Hermes MCP proxy needs --server or --command.", file=sys.stderr)
@@ -186,17 +143,25 @@ def _run_hermes_mcp_proxy(
         env=env,
         enabled=True,
     )
-    return _serve_hermes_stdio_proxy(
-        context=context,
-        store=store,
-        config=config,
-        server_name=identity.name,
-        command=command,
-        source_scope=identity.source_scope,
-        config_path=identity.config_path,
+    relayed = argparse.Namespace(
+        **{
+            **vars(args),
+            "server_name": identity.name,
+            "config_path": identity.config_path,
+            "source_scope": identity.source_scope,
+            "transport": "stdio",
+        }
+    )
+    argv = relay_argv(
+        "hermes-mcp-proxy",
+        relayed,
+        guard_home=context.guard_home,
+        server_command=command[0],
+        server_args=command[1:],
         server_id=stable_mcp_server_identifier(identity),
         server_env_keys=tuple(sorted(env)),
     )
+    return run_relay(argv, guard_home=context.guard_home)
 
 def _server_command(server: dict[str, object]) -> list[str]:
     command = server.get("command")

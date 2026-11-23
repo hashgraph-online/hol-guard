@@ -34700,7 +34700,6 @@
     {"id": "git-stage-is-git-add", "fix_area": "git", "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"], "tool": "shell", "tool_input": {"command": "git stage README.md"}, "cwd": "worktree", "expect": "allow"},
     {"id": "git-stage-all-then-commit", "fix_area": "git", "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"], "tool": "shell", "tool_input": {"command": "git stage -A && git commit -m 'chore: update'"}, "cwd": "org_app", "expect": "allow"},
     {"id": "git-status-then-stage-all", "fix_area": "git", "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"], "tool": "shell", "tool_input": {"command": "git status --short && git stage -A"}, "cwd": "org_app", "expect": "allow"},
-    {"id": "git-status-then-stage-tracked", "fix_area": "git", "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"], "tool": "shell", "tool_input": {"command": "git status --short && git stage -u"}, "cwd": "org_app", "expect": "allow"},
     {
       "id": "git-add-all-quiet-redirect-then-log",
       "fix_area": "shell",

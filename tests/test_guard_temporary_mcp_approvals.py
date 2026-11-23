@@ -13,13 +13,13 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     evaluate_tool_call,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
-from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.temporary_mcp_approvals import (
     parse_temporary_mcp_grant_selection,
     temporary_mcp_approval_payload,
 )
+from tests.mcp_call_projection_support import McpCallProjection, McpCallProjector
 
 
 def temporary_mcp_grant_selector(server_identity_hash: str, category: str | None = None) -> str:

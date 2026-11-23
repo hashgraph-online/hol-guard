@@ -193,7 +193,7 @@ pub(super) fn package_facts(policy: &PackagePolicy) -> Result<McpPackageFactsV1,
 }
 
 /// `_has_saved_package_block(evaluation.reasons)`.
-fn saved_policy_blocks(policy: &PackagePolicy) -> bool {
+pub(super) fn saved_policy_blocks(policy: &PackagePolicy) -> bool {
     policy
         .evaluation
         .get("reasons")

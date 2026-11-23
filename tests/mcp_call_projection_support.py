@@ -1,43 +1,25 @@
-"""What the MCP proxy shows and binds for one ``tools/call``, in one round trip.
+"""Test helper: the resident's ``call_projection`` check for one ``tools/call``.
 
-The resident's ``call_projection`` check masks the arguments and params,
-builds the launch target, normalizes the browser intent and renders the risk
-evidence together. Handling one message asks for the same projection from
-several places, so the proxy keeps the last few answers; the projection is a
-pure function of its query.
+The check masks the arguments and params, builds the launch target,
+normalizes the browser intent and renders the risk evidence together. The
+retired Python MCP proxy used to own this helper; the protection tests keep
+it to drive the native check directly.
 """
 
 from __future__ import annotations
 
 import json
-import re
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from ..blocked_request_mode import connector_setup_reason
-from ..models import GuardArtifact
-from ..native_context import _MCP_RISK_CATEGORIES
-from ..native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_mcp_proxy_decide
-from ..native_mcp_tool_evidence import risk_input
+from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.native_context import _MCP_RISK_CATEGORIES
+from codex_plugin_scanner.guard.native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_mcp_proxy_decide
+from codex_plugin_scanner.guard.native_mcp_tool_evidence import risk_input
 
 _UNAVAILABLE = "native_mcp_arguments_projection_unavailable"
 _MEMO_SIZE = 8
-_SAFE_NAME = re.compile(r"[A-Za-z0-9@][A-Za-z0-9._@+/-]{0,63}")
-
-
-def connector_agent_text(connector_setup: Mapping[str, object], *, ask: bool) -> str:
-    """Agent text for a call held only because its MCP server was never set up.
-
-    The default mode carries no link and no request to ask the user; ``ask``
-    mode says the setup waits in the inbox and the caller adds the link.
-    """
-
-    name = connector_setup.get("name")
-    plain = name.strip() if isinstance(name, str) else ""
-    shown = plain if _SAFE_NAME.fullmatch(plain) else "this MCP server"
-    return connector_setup_reason(shown, "mcp", ask=ask)
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +40,7 @@ class McpCallProjection:
 
 
 class McpCallProjector:
-    """Answers ``call_projection`` for one proxy, reusing recent answers."""
+    """Answers ``call_projection``, reusing recent answers."""
 
     def __init__(self, guard_home: Path) -> None:
         self._guard_home = guard_home
@@ -89,50 +71,6 @@ class McpCallProjector:
             self._memo.clear()
         self._memo[key] = projection
         return projection
-
-
-def review_artifact_payload(
-    projection: McpCallProjection,
-    artifact: Any,
-    artifact_hash: str,
-    signals: tuple[str, ...],
-    *,
-    policy_action: str,
-    scanner_evidence: tuple[dict[str, object], ...] = (),
-    connector_setup: Mapping[str, object] | None = None,
-) -> dict[str, Any]:
-    """The evaluation item a queued ``tools/call`` is written to the inbox with.
-
-    Includes browser intent metadata when the MCP tool call is a browser
-    automation call (HGBM063-HGBM065). ``projection`` is the call projected
-    with its artifact. A ``connector_setup`` call joins its server's
-    ``connector:`` group; the queue adds the row's own action digest, so only
-    identical calls merge and every row is still written.
-    """
-
-    changed_fields: list[str] = ["runtime_tool_call"]
-    if projection.browser_intent is not None:
-        changed_fields.append("runtime_browser_tool_call")
-    payload: dict[str, Any] = {
-        "artifact_id": artifact.artifact_id,
-        "artifact_name": artifact.name,
-        "artifact_hash": artifact_hash,
-        "artifact_type": artifact.artifact_type,
-        "source_scope": artifact.source_scope,
-        "config_path": artifact.config_path,
-        "changed_fields": changed_fields,
-        "policy_action": policy_action,
-        "launch_target": projection.display_launch_target,
-        "risk_summary": projection.risk_summary,
-        "risk_signals": list(signals),
-    }
-    if projection.browser_intent is not None:
-        payload["browser_intent"] = projection.browser_intent
-    if scanner_evidence:
-        payload["scanner_evidence"] = list(scanner_evidence)
-    if connector_setup is not None:
-        payload["queue_group_id"] = connector_setup["queue_group_id"]
-    return payload
 
 
 def _projection(payload: dict[str, Any]) -> McpCallProjection:

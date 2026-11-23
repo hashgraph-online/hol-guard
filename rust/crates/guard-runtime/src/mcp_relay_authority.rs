@@ -14,6 +14,9 @@ use crate::mcp_relay_catalog::{CatalogSnapshot, RelayCatalog};
 
 const BLOCKED_CODE: i64 = -32001;
 const NO_DECISION: &str = "HOL Guard could not obtain a native decision for this tool call.";
+const VERSION_SKEW: &str = "HOL Guard was updated while this MCP session was running, so this \
+     session cannot decide the tool call. Restart the session, or run `hol-guard repair` if this \
+     message returns.";
 const SYNC_FAILED: &str =
     "HOL Guard could not synchronize the MCP server notification stream before this tool call.";
 
@@ -189,6 +192,29 @@ pub(crate) fn no_decision_response(id: Option<&Value>, params: &Map<String, Valu
     )
 }
 
+/// The response for a call the resident left undecided for `cause`. A
+/// resident the installed runtime has superseded, or a store newer than this
+/// runtime reads, is version skew that only a restarted session or
+/// `hol-guard repair` clears, so the answer names that repair.
+pub(crate) fn undecided_response(
+    id: Option<&Value>,
+    params: &Map<String, Value>,
+    cause: &str,
+) -> Value {
+    if !matches!(
+        cause,
+        "mcp_relay_runtime_superseded" | "mcp_relay_store_newer"
+    ) {
+        return no_decision_response(id, params);
+    }
+    blocked_response(
+        id,
+        &tool_name(params),
+        Some(VERSION_SKEW),
+        Some(json!({"approvalRequests": [], "guardPolicyAction": "block"})),
+    )
+}
+
 /// The response when the child stream could not be synchronized first.
 pub(crate) fn sync_failed_response(id: Option<&Value>, params: &Map<String, Value>) -> Value {
     blocked_response(
@@ -209,3 +235,7 @@ fn truthy(value: &Value) -> bool {
         Value::Number(_) => true,
     }
 }
+
+#[cfg(test)]
+#[path = "mcp_relay_authority_tests.rs"]
+mod tests;

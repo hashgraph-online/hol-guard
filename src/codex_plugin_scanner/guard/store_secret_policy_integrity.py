@@ -26,7 +26,7 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
-from .store_policy_integrity_key_mint import mint_policy_integrity_key_once
+from .store_policy_integrity_key_mint import mint_policy_integrity_key_once, native_mint_for_store
 from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
@@ -567,8 +567,18 @@ class StoreSecretPolicyIntegrityMixin:
                     for name in (AUTHORITY_FILE_NAME, NATIVE_POLICY_VERIFIER_KEY_NAME)
                 )
 
+            minted = native_mint_for_store(self.guard_home, secret_store)
+            if minted in {"armed", "busy"}:
+                return None, None
+            if minted == "present":
+                # The native mint stored or found a key. A reread that finds
+                # nothing is an unreadable copy, not a missing key, so minting
+                # here would replace it.
+                encoded_key = self._get_policy_integrity_secret_from_store(key_ref)
+                if encoded_key is None:
+                    return None, None
             try:
-                encoded_key = mint_policy_integrity_key_once(
+                encoded_key = encoded_key or mint_policy_integrity_key_once(
                     self.guard_home,
                     read_key=lambda: self._get_policy_integrity_secret_from_store(key_ref),
                     write_key=lambda value: secret_store.set_secret(key_ref, value),

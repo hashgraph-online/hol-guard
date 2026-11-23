@@ -4,7 +4,7 @@
 //! module; what the leg owns is the request a package call is decided from, so
 //! these cover the fields a call is refused for missing.
 
-use super::super::{identity, subject};
+use super::super::{resolve::identity, subject};
 use super::*;
 
 use guard_command::package_intent_parser::parse_package_intent;
