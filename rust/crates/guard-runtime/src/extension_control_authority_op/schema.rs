@@ -14,7 +14,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 
 use super::pack_finish::{PACK_SCHEMA_VERSIONS, SCHEMA_V2};
-use super::records::{store_fault, tampered, Res};
+use super::records::{store_fault, tampered, Fault, Res};
 
 /// `EXTENSION_CONTROL_SCHEMA_VERSION`.
 const SCHEMA_VERSION: i64 = 4;
@@ -215,6 +215,21 @@ pub(super) fn ensure_schema(connection: &Connection, wanted: i64) -> Res<()> {
         }
     }
     ensure_epoch(connection)
+}
+
+/// The store opener's call, `require_compatible=False`: ensure the base
+/// schema, but leave a marker this build does not recognize untouched and
+/// answer `false`, so opening the store never fails on it. Returns `true`
+/// once the schema is in place.
+// Reached only through the native schema chain until the store opener
+// moves to it.
+#[allow(dead_code)]
+pub(crate) fn ensure_startup_schema(connection: &Connection) -> Res<bool> {
+    match ensure_schema(connection, SCHEMA_VERSION) {
+        Ok(()) => Ok(true),
+        Err(Fault::Tampered(reason)) if reason == INCOMPATIBLE => Ok(false),
+        Err(other) => Err(other),
+    }
 }
 
 fn trigger_name(table: &str, event: &str) -> String {
