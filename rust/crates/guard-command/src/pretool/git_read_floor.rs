@@ -369,7 +369,7 @@ fn verdict(
             && segment.wrapper_chain.is_empty()
             && segment.environment_names.is_empty()
             && (super::search::grep::creates_nothing(segment)
-                || super::write_free_steps::writes_nothing(segment))
+                || super::write_free_steps::writes_nothing(segment, read_context))
     };
     let settled = |prior: usize, later: &crate::CommandSegmentV1| {
         let segment = segments[prior];
