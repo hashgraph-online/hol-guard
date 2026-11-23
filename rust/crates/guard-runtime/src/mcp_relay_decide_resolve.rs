@@ -94,8 +94,7 @@ fn resolve_saved(
         &subject,
         &decision,
         Some(&catalog),
-    )
-    .or_else(|| crate::mcp_tool_policy_connector::unrecognized_allow_setup(&subject, &decision));
+    );
     if connector_setup.is_some()
         && matches!(
             decision.action,
