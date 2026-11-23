@@ -370,6 +370,9 @@ fn verdict(
     };
     let settled = |prior: usize, later: &crate::CommandSegmentV1| {
         let segment = segments[prior];
+        if shell_local_assignment(segment) {
+            return true;
+        }
         // A step that changes shell state (an assignment, `export`, `source`,
         // `printf -v` or `%n`, arithmetic like `$((PATH=10))`) can name the
         // configuration Git reads; the proofs below answer only for what a
@@ -492,6 +495,46 @@ fn verdict(
 #[path = "git_read_floor_prefix.rs"]
 mod prefix;
 use prefix::{after_git_read_prefix, git_after_later_cd};
+
+/// `dir=/tmp/work` or `dir="$HOME/work"` on its own: a plain shell variable
+/// the command sets for its own later words.
+///
+/// A lowercase name is not one Git, or anything Git starts, reads from its
+/// environment, and [`super::generic::chain_literals::ordinary_name`] refuses the ones
+/// a shell ties to its own state (zsh's `path`, `cdpath`, `fpath`) or that
+/// name a proxy or a credential. Only a bare assignment counts: no command
+/// word, so nothing runs with it in its environment. The value is a literal
+/// path or a double-quoted `$HOME` root, so no substitution, arithmetic or
+/// subscript runs while it is set. An uppercase name keeps the review, since
+/// one already exported (`GIT_DIR`, `PAGER`) would reach Git.
+fn shell_local_assignment(segment: &crate::CommandSegmentV1) -> bool {
+    let text = segment.text.trim();
+    let Some((name, value)) = text.split_once('=') else {
+        return false;
+    };
+    let value = ["\"$HOME/", "\"${HOME}/"]
+        .iter()
+        .find_map(|root| value.strip_prefix(root))
+        .and_then(|rest| rest.strip_suffix('"'))
+        .unwrap_or(value);
+    segment.executable.is_none()
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden
+        && segment.tokens.len() == 1
+        && !name.is_empty()
+        && name.len() <= 64
+        && !name.starts_with(|c: char| c.is_ascii_digit())
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        && name.bytes().any(|byte| byte.is_ascii_lowercase())
+        && super::generic::chain_literals::ordinary_name(name)
+        && !value.is_empty()
+        && value.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || matches!(c, '_' | '.' | '/' | '@' | '%' | '+' | ':' | ',' | '-')
+        })
+}
 
 pub(super) fn after_safe_git_read_prefix(
     model: &CanonicalCommandV1,
