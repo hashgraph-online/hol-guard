@@ -57,15 +57,21 @@ def apply_pending_policy_request(
             raise PolicyToolError("stale_policy_generation", "Policy integrity generation has changed.")
     if has_business_rules(document):
         try:
-            with approved_business_source_mutation(
-                store,
-                document,
-                mode=request.mode,
-                now=_now_iso(),
-                approval_gate_grant=approval_gate_grant,
-                expected_current_digest=request.expected_current_digest,
-                reject_already_installed=True,
-            ) as mutation:
+            # The native apply advances the generation and the finalize adopts
+            # it in a second step, so the generation lock spans both, taken
+            # before the authority lock as every other advance does.
+            with (
+                store.hold_policy_integrity_generation_lock(),
+                approved_business_source_mutation(
+                    store,
+                    document,
+                    mode=request.mode,
+                    now=_now_iso(),
+                    approval_gate_grant=approval_gate_grant,
+                    expected_current_digest=request.expected_current_digest,
+                    reject_already_installed=True,
+                ) as mutation,
+            ):
                 result = _apply_business_request(
                     store, repo, request, document, mutation, approval_gate_grant=approval_gate_grant
                 )
