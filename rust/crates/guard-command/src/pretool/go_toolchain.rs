@@ -1,7 +1,8 @@
 //! Version and environment queries for the `go` command.
 //!
-//! `go version` prints a banner and `go env` prints the settings the command
-//! resolved, and neither builds a package, runs a generator or writes a file.
+//! `go version` prints a banner. Named `go env` setting queries can be
+//! inert reads, but a full dump or compiler-related setting can invoke the
+//! configured C compiler just to calculate the value. Those are not reads.
 //! The `go` on `PATH` is not always the toolchain that answers them, though:
 //! since Go 1.21 the command reads `GOTOOLCHAIN`, and under its default
 //! `auto` a `go.mod` or `go.work` that asks for a newer release makes the
@@ -69,19 +70,23 @@ pub(super) fn safe_go_probe(arguments: &[String], context: super::PathContext<'_
 
 /// The two spellings that print and exit.
 ///
-/// `go env` takes `-json`, which only changes the shape of the answer, and
-/// plain variable names, which choose which lines of it are printed. `-w`
-/// and `-u` write the stored file instead, and every other option and every
-/// operand after `version` names something to open.
+/// `go env` needs at least one explicitly named, compiler-inert setting;
+/// dumping all settings can execute the configured C compiler. `-json` only
+/// changes the output shape. `-w` and `-u` write the stored file, and every
+/// other option or operand after `version` stays outside this read proof.
 fn read_only_query(arguments: &[String]) -> bool {
     let Some((verb, rest)) = arguments.split_first() else {
         return false;
     };
     match verb.as_str() {
         "version" => rest.is_empty(),
-        "env" => rest
-            .iter()
-            .all(|argument| argument == "-json" || setting_name(argument)),
+        "env" => {
+            let names: Vec<_> = rest.iter().filter(|arg| arg.as_str() != "-json").collect();
+            !names.is_empty()
+                && names
+                    .iter()
+                    .all(|name| setting_name(name) && !env_setting_runs_compiler(name))
+        }
         _ => false,
     }
 }
@@ -95,6 +100,22 @@ fn setting_name(argument: &str) -> bool {
         && argument
             .chars()
             .all(|letter| letter.is_ascii_uppercase() || letter.is_ascii_digit() || letter == '_')
+}
+
+/// Values whose computation can run `CC` even for a `go env` read.
+/// Verified with an inert CC marker on Go 1.23.2; keep these under review,
+/// including when they are selected after `-json`.
+fn env_setting_runs_compiler(name: &str) -> bool {
+    matches!(
+        name,
+        "CGO_CFLAGS"
+            | "CGO_CPPFLAGS"
+            | "CGO_CXXFLAGS"
+            | "CGO_FFLAGS"
+            | "CGO_LDFLAGS"
+            | "PKG_CONFIG"
+            | "GOGCCFLAGS"
+    )
 }
 
 /// Whether the toolchain that answers the query can only be the one on
