@@ -274,7 +274,7 @@ fn require_capacity(connection: &Connection, cli_id: &str, identity_hash: &str) 
 
 /// `rebuild_provider_authority`: one digest over every stored action for this
 /// connection, in slug order, seeded with the connection identity.
-fn rebuild_provider_authority(
+pub(crate) fn rebuild_provider_authority(
     connection: &Connection,
     cli_id: &str,
     identity_hash: &str,

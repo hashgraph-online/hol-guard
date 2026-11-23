@@ -426,7 +426,7 @@ fn authority_shape(tool: &Value) -> StoreResult<String> {
 /// `rebuild_tool_authority`: rebuild inside the catalog transaction, where
 /// invalid or missing evidence leaves the tool with no authority row at all
 /// and so permits nothing.
-fn rebuild_tool_authority(
+pub(crate) fn rebuild_tool_authority(
     connection: &Connection,
     cli_id: &str,
     identity_hash: &str,
