@@ -17,10 +17,7 @@ that carry integrity fields this activation would clear, counts as a change.
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Iterable, Mapping, Sequence
-
-from .policy_integrity import REMOTE_POLICY_SOURCES
 
 # Reported to Cloud only; for an unmanaged delivery the resident does not
 # observe it and no reader enforces from it.
@@ -72,7 +69,8 @@ def _comparable_rows(rows: Iterable[Sequence[object]]) -> list[tuple[str, ...]]:
 
 
 def activation_changes_enforcement(
-    connection: sqlite3.Connection,
+    stored: Mapping[str, str | None],
+    stored_rows: Iterable[Sequence[object]],
     *,
     payloads: Mapping[str, str],
     rows: Sequence[Sequence[object]],
@@ -81,26 +79,18 @@ def activation_changes_enforcement(
 
     ``payloads`` are the ``sync_state`` values the activation writes, last-good
     copies included, and ``rows`` the remote policy rows that replace the
-    stored ones. Call it inside the transaction that observed the state the
-    activation is checked against.
+    stored ones. ``stored`` holds the stored text of every payload key and
+    ``stored_rows`` the stored remote rows, in ``_ROW_COLUMNS`` order, both from
+    the view the activation is checked against.
     """
 
     for state_key, payload in payloads.items():
         if state_key in _REPORTING_ONLY_KEYS:
             continue
-        stored_row = connection.execute(
-            "select payload_json from sync_state where state_key = ?", (state_key,)
-        ).fetchone()
-        stored = None if stored_row is None else str(stored_row[0])
+        current = stored[state_key]
         if state_key in _SIGNED_BUNDLE_KEYS:
-            if _without_signature(stored) != _without_signature(payload):
+            if _without_signature(current) != _without_signature(payload):
                 return True
-        elif stored != payload:
+        elif current != payload:
             return True
-    sources = sorted(REMOTE_POLICY_SOURCES)
-    placeholders = ",".join("?" for _ in sources)
-    stored_rows = connection.execute(
-        f"select {', '.join(_ROW_COLUMNS)} from policy_decisions where source in ({placeholders})",
-        sources,
-    ).fetchall()
-    return _comparable_rows(tuple(row) for row in stored_rows) != _comparable_rows(rows)
+    return _comparable_rows(stored_rows) != _comparable_rows(rows)

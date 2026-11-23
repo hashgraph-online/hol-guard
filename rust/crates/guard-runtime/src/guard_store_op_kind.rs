@@ -198,6 +198,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         // The memory policy version and rule registry a signed memory
         // bundle is checked and planned against, as one view.
         "review_policy_memory_rows" => Kind::Snapshot,
+        // The sync rows, authority snapshot and remote policy rows a bundle
+        // activation is checked against, as one view.
+        "policy_activation_view" => Kind::Snapshot,
         // Admission evidence only: a deferred read that never finalizes the
         // outbox, so it cannot wait on the write lock.
         "read_legacy_codex_probe_receipt" => Kind::Snapshot,

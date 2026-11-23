@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Callable, Hashable, Mapping
 from dataclasses import dataclass
 
@@ -64,7 +63,7 @@ def managed_delivery_matches_base(
 
 
 def revalidate_cloud_policy(
-    connection: sqlite3.Connection,
+    summary_json: str | None,
     *,
     policy: ParsedManagedControlsPolicy,
     policy_bundle: Mapping[str, object],
@@ -83,10 +82,6 @@ def revalidate_cloud_policy(
     from .managed_controls_policy_bundle import parsed_managed_controls_from_validated_policy_bundle
     from .managed_controls_policy_fields import ManagedControlsPolicyError
 
-    row = connection.execute(
-        "select payload_json from sync_state where state_key = ?", ("runtime_session_summary",)
-    ).fetchone()
-    summary_json = None if row is None else str(row["payload_json"])
     if summary_json is None:
         return False
 
@@ -223,7 +218,7 @@ def _encode_acknowledgement(
 
 
 def encoded_delivery_acknowledgement(
-    connection: sqlite3.Connection,
+    previous_json: str | None,
     *,
     delivery: Mapping[str, object],
     policy_bundle: Mapping[str, object],
@@ -231,7 +226,7 @@ def encoded_delivery_acknowledgement(
     observed_at: str,
     verdicts: PrecomputedVerdicts | None = None,
 ) -> str:
-    """Return the encoded acknowledgement for the state observed on ``connection``.
+    """Return the encoded acknowledgement for the stored one, ``previous_json``.
 
     The acknowledgement comes from the resident. With ``verdicts`` the call never
     reaches the resident: it returns the result computed for exactly the state
@@ -242,12 +237,8 @@ def encoded_delivery_acknowledgement(
     device_id = delivery.get("deviceId")
     if not isinstance(device_id, str) or not device_id:
         raise ValueError("Managed Controls delivery requires a device identity")
-    row = connection.execute(
-        "select payload_json from sync_state where state_key = ?",
-        ("policy_bundle_ack",),
-    ).fetchone()
     inputs = DeliveryAcknowledgementInputs(
-        previous_json=None if row is None else str(row["payload_json"]),
+        previous_json=previous_json,
         applied_revision=published_authority.managed_revision,
         applied_digest=effective_projection_digest(published_authority),
     )
