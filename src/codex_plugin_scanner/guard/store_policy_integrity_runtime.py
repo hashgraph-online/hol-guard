@@ -9,7 +9,7 @@ import logging
 
 from .native_guard_store import NativeGuardStoreUnavailable
 from .native_policy_integrity_rows import PolicyRowVerifyItem, discard_row_signing_verifier_key
-from .native_store_policy import encode_key
+from .native_store_policy import integrity_key_fields
 from .store_base import *
 
 _LOGGER = logging.getLogger(__name__)
@@ -392,12 +392,10 @@ class StorePolicyIntegrityAdminMixin:
         current_time = now or _now()
         if clear_invalid:
             require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant, now=current_time)
-        next_control_state: dict[str, object] | None = None
         with self._connect() as connection:
             state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True)
             state = self._load_policy_integrity_state(connection) or state
             key, key_id = self._policy_integrity_secret_material(create=True)
-            trusted_generation = _mapping_int(state, "generation")
             invalid_ids: list[int] = []
             rows = self._load_local_policy_rows(connection, harness=harness)
             results = self._policy_integrity_results_for_rows(
@@ -405,36 +403,19 @@ class StorePolicyIntegrityAdminMixin:
                 mode=str(state.get("mode") or "degraded"),
                 key=key,
                 key_id=key_id,
-                trusted_generation=trusted_generation,
+                trusted_generation=_mapping_int(state, "generation"),
             )
             for row, integrity_result in zip(rows, results, strict=True):
                 if integrity_result.status != "valid" and (decision_id := _int_value(row["decision_id"])) is not None:
                     invalid_ids.append(decision_id)
-            cleared = 0
-            if clear_invalid and invalid_ids:
-                for chunk in _chunks(invalid_ids, _SQLITE_ID_BATCH_SIZE):
-                    placeholders = ",".join("?" for _ in chunk)
-                    cursor = connection.execute(
-                        f"delete from policy_decisions where decision_id in ({placeholders})",
-                        tuple(chunk),
-                    )
-                    cleared += int(cursor.rowcount if cursor.rowcount is not None else 0)
-                if cleared > 0 and state.get("mode") == "protected":
-                    trusted_state = self._load_policy_integrity_control_state(create=True)
-                    if key is not None and key_id is not None and trusted_state is not None:
-                        next_control_state = self._advance_policy_integrity_generation(
-                            connection,
-                            now=current_time,
-                            key=key,
-                            key_id=key_id,
-                            trusted_state=trusted_state,
-                        )
-                        connection.commit()
-            if (
-                next_control_state is not None
-                and self._finalize_policy_integrity_control_state(next_control_state) is False
-            ):
-                raise RuntimeError("Guard policy integrity control state could not be finalized.")
+        cleared = 0
+        if clear_invalid and invalid_ids:
+            # The resident deletes the rows and re-signs the ones left in one
+            # transaction, the same clear the dashboard's remove runs.
+            cleared = self._native_clear_policy_decisions(
+                {"decision_ids": sorted(invalid_ids), "now": current_time}, now=current_time
+            )
+        with self._connect() as connection:
             state, counts, remaining_items = self._policy_integrity_scan(
                 connection,
                 now=current_time,
@@ -685,15 +666,22 @@ class StorePolicyIntegrityAdminMixin:
             "publisher": publisher,
             "now": current_time,
         }
-        # The resident owns the filters and the delete. A clear that removes
-        # a local row must advance the integrity generation, so the first call
-        # deletes only when no local row matches; otherwise it reports
-        # `needs_signing` and the second call carries the key.
+        return self._native_clear_policy_decisions(fields, now=current_time)
+
+    def _native_clear_policy_decisions(self, fields: dict[str, object], *, now: str) -> int:
+        """Run the resident's ``clear_policy_decisions`` and adopt its control state.
+
+        The resident owns the filters and the delete. A clear that removes a
+        local row must advance the integrity generation, so the first call
+        deletes only when no local row matches; otherwise it reports
+        ``needs_signing`` and the second call names the key.
+        """
+
         secret_material = self._policy_integrity_secret_material(create=True)
         with self._connect() as connection:
             state = self._refresh_policy_integrity_state(
                 connection,
-                now=current_time,
+                now=now,
                 create_key=True,
                 secret_material=secret_material,
                 allow_cutover_resign=False,
@@ -706,8 +694,9 @@ class StorePolicyIntegrityAdminMixin:
                 trusted_state = self._load_policy_integrity_control_state(create=True)
                 if trusted_state is not None:
                     integrity["current_generation"] = self._begin_policy_integrity_generation(trusted_state)
-                    integrity["integrity_key_b64"] = encode_key(key)
-                    integrity["integrity_key_id"] = key_id
+                    integrity.update(
+                        integrity_key_fields(getattr(self, "_policy_integrity_secret_store", None), key, key_id)
+                    )
             payload = self._native_store_call("clear_policy_decisions", {**fields, **integrity})
         if not isinstance(payload, dict) or not isinstance(payload.get("cleared"), int):
             raise RuntimeError("Guard policy decisions were not cleared.")

@@ -200,3 +200,18 @@ fn an_empty_decision_id_list_clears_nothing() {
     );
     assert_eq!(dump(&connection).len(), 2);
 }
+
+#[test]
+fn a_decision_id_list_longer_than_the_bound_variable_limit_still_clears() {
+    let connection = store(&signed_rows());
+    let first = dump(&connection)[0]["decision_id"]
+        .as_i64()
+        .expect("decision id");
+    let mut ids: Vec<i64> = (1_000_000..1_040_000).collect();
+    ids.push(first);
+
+    let reply = call(&connection, &args(json!({"decision_ids": ids}), false));
+
+    assert_eq!(reply["cleared"], json!(1));
+    assert_eq!(dump(&connection).len(), 1);
+}
