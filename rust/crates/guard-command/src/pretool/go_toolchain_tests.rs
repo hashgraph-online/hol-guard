@@ -226,6 +226,49 @@ fn a_go_workspace_keeps_review_even_with_inert_environment() {
     std::fs::remove_dir_all(&root).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn logical_go_workspace_ancestors_cannot_select_an_unreviewed_toolchain() {
+    let root = temp_root("logical-go-workspace");
+    let physical = root.join("physical").join("nested");
+    let logical = root.join("logical");
+    std::fs::create_dir_all(&physical).unwrap();
+    std::fs::create_dir_all(&logical).unwrap();
+    let link = logical.join("link");
+    std::os::unix::fs::symlink(&physical, &link).unwrap();
+    let home = root.to_str().unwrap().to_owned();
+    let cwd = link.to_str().unwrap().to_owned();
+    let context = || super::super::PathContext {
+        home_dir: Some(&home),
+        cwd: Some(&cwd),
+        go_toolchain_inert: true,
+        shell_home_matches: true,
+        ..Default::default()
+    };
+
+    assert!(safe_go_probe(&words("version"), context()));
+    // Go 1.23.2 uses a valid logical PWD to find this go.mod, even
+    // though the symlink target's physical ancestors have no module.
+    std::fs::write(
+        logical.join("go.mod"),
+        "module example.test/guard\ngo 1.23.0\ntoolchain go1.26.0\n",
+    )
+    .unwrap();
+    assert!(!safe_go_probe(&words("version"), context()));
+    assert!(!safe_go_probe(&words("env GOPATH"), context()));
+
+    // A relative cwd must never be resolved against Guard's own cwd.
+    let relative_context = super::super::PathContext {
+        home_dir: Some(&home),
+        cwd: Some("logical/link"),
+        go_toolchain_inert: true,
+        shell_home_matches: true,
+        ..Default::default()
+    };
+    assert!(!safe_go_probe(&words("version"), relative_context));
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
 #[test]
 fn the_probe_reads_the_queries_only_where_nothing_selects_a_toolchain() {
     let root = temp_root("probe");
