@@ -113,6 +113,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
                 cwd: request.cwd.as_deref(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                go_toolchain_inert: false,
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,

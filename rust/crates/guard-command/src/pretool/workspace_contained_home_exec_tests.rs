@@ -56,6 +56,7 @@ fn context<'a>(home: &'a Path, cwd: &'a Path, shell_home_matches: bool) -> PathC
         shell_home_matches,
         cdpath_unset: false,
         rustup_override_absent: false,
+        go_toolchain_inert: false,
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,

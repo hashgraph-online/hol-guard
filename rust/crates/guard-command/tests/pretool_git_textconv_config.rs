@@ -113,6 +113,7 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                go_toolchain_inert: false,
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,

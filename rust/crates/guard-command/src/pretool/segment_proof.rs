@@ -112,6 +112,7 @@ fn segment_proofs(
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
+        go_toolchain_inert: context.go_toolchain_inert,
         cargo_config_inert: context.cargo_config_inert,
         npm_config_inert: context.npm_config_inert,
         pip_config_inert: context.pip_config_inert,
@@ -535,6 +536,10 @@ pub(super) fn exact_safe_segment_with_context(
         "type" | "command" | "whence" | "which" => {
             super::lookup_reads::safe_path_lookup(basename, &segment.arguments)
         }
+        // `go version` and a read-only `go env` print and exit, but which
+        // toolchain prints them is decided first; `go_toolchain` reads that
+        // choice.
+        "go" => super::go_toolchain::safe_go_probe(&segment.arguments, context),
         "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
         "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),
         "date" => safe_reads::safe_date_arguments(&segment.arguments),
