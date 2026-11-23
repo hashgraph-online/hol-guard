@@ -15,6 +15,8 @@ mod base_a;
 mod base_b;
 #[path = "guard_store_schema_columns.rs"]
 mod columns;
+#[path = "guard_store_schema_indexes.rs"]
+mod indexes;
 
 /// The base statements, in the order the Python store runs them.
 pub(crate) fn base_statements() -> impl Iterator<Item = &'static str> {
@@ -62,6 +64,42 @@ pub(crate) fn upgrade_client_attachments(connection: &Connection) -> rusqlite::R
         &columns::ATTACHMENT_COLUMNS,
     )
 }
+
+fn run_all(connection: &Connection, statements: &[&str]) -> rusqlite::Result<()> {
+    for statement in statements {
+        connection.execute_batch(statement)?;
+    }
+    Ok(())
+}
+
+/// Create the supply-chain and threat-intel cache indexes.
+pub(crate) fn create_cache_indexes(connection: &Connection) -> rusqlite::Result<()> {
+    run_all(connection, &indexes::SUPPLY_CHAIN_INDEXES)?;
+    run_all(connection, &indexes::THREAT_INTEL_INDEXES)
+}
+
+/// Create the approval-queue indexes. They read columns the approval upgrade
+/// adds, so they run after it.
+pub(crate) fn create_approval_indexes(connection: &Connection) -> rusqlite::Result<()> {
+    run_all(connection, &indexes::APPROVAL_INDEXES)
+}
+
+/// Create the receipt indexes, then the receipt rollup tables and their
+/// indexes.
+pub(crate) fn create_receipt_rollups(connection: &Connection) -> rusqlite::Result<()> {
+    run_all(connection, &indexes::RECEIPT_INDEXES)?;
+    run_all(connection, &indexes::RECEIPT_ROLLUP_TABLES)?;
+    run_all(connection, &indexes::RECEIPT_ROLLUP_INDEXES)
+}
+
+/// Create the storage-maintenance table and its single row.
+pub(crate) fn create_storage_maintenance(connection: &Connection) -> rusqlite::Result<()> {
+    run_all(connection, &indexes::STORAGE_MAINTENANCE)
+}
+
+#[cfg(test)]
+#[path = "guard_store_schema_indexes_tests.rs"]
+mod indexes_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_columns_tests.rs"]
