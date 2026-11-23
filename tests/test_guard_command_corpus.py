@@ -368,7 +368,10 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
             check=True,
             capture_output=True,
             text=True,
-            timeout=90,
+            # A bound against a hung worker, not a speed budget: three shards
+            # share a hosted runner with coverage on, and a slow runner needs
+            # more than a minute per shard.
+            timeout=240,
             cwd=Path.cwd(),
             # Evaluation is the resident's verdict, so the runner and its
             # workers must always run in force mode. Jobs that bind the
