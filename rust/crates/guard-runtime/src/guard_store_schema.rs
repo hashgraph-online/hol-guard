@@ -13,6 +13,10 @@ use crate::guard_store_db::StoreResult;
 
 #[path = "guard_store_schema_activity.rs"]
 mod activity;
+#[path = "guard_store_schema_activity_extra.rs"]
+mod activity_extra;
+#[path = "guard_store_schema_activity_extra_sql.rs"]
+mod activity_extra_sql;
 #[path = "guard_store_schema_activity_sql.rs"]
 mod activity_sql;
 #[path = "guard_store_schema_base_a.rs"]
@@ -21,6 +25,10 @@ mod base_a;
 mod base_b;
 #[path = "guard_store_schema_columns.rs"]
 mod columns;
+#[path = "guard_store_schema_evidence.rs"]
+mod evidence;
+#[path = "guard_store_schema_evidence_sql.rs"]
+mod evidence_sql;
 #[path = "guard_store_schema_families.rs"]
 mod families;
 #[path = "guard_store_schema_indexes.rs"]
@@ -183,6 +191,11 @@ pub(crate) fn ensure_families(connection: &Connection, now: &str) -> StoreResult
     families::ensure_resume(connection)?;
     activity::ensure_activity(connection, now)?;
     activity::ensure_health(connection, now)?;
+    activity_extra::ensure_maintenance(connection, now)?;
+    activity_extra::ensure_api(connection, now)?;
+    activity_extra::ensure_display(connection, now)?;
+    evidence::ensure_evidence(connection)?;
+    evidence::ensure_extension_control(connection)?;
     families::ensure_bash_operations(connection, now)?;
     families::ensure_workflow_capabilities(connection, now)
 }
@@ -190,6 +203,14 @@ pub(crate) fn ensure_families(connection: &Connection, now: &str) -> StoreResult
 #[cfg(test)]
 #[path = "guard_store_schema_activity_tests.rs"]
 mod activity_tests;
+
+#[cfg(test)]
+#[path = "guard_store_schema_activity_extra_tests.rs"]
+mod activity_extra_tests;
+
+#[cfg(test)]
+#[path = "guard_store_schema_evidence_tests.rs"]
+mod evidence_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_families_tests.rs"]

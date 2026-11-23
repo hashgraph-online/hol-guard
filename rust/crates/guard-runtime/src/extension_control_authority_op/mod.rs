@@ -64,7 +64,7 @@ mod tests;
 mod view;
 mod writes;
 
-pub(crate) use schema::{compatible_marker, FIRST_PACK_SCHEMA_VERSION};
+pub(crate) use schema::{compatible_marker, ensure_startup_schema, FIRST_PACK_SCHEMA_VERSION};
 
 use std::cell::RefCell;
 
