@@ -92,8 +92,7 @@ pub(crate) fn dispatch(
     match method {
         "upsert_policy" => upsert_policy(connection, args),
         "clear_policy_decisions" | "resign_policy_rows" => policy_clear(connection, method, args),
-        "import_policy_rows" => policy_import::import_policy_rows(connection, args),
-        "apply_mcp_policy_request" => policy_import::apply_mcp_policy_request(connection, args),
+        _ if policy_import::handles(method) => policy_import::run(connection, method, args),
         "policy_rows_fingerprint" => policy_import::policy_rows_fingerprint(connection, args),
         "stage_mcp_policy_request" => mcp_policy_requests::stage(connection, args),
         "expire_mcp_policy_request" => mcp_policy_requests::expire(connection, args),

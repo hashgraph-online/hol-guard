@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import sqlite3
 from typing import TYPE_CHECKING
 
 from ..business_policy_document_import import (
-    apply_business_document_on_connection,
+    approved_install_digest,
     compile_document_for_import,
     has_business_rules,
 )
@@ -15,14 +14,14 @@ from ..native_command_control_authority_io import hold_command_control_authority
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..policy_document import policy_document_digest
 from .policy_errors import PolicyToolError
-from .policy_recovery_state import request_recovery_recorded, request_recovery_recorded_on_connection
-from .policy_store import MCPolicyRequestRepository, PendingPolicyRequest
+from .policy_recovery_state import request_recovery_recorded
+from .policy_store import ApplyRequestResult, MCPolicyRequestRepository, PendingPolicyRequest
 from .policy_time import utc_now_iso as _now_iso
 
 if TYPE_CHECKING:
     from ..approval_gate import ApprovalGateGrant
+    from ..policy_document import GuardPolicyDocument
     from ..store import GuardStore
-    from ..store_policy_document import PolicyDocumentImportResult
 
 
 def apply_pending_policy_request(
@@ -33,10 +32,8 @@ def apply_pending_policy_request(
 ) -> dict[str, object]:
     from .policy_tools import (
         _build_current_document,
-        _build_current_legacy_document,
         _pending_policy_candidate,
         _read_policy_integrity_generation,
-        _safe_int,
     )
 
     repo = MCPolicyRequestRepository(store)
@@ -58,63 +55,26 @@ def apply_pending_policy_request(
         current_generation = _read_policy_integrity_generation(store)
         if current_generation is not None and current_generation != expected_generation:
             raise PolicyToolError("stale_policy_generation", "Policy integrity generation has changed.")
-    mutation: BusinessSourceMutation | None = None
-
-    def _do_import(pending: PendingPolicyRequest, conn: sqlite3.Connection) -> PolicyDocumentImportResult:
-        if request_recovery_recorded_on_connection(conn, request_id):
-            raise PolicyToolError("business_source_already_recovered", "This request's policy was already recovered.")
-        if any(
-            getattr(pending, name) != getattr(request, name)
-            for name in (
-                "policy_document_digest",
-                "canonical_policy_yaml",
-                "mode",
-                "expected_current_digest",
-                "expected_policy_generation",
-            )
-        ):
-            raise PolicyToolError("candidate_digest_mismatch", "Stored candidate changed before apply.")
-        previous_source = mutation.previous_source if mutation is not None else None
-        checked_digest = None
-        if previous_source is not None:
-            checked_digest = previous_source.source_digest
-        else:
-            if mutation is not None:
-                previous_document = _build_current_legacy_document(store)
-            else:
-                previous_document = _build_current_document(store)
-            if previous_document is not None:
-                checked_digest = policy_document_digest(previous_document)
-        if checked_digest != request.expected_current_digest:
-            raise PolicyToolError("current_digest_mismatch", "Current policy digest has changed.")
-        if expected_generation is not None:
-            state = store._load_policy_integrity_state(conn)
-            gen = state.get("generation") if isinstance(state, dict) else None
-            if gen is not None and _safe_int(gen) != expected_generation:
-                raise PolicyToolError("stale_policy_generation", "Policy integrity generation has changed.")
-        assert mutation is not None
-        return apply_business_document_on_connection(
-            store,
-            document,
-            mutation,
-            mode=request.mode,
-            now=_now_iso(),
-            approval_gate_grant=approval_gate_grant,
-            connection=conn,
-        )
-
     if has_business_rules(document):
         try:
-            with approved_business_source_mutation(
-                store,
-                document,
-                mode=request.mode,
-                now=_now_iso(),
-                approval_gate_grant=approval_gate_grant,
-                expected_current_digest=request.expected_current_digest,
-                reject_already_installed=True,
-            ) as mutation:
-                result = repo.apply_request(request_id, apply_fn=_do_import)
+            # The native apply advances the generation and the finalize adopts
+            # it in a second step, so the generation lock spans both, taken
+            # before the authority lock as every other advance does.
+            with (
+                store.hold_policy_integrity_generation_lock(),
+                approved_business_source_mutation(
+                    store,
+                    document,
+                    mode=request.mode,
+                    now=_now_iso(),
+                    approval_gate_grant=approval_gate_grant,
+                    expected_current_digest=request.expected_current_digest,
+                    reject_already_installed=True,
+                ) as mutation,
+            ):
+                result = _apply_business_request(
+                    store, repo, request, document, mutation, approval_gate_grant=approval_gate_grant
+                )
         except NativePolicySnapshotError as error:
             if str(error) == "native_business_source_already_installed":
                 raise PolicyToolError(
@@ -163,3 +123,60 @@ def apply_pending_policy_request(
         "inserted": result.inserted,
         "replaced": result.replaced,
     }
+
+
+def _apply_business_request(
+    store: GuardStore,
+    repo: MCPolicyRequestRepository,
+    request: PendingPolicyRequest,
+    document: GuardPolicyDocument,
+    mutation: BusinessSourceMutation,
+    *,
+    approval_gate_grant: ApprovalGateGrant | None,
+) -> ApplyRequestResult:
+    """Install an approved business source the request carries.
+
+    The mutation holds the command-control authority lock. The resident
+    re-checks the request, its candidate, the imported rows behind the
+    current digest and the generation, then drops the imported rows, stages
+    the installation witness and resolves the request in one transaction.
+    """
+    from .policy_tools import _build_current_legacy_document
+
+    fingerprint = store._native_store_call("policy_rows_fingerprint", {})
+    rows_fingerprint = fingerprint.get("fingerprint") if isinstance(fingerprint, dict) else None
+    if not isinstance(rows_fingerprint, str):
+        raise RuntimeError("Guard could not read the imported policy rows.")
+    previous_source = mutation.previous_source
+    if previous_source is not None:
+        checked_digest: str | None = previous_source.source_digest
+    else:
+        previous_document = _build_current_legacy_document(store)
+        checked_digest = policy_document_digest(previous_document) if previous_document is not None else None
+    if checked_digest != request.expected_current_digest:
+        raise PolicyToolError("current_digest_mismatch", "Current policy digest has changed.")
+    now = _now_iso()
+    try:
+        digest = approved_install_digest(
+            store, document, mutation, mode=request.mode, now=now, approval_gate_grant=approval_gate_grant
+        )
+        import_args = store.policy_import_args(document, [], mode="replace", now=now, digest=digest, vault_key=True)
+    except PolicyToolError:
+        raise
+    except Exception:
+        # A refused approval or an incoherent install ends the request, as
+        # it did inside the request transaction.
+        repo.mark_failed(request.request_id)
+        raise
+    result, next_control_state = repo.apply_request_native(
+        request.request_id,
+        candidate=request,
+        import_args={
+            **import_args,
+            "rows_fingerprint": rows_fingerprint,
+            "business_witness": mutation.witness_text(),
+            "reported_inserted": len(document.rules),
+        },
+    )
+    store.finalize_policy_import(next_control_state)
+    return result

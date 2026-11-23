@@ -14,6 +14,10 @@
 //! a `replace` with no rows: the imported rows go, the generation advances,
 //! and the witness lands in `sync_state` in the same transaction, as
 //! `BusinessSourceMutation.stage_on_connection` did beside the row writes.
+//! Both ops take it, so an approved MCP request installs a business source
+//! the same way. Such an install writes no rows, so it may send the source's
+//! rule count as `reported_inserted` for the answer and the request's stored
+//! result.
 //!
 //! `apply_mcp_policy_request` runs the same write inside the request's own
 //! transaction. Every check comes first, so a refused apply writes nothing
@@ -70,23 +74,32 @@ fn rows_fingerprint(connection: &Connection) -> StoreResult<String> {
     Ok(hex::encode(Sha256::digest(encoded)))
 }
 
+#[path = "guard_store_policy_recovery.rs"]
+mod recovery;
+
+/// Whether `run` owns `method`.
+pub(crate) fn handles(method: &str) -> bool {
+    matches!(
+        method,
+        "import_policy_rows" | "apply_mcp_policy_request" | "recover_business_policy_source"
+    )
+}
+
+/// The policy import ops `handles` names.
+pub(crate) fn run(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
+    match method {
+        "import_policy_rows" => import_policy_rows(connection, args),
+        "apply_mcp_policy_request" => apply_mcp_policy_request(connection, args),
+        "recover_business_policy_source" => {
+            recovery::recover_business_policy_source(connection, args)
+        }
+        _ => Err(StoreError::Invalid("native_guard_store_args_invalid")),
+    }
+}
+
 /// `GuardStore.import_policy_document` (`store_policy_document.py`).
 pub(crate) fn import_policy_rows(connection: &Connection, args: &Args) -> StoreResult<Value> {
-    let witness = business_witness(args)?;
     let (inserted, replaced, next_control_state) = write_rows(connection, args)?;
-    if let Some(witness) = witness {
-        exec(
-            connection,
-            "insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?) \
-             on conflict(state_key) do update set payload_json = excluded.payload_json, \
-             updated_at = excluded.updated_at",
-            &[
-                json!(BUSINESS_WITNESS_KEY),
-                json!(witness),
-                json!(args.str("now")?),
-            ],
-        )?;
-    }
     Ok(json!({
         "inserted": inserted,
         "replaced": replaced,
@@ -126,19 +139,29 @@ pub(crate) fn apply_mcp_policy_request(connection: &Connection, args: &Args) -> 
 }
 
 /// The installation witness a business-source install stages, checked before
-/// any row is touched: only a `replace` with no rows may carry one.
-fn business_witness<'a>(args: &Args<'a>) -> StoreResult<Option<&'a str>> {
+/// any row is touched: only a `replace` with no rows may carry one. Such an
+/// install writes no rows, so it may name the rule count to report instead
+/// in `reported_inserted`; nothing else may.
+fn business_witness<'a>(args: &Args<'a>) -> StoreResult<Option<(&'a str, Option<i64>)>> {
+    let reported = match args.raw("reported_inserted") {
+        None => None,
+        Some(_) => Some(args.int("reported_inserted")?),
+    };
     let Some(witness) = args.opt_str("business_witness")? else {
+        if reported.is_some() {
+            return value_error("native_business_source_installation_incoherent");
+        }
         return Ok(None);
     };
     let no_rows = args
         .raw("rows")
         .and_then(Value::as_array)
         .is_some_and(Vec::is_empty);
-    if witness.is_empty() || args.str("mode")? != "replace" || !no_rows {
+    let negative = reported.is_some_and(|count| count < 0);
+    if witness.is_empty() || args.str("mode")? != "replace" || !no_rows || negative {
         return value_error("native_business_source_installation_incoherent");
     }
-    Ok(Some(witness))
+    Ok(Some((witness, reported)))
 }
 
 fn refused(code: &str) -> StoreResult<Option<Value>> {
@@ -270,6 +293,7 @@ fn stored_generation(connection: &Connection) -> StoreResult<Option<Value>> {
 
 /// The deletes, the inserts and the generation advance.
 fn write_rows(connection: &Connection, args: &Args) -> StoreResult<(i64, i64, Value)> {
+    let witness = business_witness(args)?;
     let mode = args.str("mode")?;
     if !matches!(mode, "merge" | "replace") {
         return value_error("invalid_policy_import_mode");
@@ -364,7 +388,12 @@ fn write_rows(connection: &Connection, args: &Args) -> StoreResult<(i64, i64, Va
         )?,
         None => Value::Null,
     };
-    Ok((inserted.len() as i64, replaced, next_control_state))
+    let mut count = inserted.len() as i64;
+    if let Some((witness, reported)) = witness {
+        recovery::stage_witness(connection, witness, now)?;
+        count = reported.unwrap_or(count);
+    }
+    Ok((count, replaced, next_control_state))
 }
 
 #[cfg(test)]

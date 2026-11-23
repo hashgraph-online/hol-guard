@@ -11,9 +11,9 @@ use crate::guard_store_policy_upsert::tests::{
     dump, generation, key, key_id, signed_rows, store, verifies_at,
 };
 
-const NOW: &str = "2026-10-16T09:00:00Z";
+pub(super) const NOW: &str = "2026-10-16T09:00:00Z";
 
-fn request_store() -> Connection {
+pub(super) fn request_store() -> Connection {
     let connection = store(&signed_rows());
     connection
         .execute_batch(
@@ -53,7 +53,7 @@ fn row(artifact_id: &str) -> Value {
     })
 }
 
-fn import_args(mode: &str, rows: Vec<Value>, signed: bool) -> Map<String, Value> {
+pub(super) fn import_args(mode: &str, rows: Vec<Value>, signed: bool) -> Map<String, Value> {
     let mut args = json!({
         "mode": mode,
         "now": NOW,
@@ -283,7 +283,7 @@ fn a_resolved_or_missing_request_is_refused() {
     assert_eq!(reply, json!({"error": "policy_request_not_found"}));
 }
 
-fn witness(connection: &Connection) -> Option<String> {
+pub(super) fn witness(connection: &Connection) -> Option<String> {
     connection
         .query_row(
             "select payload_json from sync_state where state_key = 'business_source_installation_v1'",
@@ -333,6 +333,59 @@ fn a_business_witness_beside_rows_or_a_merge_is_refused_before_any_write() {
         args.insert("business_witness".into(), json!("{}"));
         assert!(import_policy_rows(&connection, &Args(&args)).is_err());
     }
+    assert_eq!(dump(&connection).len(), before);
+    assert_eq!(witness(&connection), None);
+}
+
+#[test]
+fn an_approved_request_installs_a_business_source_and_reports_its_rule_count() {
+    let connection = request_store();
+    connection
+        .execute("update mcp_policy_requests set mode = 'replace'", [])
+        .unwrap();
+    let mut candidate = candidate();
+    candidate["mode"] = json!("replace");
+    let mut args = apply_args(&connection, NOW, candidate);
+    args.insert("mode".into(), json!("replace"));
+    args.insert("rows".into(), json!([]));
+    args.insert(
+        "business_witness".into(),
+        json!("{\"anchor_digest\":\"d\"}"),
+    );
+    args.insert("reported_inserted".into(), json!(5));
+
+    let reply = apply_mcp_policy_request(&connection, &Args(&args)).unwrap();
+
+    assert_eq!(reply["applied"]["inserted"], json!(5));
+    assert_eq!(reply["next_control_state"]["generation"], json!(4));
+    assert_eq!(status(&connection), "applied");
+    assert_eq!(
+        witness(&connection).as_deref(),
+        Some("{\"anchor_digest\":\"d\"}")
+    );
+    let result: String = connection
+        .query_row(
+            "select result_json from mcp_policy_requests where request_id = 'r1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(result, r#"{"inserted":5,"replaced":0}"#);
+}
+
+#[test]
+fn a_reported_count_without_a_business_witness_is_refused_before_any_write() {
+    let connection = request_store();
+    let before = dump(&connection).len();
+    let mut args = import_args("replace", Vec::new(), false);
+    args.insert("reported_inserted".into(), json!(3));
+    assert!(import_policy_rows(&connection, &Args(&args)).is_err());
+
+    let mut args = import_args("replace", Vec::new(), false);
+    args.insert("business_witness".into(), json!("{}"));
+    args.insert("reported_inserted".into(), json!(-1));
+    assert!(import_policy_rows(&connection, &Args(&args)).is_err());
+
     assert_eq!(dump(&connection).len(), before);
     assert_eq!(witness(&connection), None);
 }

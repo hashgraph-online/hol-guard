@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from typing import TYPE_CHECKING, cast
 
 from .approval_gate import require_high_risk
@@ -100,7 +99,7 @@ def refuse_legacy_import_over_business_source(store: GuardStore) -> None:
         raise NativePolicySnapshotError("native_business_policy_removal_requires_authority")
 
 
-def _approved_install_digest(
+def approved_install_digest(
     store: GuardStore,
     document: GuardPolicyDocument,
     mutation: BusinessSourceMutation,
@@ -122,38 +121,6 @@ def _approved_install_digest(
     return digest
 
 
-def apply_business_document_on_connection(
-    store: GuardStore,
-    document: GuardPolicyDocument,
-    mutation: BusinessSourceMutation,
-    *,
-    mode: str,
-    now: str,
-    approval_gate_grant: ApprovalGateGrant | None,
-    connection: sqlite3.Connection,
-):
-    """Install inside a caller's own transaction (MCP request apply, recovery)."""
-    from .store_policy_document import PolicyDocumentImportResult
-
-    digest = _approved_install_digest(
-        store, document, mutation, mode=mode, now=now, approval_gate_grant=approval_gate_grant
-    )
-    result = store._import_policy_rows_on_connection(
-        connection,
-        document=document,
-        compiled_rows=(),
-        normalized_rows=[],
-        mode="replace",
-        now=now,
-        digest=digest,
-        secret_material=store._policy_integrity_secret_material(create=False),
-    )
-    mutation.stage_on_connection(connection, now=now)
-    return PolicyDocumentImportResult(
-        document_id=document.metadata.id, digest=digest, inserted=len(document.rules), replaced=result.replaced
-    )
-
-
 def import_business_document(
     store: GuardStore,
     document: GuardPolicyDocument,
@@ -170,7 +137,7 @@ def import_business_document(
     with approved_business_source_mutation(
         store, document, mode=mode, now=now, approval_gate_grant=approval_gate_grant
     ) as mutation:
-        digest = _approved_install_digest(
+        digest = approved_install_digest(
             store, document, mutation, mode=mode, now=now, approval_gate_grant=approval_gate_grant
         )
         args = store.policy_import_args(document, [], mode="replace", now=now, digest=digest, vault_key=True)
