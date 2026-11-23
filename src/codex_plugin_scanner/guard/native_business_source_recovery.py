@@ -36,7 +36,12 @@ def recover_committed_business_source(
         )
 
     require_approval()
-    with hold_command_control_authority_lock(store.guard_home, timeout_seconds=_remaining(deadline)):
+    # An install advances the generation natively and the finalize adopts it
+    # afterwards, so the generation lock spans both, before the authority lock.
+    with (
+        store.hold_policy_integrity_generation_lock(timeout_seconds=_remaining(deadline)),
+        hold_command_control_authority_lock(store.guard_home, timeout_seconds=_remaining(deadline)),
+    ):
         require_approval()
         material = store._policy_integrity_secret_material(create=False)
         if material is None or type(material[0]) is not bytes or len(material[0]) != 32:
