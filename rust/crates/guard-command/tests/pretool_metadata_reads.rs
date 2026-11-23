@@ -85,6 +85,7 @@ fn shell(home: &Path, command: &str) -> String {
                 rustup_override_absent: false,
                 go_toolchain_inert: false,
                 cargo_config_inert: false,
+                cargo_compiler_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 python_environment_inert: false,

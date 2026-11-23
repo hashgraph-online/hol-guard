@@ -1,5 +1,5 @@
 use super::{
-    cargo_config_inert, inert_toolchain, registry_query, rustup_settings,
+    directory_config_inert, inert_toolchain, manifest_query, registry_query, rustup_settings,
     rustup_settings_only_official, safe_cargo_probe, RustupSettings,
 };
 use std::path::Path;
@@ -101,7 +101,10 @@ fn refuses_a_cargo_configuration_that_can_move_the_registry() {
     let path = directory.join("config.toml");
     // A directory with no Cargo configuration at all leaves the query
     // pointed at crates.io.
-    assert!(cargo_config_inert(Path::new(&root)));
+    assert!(directory_config_inert(
+        Path::new(&root),
+        &super::REDIRECTING_TABLES
+    ));
     for contents in [
         "[profile.dev]\nopt-level = 1\n",
         "[build]\ntarget-dir = \"out\"\nrustc-wrapper = \"sccache\"\n",
@@ -110,7 +113,10 @@ fn refuses_a_cargo_configuration_that_can_move_the_registry() {
         "[term]\nquiet = true\n",
     ] {
         std::fs::write(&path, contents).unwrap();
-        assert!(cargo_config_inert(Path::new(&root)), "{contents}");
+        assert!(
+            directory_config_inert(Path::new(&root), &super::REDIRECTING_TABLES),
+            "{contents}"
+        );
     }
     for contents in [
         "[registry]\ndefault = \"mirror\"\n",
@@ -126,7 +132,10 @@ fn refuses_a_cargo_configuration_that_can_move_the_registry() {
         "[registry\n",
     ] {
         std::fs::write(&path, contents).unwrap();
-        assert!(!cargo_config_inert(Path::new(&root)), "{contents}");
+        assert!(
+            !directory_config_inert(Path::new(&root), &super::REDIRECTING_TABLES),
+            "{contents}"
+        );
     }
     std::fs::remove_file(&path).unwrap();
     // Cargo reads the extensionless spelling too.
@@ -135,7 +144,10 @@ fn refuses_a_cargo_configuration_that_can_move_the_registry() {
         "[registry]\ndefault = \"mirror\"\n",
     )
     .unwrap();
-    assert!(!cargo_config_inert(Path::new(&root)));
+    assert!(!directory_config_inert(
+        Path::new(&root),
+        &super::REDIRECTING_TABLES
+    ));
     std::fs::remove_dir_all(&root).ok();
 }
 
@@ -239,6 +251,7 @@ fn a_stored_rustup_default_decides_whether_the_search_is_read() {
         cwd: Some(&cwd),
         rustup_override_absent: true,
         cargo_config_inert: true,
+        cargo_compiler_inert: true,
         ..Default::default()
     };
 
@@ -276,4 +289,131 @@ fn a_stored_rustup_default_decides_whether_the_search_is_read() {
     std::fs::write(&settings, "default_toolchain = \"stable\"\n").unwrap();
     assert!(safe_cargo_probe(&query, context()));
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn reads_the_manifest_questions_cargo_answers_without_resolving() {
+    for arguments in [
+        "locate-project",
+        "locate-project --workspace",
+        "locate-project --message-format plain",
+        "locate-project --message-format=json",
+        "metadata --no-deps",
+        "metadata --no-deps --format-version 1",
+        "metadata --format-version=1 --no-deps",
+        "metadata --no-deps --offline",
+        "metadata --no-deps --frozen --quiet",
+    ] {
+        assert!(manifest_query(&words(arguments)), "{arguments}");
+    }
+}
+
+#[test]
+fn a_resolving_or_redirected_manifest_query_keeps_its_review() {
+    for arguments in [
+        // The resolve behind the same answer reads the index, may fetch what
+        // the lockfile does not pin and writes the lockfile back.
+        "metadata",
+        "metadata --format-version 1",
+        "tree",
+        "tree -p serde",
+        "pkgid",
+        // A manifest somewhere else, configuration set on the line, an
+        // unstable option and a toolchain the proxy installs first.
+        "metadata --no-deps --manifest-path ../other/Cargo.toml",
+        "locate-project --manifest-path ../other/Cargo.toml",
+        "metadata --no-deps --config net.offline=true",
+        "metadata --no-deps -Z unstable-options",
+        "+nightly metadata --no-deps",
+        // A format this reading has not been written against, and an operand
+        // neither subcommand takes.
+        "metadata --no-deps --format-version 2",
+        "locate-project --message-format yaml",
+        "locate-project extra",
+        // The flags belong to the subcommand that has them.
+        "locate-project --no-deps",
+        "metadata --no-deps --workspace",
+        // A word the shell may still split into an option and its value.
+        "metadata --no-deps {--config,evil.toml}",
+    ] {
+        assert!(!manifest_query(&words(arguments)), "{arguments}");
+    }
+}
+
+#[test]
+fn an_environment_naming_the_compiler_keeps_the_manifest_query_reviewed() {
+    let root = std::env::temp_dir().join(format!(
+        "guard-cargo-compiler-env-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos(),
+    ));
+    let cwd = root.join("workspace");
+    std::fs::create_dir_all(cwd.join(".cargo")).unwrap();
+    let home = root.to_str().unwrap().to_owned();
+    let cwd_text = cwd.to_str().unwrap().to_owned();
+    // Nothing in the workspace configuration names a program: the whole
+    // question is what the session exported.
+    let context = |compiler_inert: bool| super::super::PathContext {
+        home_dir: Some(&home),
+        cwd: Some(&cwd_text),
+        rustup_override_absent: true,
+        cargo_config_inert: true,
+        cargo_compiler_inert: compiler_inert,
+        ..Default::default()
+    };
+    let query = words("metadata --no-deps");
+
+    assert!(safe_cargo_probe(&query, context(true)));
+
+    // An inherited `RUSTC_WRAPPER` or per-target runner chooses the program
+    // Cargo starts for the host-target answer, exactly as a `[build]` or
+    // `[target]` table would, so the query keeps its review.
+    assert!(!safe_cargo_probe(&query, context(false)));
+    // A registry query compiles nothing, so the same environment leaves it
+    // alone.
+    assert!(safe_cargo_probe(&words("search serde"), context(false)));
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn a_configured_compiler_keeps_the_manifest_query_reviewed() {
+    let root = std::env::temp_dir().join(format!(
+        "guard-cargo-manifest-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos(),
+    ));
+    let cwd = root.join("workspace");
+    std::fs::create_dir_all(cwd.join(".cargo")).unwrap();
+    let home = root.to_str().unwrap().to_owned();
+    let cwd_text = cwd.to_str().unwrap().to_owned();
+    let context = || super::super::PathContext {
+        home_dir: Some(&home),
+        cwd: Some(&cwd_text),
+        rustup_override_absent: true,
+        cargo_config_inert: true,
+        cargo_compiler_inert: true,
+        ..Default::default()
+    };
+    let query = words("metadata --no-deps");
+
+    assert!(safe_cargo_probe(&query, context()));
+
+    // Cargo asks the compiler what the target supports while it builds the
+    // answer, so a file naming which compiler -- or a wrapper around it --
+    // keeps the review the search query does not need.
+    let path = cwd.join(".cargo").join("config.toml");
+    for contents in [
+        "[build]\nrustc = \"./vendor-rustc\"\n",
+        "[build]\nrustc-wrapper = \"./wrapper\"\n",
+        "[target.x86_64-unknown-linux-gnu]\nrunner = \"./runner\"\n",
+    ] {
+        std::fs::write(&path, contents).unwrap();
+        assert!(!safe_cargo_probe(&query, context()), "{contents}");
+        // The same file leaves a registry query alone: it compiles nothing.
+        assert!(
+            safe_cargo_probe(&words("search serde"), context()),
+            "{contents}"
+        );
+    }
+    std::fs::remove_dir_all(&root).ok();
 }

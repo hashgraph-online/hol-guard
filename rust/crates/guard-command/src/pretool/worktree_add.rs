@@ -72,6 +72,7 @@ fn proven_command(
         rustup_override_absent: context.rustup_override_absent,
         go_toolchain_inert: context.go_toolchain_inert,
         cargo_config_inert: context.cargo_config_inert,
+        cargo_compiler_inert: context.cargo_compiler_inert,
         npm_config_inert: context.npm_config_inert,
         pip_config_inert: context.pip_config_inert,
         python_environment_inert: context.python_environment_inert,
