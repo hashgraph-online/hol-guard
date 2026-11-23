@@ -251,9 +251,34 @@ fn a_keyring_write_clears_a_stale_marker() {
 
 #[test]
 fn a_control_state_mirrors_only_into_a_keyring_copy_python_would_prefer() {
-    assert!(mirror_control_state(Existing::NoService, || false));
-    assert!(mirror_control_state(Existing::Absent, || false));
-    assert!(mirror_control_state(Existing::Present, || true));
-    assert!(!mirror_control_state(Existing::Present, || false));
-    assert!(!mirror_control_state(Existing::Unreadable, || true));
+    assert!(mirror_control_state(Existing::Absent, || false, || false));
+    assert!(mirror_control_state(Existing::Present, || true, || false));
+    assert!(!mirror_control_state(Existing::Present, || false, || true));
+    assert!(!mirror_control_state(
+        Existing::Unreadable,
+        || true,
+        || true
+    ));
+    // No Secret Service: the vault write stands only once the vault is
+    // marked as the copy Python reads.
+    assert!(mirror_control_state(Existing::NoService, || false, || true));
+    assert!(!mirror_control_state(
+        Existing::NoService,
+        || true,
+        || false
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_vault_marked_preferred_is_the_copy_python_reads() {
+    let home = home("prefer-vault");
+    let mut store = vault(&home.0);
+    store.ensure_ready().expect("ready");
+    assert!(prefer_vault(&mut store, &key_ref(&home.0)));
+    assert_eq!(
+        vault(&home.0).get_secret(&marker(&home.0)).as_deref(),
+        Some("1")
+    );
+    assert!(prefer_vault(&mut store, &key_ref(&home.0)));
 }

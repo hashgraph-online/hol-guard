@@ -92,8 +92,8 @@ pub(super) fn mint(
 /// What a read of the keyring copy of one secret found.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Existing {
-    /// No Secret Service on the session bus. Python's store then has no
-    /// keyring to mirror and reads the vault alone.
+    /// The session bus gave no Secret Service. That may be a headless host
+    /// or a bus that is only down for now, with a keyring copy behind it.
     NoService,
     /// The keyring answered and holds no copy.
     Absent,
@@ -104,16 +104,32 @@ pub(super) enum Existing {
     Unreadable,
 }
 
-/// Whether the vault write of a control state may stand. Only a keyring copy
+/// Whether the vault write of a control state may stand. A keyring copy
 /// Python would prefer must be brought in step, and a failed update or an
 /// unreadable copy refuses the write, since the stale copy would roll the
-/// generation back. Without a Secret Service the vault is the selected store.
-pub(super) fn mirror_control_state(found: Existing, update: impl FnOnce() -> bool) -> bool {
+/// generation back. With no Secret Service the keyring may still hold an
+/// older copy that Python would read once the bus returns, so the vault must
+/// first be marked as the preferred copy (`prefer_vault`); a vault that
+/// cannot be marked refuses the write too.
+pub(super) fn mirror_control_state(
+    found: Existing,
+    update: impl FnOnce() -> bool,
+    prefer_vault: impl FnOnce() -> bool,
+) -> bool {
     match found {
-        Existing::NoService | Existing::Absent => true,
+        Existing::Absent => true,
+        Existing::NoService => prefer_vault(),
         Existing::Present => update(),
         Existing::Unreadable => false,
     }
+}
+
+/// Marks the vault as the copy Python reads for `key_ref` and its control
+/// state, as `set_secret` does after a failed keyring write. Python then reads
+/// the vault alone, and its next key write restores the keyring from it.
+pub(super) fn prefer_vault(vault: &mut EncryptedFileSecretStore, key_ref: &str) -> bool {
+    let marker = format!("{FALLBACK_PREFERENCE_PREFIX}{key_ref}");
+    vault.get_secret(&marker).as_deref() == Some("1") || vault.set_secret(&marker, "1").is_ok()
 }
 
 #[cfg(test)]

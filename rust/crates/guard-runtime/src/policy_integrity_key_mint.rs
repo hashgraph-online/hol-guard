@@ -304,23 +304,33 @@ fn locked_mint(home: &Path, deadline: Instant) -> Minted {
 /// Keep an existing Secret Service copy of the integrity control state in
 /// step with the encrypted vault. Python's mirrored backend prefers that
 /// primary copy on the next read, so a vault-only generation advance would be
-/// rolled back when the Python store refreshes it. A home with no Secret
-/// Service (a headless host) has no keyring copy, so the vault write stands.
+/// rolled back when the Python store refreshes it. With no Secret Service on
+/// the bus the vault is marked as the preferred copy instead, so a keyring
+/// copy that reappears later cannot replace the newer vault generation.
 #[cfg(target_os = "linux")]
-pub(crate) fn mirror_existing_control_state(_home: &Path, control_ref: &str, state: &str) -> bool {
+pub(crate) fn mirror_existing_control_state(
+    home: &Path,
+    vault: &mut EncryptedFileSecretStore,
+    control_ref: &str,
+    state: &str,
+) -> bool {
     let primary = keyring_linux::SecretServiceKeyring {
         service_name: KEYRING_SERVICE_NAME.to_owned(),
         deadline: Instant::now() + KEYRING_BUDGET,
         mint_lock: None,
     };
-    mirrored::mirror_control_state(primary.existing(control_ref), || {
-        mirrored::Primary::set(&primary, control_ref, state).is_ok()
-    })
+    let key_ref = build_scoped_secret_ref(POLICY_INTEGRITY_KEY_REF, home);
+    mirrored::mirror_control_state(
+        primary.existing(control_ref),
+        || mirrored::Primary::set(&primary, control_ref, state).is_ok(),
+        || mirrored::prefer_vault(vault, &key_ref),
+    )
 }
 
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn mirror_existing_control_state(
     _home: &Path,
+    _vault: &mut EncryptedFileSecretStore,
     _control_ref: &str,
     _state: &str,
 ) -> bool {

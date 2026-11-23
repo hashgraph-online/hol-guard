@@ -359,6 +359,7 @@ fn put(
     }
     crate::policy_integrity_resolver::key_mint::mirror_existing_control_state(
         home,
+        secrets,
         control_ref,
         &serialized,
     )
