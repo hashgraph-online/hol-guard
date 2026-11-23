@@ -89,12 +89,20 @@ fn resolve_saved(
         guard_home: &request.guard_home,
         controls: admitted.snapshot.command_extensions.as_ref(),
     };
-    let decision = run_policy(&subject, saved, connection, &catalog)?;
+    let mut decision = run_policy(&subject, saved, connection, &catalog)?;
     let connector_setup = crate::mcp_tool_policy_connector::connector_setup_with_catalog(
         &subject,
         &decision,
         Some(&catalog),
     );
+    if connector_setup.is_some()
+        && decision.action == guard_command::effect_decision::GuardAction::Allow
+        && decision.policy_action() == guard_command::effect_decision::GuardAction::Allow
+    {
+        decision.action = guard_command::effect_decision::GuardAction::Review;
+        decision.source = "heuristic".to_owned();
+        decision.summary = "This MCP connector has not been set up on this device.".to_owned();
+    }
     let packaged = match leg {
         Some(PackageLeg::Decide(intent)) => {
             let inputs = package_leg::package_inputs(

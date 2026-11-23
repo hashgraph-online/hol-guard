@@ -29,11 +29,14 @@ fn explicit_choice(config: &Map<String, Value>, key: &str, id: Option<&str>) -> 
         .is_some_and(|value| !value.is_null())
 }
 
-/// Whether `decision` is a review due only to Guard not recognising the server.
+/// Whether `decision` is due only to Guard not recognising the server.
 fn non_recognition(subject: &McpToolPolicySubjectV1, decision: &Decision) -> bool {
     let command = subject.artifact.command.as_deref().unwrap_or("");
-    decision.action == GuardAction::Review
-        && decision.policy_action() == GuardAction::Review
+    matches!(decision.action, GuardAction::Allow | GuardAction::Review)
+        && matches!(
+            decision.policy_action(),
+            GuardAction::Allow | GuardAction::Review
+        )
         && decision.signals.is_empty()
         && decision.risk_categories.is_empty()
         && BASE_SOURCES.contains(&decision.source.as_str())
