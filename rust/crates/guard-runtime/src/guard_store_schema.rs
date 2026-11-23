@@ -33,6 +33,12 @@ mod evidence_sql;
 mod families;
 #[path = "guard_store_schema_indexes.rs"]
 mod indexes;
+#[path = "guard_store_schema_local_cli.rs"]
+mod local_cli;
+#[path = "guard_store_schema_local_cli_rebuild.rs"]
+mod local_cli_rebuild;
+#[path = "guard_store_schema_local_cli_sql.rs"]
+mod local_cli_sql;
 #[path = "guard_store_schema_objects.rs"]
 mod objects;
 #[path = "guard_store_schema_tables.rs"]
@@ -196,6 +202,7 @@ pub(crate) fn ensure_families(connection: &Connection, now: &str) -> StoreResult
     activity_extra::ensure_display(connection, now)?;
     evidence::ensure_evidence(connection)?;
     evidence::ensure_extension_control(connection)?;
+    local_cli::ensure_local_cli(connection)?;
     families::ensure_bash_operations(connection, now)?;
     families::ensure_workflow_capabilities(connection, now)
 }
@@ -211,6 +218,10 @@ mod activity_extra_tests;
 #[cfg(test)]
 #[path = "guard_store_schema_evidence_tests.rs"]
 mod evidence_tests;
+
+#[cfg(test)]
+#[path = "guard_store_schema_local_cli_tests.rs"]
+mod local_cli_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_families_tests.rs"]
