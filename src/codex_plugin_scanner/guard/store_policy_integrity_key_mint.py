@@ -83,7 +83,10 @@ def native_mint_for_store(guard_home: Path, secret_store: object) -> str | None:
     # from replacing that unknown result with a second key.
     if native_policy_integrity_key_mint is _NATIVE_MINT_IMPLEMENTATION and not _runtime_offers(feature):
         return None
-    return native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service) or "busy"
+    answer = native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service)
+    if answer is None:
+        return "busy" if native_policy_integrity_key_mint is _NATIVE_MINT_IMPLEMENTATION else None
+    return answer
 
 
 def _runtime_offers(feature: str) -> bool:
