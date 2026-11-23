@@ -1192,7 +1192,7 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-find-unquoted-glob-before-git-status",
+      "id": "neg-find-unquoted-variable-before-git-status",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -1203,7 +1203,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "find * -print; git status --short"
+        "command": "find $DIR -print; git status --short"
       },
       "cwd": "worktree",
       "expect": "not_allow"
