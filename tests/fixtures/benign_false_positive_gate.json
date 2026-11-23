@@ -6832,6 +6832,91 @@
       "expect": "allow"
     },
     {
+      "id": "git-status-after-shell-local-home-variable",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "work_dir=\"$HOME/projects\"; ls -la; git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-status-after-shell-local-literal-variable",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "out_dir=/tmp/report; echo done; git status --short && git log --oneline -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-status-after-git-dir-assignment",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "GIT_DIR=/tmp/elsewhere; git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-status-after-zsh-path-assignment",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "path=/tmp/bin; git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-status-after-substituted-variable",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "h=$(id -u); git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "git-worktree-status-glob-read",
       "fix_area": "git",
       "harnesses": [
