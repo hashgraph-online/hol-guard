@@ -30,6 +30,7 @@ def _sent(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
         return {"accepted": True, "result": {"payload": {}, "keyId": "k", "signature": "s"}}
 
     monkeypatch.setattr(command_capability, "native_command_envelope", _envelope)
+    monkeypatch.setattr(command_capability, "_resident_has", lambda _feature: True)
     return sent
 
 
@@ -82,3 +83,24 @@ def test_a_digest_never_reads_or_sends_a_key(tmp_path: Path, monkeypatch: pytest
     assert sent[0]["resident_key"] is False
     assert sent[0]["integrity_key_b64"] is None
     assert store.material_calls == []
+
+
+def test_a_vault_store_sends_its_key_to_a_resident_without_the_feature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent = _sent(monkeypatch)
+    features: list[str] = []
+
+    def _older(feature: str) -> bool:
+        features.append(feature)
+        return False
+
+    monkeypatch.setattr(command_capability, "_resident_has", _older)
+    store = _Store(tmp_path, EncryptedFileSecretStore(tmp_path))
+
+    command_capability._envelope(cast(Any, store), "sign", {"version": 1})
+
+    assert features == ["command-envelope-resident-key-v1"]
+    assert sent[0]["resident_key"] is False
+    assert isinstance(sent[0]["integrity_key_b64"], str)
+    assert store.material_calls == [False]

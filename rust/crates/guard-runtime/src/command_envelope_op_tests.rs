@@ -254,3 +254,10 @@ fn asking_for_the_resident_key_while_sending_one_is_refused() {
     both.resident_key = true;
     assert_eq!(refusal(&both), Some("native_command_envelope_invalid"));
 }
+
+#[test]
+fn asking_for_the_resident_key_while_naming_a_key_id_is_refused() {
+    let mut id_only = resident(COMMAND_ENVELOPE_ACTION_SIGN, grant());
+    id_only.integrity_key_id = Some("key-2".to_owned());
+    assert_eq!(refusal(&id_only), Some("native_command_envelope_invalid"));
+}

@@ -1,9 +1,10 @@
 """How the command-capability bridge hands the policy-integrity key to the resident.
 
 The HMAC, the canonical bytes it covers and every comparison against them
-live in the resident. This module only reads the key out of the secret store
-for callers whose key the resident cannot read itself, and decides when one
-has to be minted, which is provisioning, not a verdict.
+live in the resident, which reads the key from its own vault when the store
+is the plain encrypted-file vault. This module reads the key out of the
+secret store only for callers whose key the resident cannot read itself, and
+decides when one has to be minted, which is provisioning, not a verdict.
 """
 
 from __future__ import annotations
@@ -13,9 +14,11 @@ from pathlib import Path
 
 from ..native_command_capability import CommandCapabilityUnavailableError
 from ..native_command_envelope import (
+    COMMAND_ENVELOPE_RESIDENT_KEY_FEATURE,
     CommandEnvelopeUnavailableError,
     native_command_envelope,
 )
+from ..native_runtime import native_runtime_status
 from ..store import GuardStore
 from ..store_base import EncryptedFileSecretStore
 
@@ -38,12 +41,14 @@ def _envelope(
     """One signed-envelope answer from the runtime, or its refusal raised.
 
     The HMAC, the canonical bytes it covers and every comparison against them
-    live in the resident. This side reads the key out of the secret store and
-    decides when one has to be minted, which is provisioning, not a verdict.
+    live in the resident. A store kept in the plain vault lets the resident
+    read the key itself; any other store reads the key out here and sends it.
+    This side also decides when a key has to be minted, which is provisioning,
+    not a verdict.
     """
 
     home = _resident_home(store)
-    resident_key = action != "digest" and _resident_reads_key(store)
+    resident_key = action != "digest" and _resident_reads_key(store, COMMAND_ENVELOPE_RESIDENT_KEY_FEATURE)
     if action == "digest" or resident_key:
         # The runtime digests the payload alone and never reads the key for
         # this action, so reading the policy integrity secret out of the store
@@ -86,15 +91,36 @@ def _resident_home(store: GuardStore) -> Path:
     return guard_home
 
 
-def _resident_reads_key(store: GuardStore) -> bool:
-    """Whether the policy-integrity key lives where the resident reads it.
+def _resident_reads_key(store: GuardStore, feature: str) -> bool:
+    """Whether the resident can read the policy-integrity key for this store.
 
     Only the plain encrypted-file vault qualifies. A system keyring, or a
     store that mirrors one, may hold a key the resident cannot read, so those
-    callers keep sending their own copy.
+    callers keep sending their own copy. A resident that does not advertise
+    ``feature`` predates reading the key itself, so the caller sends its copy
+    to that resident too rather than asking for a request it cannot answer.
     """
 
-    return type(getattr(store, "_policy_integrity_secret_store", None)) is EncryptedFileSecretStore
+    if type(getattr(store, "_policy_integrity_secret_store", None)) is not EncryptedFileSecretStore:
+        return False
+    return _resident_has(feature)
+
+
+def _resident_has(feature: str) -> bool:
+    """Whether the running resident advertises ``feature``.
+
+    A status that cannot be read answers no, so the caller sends its own key;
+    the request itself then fails closed if the resident is really down.
+    """
+
+    try:
+        status = native_runtime_status()
+    except Exception:
+        return False
+    capabilities = status.capabilities
+    if not status.available or not status.compatible or capabilities is None:
+        return False
+    return feature in capabilities.features
 
 
 def _signing_material_for_resident(store: GuardStore, *, create: bool = False) -> tuple[str | None, str | None]:
