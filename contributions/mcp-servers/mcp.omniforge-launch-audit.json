@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.omniforge-launch-audit",
+  "version": "1.0.0",
+  "name": "OmniForge Launch Audit",
+  "description": "Public zero-auth Streamable HTTP MCP server at https://omnipulse-x402.appwrite.network/mcp for pre-launch domain audits. All 5 tools (website security headers, SPF/DKIM/DMARC DNS, llms.txt crawler readiness, 78-TLD RDAP availability, and combined launch audit) are keyless and read-only; other stays on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.zcoldwater",
+    "displayName": "zColdWater",
+    "url": "https://github.com/zColdWater"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/zColdWater/mcp-launch-audit",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://omnipulse-x402.appwrite.network/mcp",
+    "serverNames": [
+      "omniforge-launch-audit",
+      "mcp-launch-audit"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-public-data-read"
+  ],
+  "tools": [
+    {
+      "name": "audit_website_security",
+      "state": "inherit"
+    },
+    {
+      "name": "audit_email_deliverability",
+      "state": "inherit"
+    },
+    {
+      "name": "audit_ai_search_readiness",
+      "state": "inherit"
+    },
+    {
+      "name": "check_brand_launch_readiness",
+      "state": "inherit"
+    },
+    {
+      "name": "run_full_launch_audit",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/zColdWater/mcp-launch-audit",
+    "https://omnipulse-x402.appwrite.network/openapi.json",
+    "https://omnipulse-x402.appwrite.network/llms.txt",
+    "https://glama.ai/mcp/connectors/io.github.zColdWater/mcp-launch-audit"
+  ],
+  "saferAlternatives": [
+    "All 5 tools are keyless read-only public HTTP/DNS/RDAP inspections that change no state; pass only public domains you intend to audit.",
+    "Keep unknown future tools ('other') on Review, or run the MIT-licensed local stdio package from https://github.com/zColdWater/mcp-launch-audit when auditing from pinned local source."
+  ]
+}
