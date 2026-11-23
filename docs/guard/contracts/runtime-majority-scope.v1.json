@@ -621,6 +621,10 @@
         "reason": "Reviewed: the base tables, indexes and triggers the store creates when it opens, moved out of store_connection_schema.py unchanged. The native runtime keeps a copy that a parity test holds to this list."
       },
       {
+        "path": "src/codex_plugin_scanner/guard/store_schema_versions.py",
+        "reason": "Reviewed: the versioned schema steps the store runs when it opens (version records, the version 5 receipt envelope move, the local device row and the legacy expiry reopen), moved out of store_connection_schema.py unchanged. The native runtime keeps a copy that a parity test holds to these statements."
+      },
+      {
         "path": "src/codex_plugin_scanner/guard/store_schema_columns.py",
         "reason": "Reviewed: the columns and policy indexes the store adds to tables created by older releases, moved out of store_connection_schema.py unchanged. The native runtime keeps a copy that a parity test holds to these lists."
       },
