@@ -53,6 +53,7 @@ from .review_fixtures import (
 from .runtime_cases import runtime_case_checks
 from .script_cases import script_case_checks
 from .session_folder import session_folder_checks
+from .package_store_fixtures import add_package_store_checkout
 from .sibling_runner_fixtures import add_sibling_test_runner
 from .supply_chain import supply_chain_checks
 from .workspace_runner_fixtures import (
@@ -776,6 +777,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         _git(args, sibling, environment)
     add_home_tools(home)
     add_sibling_test_runner(home, scenario_id)
+    add_package_store_checkout(home, scenario_id)
     # A clone with ignored local configuration files beside its code.
     write_edge_clone(home, environment)
     add_checkout_origin(main, environment, scenario_id)
