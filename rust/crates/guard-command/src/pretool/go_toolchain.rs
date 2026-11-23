@@ -20,13 +20,11 @@
 //! a toolchain file selects, which [`super::rust_toolchain`] already admits.
 //!
 //! Before fetching, the command looks on `PATH` for a program named after
-//! the release. That lookup picks among the session's installed programs by
-//! a name the go command itself constrains to a release spelling, and `PATH`
-//! is already what decides which `go` runs at all: a directory that could
-//! plant a `go1.25.3` there could plant a `go`. So the workspace file
-//! selects between the user's own toolchains, not between a toolchain and
-//! arbitrary code, and the proof below is about the settings that can break
-//! that chain rather than about the workspace file:
+//! the release. That name is constrained to a release spelling, but it is
+//! not authenticated: a workspace-writable PATH entry may contain a program
+//! called `go1.25.3`. A module or workspace selecting it therefore cannot
+//! receive an inert-read proof. Outside a Go module/workspace, this proof
+//! checks the remaining settings that could redirect toolchain selection:
 //!
 //! - `GOTOOLCHAIN=path` runs a `go1.N` found on `PATH`, which is a local
 //!   binary and not a verified download, and `GOTOOLCHAIN=go1.N` names one
@@ -140,6 +138,15 @@ fn toolchain_selection_is_official(context: super::PathContext<'_>) -> bool {
     if !context.go_toolchain_inert || !context.shell_home_matches {
         return false;
     }
+    // Under Go's default `auto` mode a module or workspace can choose a
+    // release name. Go searches PATH for that name before downloading a
+    // verified toolchain, so a workspace-controlled PATH entry may execute
+    // arbitrary code even for `go version` or a named `go env` read.
+    // Do not confer an inert-read proof while a Go module or workspace can
+    // select that executable; uncertain filesystem state also keeps review.
+    if !no_workspace_toolchain_override(context.cwd) {
+        return false;
+    }
     let Some(home) = context.home_dir.map(Path::new) else {
         return false;
     };
@@ -147,6 +154,28 @@ fn toolchain_selection_is_official(context: super::PathContext<'_>) -> bool {
         return false;
     }
     go_env_files(home).iter().all(|path| go_env_inert(path))
+}
+
+/// Check every ancestor Go would inspect for a `go.work` or `go.mod`.
+/// An existing file can request a workspace-selected toolchain, which Go
+/// searches for on PATH before verified downloads. Do not assume release
+/// spellings on PATH are trustworthy: writable directories may contain one.
+fn no_workspace_toolchain_override(cwd: Option<&str>) -> bool {
+    let Some(cwd) = cwd else {
+        return false;
+    };
+    let Ok(directory) = fs::canonicalize(cwd) else {
+        return false;
+    };
+    directory.is_dir()
+        && directory.ancestors().all(|parent| {
+            ["go.work", "go.mod"].iter().all(|name| {
+                matches!(
+                    fs::symlink_metadata(parent.join(name)),
+                    Err(error) if error.kind() == ErrorKind::NotFound
+                )
+            })
+        })
 }
 
 /// Where the go command keeps the settings `go env -w` writes.
