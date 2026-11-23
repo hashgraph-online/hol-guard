@@ -20,7 +20,7 @@ from codex_plugin_scanner.guard.store_extension_control_authority_schema import 
     ensure_extension_control_authority_schema,
     extension_control_schema_marker_is_compatible,
 )
-from tests.native_activation_support import activation_slot_call, subset_store
+from tests.native_activation_support import activation_slot_call, baseline_retained_store, subset_store
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.pack_activation_writer_support import write_in_transaction
 from tests.test_extension_pack_preparation import delivery as delivery
@@ -102,7 +102,9 @@ def test_subset_writes_schema6_and_keeps_schema5_readable(delivery, monkeypatch)
     assert activation_store.read(store).selected == {"command.core"}
     # New readers preserve the floor and baseline reservation cannot overwrite it.
     with hold_command_control_authority_lock(store.guard_home), connection:
-        assert activation_baseline.baseline_request(connection, None, recorded_at="unit") is None
+        assert (
+            activation_baseline.baseline_request(baseline_retained_store(connection), None, recorded_at="unit") is None
+        )
     assert activation_store.read(store).record_digest == draft.digest
     with (
         hold_command_control_authority_lock(store.guard_home),
@@ -117,7 +119,7 @@ def test_a_refused_first_activation_sends_the_baseline_again() -> None:
     connection.row_factory = sqlite3.Row
     ensure_extension_control_authority_schema(connection, activate_packs=True)
     metadata = SimpleNamespace(program_digest="1" * 64, catalog_digest="2" * 64, trust_digest="3" * 64)
-    assert activation_baseline.baseline_request(connection, metadata, recorded_at="unit") == {
+    assert activation_baseline.baseline_request(baseline_retained_store(connection), metadata, recorded_at="unit") == {
         "program_digest": "1" * 64,
         "catalog_digest": "2" * 64,
         "trust_digest": "3" * 64,

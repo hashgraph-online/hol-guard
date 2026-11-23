@@ -222,7 +222,7 @@ fn items_cursor(row: &Row) -> Value {
 
 /// The item's encoded length plus its separating comma. The reply is JSON,
 /// so every quote and backslash in a record costs two bytes, not one.
-fn item_bytes(item: &Value) -> usize {
+pub(crate) fn item_bytes(item: &Value) -> usize {
     serde_json::to_vec(item).map_or(usize::MAX, |bytes| bytes.len().saturating_add(1))
 }
 

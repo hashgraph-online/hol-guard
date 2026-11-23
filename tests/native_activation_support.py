@@ -162,7 +162,7 @@ def activation_slot_call(connect):
 
     def call(method, args):
         if method == "list_command_pack_pending_records" and args == {}:
-            return {"items": _pending_items(connect)}
+            return {"items": _pending_items(connect), "next": None}
         assert method == "read_command_pack_activation" and args == {}
         with connect() as connection:
             if not connection.execute(
@@ -179,6 +179,23 @@ def activation_slot_call(connect):
         return {"state": "present", "row": {name: row[name] for name in fields}}
 
     return call
+
+
+def baseline_retained_store(connection):
+    """A store whose native ``command_pack_baseline_retained`` reads a fixture connection."""
+    from types import SimpleNamespace
+
+    def call(method, args):
+        assert method == "command_pack_baseline_retained" and args == {}
+        marker = connection.execute(
+            "select version from extension_control_schema_migration where singleton=1"
+        ).fetchone()
+        if marker is None or marker["version"] not in {5, 6}:
+            return {"state": "present", "retained": False}
+        slot = connection.execute("select 1 from extension_command_pack_activation where singleton=1").fetchone()
+        return {"state": "present", "retained": slot is not None}
+
+    return SimpleNamespace(_native_store_call=call)
 
 
 def _pending_items(connect):

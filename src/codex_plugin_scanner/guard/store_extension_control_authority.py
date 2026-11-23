@@ -10,6 +10,11 @@ import secrets
 import sqlite3
 from typing import cast
 
+from .native_extension_control_head import (
+    extension_control_recovery_transition,
+    extension_control_snapshot_head,
+    extension_control_transition_committed,
+)
 from .native_extension_control_schema import extension_control_schema_compatible
 from .native_extension_control_snapshot import extension_control_snapshot_layers
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
@@ -23,11 +28,8 @@ from .store_base import SecretStore
 from .store_extension_control_authority_catalog import ExtensionControlAuthorityCatalogMixin
 from .store_extension_control_authority_commit import ExtensionControlAuthorityCommitMixin
 from .store_extension_control_authority_reads import ExtensionControlAuthorityReadsMixin
-from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 from .store_extension_control_authority_support import (
     _now,
-    _row_int,
-    _row_str,
 )
 from .store_extension_control_authority_transitions import _ExtensionControlAuthorityTransitionMixin
 from .store_extension_control_last_good import ExtensionControlLastGoodMixin, _count_controls
@@ -70,84 +72,58 @@ class StoreExtensionControlAuthorityMixin(
                 )
                 if restored_view is not None:
                     return restored_view
-            with self._connect() as connection:
-                require_compatible_extension_control_schema(connection)
-                snapshot = connection.execute(
-                    "select revision, snapshot_digest from extension_control_authority_snapshot where singleton = 1"
-                ).fetchone()
-                if snapshot is None or anchor is None:
+            _ = extension_control_schema_compatible(self)
+            head = extension_control_snapshot_head(self)
+            if head is None or anchor is None:
+                return self._reset_extension_control_authority(
+                    catalog_digest,
+                    key=key,
+                    reason="snapshot-or-anchor-missing",
+                )
+            current_revision = head.revision
+            current_digest = head.snapshot_digest
+            pending_revision = extension_control_recovery_transition(self, current_revision)
+            if pending_revision is not None:
+                try:
+                    resumed = self._resume_transition(pending_revision, key=key)
+                except UnverifiablePackTransitionError:
+                    # Only damaged pending authentication permits the existing
+                    # explicit recovery reset; environmental failures propagate.
+                    return self._reset_extension_control_authority(
+                        catalog_digest, key=key, reason="pending-transition-unverifiable"
+                    )
+                if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
+                    return resumed
+            if anchor.revision == current_revision and anchor.snapshot_digest == current_digest:
+                if anchor.phase is not AuthorityPhase.COMMITTED:
+                    self._write_and_verify_anchor(
+                        AuthorityAnchor(
+                            current_revision,
+                            current_digest,
+                            AuthorityPhase.COMMITTED,
+                        ),
+                        key=key,
+                    )
+                if current_revision > 0 and not extension_control_transition_committed(self, current_revision):
                     return self._reset_extension_control_authority(
                         catalog_digest,
                         key=key,
-                        reason="snapshot-or-anchor-missing",
+                        reason="committed-transition-missing",
                     )
-                current_revision = _row_int(snapshot, "revision")
-                current_digest = _row_str(snapshot, "snapshot_digest")
-                pending = connection.execute(
-                    """
-                    select * from extension_control_authority_transition
-                    where (revision = ? and phase != ?) or revision = ?
-                    order by revision
-                    limit 1
-                    """,
-                    (
-                        current_revision,
-                        AuthorityPhase.COMMITTED.value,
-                        current_revision + 1,
-                    ),
-                ).fetchone()
-                if pending is not None:
-                    try:
-                        resumed = self._resume_transition(_row_int(pending, "revision"), key=key)
-                    except UnverifiablePackTransitionError:
-                        # Only damaged pending authentication permits the existing
-                        # explicit recovery reset; environmental failures propagate.
-                        connection.rollback()
-                        return self._reset_extension_control_authority(
-                            catalog_digest, key=key, reason="pending-transition-unverifiable"
-                        )
-                    if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
-                        return resumed
-                    connection.commit()
-                if anchor.revision == current_revision and anchor.snapshot_digest == current_digest:
-                    if anchor.phase is not AuthorityPhase.COMMITTED:
-                        self._write_and_verify_anchor(
-                            AuthorityAnchor(
-                                current_revision,
-                                current_digest,
-                                AuthorityPhase.COMMITTED,
-                            ),
-                            key=key,
-                        )
+                recovered = self._read_extension_control_authority_locked(
+                    catalog_digest,
+                    migration_registry=migration_registry,
+                )
+                if recovered.health is AuthorityHealth.PROTECTED:
                     if current_revision > 0:
-                        committed = connection.execute(
-                            "select 1 from extension_control_authority_transition where revision = ? and phase = ?",
-                            (current_revision, AuthorityPhase.COMMITTED.value),
-                        ).fetchone()
-                        if committed is None:
-                            return self._reset_extension_control_authority(
-                                catalog_digest,
-                                key=key,
-                                reason="committed-transition-missing",
-                            )
-                    # Catalog migration below uses its own transaction. Release
-                    # the writer lock before re-reading the authority;
-                    # the authority lock still excludes competing mutations.
-                    connection.commit()
-                    recovered = self._read_extension_control_authority_locked(
-                        catalog_digest,
-                        migration_registry=migration_registry,
-                    )
-                    if recovered.health is AuthorityHealth.PROTECTED:
-                        if current_revision > 0:
-                            self._extension_control_authority_op(
-                                "queue_change",
-                                key=key,
-                                revision=current_revision,
-                                now=_now(),
-                                event_queue_limit=self._guard_event_queue_limit,
-                            )
-                        return recovered
+                        self._extension_control_authority_op(
+                            "queue_change",
+                            key=key,
+                            revision=current_revision,
+                            now=_now(),
+                            event_queue_limit=self._guard_event_queue_limit,
+                        )
+                    return recovered
             return self._reset_extension_control_authority(
                 catalog_digest,
                 key=key,

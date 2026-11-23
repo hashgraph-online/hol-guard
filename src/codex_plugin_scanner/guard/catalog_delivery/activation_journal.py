@@ -21,7 +21,7 @@ class UnverifiablePackTransitionError(NativePolicySnapshotError):
     """Pending pack bytes cannot authenticate against their approved transition."""
 
 
-def reserve_request(store, connection, draft, *, recorded_at, now=None):
+def reserve_request(store, draft, *, recorded_at, now=None):
     """The ``pack_reserve`` the resident checks ``draft`` against and reserves.
 
     The resident moves the schema marker to the pack schema the draft names,
@@ -41,7 +41,7 @@ def reserve_request(store, connection, draft, *, recorded_at, now=None):
     if draft.previous_digest is None:
         if draft.baseline_metadata is None:
             raise NativePolicySnapshotError("native_command_pack_baseline_missing")
-        baseline = activation_baseline.baseline_request(connection, draft.baseline_metadata, recorded_at=recorded_at)
+        baseline = activation_baseline.baseline_request(store, draft.baseline_metadata, recorded_at=recorded_at)
     from ..native_store_policy import encode_key
     from .active_security import read as read_security
 

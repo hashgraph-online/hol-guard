@@ -166,10 +166,7 @@ class ExtensionControlAuthorityCatalogMixin:
         if pack_activation is not None:
             from .catalog_delivery.activation_journal import reserve_request
 
-            with self._connect() as connection:
-                pack_reserve["pack_reserve"] = reserve_request(
-                    self, connection, pack_activation, recorded_at=str(request["now"])
-                )
+            pack_reserve["pack_reserve"] = reserve_request(self, pack_activation, recorded_at=str(request["now"]))
         reply = self._extension_control_authority_op(
             "migrate", key=key, **request, **pack_reserve, migration_record=migration_record
         )

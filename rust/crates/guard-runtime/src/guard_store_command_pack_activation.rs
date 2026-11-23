@@ -40,10 +40,14 @@ const MARKER_SQL: &str =
      case when typeof(checksum) = 'text' then checksum end as checksum \
      from extension_control_schema_migration where singleton = 1";
 
+#[path = "guard_store_command_pack_baseline.rs"]
+mod command_pack_baseline;
 #[path = "guard_store_command_pack_legacy_evidence.rs"]
 mod command_pack_legacy_evidence;
 #[path = "guard_store_command_pack_pending.rs"]
 mod command_pack_pending;
+#[path = "guard_store_extension_control_head.rs"]
+mod extension_control_head;
 #[path = "guard_store_extension_control_snapshot.rs"]
 mod extension_control_snapshot;
 
@@ -51,6 +55,8 @@ pub(crate) fn handles(method: &str) -> bool {
     extension_control_snapshot::handles(method)
         || command_pack_pending::handles(method)
         || command_pack_legacy_evidence::handles(method)
+        || extension_control_head::handles(method)
+        || command_pack_baseline::handles(method)
         || matches!(
             method,
             "read_command_pack_activation" | "extension_control_schema_state"
@@ -63,13 +69,19 @@ pub(crate) fn dispatch(
     args: &Args<'_>,
 ) -> StoreResult<Value> {
     match method {
+        _ if extension_control_head::handles(method) => {
+            extension_control_head::dispatch(connection, method, args)
+        }
+        _ if command_pack_baseline::handles(method) => command_pack_baseline::dispatch(connection),
         _ if command_pack_legacy_evidence::handles(method) => {
             command_pack_legacy_evidence::dispatch(connection, method, args)
         }
         _ if extension_control_snapshot::handles(method) => {
             extension_control_snapshot::dispatch(connection)
         }
-        _ if command_pack_pending::handles(method) => command_pack_pending::dispatch(connection),
+        _ if command_pack_pending::handles(method) => {
+            command_pack_pending::dispatch(connection, args)
+        }
         "extension_control_schema_state" => schema_state(connection),
         _ => read(connection),
     }

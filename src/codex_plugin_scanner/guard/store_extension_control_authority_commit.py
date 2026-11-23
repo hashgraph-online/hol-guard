@@ -11,6 +11,7 @@ import time
 from collections.abc import Mapping
 
 from .native_extension_control_authority import view_to_wire
+from .native_extension_control_schema import extension_control_schema_compatible
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
@@ -31,7 +32,6 @@ from .runtime.extension_control_proof import (
     validate_extension_control_enrollment_proof,
     validate_extension_control_proof,
 )
-from .store_extension_control_authority_schema import require_compatible_extension_control_schema
 from .store_extension_control_authority_support import _now, _plan_int, _plan_map
 
 # A commit re-reads at most once to roll back another request's abandoned
@@ -64,8 +64,7 @@ class ExtensionControlAuthorityCommitMixin:
             retained = lifecycle_store.migration_retained(self)
         if not retained:
             with self._extension_control_authority_lock():
-                with self._connect() as connection:
-                    require_compatible_extension_control_schema(connection)
+                _ = extension_control_schema_compatible(self)
                 lifecycle_store.migrate_installed(self, installed)
         from .catalog_delivery.installed_upgrade import migrate_active
 
@@ -229,8 +228,7 @@ class ExtensionControlAuthorityCommitMixin:
             assert key is not None
             # An unknown schema version must refuse the write by name rather
             # than surface as a generic unavailable authority.
-            with self._connect() as connection:
-                require_compatible_extension_control_schema(connection)
+            _ = extension_control_schema_compatible(self)
             commit = {
                 "actor_id": actor_id,
                 "idempotency_key": idempotency_key,
@@ -247,8 +245,7 @@ class ExtensionControlAuthorityCommitMixin:
             if pack_activation is not None:
                 from .catalog_delivery.activation_journal import reserve_request
 
-                with self._connect() as connection:
-                    reservation = reserve_request(self, connection, pack_activation, recorded_at=_now())
+                reservation = reserve_request(self, pack_activation, recorded_at=_now())
             proof_already_consumed = False
             rollback_attempted = False
             for _ in range(_MAX_COMMIT_ROUNDS):
