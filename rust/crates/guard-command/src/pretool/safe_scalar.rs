@@ -178,6 +178,18 @@ pub(super) fn safe_launchctl_arguments(arguments: &[String]) -> bool {
     matches!(arguments, [subcommand] if subcommand == "list")
 }
 
+/// `crontab -l` writes the calling user's own table to standard output. It
+/// opens no editor, reads no file and changes no schedule, so a line that
+/// only lists reads state the user already owns -- the same view
+/// `launchctl list` proves above.
+///
+/// Every other form keeps its review: `crontab FILE` and `crontab -` install
+/// a new table, `-e` opens it in an editor, which runs a program, `-r`
+/// removes it, and `-u NAME` reads or replaces another account's table.
+pub(super) fn safe_crontab_arguments(arguments: &[String]) -> bool {
+    matches!(arguments, [only] if only == "-l")
+}
+
 /// `ps` lists processes and their arguments, the same view `pgrep -f`
 /// already exposes. Environment display (BSD `e`, and `-e`/`-E` on macOS)
 /// stays out because it prints other processes' variables.

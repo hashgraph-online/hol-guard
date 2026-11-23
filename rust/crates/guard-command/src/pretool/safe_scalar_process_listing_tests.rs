@@ -92,3 +92,27 @@ fn ps_reads_a_bsd_style_column_list() {
         assert!(!super::safe_ps_arguments(&arguments(values)), "{values:?}");
     }
 }
+
+#[test]
+fn crontab_lists_the_callers_own_table() {
+    assert!(super::safe_crontab_arguments(&arguments(&["-l"])));
+}
+
+#[test]
+fn crontab_installs_edits_and_other_accounts_stay_unproven() {
+    for values in [
+        &[][..],
+        &["-e"],
+        &["-r"],
+        &["-"],
+        &["schedule.txt"],
+        &["-u", "deploy", "-l"],
+        &["-l", "-u", "deploy"],
+        &["-l", "extra.txt"],
+    ] {
+        assert!(
+            !super::safe_crontab_arguments(&arguments(values)),
+            "{values:?}"
+        );
+    }
+}
