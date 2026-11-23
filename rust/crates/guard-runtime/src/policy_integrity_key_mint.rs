@@ -306,19 +306,27 @@ fn locked_mint(home: &Path, deadline: Instant) -> Minted {
 /// primary copy on the next read, so a vault-only generation advance would be
 /// rolled back when the Python store refreshes it.
 #[cfg(target_os = "linux")]
-pub(crate) fn mirror_existing_control_state(_home: &Path, control_ref: &str, state: &str) {
+pub(crate) fn mirror_existing_control_state(_home: &Path, control_ref: &str, state: &str) -> bool {
     let primary = keyring_linux::SecretServiceKeyring {
         service_name: KEYRING_SERVICE_NAME.to_owned(),
         deadline: Instant::now() + KEYRING_BUDGET,
         mint_lock: None,
     };
-    if matches!(mirrored::Primary::get(&primary, control_ref), Ok(Some(_))) {
-        let _ = mirrored::Primary::set(&primary, control_ref, state);
+    match mirrored::Primary::get(&primary, control_ref) {
+        Ok(None) => true,
+        Ok(Some(_)) => mirrored::Primary::set(&primary, control_ref, state).is_ok(),
+        Err(()) => false,
     }
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(crate) fn mirror_existing_control_state(_home: &Path, _control_ref: &str, _state: &str) {}
+pub(crate) fn mirror_existing_control_state(
+    _home: &Path,
+    _control_ref: &str,
+    _state: &str,
+) -> bool {
+    true
+}
 
 #[cfg(test)]
 #[path = "policy_integrity_key_mint_tests.rs"]

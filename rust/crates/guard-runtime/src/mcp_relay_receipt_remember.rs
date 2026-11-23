@@ -348,8 +348,7 @@ fn put(
         home,
         control_ref,
         &serialized,
-    );
-    true
+    )
 }
 
 #[cfg(test)]
