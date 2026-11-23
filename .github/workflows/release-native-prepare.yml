@@ -133,6 +133,9 @@ jobs:
       - name: Identify exact release binaries
         id: native-identity
         if: env.UNSHIPPED_TARGET != 'true'
+        env:
+          CARGO_PROFILE_RELEASE_LTO: ${{ inputs.fast_codegen == true && 'false' || 'thin' }}
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
         shell: bash
         run: |
           identity="$(python -m scripts.release.native_cache_key)"
