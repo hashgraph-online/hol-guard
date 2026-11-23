@@ -4,9 +4,7 @@
 //! A fresh store gets the current marker and every table. An older marker
 //! walks the forward-only chain one version at a time, each step recording
 //! its own marker, so a failure leaves the last finished version behind. A
-//! marker this build does not recognize is refused, never rewritten. The
-//! version 13 to 14 step, which regroups pending connector reviews, is the
-//! one step not ported yet: a store at version 13 is refused until it is.
+//! marker this build does not recognize is refused, never rewritten.
 
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension};
@@ -24,7 +22,6 @@ use crate::guard_store_db::{StoreError, StoreResult};
 
 /// `LOCAL_CLI_SCHEMA_VERSION`.
 pub(super) const VERSION: i64 = 14;
-const UNPORTED_FROM: i64 = 13;
 const INVALID_MARKER: &str = "invalid local CLI schema marker";
 
 /// The checksum the marker records for `version`.
@@ -70,7 +67,7 @@ fn marker((version, checksum): (Value, Value)) -> StoreResult<(i64, String)> {
 /// Walk the chain from `(version, checksum)` to the current marker.
 fn migrate(connection: &Connection, (mut version, sum): (i64, String)) -> StoreResult<()> {
     let known = sum == checksum(version);
-    while known && (1..VERSION).contains(&version) && version != UNPORTED_FROM {
+    while known && (1..VERSION).contains(&version) {
         step(connection, version)?;
         version += 1;
         connection.execute(MARKER_UPDATE, (version, checksum(version)))?;
@@ -132,6 +129,13 @@ fn step(connection: &Connection, version: i64) -> StoreResult<()> {
             &V12_COLUMNS,
         )?),
         12 => Ok(connection.execute_batch(CAPABILITY_TABLE)?),
+        13 => {
+            // Setup context columns start null; the regroup is best effort
+            // and never blocks the schema bump.
+            context_columns(connection)?;
+            let _moved = super::local_cli_regroup::regroup(connection);
+            Ok(())
+        }
         _ => Err(StoreError::Value(INVALID_MARKER.to_owned())),
     }
 }
