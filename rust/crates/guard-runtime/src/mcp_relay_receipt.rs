@@ -464,7 +464,7 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
     let plain = plain(record)?;
     let artifact = plain.artifact;
     let name = artifact["name"].as_str()?;
-    let projected = plain.projected()?.flatten();
+    let projected = plain.projected()?;
     let risk_categories = plain.risk_categories(projected.as_ref())?;
     let call = Call {
         tool_name: plain.tool_name,
