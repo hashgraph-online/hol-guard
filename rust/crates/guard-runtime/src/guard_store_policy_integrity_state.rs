@@ -21,6 +21,9 @@ use serde_json::{json, Value};
 use guard_policy_snapshot::policy_integrity::{POLICY_INTEGRITY_VERSION, REMOTE_POLICY_SOURCES};
 
 use super::INTEGRITY_STATE_KEY;
+
+#[path = "guard_store_policy_decision_list.rs"]
+mod decision_list;
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_one, StoreError, StoreResult};
 
@@ -35,6 +38,8 @@ pub(super) fn handles(method: &str) -> bool {
             | "has_local_policy_rows"
             | "count_legacy_policy_rows"
             | "record_policy_integrity_state"
+            | "list_policy_decision_rows"
+            | "read_policy_decision_row"
     )
 }
 
@@ -44,6 +49,8 @@ pub(super) fn run(connection: &Connection, method: &str, args: &Args) -> StoreRe
         "has_local_policy_rows" => has_local_policy_rows(connection),
         "count_legacy_policy_rows" => count_legacy_policy_rows(connection),
         "record_policy_integrity_state" => record_policy_integrity_state(connection, args),
+        "list_policy_decision_rows" => decision_list::list_policy_decision_rows(connection, args),
+        "read_policy_decision_row" => decision_list::read_policy_decision_row(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_args_invalid")),
     }
 }

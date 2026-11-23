@@ -56,24 +56,18 @@ class StorePolicyIntegrityAdminMixin:
             "local_rows_scanned": sum(counts.values()),
         }
 
+    def _native_policy_decision_rows(self, harness: str | None) -> list[dict[str, object]]:
+        """The saved decisions to list, newest first, read by the native store."""
+        args: dict[str, object] = {} if harness is None else {"harness": harness}
+        reply = self._native_store_call("list_policy_decision_rows", args)
+        rows = reply.get("rows") if isinstance(reply, dict) else None
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise RuntimeError("Guard could not list the saved policy decisions.")
+        return rows
+
     def list_policy_decisions(self, harness: str | None = None) -> list[dict[str, object]]:
-        query = """
-            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
-                   action, reason, owner, source, expires_at, updated_at,
-                   policy_document_schema_version, policy_document_id, policy_document_digest,
-                   policy_rule_id, policy_provenance_json, integrity_version, integrity_generation,
-                   payload_hash, payload_mac, integrity_key_id, signed_at
-            from policy_decisions
-        """
-        params: tuple[object, ...] = (_APPROVAL_GATE_POLICY_SOURCE,)
-        conditions = ["not (source = ? and expires_at is not null)"]
-        if harness is not None:
-            conditions.append("harness = ?")
-            params = (_APPROVAL_GATE_POLICY_SOURCE, harness)
-        query += " where " + " and ".join(conditions)
-        query += " order by updated_at desc"
+        rows = self._native_policy_decision_rows(harness)
         with self._connect() as connection:
-            rows = connection.execute(query, params).fetchall()
             needs_local_integrity = any(not is_remote_policy_source(str(row["source"])) for row in rows)
             state: Mapping[str, object] | None = None
             key: bytes | None = None
@@ -113,12 +107,7 @@ class StorePolicyIntegrityAdminMixin:
     def get_policy_decision(self, decision_id: int) -> dict[str, object] | None:
         from .store_policy_decision import get_policy_decision_payload
 
-        return get_policy_decision_payload(
-            self,
-            decision_id=decision_id,
-            approval_gate_policy_source=_APPROVAL_GATE_POLICY_SOURCE,
-            now=_now(),
-        )
+        return get_policy_decision_payload(self, decision_id=decision_id, now=_now())
 
     def _attach_policy_source_contexts(self, items: Sequence[dict[str, object]]) -> None:
         """Add the remembered command and workspace context chosen by the native store.
@@ -162,7 +151,7 @@ class StorePolicyIntegrityAdminMixin:
                 item.update(context)
 
     @staticmethod
-    def _policy_decision_dict_from_row(row: sqlite3.Row) -> dict[str, object]:
+    def _policy_decision_dict_from_row(row: sqlite3.Row | Mapping[str, Any]) -> dict[str, object]:
         harness = str(row["harness"])
         artifact_id = row["artifact_id"]
         artifact_hash = row["artifact_hash"]
