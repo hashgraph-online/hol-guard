@@ -33,7 +33,6 @@
 //! keys, compact, UTF-8), which is what every stored signature covers.
 
 use std::io::Read;
-use std::path::Path;
 
 use guard_contracts::{utc_timestamp_micros, write_canonical_json_utf8};
 use hmac::{Hmac, Mac};
@@ -162,8 +161,9 @@ impl std::fmt::Debug for ExactCloudReviewResidentRequest {
 /// `guard_home` is the resident's own home, the only vault it reads a key from.
 pub(crate) fn evaluate_resident_request(
     request: ExactCloudReviewResidentRequest,
-    guard_home: Option<&Path>,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
+    let guard_home = owner.map(crate::policy_store::PolicySnapshotStore::guard_home);
     if request.schema != RESIDENT_REQUEST_SCHEMA {
         return Err(invalid());
     }
