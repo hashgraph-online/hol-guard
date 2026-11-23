@@ -91,12 +91,7 @@ impl Repo {
     }
 
     /// Whether the floor calls `relative` sensitive for `tool` and `action`.
-    fn sensitive_action(
-        &self,
-        relative: &str,
-        tool: &str,
-        action: PreToolActionTypeV1,
-    ) -> bool {
+    fn sensitive_action(&self, relative: &str, tool: &str, action: PreToolActionTypeV1) -> bool {
         let named = self.path().join(relative);
         let payload = json!({
             "tool_name": tool,
