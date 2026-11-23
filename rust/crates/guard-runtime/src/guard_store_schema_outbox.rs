@@ -2,10 +2,9 @@
 //! `ensure_review_event_outbox_schema` in `store_review_event_outbox_schema.py`
 //! and `ensure_review_event_outbox_upgrade` in
 //! `store_review_event_outbox_upgrade.py`, followed by the version 9 record
-//! `store_connection_schema.py` writes once the outbox exists.
-//!
-//! The retired `guard_live_request_outbox` migration runs between the upgrade
-//! and the review triggers in Python; its native copy lands separately.
+//! `store_connection_schema.py` writes once the outbox exists. The retired
+//! outbox migration (`guard_store_schema_outbox_retired.rs`) runs between the
+//! upgrade and the review triggers, as it does in Python.
 
 use rusqlite::Connection;
 use serde_json::Value;
@@ -57,6 +56,7 @@ pub(super) fn ensure_review_outbox(connection: &Connection, now: &str) -> StoreR
             connection.execute_batch(statement)?;
         }
         upgrade(connection)?;
+        super::outbox_retired::migrate_retired_outbox(connection, now)?;
         for statement in DROPPED_TRIGGERS {
             connection.execute_batch(statement)?;
         }

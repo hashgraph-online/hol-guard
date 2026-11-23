@@ -49,6 +49,8 @@ mod objects;
 mod outbox;
 #[path = "guard_store_schema_outbox_insert_sql.rs"]
 mod outbox_insert_sql;
+#[path = "guard_store_schema_outbox_retired.rs"]
+mod outbox_retired;
 #[path = "guard_store_schema_outbox_sql.rs"]
 mod outbox_sql;
 #[path = "guard_store_schema_outbox_update_sql.rs"]
@@ -61,6 +63,8 @@ mod shadow;
 mod shadow_sql;
 #[path = "guard_store_schema_tables.rs"]
 mod tables;
+#[path = "guard_store_schema_tail.rs"]
+mod tail;
 #[path = "guard_store_schema_versions.rs"]
 mod versions;
 #[path = "guard_store_schema_workspace.rs"]
@@ -232,7 +236,8 @@ pub(crate) fn ensure_families(connection: &Connection, now: &str) -> StoreResult
     shadow::ensure_shadow(connection, now)?;
     requests::ensure_requests_through_approvals(connection, now)?;
     approvals::ensure_approval_queue(connection, now)?;
-    outbox::ensure_review_outbox(connection, now)
+    outbox::ensure_review_outbox(connection, now)?;
+    tail::ensure_tail(connection, now)
 }
 
 #[cfg(test)]
@@ -274,6 +279,14 @@ mod columns_tests;
 #[cfg(test)]
 #[path = "guard_store_schema_outbox_tests.rs"]
 mod outbox_tests;
+
+#[cfg(test)]
+#[path = "guard_store_schema_outbox_retired_tests.rs"]
+mod outbox_retired_tests;
+
+#[cfg(test)]
+#[path = "guard_store_schema_tail_tests.rs"]
+mod tail_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_requests_tests.rs"]

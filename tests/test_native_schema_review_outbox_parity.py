@@ -63,6 +63,7 @@ def test_native_steps_follow_the_python_order() -> None:
         '"approval_requests"',
         "OUTBOX_STATEMENTS",
         "upgrade(connection)",
+        "migrate_retired_outbox",
         "DROPPED_TRIGGERS",
         "INSERT_TRIGGER",
         "UPDATE_TRIGGER",
@@ -76,6 +77,7 @@ def test_native_steps_follow_the_python_order() -> None:
         "alter table approval_requests add column oauth_source",
         "review_event_outbox_schema_statements()",
         "ensure_review_event_outbox_upgrade(",
+        "_migrate_retired_outbox(connection, now)",
         "drop trigger if exists",
         "_insert_trigger()",
         "_update_trigger()",
@@ -88,3 +90,20 @@ def test_native_steps_follow_the_python_order() -> None:
     )
     after = opener.index("ensure_review_event_outbox_schema(connection")
     assert opener.index("self._record_schema_version(connection, version=9)", after) > after
+
+
+def test_native_retired_outbox_migration_matches_python() -> None:
+    retired = (SOURCES / "guard_store_schema_outbox_retired.rs").read_text(encoding="utf-8")
+    key = re.search(r'const MIGRATED_KEY: &str = "([^"]+)";', retired)
+    assert key is not None
+    assert key.group(1) == outbox._RETIRED_OUTBOX_MIGRATION_STATE_KEY  # pyright: ignore[reportPrivateUsage]
+    python_source = inspect.getsource(outbox._retired_outbox_payload) + inspect.getsource(  # pyright: ignore[reportPrivateUsage]
+        outbox._migrate_retired_outbox  # pyright: ignore[reportPrivateUsage]
+    )
+    pattern = r'"(retired_[a-z_]+)"'
+    native_reasons: list[str] = re.findall(pattern, retired)
+    python_reasons: list[str] = re.findall(pattern, python_source)
+    assert sorted(native_reasons) == sorted(python_reasons)
+    marker = inspect.getsource(outbox._retired_outbox_marker_payload)  # pyright: ignore[reportPrivateUsage]
+    keys: list[str] = re.findall(r'payload\.insert\(\s*"(\w+)"', retired)
+    assert keys == re.findall(r'"(\w+)":', marker)
