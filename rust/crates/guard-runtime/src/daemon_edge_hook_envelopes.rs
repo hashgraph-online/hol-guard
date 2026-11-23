@@ -33,6 +33,26 @@ pub(super) fn prepare_refusal(harness: &str, event: &str, refused: &Value) -> Op
     ))
 }
 
+/// Whether a `native_policy_not_ready` refusal only means the policy wait
+/// used up the hook's own deadline: no time is left and the publisher reports
+/// no error. Under a burst the barrier waits in the admitted slot, so a hook
+/// that queued behind others can run out of time while the next ACK is a
+/// moment away. That is deadline exhaustion, and naming it so keeps the
+/// "policy not ready" reason for a publisher that actually failed. The
+/// verdict is the same deny either way.
+pub(super) fn policy_wait_outlived_deadline(refused: &Value, remaining_seconds: f64) -> bool {
+    if remaining_seconds > 0.0
+        || refusal(refused).map(|(_, code)| code) != Some("native_policy_not_ready")
+    {
+        return false;
+    }
+    refused
+        .get("policy_failure")
+        .and_then(|failure| failure.get("last_error"))
+        .and_then(Value::as_str)
+        .is_none_or(|code| code.trim().is_empty())
+}
+
 /// The message a capacity refusal carries. A retry usually succeeds once a
 /// cold start or a burst has passed; one that keeps failing points at a
 /// daemon that needs repair, so each message names the command for that.
