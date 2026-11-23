@@ -16,6 +16,9 @@ pub const GUARD_STORE_REQUEST_SCHEMA: &str = "guard-store-request.v1";
 pub const GUARD_STORE_RESULT_SCHEMA: &str = "guard-store-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const GUARD_STORE_FEATURE: &str = "guard-store-v1";
+/// The resident fills in a `vault_key` call's policy-integrity key from its
+/// own vault (`guard_store_vault_key`).
+pub const GUARD_STORE_VAULT_KEY_FEATURE: &str = "guard-store-vault-key-v1";
 /// Largest canonical request the op accepts.
 pub const GUARD_STORE_MAX_REQUEST_BYTES: usize = 4 * 1024 * 1024;
 

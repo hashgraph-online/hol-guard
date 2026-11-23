@@ -121,8 +121,10 @@ fn filters(connection: &Connection, args: &Args) -> StoreResult<Option<Filters>>
         if ids.is_empty() {
             return Ok(None);
         }
-        conditions.push(format!("decision_id in ({})", placeholders(ids.len())));
-        params.extend(ids.into_iter().map(Value::from));
+        // One JSON parameter, not one per id: a repair can clear more rows
+        // than SQLite allows bound variables in a statement.
+        conditions.push("decision_id in (select value from json_each(?))".to_owned());
+        params.push(Value::String(json!(ids).to_string()));
     }
     if let Some(harness) = harness {
         conditions.push("harness = ?".to_owned());

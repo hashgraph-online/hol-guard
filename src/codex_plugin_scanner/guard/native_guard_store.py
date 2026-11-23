@@ -29,6 +29,9 @@ from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 GUARD_STORE_FEATURE = "guard-store-v1"
+# A call that sends ``vault_key`` instead of a key needs a resident that reads
+# the key from its own vault; an older one would see no key, so it is refused.
+GUARD_STORE_VAULT_KEY_FEATURE = "guard-store-vault-key-v1"
 GUARD_STORE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _REQUEST_SCHEMA = "guard-store-request.v1"
 _RESULT_SCHEMA = "guard-store-result.v1"
@@ -176,7 +179,7 @@ def native_guard_store_call(
         request=request,
         guard_home=guard_home,
         timeout_seconds=remaining_seconds,
-        required_feature=GUARD_STORE_FEATURE,
+        required_feature=GUARD_STORE_VAULT_KEY_FEATURE if args.get("vault_key") is True else GUARD_STORE_FEATURE,
         response_schema=_RESULT_SCHEMA,
         max_request_bytes=GUARD_STORE_MAX_REQUEST_BYTES + _ENVELOPE_SLACK_BYTES,
         record_success=False,
@@ -204,6 +207,7 @@ def native_guard_store_call(
 
 __all__ = [
     "GUARD_STORE_FEATURE",
+    "GUARD_STORE_VAULT_KEY_FEATURE",
     "NativeGuardStoreUnavailable",
     "native_guard_store_call",
     "unavailable_outbox_status",
