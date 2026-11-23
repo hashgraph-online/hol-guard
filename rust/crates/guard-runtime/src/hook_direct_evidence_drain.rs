@@ -203,6 +203,18 @@ fn record_page(
         }
     }
     let Some(source) = writer_source.filter(|_| !home.is_empty()) else {
+        // Relayed MCP records own their Rust receipt and review-row writer.
+        // They can be committed without the daemon's command-activity source,
+        // which is absent in short-lived relay-only workers.
+        let plain: Vec<_> = paged
+            .iter()
+            .filter(|item| mcp_relay_receipt::is_plain(&item.record))
+            .map(|item| (item.seq, item.record.clone()))
+            .collect();
+        if !plain.is_empty() {
+            let unwritten = mcp_relay_receipt::write_indexed(home, plain);
+            keep_handed_back(queue, paged, &unwritten);
+        }
         return Ok(None);
     };
     let fatal = record::leftovers(queue, home, source, paged);
