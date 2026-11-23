@@ -357,11 +357,11 @@ fn an_unpublished_mismatched_or_moved_integrity_state_defers() {
 }
 
 /// The proxy's lookup evidence carries a degraded state as it is, and the
-/// lookup judges it. The store reads natively under it, as long as it still
-/// holds the state the daemon published. A local row is refused, and the
-/// audit event recording that is collected for the relay to write later.
+/// lookup keeps the state the daemon published while applying protected
+/// verification semantics to local rows. Unsigned rows do not become saved
+/// decisions or degraded-mode audit allowances.
 #[test]
-fn a_degraded_integrity_state_reads_natively_and_collects_the_refusal() {
+fn a_degraded_integrity_state_reads_natively_without_unsigned_row_allowance() {
     let (home, connection) = guard_home("degraded");
     decide(
         &connection,
@@ -401,9 +401,7 @@ fn a_degraded_integrity_state_reads_natively_and_collects_the_refusal() {
         saved.audit.borrow().clone()
     })
     .unwrap();
-    assert!(audit
-        .iter()
-        .any(|(name, _, _)| name == "rule.ignored.local_integrity"));
+    assert!(audit.is_empty());
 }
 
 #[test]

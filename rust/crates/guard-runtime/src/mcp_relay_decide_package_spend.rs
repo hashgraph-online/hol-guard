@@ -113,7 +113,8 @@ pub(super) fn spend_package(
     let (published, key) = store::lookup_integrity(&admitted.binding)?;
     // The bound check compares the published state with the persisted one,
     // which the relay's own remembered write does not touch.
-    let bound = integrity_evidence(&rows, &published, key)?;
+    let verification = store::verification_state(&published);
+    let bound = integrity_evidence(&rows, &verification, key)?;
     // The rows are verified at the generation the decision read them at:
     // after the relay's own remembered allow re-signed every local row, that
     // is the generation the write was finalized at.
@@ -121,7 +122,8 @@ pub(super) fn spend_package(
     if let Some(generation) = own_write_generation(&context.request) {
         store::after_own_write(&mut state, generation);
     }
-    let evidence = integrity_evidence(&rows, &state, key)?;
+    let verification = store::verification_state(&state);
+    let evidence = integrity_evidence(&rows, &verification, key)?;
     // `claim_evidence_binding(connection, bundle=False)`.
     let binding = ClaimEvidenceBindingV1::default();
     // A claim that commits may still queue an approval row, which needs room
