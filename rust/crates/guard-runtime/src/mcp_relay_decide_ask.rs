@@ -206,7 +206,10 @@ fn prepare_with_connector_setup(
         .as_deref()
         .ok_or(ASK_UNSUPPORTED)?;
     let signals = &resolved.decision.signals;
-    if connector_setup.is_none() && !signals.iter().any(|signal| !signal.is_empty()) {
+    if connector_setup.is_none()
+        && !signals.iter().any(|signal| !signal.is_empty())
+        && matches!(resolved.decision.source.as_str(), "policy" | "heuristic")
+    {
         return Err(ASK_UNSUPPORTED);
     }
     let projection = match project(request, artifact) {
