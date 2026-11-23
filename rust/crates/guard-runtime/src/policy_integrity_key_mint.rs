@@ -310,9 +310,11 @@ pub(crate) fn mirror_existing_control_state(_home: &Path, control_ref: &str, sta
     // A headless process with no session bus has no Secret Service primary
     // copy to mirror. Treat that as the absent-keyring case so the vault can
     // advance its control state in CI and other non-desktop environments.
-    if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_none()
-        && std::env::var_os("XDG_RUNTIME_DIR").is_none()
-    {
+    let session_bus = std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some()
+        || std::env::var_os("XDG_RUNTIME_DIR")
+            .map(|dir| std::path::Path::new(&dir).join("bus").is_socket())
+            .unwrap_or(false);
+    if !session_bus {
         return true;
     }
     let primary = keyring_linux::SecretServiceKeyring {
