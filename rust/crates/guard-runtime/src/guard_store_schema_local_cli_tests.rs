@@ -96,12 +96,16 @@ fn a_version_one_store_walks_the_chain_and_keeps_its_rows() {
             [],
         )
         .expect("row");
-    // Version 13 to 14 is not ported yet, so the walk stops there.
-    let message = refusal(&connection);
-    assert!(message.contains("does not match"), "{message}");
-    assert_eq!(marker(&connection), (13, checksum(13)));
+    ensure_local_cli(&connection).expect("walk");
+    assert_eq!(marker(&connection), (VERSION, checksum(VERSION)));
     let observation = table_columns(&connection, "local_cli_observation").expect("columns");
-    for column in ["source_path", "surface", "source_label", "remote_origin"] {
+    for column in [
+        "source_path",
+        "surface",
+        "source_label",
+        "remote_origin",
+        "last_context_at",
+    ] {
         assert!(observation.contains(column), "{column}");
     }
     let surface: String = connection
@@ -129,7 +133,7 @@ fn a_version_six_command_grant_is_rebuilt_with_its_rows() {
              insert into local_cli_command_grant values ('cli', 'status', 'allow');",
         )
         .expect("v6 grant");
-    let _ = refusal(&connection);
+    ensure_local_cli(&connection).expect("walk");
     let state: String = connection
         .query_row("select state from local_cli_command_grant", [], |row| {
             row.get(0)

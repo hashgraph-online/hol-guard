@@ -37,6 +37,8 @@ mod indexes;
 mod local_cli;
 #[path = "guard_store_schema_local_cli_rebuild.rs"]
 mod local_cli_rebuild;
+#[path = "guard_store_schema_local_cli_regroup.rs"]
+mod local_cli_regroup;
 #[path = "guard_store_schema_local_cli_sql.rs"]
 mod local_cli_sql;
 #[path = "guard_store_schema_objects.rs"]
