@@ -34,7 +34,7 @@ from .case_helpers import (
     read_case_logs,
     ready_watch_binding,
 )
-from .case_retry import CaseRetries, case_fixture_name
+from .case_retry import CaseRetries, case_fixture_name, worker_death_assessment
 from .case_worker import SubprocessCaseWorker
 from .catalog import CATALOG, WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
@@ -681,16 +681,10 @@ def run_suite(
             """
             scenario = selected[index]
             returncode = getattr(exc, "returncode", None)
-            assessment = {
-                "outcome": "harness-error",
-                "reason": f"case worker exited {returncode} before recording a result",
-                "tool_calls": 0,
-                "successful_tools": 0,
-                "blocked_tools": 0,
-                "protocol_errors": [],
-                "recovered_inference_retries": 0,
-            }
+            assessment = worker_death_assessment(returncode)
             case = {
+                "id": scenario.id,
+                "expectation": scenario.expectation,
                 "scenario_id": scenario.id,
                 "assessment": assessment,
                 "guard_observations": [],

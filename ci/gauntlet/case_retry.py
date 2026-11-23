@@ -50,6 +50,27 @@ def case_fixture_name(scenario_id: str, attempt: int) -> str:
     return name if attempt <= 1 else f"{name}r{attempt}"
 
 
+WORKER_DEATH_FIELDS = frozenset({"id", "expectation", "scenario_id", "assessment", "guard_observations", "worker_exit"})
+
+
+def worker_death_assessment(returncode: int | None) -> dict[str, Any]:
+    """The only result a case worker that died before recording a verdict may claim.
+
+    The runner writes it and the verifier recomputes it from ``worker_exit``, so a
+    death record cannot carry any other outcome. It is a harness error with no tool
+    call: never a pass, and retry-eligible like any other host failure.
+    """
+    return {
+        "outcome": "harness-error",
+        "reason": f"case worker exited {returncode} before recording a result",
+        "tool_calls": 0,
+        "successful_tools": 0,
+        "blocked_tools": 0,
+        "protocol_errors": [],
+        "recovered_inference_retries": 0,
+    }
+
+
 def interrupted(assessment: dict[str, Any]) -> bool:
     """Ordinary work that raised any interruption event; protection denies are expected."""
     record = assessment.get("interruptions")

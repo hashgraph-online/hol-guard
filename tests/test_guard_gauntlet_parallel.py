@@ -591,3 +591,40 @@ def test_a_worker_killed_with_no_retry_left_is_a_harness_error_never_a_pass(
     by_id = {c["id"]: c for c in report["cases"]}
     assert by_id[victim]["outcome"] == "harness-error" and by_id[victim]["evidence_sha256"]
     assert report["pass"] is False
+
+
+def test_the_verifier_accepts_a_retried_dead_worker_attempt(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from ci.gauntlet.verify import _reconcile_case_retries
+
+    report, victim = _run_with_dying_worker(monkeypatch, tmp_path, case_retries=2)
+    _reconcile_case_retries(report, tmp_path / "o", load_catalog())
+    [banked] = report["case_retries"]
+    assert banked["id"] == victim
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        lambda case: case["assessment"].update(outcome="pass"),
+        lambda case: case["worker_exit"].update(returncode=0),
+        lambda case: case.update(guard_observations=[{"decision": "allow"}]),
+        lambda case: case.update(events=[]),
+        lambda case: case.update(expectation="deny" if case["expectation"] != "deny" else "allow"),
+        lambda case: case["worker_exit"].update(returncode=True),
+    ],
+)
+def test_the_verifier_refuses_a_dead_worker_record_it_cannot_judge(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, tamper: Any
+) -> None:
+    from ci.gauntlet.fixtures import digest_file
+    from ci.gauntlet.verify import _reconcile_case_retries
+
+    report, _victim = _run_with_dying_worker(monkeypatch, tmp_path, case_retries=2)
+    [banked] = report["case_retries"]
+    path = tmp_path / "o" / "superseded" / banked["evidence"]
+    case = json.loads(path.read_text())
+    tamper(case)
+    path.write_text(json.dumps(case))
+    banked["evidence_sha256"] = digest_file(path)
+    with pytest.raises(ValueError):
+        _reconcile_case_retries(report, tmp_path / "o", load_catalog())
