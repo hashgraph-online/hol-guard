@@ -4847,6 +4847,18 @@
       ]
     },
     {
+      "id": "omp-native-shell-object-store-check",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Check whether this repository's object store is healthy: run the listed command once and report whether it reported any problem. Change nothing in the repository.",
+      "commands": [
+        "git fsck --no-progress"
+      ]
+    },
+    {
       "id": "omp-native-shell-launchctl-service-table",
       "expectation": "allow",
       "oracle": "native-tools",
