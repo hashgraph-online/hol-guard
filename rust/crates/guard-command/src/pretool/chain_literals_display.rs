@@ -52,7 +52,8 @@ const MAX_BODY_CHARS: usize = 256;
 const LOOP_WORDS: &str = "for while until select";
 
 const STEERING_WORDS: &str = ". alias builtin cd command declare enable eval exec export \
-    function hash local popd pushd readonly set setopt shopt source typeset unalias unset";
+    function getopts hash let local mapfile popd pushd read readarray readonly set \
+    setopt shopt source trap typeset unalias unset";
 
 /// Whether `substitution` sits where its value is only printed.
 ///
@@ -337,7 +338,9 @@ fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bo
         STEERING_WORDS
             .split_ascii_whitespace()
             .any(|entry| entry == word)
-    })
+    }) || words
+        .windows(2)
+        .any(|pair| pair[0] == "printf" && pair[1].starts_with("-v"))
 }
 
 /// Whether `word` so far is `NAME=`, the start of an assignment.
