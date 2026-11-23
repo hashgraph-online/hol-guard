@@ -38,16 +38,6 @@ pub fn wallet_key_named(name: &str) -> bool {
 /// `search_scope_tracked` accepts exactly these, reads the committed file and
 /// scans it for credential-shaped values.
 ///
-/// A file in one of them whose name only spells the marker out is a project
-/// document about keys rather than a key. `private_key_jwt` is an OpenID
-/// Connect client authentication method, so a design note named
-/// `private-key-jwt-client-auth.md` describes a feature the way
-/// `command.kubernetes-secrets.json` does. Such a name keeps the review its
-/// words earn through `credential_named_path`, where the committed-document
-/// proof can clear it, instead of the container family, which has no relief
-/// at all and refused every read of the file and every recursive search of
-/// the directory holding it.
-///
 /// A key container carries no extension, or a key or certificate extension,
 /// both of which are read above, and a hidden name is refused on the dot
 /// alone, so neither reaches this.
@@ -61,6 +51,29 @@ fn provable_document_name(basename: &str) -> bool {
 }
 
 pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)> {
+    family(path, false)
+}
+
+/// [`sensitive_path_family`] without its catch-all for a document that only
+/// spells a key marker out, such as `private-key-jwt-client-auth.md`.
+///
+/// `private_key_jwt` is an OpenID Connect client authentication method, so a
+/// committed design note named for it describes a feature rather than holding
+/// a key. The container family has no relief at all, and refused every read of
+/// such a file and every recursive search of the directory holding it.
+///
+/// Only a screen that also applies [`crate::credential_named_path`], which
+/// still matches the marker, and clears that name only through the
+/// committed-document proof may use this. Every other caller keeps the full
+/// family, so an untracked `wallet-key.json` is still refused wherever no
+/// proof runs.
+pub fn sensitive_path_family_beside_name_proof(
+    path: &Path,
+) -> Option<(&'static str, &'static str)> {
+    family(path, true)
+}
+
+fn family(path: &Path, document_relief: bool) -> Option<(&'static str, &'static str)> {
     let normalized = path
         .to_string_lossy()
         .replace('\\', "/")
@@ -101,7 +114,7 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
     if let Some((_, family, sensitivity)) = direct.iter().find(|(name, _, _)| *name == basename) {
         return Some((*family, *sensitivity));
     }
-    if wallet_key_named(basename) && !provable_document_name(basename) {
+    if wallet_key_named(basename) && !(document_relief && provable_document_name(basename)) {
         return Some(("wallet/private-key file", "critical"));
     }
     if parts

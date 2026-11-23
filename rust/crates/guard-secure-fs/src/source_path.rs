@@ -529,7 +529,9 @@ fn classify(
 
 #[path = "sensitive_path_family.rs"]
 mod sensitive;
-pub use sensitive::{sensitive_path_family, wallet_key_named, win32_name};
+pub use sensitive::{
+    sensitive_path_family, sensitive_path_family_beside_name_proof, wallet_key_named, win32_name,
+};
 
 /// True when every hidden (`.`-prefixed) path component is on the benign
 /// dotfile list or the `.github/workflows` prefix, or is a project config

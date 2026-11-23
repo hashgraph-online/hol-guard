@@ -93,7 +93,7 @@ pub(in crate::pretool) fn committed_document(path: &Path) -> bool {
         && !path
             .components()
             .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
-        && guard_secure_fs::sensitive_path_family(path).is_none()
+        && guard_secure_fs::sensitive_path_family_beside_name_proof(path).is_none()
         && WALK.with(|walk| match walk.borrow_mut().as_mut() {
             Some(tracked) => tracked.non_secret(path),
             None => TrackedFiles::default().non_secret(path),

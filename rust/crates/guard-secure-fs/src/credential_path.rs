@@ -49,11 +49,11 @@ pub fn credential_named_path(path: &Path) -> bool {
         .map(win32_name)
         .filter(|part| !part.is_empty());
     let name = parts.next_back();
-    // `wallet_key_named` is the other half of the container rule in
-    // `sensitive_path_family`. A name that only spells the marker out in a
-    // document extension the committed-document proof can read back is a note
-    // about keys rather than a key, so it is screened here, where that proof
-    // clears it, instead of being refused outright as a container.
+    // `wallet_key_named` mirrors the container rule in
+    // `sensitive_path_family`. The screens that run the committed-document
+    // proof drop that rule for a document named for a key, through
+    // `sensitive_path_family_beside_name_proof`, and rely on this name review
+    // instead, which only that proof clears.
     (!schema_script
         && name.is_some_and(|name| {
             sensitive_external_filename(Path::new(name)) || wallet_key_named(name)

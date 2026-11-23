@@ -70,7 +70,14 @@ pub(in crate::pretool::search) fn descendant_allowed(
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
-    if guard_secure_fs::sensitive_path_family(path).is_some()
+    // A file's key-named document is screened by `credential_named_path`
+    // below, which only the committed-document proof clears.
+    let family = if is_file {
+        guard_secure_fs::sensitive_path_family_beside_name_proof
+    } else {
+        guard_secure_fs::sensitive_path_family
+    };
+    if family(path).is_some()
         || (name.starts_with('.')
             && !hidden_allowed(name)
             && !package_store_bin(path, name)

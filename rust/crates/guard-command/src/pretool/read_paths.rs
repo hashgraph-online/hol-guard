@@ -540,7 +540,14 @@ fn location_allowed(
             .iter()
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
         || foreign_user_home(canonical, home_dir, cwd)
-        || guard_secure_fs::sensitive_path_family(canonical).is_some()
+        || (if credential_names {
+            // The name screen below still matches a key-named document and
+            // clears it only through the committed-document proof.
+            guard_secure_fs::sensitive_path_family_beside_name_proof(canonical)
+        } else {
+            guard_secure_fs::sensitive_path_family(canonical)
+        })
+        .is_some()
         || (credential_names && super::search_scope_tracked::names::unproven(canonical, cwd)))
 }
 
