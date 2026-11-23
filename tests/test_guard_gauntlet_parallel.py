@@ -204,6 +204,66 @@ def test_subprocess_worker_collects_result_and_fails_closed(tmp_path: Path) -> N
         parallel.run_scheduled(["x"], jobs=1, spawn=lambda _i: bad, poll_interval=0.05)
 
 
+def test_dead_worker_reports_its_exit_and_stderr_tail(tmp_path: Path) -> None:
+    dead = case_worker.SubprocessCaseWorker(
+        "dead",
+        {},
+        tmp_path,
+        command=_script(
+            tmp_path / "dead.py", "import sys\nsys.stdin.read()\nsys.stderr.write('MemoryError')\nsys.exit(9)\n"
+        ),
+    )
+    while dead.poll() is None:
+        time.sleep(0.05)
+    with pytest.raises(case_worker.CaseWorkerDiedError) as raised:
+        dead.collect()
+    assert raised.value.scenario_id == "dead" and raised.value.returncode == 9
+    assert "MemoryError" in raised.value.stderr_tail
+
+
+class DyingWorker(FakeWorker):
+    def collect(self) -> str:
+        raise case_worker.CaseWorkerDiedError(self.name, -9, "killed")
+
+
+def test_a_dead_worker_becomes_that_items_result_and_the_rest_still_run() -> None:
+    # Before this, one worker killed under memory pressure aborted every case in the attempt.
+    seen: list[tuple[int, str]] = []
+    results = parallel.run_scheduled(
+        ["a", "b", "c"],
+        jobs=3,
+        spawn=lambda name: (DyingWorker if name == "b" else FakeWorker)(name, [], 1),
+        worker_died=lambda index, exc: seen.append((index, type(exc).__name__)) or {"died": exc.scenario_id},
+        sleep=_no_sleep,
+    )
+    assert results == ["a", {"died": "b"}, "c"]
+    assert seen == [(1, "CaseWorkerDiedError")]
+
+
+def test_a_dead_worker_result_can_be_retried() -> None:
+    spawned: list[str] = []
+
+    def spawn(name: str) -> FakeWorker:
+        spawned.append(name)
+        dies = name == "b" and spawned.count("b") == 1
+        return (DyingWorker if dies else FakeWorker)(name, [], 1)
+
+    results = parallel.run_scheduled(
+        ["a", "b"],
+        jobs=2,
+        spawn=spawn,
+        worker_died=lambda _index, _exc: "died",
+        retry=lambda _index, result: result == "died",
+        sleep=_no_sleep,
+    )
+    assert results == ["a", "b"] and spawned.count("b") == 2
+
+
+def test_without_a_handler_a_dead_worker_still_fails_closed() -> None:
+    with pytest.raises(case_worker.CaseWorkerDiedError):
+        parallel.run_scheduled(["a"], jobs=1, spawn=lambda name: DyingWorker(name, [], 1), sleep=_no_sleep)
+
+
 def _fake_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     package = json.loads((runner.REPO / "ci/pi-exact-continuation/package.json").read_text())
     version = "omp/" + package["dependencies"]["@oh-my-pi/pi-coding-agent"]
@@ -469,3 +529,65 @@ def test_a_dead_provider_route_is_recorded_once_and_printed(capsys):
     # iterator is not advanced and nothing more is printed.
     assert record_route_failure(report, lambda: next(calls)) is True
     assert capsys.readouterr().out == ""
+
+
+def _run_with_dying_worker(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, case_retries: int
+) -> tuple[dict[str, Any], str]:
+    _fake_environment(monkeypatch)
+    ids = [s.id for s in load_catalog()][:2]
+    victim = ids[1]
+    spawns: dict[str, int] = {}
+
+    class Handle:
+        def __init__(self, scenario_id: str, spec: dict[str, Any], _workdir: Path, **_kw: Any):
+            spawns[scenario_id] = spawns.get(scenario_id, 0) + 1
+            self.scenario_id = scenario_id
+            self.dies = scenario_id == victim and spawns[scenario_id] == 1
+            self.public = Path(spec["public"])
+
+        def poll(self) -> int | None:
+            return 0
+
+        def collect(self) -> dict[str, Any]:
+            if self.dies:
+                raise case_worker.CaseWorkerDiedError(self.scenario_id, -9, "Killed")
+            return _fake_result(self.scenario_id, self.public)
+
+        def terminate(self) -> None: ...
+
+        def kill(self) -> None: ...
+
+    monkeypatch.setattr(runner, "SubprocessCaseWorker", Handle)
+    monkeypatch.setattr(runner, "stale_gaps", lambda _report: [])
+    monkeypatch.setattr(parallel.time, "sleep", _no_sleep)
+    report = runner.run_suite(
+        expected_source_sha="a" * 40,
+        output=tmp_path / "o",
+        provider={},
+        work_root=tmp_path / "w",
+        selected_ids=ids,
+        jobs=2,
+        case_retries=case_retries,
+    )
+    return report, victim
+
+
+def test_a_worker_killed_mid_case_is_rerun_not_the_end_of_the_attempt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    report, victim = _run_with_dying_worker(monkeypatch, tmp_path, case_retries=2)
+    assert [c["outcome"] for c in report["cases"]] == ["pass", "pass"]
+    [banked] = report["case_retries"]
+    assert banked["id"] == victim and banked["outcome"] == "harness-error"
+    superseded = json.loads((tmp_path / "o" / "superseded" / banked["evidence"]).read_text())
+    assert superseded["worker_exit"] == {"returncode": -9, "stderr_tail": "Killed"}
+
+
+def test_a_worker_killed_with_no_retry_left_is_a_harness_error_never_a_pass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    report, victim = _run_with_dying_worker(monkeypatch, tmp_path, case_retries=0)
+    by_id = {c["id"]: c for c in report["cases"]}
+    assert by_id[victim]["outcome"] == "harness-error" and by_id[victim]["evidence_sha256"]
+    assert report["pass"] is False

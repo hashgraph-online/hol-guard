@@ -671,6 +671,34 @@ def run_suite(
             )
 
         (output / "cases").mkdir(parents=True, exist_ok=True)
+
+        def worker_died(index: int, exc: BaseException) -> dict[str, Any]:
+            """A dead worker recorded no verdict; publish that as this case's harness error.
+
+            The case file is written so the summary, retry archive and verifier all see
+            one record per case. A harness error never counts as a pass, so the only
+            effect is that the case can be re-run instead of the attempt being lost.
+            """
+            scenario = selected[index]
+            returncode = getattr(exc, "returncode", None)
+            assessment = {
+                "outcome": "harness-error",
+                "reason": f"case worker exited {returncode} before recording a result",
+                "tool_calls": 0,
+                "successful_tools": 0,
+                "blocked_tools": 0,
+                "protocol_errors": [],
+                "recovered_inference_retries": 0,
+            }
+            case = {
+                "scenario_id": scenario.id,
+                "assessment": assessment,
+                "guard_observations": [],
+                "worker_exit": {"returncode": returncode, "stderr_tail": getattr(exc, "stderr_tail", "")},
+            }
+            (output / "cases" / f"{scenario.id}.json").write_text(json.dumps(case, indent=2) + "\n")
+            return {"assessment": assessment, "guard_observations": []}
+
         # Ordinary cases run first so the short single-attempt protection cases
         # fill the tail; evidence stays in catalog order through record().
         order = [i for i, s in enumerate(selected) if s.expectation == "allow"] + [
@@ -689,6 +717,7 @@ def run_suite(
             ),
             retry=((lambda index, result: want_retry(selected[index].id, result)) if case_retries else None),
             cancel_retry=((lambda index, _result: retries.restore(selected[index].id)) if case_retries else None),
+            worker_died=worker_died,
             admit=gate,
             slots=slot_pool,
         )

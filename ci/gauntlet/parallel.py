@@ -18,6 +18,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
+from .case_worker import CaseWorkerDiedError
 from .fixtures import mkdir_private
 
 if os.name == "posix":
@@ -274,6 +275,7 @@ def run_scheduled(
     should_stop: Callable[[int, Any], bool] | None = None,
     retry: Callable[[int, Any], bool] | None = None,
     cancel_retry: Callable[[int, Any], None] | None = None,
+    worker_died: Callable[[int, BaseException], Any] | None = None,
     admit: Callable[[], bool] | None = None,
     slots: HostSlots | None = None,
     poll_interval: float = 0.2,
@@ -299,6 +301,10 @@ def run_scheduled(
     would never run. A queued re-run that a stop in the same completion batch
     cancels is published from the run it already made, after ``cancel_retry``
     lets the caller release what it banked for the re-run that will not happen.
+
+    When ``worker_died`` is given, a worker whose ``collect`` raises ``CaseWorkerDiedError``
+    is turned into that item's result by the callback (normally a retryable
+    ``harness-error``) instead of ending the whole run; without it the error propagates.
     """
     validate_jobs(jobs)
     if order is None:
@@ -334,7 +340,12 @@ def run_scheduled(
                 finished = [index for index, handle in running.items() if handle.poll() is not None]
                 for index in finished:
                     handle = running.pop(index)
-                    result = handle.collect()
+                    try:
+                        result = handle.collect()
+                    except CaseWorkerDiedError as exc:
+                        if worker_died is None:
+                            raise
+                        result = worker_died(index, exc)
                     if (lease := leases.pop(index, None)) is not None:
                         lease.release()
                     if not stop and retry is not None and retry(index, result):

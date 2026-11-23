@@ -27,6 +27,28 @@ def _result_path(workdir: Path, scenario_id: str) -> Path:
     return workdir / f"{scenario_id}.result.json"
 
 
+class CaseWorkerDiedError(RuntimeError):
+    """The worker exited without writing its result: no Guard verdict was ever recorded.
+
+    Host memory pressure or a crashed interpreter can end a worker mid-case. That says
+    nothing about Guard, so the scheduler may record it as a ``harness-error`` for that
+    one case instead of abandoning every other case in the attempt.
+    """
+
+    def __init__(self, scenario_id: str, returncode: int, stderr_tail: str) -> None:
+        super().__init__(f"case worker for {scenario_id} failed before producing a result")
+        self.scenario_id = scenario_id
+        self.returncode = returncode
+        self.stderr_tail = stderr_tail
+
+
+def _tail(path: Path, limit: int = 600) -> str:
+    with suppress(OSError):
+        data = path.read_bytes()[-limit:]
+        return data.decode("utf-8", "replace").strip()
+    return ""
+
+
 def _kill_group(pgid: int) -> None:
     with suppress(ProcessLookupError, PermissionError):
         os.killpg(pgid, signal.SIGKILL)
@@ -50,8 +72,9 @@ class SubprocessCaseWorker:
         self.scenario_id = scenario_id
         self._result = _result_path(workdir, label)
         self._groups = workdir / f"{label}.groups"
+        self._stderr = workdir / f"{label}.stderr.txt"
         out = (workdir / f"{label}.stdout.txt").open("wb")
-        err = (workdir / f"{label}.stderr.txt").open("wb")
+        err = self._stderr.open("wb")
         self._files = (out, err)
         try:
             self.process = subprocess.Popen(
@@ -94,7 +117,7 @@ class SubprocessCaseWorker:
         self._reap_group()
         self._close()
         if returncode != 0 or not self._result.is_file():
-            raise RuntimeError(f"case worker for {self.scenario_id} failed before producing a result")
+            raise CaseWorkerDiedError(self.scenario_id, returncode, _tail(self._stderr))
         return json.loads(self._result.read_text(encoding="utf-8"))
 
     def terminate(self) -> None:
