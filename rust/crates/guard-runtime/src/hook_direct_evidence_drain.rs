@@ -176,6 +176,8 @@ fn commit_queued(
         return Err(format!("mcp_relay_record_not_plain:{code}"));
     }
     if settle_individually {
+        // Ordinary records are settled by sequence so skipped relay records
+        // stay queued ahead of any evidence that was handled here.
         let mut state = queue.state.lock().map_err(|_| UNHANDLED.to_owned())?;
         paged.retain(|item| {
             let keep = mcp_relay_receipt::is_plain(&item.record) || record::needs_work(item, home);
