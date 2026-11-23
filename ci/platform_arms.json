@@ -475,6 +475,14 @@
    "body": "5c14a37d30fd"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no root-owned `/usr` tree installed by a package manager, so no name-refused file is admitted on ownership and a recursive search keeps the name screen alone. Conservative: the same search reviews as it did before this rule.",
+   "file": "rust/crates/guard-command/src/pretool/search/packaged_file.rs",
+   "item": "pub(in crate::pretool) fn packaged_file(_path: &Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "a6945c296339"
+  },
+  {
    "file": "rust/crates/guard-command/src/pretool/sed_edits.rs",
    "item": "fn executable(path: &Path, _metadata: &std::fs::Metadata) -> bool",
    "verdict": "windows-equivalent",

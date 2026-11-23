@@ -3,14 +3,12 @@
 
 use std::path::Path;
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::hook_scheduler;
-
-/// The daemon's fixed hook replies, declared once for every harness.
-pub(super) const ENVELOPES: &str = include_str!(
-    "../../../../src/codex_plugin_scanner/guard/contracts/hook-fail-closed-envelopes.v1.json"
-);
+#[cfg(test)]
+pub(super) use crate::hook_fail_closed_envelopes::fill;
+pub(super) use crate::hook_fail_closed_envelopes::{envelope, event_kind, ENVELOPES};
 
 /// The reason and code a library step's `fail_safe` carries.
 pub(super) fn refusal(refused: &Value) -> Option<(&str, &str)> {
@@ -33,6 +31,26 @@ pub(super) fn prepare_refusal(harness: &str, event: &str, refused: &Value) -> Op
         reason.as_deref().unwrap_or(fallback),
         code,
     ))
+}
+
+/// Whether a `native_policy_not_ready` refusal only means the policy wait
+/// used up the hook's own deadline: no time is left and the publisher reports
+/// no error. Under a burst the barrier waits in the admitted slot, so a hook
+/// that queued behind others can run out of time while the next ACK is a
+/// moment away. That is deadline exhaustion, and naming it so keeps the
+/// "policy not ready" reason for a publisher that actually failed. The
+/// verdict is the same deny either way.
+pub(super) fn policy_wait_outlived_deadline(refused: &Value, remaining_seconds: f64) -> bool {
+    if remaining_seconds > 0.0
+        || refusal(refused).map(|(_, code)| code) != Some("native_policy_not_ready")
+    {
+        return false;
+    }
+    refused
+        .get("policy_failure")
+        .and_then(|failure| failure.get("last_error"))
+        .and_then(Value::as_str)
+        .is_none_or(|code| code.trim().is_empty())
 }
 
 /// The message a capacity refusal carries. A retry usually succeeds once a
@@ -84,61 +102,4 @@ pub(super) fn fail_safe(harness: &str, event: &str, reason: &str, code: &str) ->
             ("$event_name", event),
         ],
     )
-}
-
-/// `_envelope`: the contract's reply of `kind` for the harness, else its
-/// default, with the placeholders filled.
-pub(super) fn envelope(kind: &str, harness: &str, values: &[(&str, &str)]) -> Value {
-    let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
-    let table = &contract["envelopes"][kind];
-    let harness = harness.trim().to_lowercase().replace('_', "-");
-    let template = table
-        .get(harness.as_str())
-        .or_else(|| table.get("*"))
-        .cloned()
-        .unwrap_or_else(|| json!({}));
-    fill(template, values)
-}
-
-/// `_event_kind`: the envelope family an event name belongs to.
-pub(super) fn event_kind(contract: &Value, event: &str) -> String {
-    let compact: String = event
-        .trim()
-        .to_lowercase()
-        .chars()
-        .filter(|character| *character != '_' && *character != '-')
-        .collect();
-    if let Some(kind) = contract["events"]
-        .get(compact.as_str())
-        .and_then(Value::as_str)
-    {
-        return kind.to_owned();
-    }
-    contract["event_prefixes"]
-        .as_object()
-        .into_iter()
-        .flatten()
-        .find(|(prefix, _)| compact.starts_with(prefix.as_str()))
-        .and_then(|(_, kind)| kind.as_str())
-        .unwrap_or("lifecycle")
-        .to_owned()
-}
-
-/// The envelope with its whole-string placeholders filled.
-pub(super) fn fill(template: Value, values: &[(&str, &str)]) -> Value {
-    match template {
-        Value::String(text) => values
-            .iter()
-            .find(|(placeholder, _)| *placeholder == text)
-            .map_or(Value::String(text), |(_, value)| json!(value)),
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, value)| (key, fill(value, values)))
-                .collect(),
-        ),
-        Value::Array(items) => {
-            Value::Array(items.into_iter().map(|item| fill(item, values)).collect())
-        }
-        other => other,
-    }
 }

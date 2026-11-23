@@ -163,7 +163,7 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // and every listing reads the repository's
                         // configuration.
                         "shortlog" | "check-ignore" | "count-objects" | "check-attr"
-                        | "sparse-checkout" => true,
+                        | "fsck" | "sparse-checkout" => true,
                         // A bisect log replays through the pager, a note
                         // prints through it too, and a replacement listing
                         // reads the repository's configuration to print the

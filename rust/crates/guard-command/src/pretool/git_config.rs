@@ -217,6 +217,7 @@ fn raw_paging(
             | "check-ignore"
             | "count-objects"
             | "check-attr"
+            | "fsck"
             | "sparse-checkout"
             | "rev-parse"
             | "ls-files"
@@ -262,6 +263,7 @@ fn raw_paging(
             | "check-ignore"
             | "count-objects"
             | "check-attr"
+            | "fsck"
             | "sparse-checkout"
             | "rev-parse"
             | "ls-files"
@@ -505,7 +507,7 @@ fn probe(
             "config",
             "--null",
             "--get-regexp",
-            "^(core\\.fsmonitor|core\\.excludesfile|core\\.attributesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
+            "^(core\\.fsmonitor|core\\.excludesfile|core\\.attributesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|fsck\\.skiplist|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
         ])
 ,
         deadline, CONFIG_LIMIT,
@@ -622,6 +624,15 @@ fn probe(
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
+        // Git reads the skip list named by every file it loads, so a later
+        // empty value does not take back the file an earlier one named: the
+        // check still opens it and can quote a line of it back. Every other
+        // setting here is decided by the last value, the way Git's own
+        // lookup reads it.
+        if key == "fsck.skiplist" && value.is_empty() {
+            effective.entry(key).or_insert(value);
+            continue;
+        }
         effective.insert(key, value);
     }
     let pager_key = format!("pager.{pager_operation}");
@@ -635,7 +646,7 @@ fn probe(
         // `pager.*` key can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
         | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
-        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
+        | "check-attr" | "fsck" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
         | "diff-index" | "diff-files" | "name-rev" | "show-branch" | "check-ref-format"
         | "symbolic-ref" | "var" | "patch-id" | "stripspace" | "check-mailmap"
         | "interpret-trailers" => false,
@@ -704,6 +715,12 @@ fn probe(
                         .all(|argument| argument.starts_with('-'))))
                 && !remaining.iter().any(|argument| argument == "--no-index"),
         )?;
+    // A child told to page with no program of its own reads `core.pager`
+    // itself, so the setting is read before the loop takes the map.
+    let core_pager = effective
+        .get("core.pager")
+        .copied()
+        .filter(|pager| !pager.is_empty() && *pager != "cat");
     for (key, value) in effective {
         let disabled = disabled_boolean(value);
         let unsafe_value = match key {
@@ -753,15 +770,44 @@ fn probe(
                     && value != "cat"
             }
             key if key.starts_with("pager.") => {
-                key == pager_key
+                let own = key == pager_key;
+                // Git runs `commit-graph verify`, `refs verify` and
+                // `multi-pack-index verify` from inside `fsck`, and each child
+                // reads its own `pager.<command>` key. None of them pages by
+                // default, so only one of those keys starts a program there --
+                // but when one does, the program runs from a read that
+                // `pager.fsck` alone proved quiet. A child the key enables
+                // reads the rest of Git's pager chain for itself, `core.pager`
+                // included. Measured on Git 2.53.
+                let fsck_child = operation == "fsck"
+                    && matches!(
+                        key,
+                        "pager.commit-graph" | "pager.refs" | "pager.multi-pack-index"
+                    );
+                (own || fsck_child)
                     && !git_pager_disabled
                     && !disabled
                     && !value.is_empty()
                     && value != "cat"
-                    && if enabled_boolean(value) {
-                        paging
+                    && if own {
+                        if enabled_boolean(value) {
+                            paging
+                        } else {
+                            configured_paging
+                        }
+                    } else if enabled_boolean(value) {
+                        // A child told to page with no program of its own
+                        // reads `core.pager` itself, and only falls back to
+                        // `$PAGER` or Git's default when that setting is
+                        // absent. The parent's own key proved nothing about
+                        // either, so both decide whether a program runs.
+                        !no_pager
+                            && (core_pager.is_some()
+                                || !environment_pager.is_some_and(|disabled| disabled))
                     } else {
-                        configured_paging
+                        // A program named by the key itself overrides the
+                        // environment, exactly as the parent's own key does.
+                        !no_pager
                     }
             }
             "diff.external" => renders_diff && !no_external && !value.is_empty(),
@@ -781,6 +827,13 @@ fn probe(
             "log.showsignature" => {
                 super::git_history_reads::verifies_signatures(rendering) && !disabled
             }
+            // A configured skip list names a file of object names Git reads
+            // before it checks anything, and a line of that file that is not
+            // an object name is quoted back in the diagnostic Git prints.
+            // A check that reads an arbitrary file and can echo a line of it
+            // keeps its review until someone reads that setting; an absent
+            // one leaves the check where it was.
+            "fsck.skiplist" => operation == "fsck" && !value.is_empty(),
             // Outside a repository grep would search every file under cwd.
             "grep.fallbacktonoindex" => operation == "grep" && !disabled,
             // A configured verification program (a very common developer

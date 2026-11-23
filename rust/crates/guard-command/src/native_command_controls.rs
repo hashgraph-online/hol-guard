@@ -711,6 +711,7 @@ mod unmodeled;
 pub(crate) use floor::explain_expired_proof;
 use floor::{add_authority_repair_hint, evaluation_error_reason, rank, rule_floor, strengthen};
 pub(crate) use precedence::settle_with_explicit_allow;
+pub(crate) use unmodeled::parameters_only_root_paths;
 pub(crate) use unmodeled::{
     bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
     python_stdin, unread_file_interpreter, Handover,

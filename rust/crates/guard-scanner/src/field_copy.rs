@@ -6,6 +6,12 @@
 //! but the value is a member access, not secret material, so reading the
 //! script around it stopped agents mid-task.
 //!
+//! A copy may fall back to another field, as in Python's
+//! `password=dest.password or self.password` or JavaScript's
+//! `token: a.token ?? b.token`. Each operand after `or`, `||` or `??` is
+//! another unquoted name, so the chain is still a copy. A literal or a call
+//! after the operator ends the chain and keeps the match.
+//!
 //! React and other JSX code hands a credential to a component the same way,
 //! as `password={password}`, `approvalPassword={approvalPassword}` or
 //! `token={session.token}`. The braces hold a variable, never a literal, so
@@ -19,6 +25,13 @@ use std::sync::LazyLock;
 static MEMBER_ACCESS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*(?:\??\.[A-Za-z_][A-Za-z0-9_]*)+[;,)]*$")
         .expect("member access rule must compile")
+});
+
+/// A fallback to another unquoted name or member access, captured without
+/// the operator.
+static FALLBACK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?:\s+or\s+|\s*(?:\|\||\?\?)\s*)([A-Za-z_][A-Za-z0-9_]*(?:\??\.[A-Za-z_][A-Za-z0-9_]*)*)")
+        .expect("fallback rule must compile")
 });
 
 /// The start of the next field after a `,`: a bare or quoted key followed by
@@ -59,6 +72,7 @@ pub(crate) fn is_field_copy(matched: &str, rest_of_line: &str) -> bool {
         let copy = format!("{name}={variable}");
         return is_field_copy(&copy, "") || crate::self_named_value::is_self_named(&copy, "");
     }
+    let rest_of_line = skip_fallbacks(rest_of_line);
     let end = rest_of_line.find([',', ';']).unwrap_or(rest_of_line.len());
     if !ends_value(&rest_of_line[..end]) {
         return false;
@@ -86,6 +100,27 @@ pub(crate) fn is_field_copy(matched: &str, rest_of_line: &str) -> bool {
         .collect::<String>()
         .to_ascii_lowercase();
     CREDENTIAL_FIELDS.iter().any(|name| field.ends_with(name))
+}
+
+/// `rest_of_line` after any fallbacks to other unquoted names. An operand
+/// that looks encoded (`or aGVsbG8gd29ybGQ1`) or a bare word with digits
+/// (`or hunter2prod`) stops the chain, since neither is a field name.
+fn skip_fallbacks(mut rest_of_line: &str) -> &str {
+    while let Some(found) = FALLBACK.captures(rest_of_line) {
+        let (Some(whole), Some(operand)) = (found.get(0), found.get(1)) else {
+            break;
+        };
+        let operand = operand.as_str();
+        if operand
+            .split(['.', '?'])
+            .any(crate::code_value::encoded_segment)
+            || (!operand.contains('.') && operand.contains(|c: char| c.is_ascii_digit()))
+        {
+            break;
+        }
+        rest_of_line = &rest_of_line[whole.end()..];
+    }
+    rest_of_line
 }
 
 /// The prop name and the variable of a JSX attribute such as
@@ -168,6 +203,10 @@ mod tests {
             "password: cfg.password, // database",
             "connect(token=session.token, user=session.user)",
             "{ token: session.token, \"user\": session.user }",
+            "        password=dest.password or self.password)",
+            "token: opts.token ?? defaults.token,",
+            "api_key = cfg.api_key || env.api_key;",
+            "password = args.password or default_password",
         ] {
             assert!(!credential_assignment(text), "{text:?}");
         }
@@ -213,6 +252,11 @@ mod tests {
             "password = admin.password, \"hunter2-production-value\"",
             "password = admin.password, \"admin:hunter2-production\"",
             concat!("token = session.token, 'aGVsbG8gd29y", "bGQgc2VjcmV0='"),
+            "password=dest.password or \"hunter2-production-value\")",
+            "token: opts.token ?? \"a1b2c3d4e5f6g7h8\",",
+            "password = admin.password or hunter2production",
+            "password = admin.password or hunter2prod",
+            "password = admin.password or load(\"hunter2-production\")",
         ] {
             assert!(credential_assignment(text), "{text:?}");
         }

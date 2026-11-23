@@ -287,6 +287,13 @@ impl DirectEvidenceQueue {
             && state.bytes + (state.reserved + 2) * MAX_RECORD_BYTES <= MAX_QUEUED_BYTES
     }
 
+    pub(crate) fn pending_len(&self) -> usize {
+        self.state
+            .lock()
+            .map(|state| state.records.len())
+            .unwrap_or(0)
+    }
+
     /// Queue one record, or refuse it when the queue cannot hold it.
     pub(crate) fn offer(&self, record: Value) -> bool {
         self.try_offer(record).is_ok()
@@ -394,6 +401,70 @@ impl DirectEvidenceQueue {
         ack_epoch: Option<&str>,
         max_records: usize,
     ) -> Peeked {
+        self.acknowledge_and_peek_with(ack_through, ack_epoch, max_records, false)
+    }
+
+    /// Peek a native commit page including records whose receipt the resident
+    /// owns. Ordinary daemon pages skip those records and settle them on the
+    /// acknowledgement. The native commit path must see them first so it can
+    /// write their receipt before acknowledging the cursor.
+    fn acknowledge_and_peek_for_commit(&self, max_records: usize) -> Peeked {
+        let Ok(state) = self.state.lock() else {
+            return Peeked {
+                records: Vec::new(),
+                remaining: 0,
+                through: None,
+                settled: Vec::new(),
+            };
+        };
+        let candidates: Vec<_> = state
+            .records
+            .iter()
+            .filter(|record| {
+                record.native
+                    || record.record.get("kind").and_then(Value::as_str) != Some("mcp_tool_call")
+            })
+            .collect();
+        let native_count = candidates.iter().filter(|record| record.native).count();
+        let ordinary_count = candidates.len();
+        let selected: Vec<_> = if native_count == 0 {
+            candidates.iter().copied().take(max_records).collect()
+        } else {
+            candidates
+                .iter()
+                .copied()
+                .filter(|record| record.native)
+                .take(max_records)
+                .collect()
+        };
+        let selected_len = selected.len();
+        let records = selected
+            .into_iter()
+            .map(|record| Paged {
+                seq: record.seq,
+                record: record.record.clone(),
+                activity: record.activity,
+            })
+            .collect();
+        Peeked {
+            records,
+            remaining: if native_count > 0 {
+                native_count.saturating_sub(selected_len)
+            } else {
+                ordinary_count.saturating_sub(selected_len)
+            },
+            through: None,
+            settled: Vec::new(),
+        }
+    }
+
+    fn acknowledge_and_peek_with(
+        &self,
+        ack_through: Option<u64>,
+        ack_epoch: Option<&str>,
+        max_records: usize,
+        include_native: bool,
+    ) -> Peeked {
         let Ok(mut state) = self.state.lock() else {
             return Peeked {
                 records: Vec::new(),
@@ -416,7 +487,7 @@ impl DirectEvidenceQueue {
             if taken.len() >= max_records {
                 break;
             }
-            if !next.native {
+            if include_native || !next.native {
                 if !taken.is_empty() && page_bytes + next.bytes > MAX_DRAIN_BYTES {
                     break;
                 }

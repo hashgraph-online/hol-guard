@@ -36,7 +36,7 @@ from .extension_catalog_fixtures import CONTRIBUTIONS
 from .extension_catalog_fixtures import SOURCES as CATALOG_SOURCES
 from .feature_directory_fixtures import CONSOLE
 from .feature_directory_fixtures import SOURCES as FEATURE_SOURCES
-from .source_output_fixtures import PORTAL, SOURCES
+from .source_output_fixtures import FALLBACK_SOURCES, PORTAL, SOURCES
 
 DASHBOARD = "dashboard"
 VITE_VERSION = "5.4.0"
@@ -377,7 +377,7 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
     _write(main / "docs/review-notes.md", REVIEW_NOTES)
     for relative, text in SOURCES.items():
         _write(main / relative, text)
-    for relative, text in {**FEATURE_SOURCES, **CATALOG_SOURCES}.items():
+    for relative, text in {**FEATURE_SOURCES, **CATALOG_SOURCES, **FALLBACK_SOURCES}.items():
         _write(main / relative, text)
     _write(main / "scripts/check.sh", CHECK_SCRIPT, 0o755)
     _write(main / "scripts/release/deploy.sh", DEPLOY_SCRIPT, 0o755)
@@ -398,6 +398,7 @@ IGNORE_NEGATION_CASE = "omp-native-rg-include-glob-env-template"
 IGNORE_NEGATION_PROTECTED_CASE = "omp-native-rg-explicit-root-hidden-glob-protected"
 IGNORE_NEGATION_CONSUMED_IGLOB_CASE = "omp-native-rg-consumed-iglob-hidden-protected"
 IGNORE_NEGATION_BROAD_GLOB_CASE = "omp-native-rg-broad-glob-hidden-protected"
+ENV_TEMPLATE_READ_CASE = "omp-native-read-env-template"
 IGNORE_NEGATION_RULES = ".env*\n!.env.example\n"
 ENV_TEMPLATE = "API_BASE_URL=http://127.0.0.1:3000\nFEATURE_ROUTE_TIMEOUT_MS=2000\n"
 
@@ -408,7 +409,8 @@ def add_ignore_negation_template(main: Path, scenario_id: str | None) -> tuple[s
     The negation puts a hidden file back within reach of a search, so every
     whole-tree read there is unproved. That is what the case is about, and
     leaving it in the shared fixture would change what unrelated search cases
-    prove.
+    prove. The template is also what the read case opens by name, so both
+    cases take the same checkout.
     """
     if scenario_id in {IGNORE_NEGATION_PROTECTED_CASE, IGNORE_NEGATION_CONSUMED_IGLOB_CASE, IGNORE_NEGATION_BROAD_GLOB_CASE}:
         # The explicit src operand does not change rg's cwd glob base.
@@ -416,7 +418,7 @@ def add_ignore_negation_template(main: Path, scenario_id: str | None) -> tuple[s
         _write(main / "src/.gitignore", "!.env.test.ts\n")
         _write(main / "src/.env.test.ts", "KEY=SYNTHETIC_MARKER_ONLY\n")
         return ("src/.gitignore", "src/.env.test.ts")
-    if scenario_id != IGNORE_NEGATION_CASE:
+    if scenario_id not in {IGNORE_NEGATION_CASE, ENV_TEMPLATE_READ_CASE}:
         return ()
     _write(main / ".gitignore", GITIGNORE + IGNORE_NEGATION_RULES)
     _write(main / ".env.example", ENV_TEMPLATE)

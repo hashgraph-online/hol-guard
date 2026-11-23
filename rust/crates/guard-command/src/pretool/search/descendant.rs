@@ -6,7 +6,9 @@
 //! only documents the repository commits (see `committed_hidden`). A
 //! credential-named file is refused unless it is source code, test data
 //! below a test-data directory inside the walk, or a document or raster image
-//! the repository tracks and the tracked-file proof clears.
+//! the repository tracks and the tracked-file proof clears. A file the system
+//! package manager installed below `/usr` passes on its ownership instead
+//! (see `packaged_file`).
 use std::path::Path;
 
 /// Hidden names that carry no credentials and are common in source trees.
@@ -67,6 +69,17 @@ pub(in crate::pretool::search) fn descendant_allowed(
     root: &Path,
     is_file: bool,
 ) -> bool {
+    screened(
+        path,
+        root,
+        is_file,
+        crate::pretool::search::packaged_file::packaged_file,
+    )
+}
+
+/// `descendant_allowed` with the ownership proof passed in, so its place in
+/// the screen order can be tested without root-owned files.
+fn screened(path: &Path, root: &Path, is_file: bool, packaged: fn(&Path) -> bool) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
@@ -85,9 +98,12 @@ pub(in crate::pretool::search) fn descendant_allowed(
     {
         return false;
     }
-    if !is_file {
-        return true;
-    }
+    // Only the credential-name and secret-extension screens give way to the
+    // ownership proof; a sensitive family or a hidden name never does.
+    !is_file || file_name_allowed(path, root) || packaged(path)
+}
+
+fn file_name_allowed(path: &Path, root: &Path) -> bool {
     let relative = path.strip_prefix(root).unwrap_or(path);
     let extension = path
         .extension()
@@ -141,4 +157,25 @@ fn synthetic_fixture(root: &Path, relative: &Path) -> bool {
         above.push(name);
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::screened;
+    use std::path::Path;
+
+    /// The ownership proof clears the credential-name and secret-extension
+    /// screens only; a sensitive family or a hidden name stays refused.
+    #[test]
+    fn ownership_clears_only_credential_names_and_secret_extensions() {
+        let root = Path::new("/usr/share/doc/tool");
+        for name in ["credentials.json", "dummycert.pem", "stop_token"] {
+            let path = root.join(name);
+            assert!(!screened(&path, root, true, |_| false), "{name}");
+            assert!(screened(&path, root, true, |_| true), "{name}");
+        }
+        for name in [".env", ".npmrc", ".netrc", "server.key", ".secret-notes"] {
+            assert!(!screened(&root.join(name), root, true, |_| true), "{name}");
+        }
+    }
 }

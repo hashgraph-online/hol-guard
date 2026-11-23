@@ -50,6 +50,22 @@ fn provable_document_name(basename: &str) -> bool {
         })
 }
 
+/// The suffixes a repository commits beside its code to document the variables
+/// a project reads. `.env.example` and its siblings hold placeholder values and
+/// are tracked in Git, while the local `.env` holding the real ones is not.
+pub const DOTENV_TEMPLATE_SUFFIXES: &[&str] =
+    &["example", "sample", "template", "dist", "defaults"];
+
+/// Whether a basename names a committed dotenv template rather than the local
+/// dotenv file. A suffix that merely begins with a template word
+/// (`.env.examples`) is still the local file.
+pub fn dotenv_template_basename(basename: &str) -> bool {
+    let lowered = basename.to_ascii_lowercase();
+    win32_name(&lowered)
+        .strip_prefix(".env.")
+        .is_some_and(|suffix| DOTENV_TEMPLATE_SUFFIXES.contains(&suffix))
+}
+
 pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)> {
     family(path, false)
 }

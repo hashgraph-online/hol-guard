@@ -434,9 +434,13 @@ pub(crate) fn compatibility_observations_in(
     // Set once a list item assigns a non-inert shell variable, which every
     // later command inherits when the session had already exported it.
     let mut assigned = false;
+    // Whether every such list item named only a lowercase shell variable that
+    // Git never reads (`dir=`, `out_dir=`). Git's own settings, the proxy
+    // names curl reads and the names a shell ties to its state stay steering.
+    let mut git_blind = true;
     for (index, segment) in command.segments.iter().enumerate() {
         deadline_check(deadline)?;
-        if assigned {
+        if assigned && !(git_blind && basename(segment) == "git") {
             steered.push(index);
         }
         if (segment.executable.is_none()
@@ -470,7 +474,13 @@ pub(crate) fn compatibility_observations_in(
                 || git && environment::git_identity_environment_name(name))
         }) {
             steered.push(index);
-            assigned |= segment.executable.is_none();
+            if segment.executable.is_none() {
+                assigned = true;
+                git_blind &= segment
+                    .environment_names
+                    .iter()
+                    .all(|name| git_ignores_shell_variable(name));
+            }
         }
         // A trailing `2>&1` only joins stderr to the segment's own stdout. It
         // writes no file and is not an operand, so the Git and GitHub CLI
@@ -514,4 +524,17 @@ pub(crate) fn compatibility_observations_in(
     result.mark_uncertain(&steered);
     result.normalize();
     Ok(result)
+}
+
+/// A lowercase shell variable such as `dir` or `out_dir` is not one Git, or a
+/// program Git starts, reads from its environment. Git's own settings are
+/// uppercase (`GIT_DIR`, `PAGER`, `EDITOR`), and
+/// [`crate::pretool::generic::chain_literals::ordinary_name`] refuses the lowercase
+/// names that still steer: the proxy names curl reads (`http_proxy`) and the
+/// ones a shell ties to its own state (zsh's `path`, `cdpath`).
+fn git_ignores_shell_variable(name: &str) -> bool {
+    name.bytes()
+        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        && name.bytes().any(|byte| byte.is_ascii_lowercase())
+        && crate::pretool::generic::chain_literals::ordinary_name(name)
 }

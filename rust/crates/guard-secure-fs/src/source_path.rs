@@ -530,7 +530,8 @@ fn classify(
 #[path = "sensitive_path_family.rs"]
 mod sensitive;
 pub use sensitive::{
-    sensitive_path_family, sensitive_path_family_beside_name_proof, wallet_key_named, win32_name,
+    dotenv_template_basename, sensitive_path_family, sensitive_path_family_beside_name_proof,
+    wallet_key_named, win32_name, DOTENV_TEMPLATE_SUFFIXES,
 };
 
 /// True when every hidden (`.`-prefixed) path component is on the benign
@@ -540,6 +541,22 @@ pub use sensitive::{
 /// dot-directories such as `.hol-guard`, `.git`, or `.config`.
 pub fn hidden_read_parts_allowed(path: &Path) -> bool {
     hidden_parts_allowed(&lowered_parts(path))
+}
+
+/// The same screen for a path a request names, rather than for what a command
+/// does with one. A repository commits `.env.example` beside the source it
+/// documents, so the template is the project's own file in the final position,
+/// the way `.gitignore` is. Every directory above it is still screened as the
+/// directory it is, so a template inside some tool's dot-directory keeps the
+/// review.
+pub fn hidden_request_parts_allowed(path: &Path) -> bool {
+    let parts = lowered_parts(path);
+    match parts.split_last() {
+        Some((name, parents)) if dotenv_template_basename(name) => {
+            hidden_dir_parts_allowed(parents)
+        }
+        _ => hidden_parts_allowed(&parts),
+    }
 }
 
 /// The same screen for a write target. A write admits only

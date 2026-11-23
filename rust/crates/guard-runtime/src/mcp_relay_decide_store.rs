@@ -261,6 +261,17 @@ pub(crate) fn lookup_integrity(
     Ok((state, key))
 }
 
+/// Verify saved local rows with protected semantics even when the published
+/// state is degraded. The key and generation remain the daemon's published
+/// values, while unsigned rows are never accepted as an allow.
+pub(crate) fn verification_state(state: &Value) -> Value {
+    let mut state = state.clone();
+    if let Some(fields) = state.as_object_mut() {
+        fields.insert("mode".to_owned(), Value::String("protected".to_owned()));
+    }
+    state
+}
+
 /// The integrity state and key the daemon published, when they are the
 /// protected, enforced, cut-over state its key signs. The relay's lookups and
 /// claims read with `lookup_integrity`; the Codex live-authority evidence
@@ -381,7 +392,7 @@ impl Saved<'_> {
             consume_one_shot: false,
             local_once_only: false,
             integrity_state: Some(if policy_key {
-                self.integrity_state.clone()
+                verification_state(&self.integrity_state)
             } else {
                 json!({})
             }),

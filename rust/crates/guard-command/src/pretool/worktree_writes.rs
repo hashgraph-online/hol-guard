@@ -37,12 +37,25 @@ pub(super) fn same_repository_worktree(workspace: &Path, target: &Path) -> bool 
     let Some((source_root, source)) = repository_common_directory(workspace) else {
         return false;
     };
-    let Some((root, admin)) = target.ancestors().find_map(|root| {
-        let text = bounded_git_metadata(&root.join(".git"))?;
-        let path = text.trim().strip_prefix("gitdir: ")?;
-        let admin = std::fs::canonicalize(root.join(path)).ok()?;
-        Some((root, admin))
-    }) else {
+    // The nearest ancestor holding a `.git` entry owns the target, exactly as
+    // it does in `primary_checkout_of_worktree`. A nested checkout keeps its
+    // own identity: its `.git` is a directory, so it is not a worktree of this
+    // repository, and the enclosing worktree's gitfile further up the path
+    // does not answer for it.
+    let Some(root) = target
+        .ancestors()
+        .find(|root| root.join(".git").symlink_metadata().is_ok())
+    else {
+        return false;
+    };
+    let Some(admin) = bounded_git_metadata(&root.join(".git"))
+        .and_then(|text| {
+            text.trim()
+                .strip_prefix("gitdir: ")
+                .map(|path| root.join(path))
+        })
+        .and_then(|path| std::fs::canonicalize(path).ok())
+    else {
         return false;
     };
     let Some(common) = bounded_git_metadata(&admin.join("commondir"))
@@ -56,6 +69,35 @@ pub(super) fn same_repository_worktree(workspace: &Path, target: &Path) -> bool 
         && bounded_git_metadata(&admin.join("gitdir"))
             .and_then(|path| std::fs::canonicalize(admin.join(path.trim())).ok())
             .is_some_and(|backlink| backlink == root.join(".git"))
+}
+
+/// Whether `target` lies in the primary checkout whose `.git` the linked
+/// worktree holding `workspace` shares.
+///
+/// [`same_repository_worktree`] proves the other direction, a session in the
+/// primary checkout reaching a linked worktree, and it cannot answer this one:
+/// it requires the target's `.git` to be a gitfile, which the primary
+/// checkout's never is. A session that runs from a worktree and reads the
+/// checkout it was cut from is the same repository seen from the other side,
+/// and that is the ordinary shape of agent work, so the proof holds both ways.
+pub(super) fn primary_checkout_of_worktree(workspace: &Path, target: &Path) -> bool {
+    let Some(common) = linked_worktree_common_dir(workspace) else {
+        return false;
+    };
+    let Some(primary) = common.parent() else {
+        return false;
+    };
+    // The nearest ancestor holding a `.git` entry owns the target. A nested
+    // checkout or another worktree therefore answers for itself rather than
+    // borrowing the primary checkout's identity from further up the path.
+    let Some(root) = target
+        .ancestors()
+        .find(|root| root.join(".git").symlink_metadata().is_ok())
+    else {
+        return false;
+    };
+    root.join(".git").is_dir()
+        && std::fs::canonicalize(root).is_ok_and(|resolved| resolved == primary)
 }
 
 /// The shared git directory of the linked worktree that contains `workspace`.

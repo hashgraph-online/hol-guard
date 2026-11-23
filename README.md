@@ -169,6 +169,8 @@ The scanner detects Codex, Claude Code, DeepSeek Harness, Gemini CLI, Kimi Code,
 
 Checks cover manifests, secrets, MCP transport and command configuration, approval defaults, skills, dependency lockfiles, and GitHub Actions permissions. Optional Cisco integrations add skill and MCP analysis. Reports support text, JSON, Markdown, and SARIF.
 
+When the scanner detects a runtime-bearing surface such as a skill, command, hook, or MCP server, text, Markdown, JSON, and GitHub Action summaries include a report-only **Guard coverage context** section. It links the detected surface to the checked-in Guard harness claims and explains that static scanning does not prove a local Guard install or a live enforcement result. The section is omitted when no mapped runtime surface is present, and it does not make a network request. See the [coverage context contract](docs/guard/scanner-coverage-bridge.md) for the JSON shape and boundary.
+
 ```bash
 plugin-scanner scan . --format sarif --output plugin-scanner.sarif
 plugin-scanner scan . --fail-on-severity high

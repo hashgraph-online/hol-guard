@@ -226,9 +226,11 @@ class HookWorker(HookWorkerNativeMixin):
         return self.close_contained(deadline_monotonic=deadline_monotonic)
 
     def _start_direct_evidence_drain(self) -> None:
-        # Direct answers are bound only while their evidence has a writer.
+        # Native MCP relays queue their evidence in the resident even when the
+        # worker has no command-activity writer. Keep the drain bound so the
+        # direct lane can advertise that those records are being consumed.
         enable = getattr(self.policy_snapshot_publisher, "enable_direct_evidence_drain", None)
-        if self.activity_writer is None or not callable(enable):
+        if not callable(enable):
             return
         from ..resident_evidence_drain import ResidentEvidenceDrain
 

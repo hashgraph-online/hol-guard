@@ -88,6 +88,7 @@ class ResidentEvidenceDrain:
         self.pages = 0
         self.records = 0
         self.failures = 0
+        self.last_failure: str | None = None
         self._counters = getattr(host, "hook_counters", None)
 
     def start(self) -> None:
@@ -168,6 +169,15 @@ class ResidentEvidenceDrain:
         if batch is None:
             self.failures += 1
             return False
+        decoded: object = None
+        if output is not None:
+            try:
+                decoded = json.loads(output)
+            except (TypeError, ValueError):
+                decoded = None
+        self.last_failure = (
+            decoded.get("failure") if isinstance(decoded, dict) and isinstance(decoded.get("failure"), str) else None
+        )
         pages, count, more, failed = batch
         self.pages += pages
         self.records += count
