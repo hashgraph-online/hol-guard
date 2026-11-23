@@ -143,6 +143,7 @@ pub(crate) fn apply_pre_tool_policy_for_hook(
         &envelope.raw_payload,
         result,
         inspection || guide,
+        envelope.source.cwd.as_deref(),
     )
 }
 
@@ -169,7 +170,7 @@ pub(crate) fn apply_pre_tool_policy(
     payload: &Value,
     result: PreToolResultV1,
 ) -> Result<PreToolResultV1, String> {
-    apply_pre_tool_policy_with_inspection(snapshot, payload, result, false)
+    apply_pre_tool_policy_with_inspection(snapshot, payload, result, false, None)
 }
 
 /// `apply_pre_tool_policy`, told whether the call is Guard's own approval
@@ -182,6 +183,7 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
     payload: &Value,
     mut result: PreToolResultV1,
     guard_inspection: bool,
+    cwd: Option<&str>,
 ) -> Result<PreToolResultV1, String> {
     if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
         return Err("native_policy_mode_invalid".to_owned());
@@ -211,7 +213,12 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
         payload,
         &harness,
         result.action.action_type,
+        // The classified operation is what says this call only reads the file
+        // it names; an action type alone cannot, because the types that cover
+        // tool calls and MCP calls cover their writes too.
+        result.action.operation == guard_contracts::PreToolOperationV1::Read,
         &result.reason_code,
+        cwd,
     )?;
     facts.sensitive_target |= result.action.sensitive_target;
     let benign_prompt = result.action.event == "UserPromptSubmit"

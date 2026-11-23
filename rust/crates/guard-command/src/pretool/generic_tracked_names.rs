@@ -9,7 +9,8 @@
 
 use super::GenericSignals;
 use crate::pretool::search_scope_tracked::names::{
-    self, command_words, moves_directory, resolves_to_tracked, without_tracked_words,
+    self, command_words, moves_directory, resolves_to_tracked, resolves_to_tracked_dotenv_template,
+    without_tracked_words,
 };
 use crate::pretool::secret_aliases::decision_names_secret_alias;
 use crate::pretool::{sensitive_command, sensitive_command_input, PathContext, PreToolDecisionV1};
@@ -44,7 +45,14 @@ impl GenericSignals {
             .path_values
             .iter()
             .filter(|value| sensitive_command(value))
-            .all(|value| resolves_to_tracked(value, cwd));
+            // A repository commits `.env.example` beside the source it
+            // documents. Its name holds a bare `.env`, so the location screen
+            // reads it as the local dotenv file; the index and the secret
+            // scan a tracked document already passes are what prove it is the
+            // template its name claims.
+            .all(|value| {
+                resolves_to_tracked(value, cwd) || resolves_to_tracked_dotenv_template(value, cwd)
+            });
         let Some(command) = self.command.as_deref() else {
             return paths_proven;
         };
