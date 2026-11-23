@@ -30,7 +30,7 @@
   ],
   "tools": [
     {
-      "name": "audit_website_security",
+      "name": "audit_web_app_security",
       "state": "inherit"
     },
     {
@@ -38,15 +38,15 @@
       "state": "inherit"
     },
     {
-      "name": "audit_ai_search_readiness",
+      "name": "audit_ai_search_visibility",
       "state": "inherit"
     },
     {
-      "name": "check_brand_launch_readiness",
+      "name": "check_brand_availability",
       "state": "inherit"
     },
     {
-      "name": "run_full_launch_audit",
+      "name": "full_launch_readiness_audit",
       "state": "inherit"
     },
     {
