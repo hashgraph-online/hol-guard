@@ -140,6 +140,14 @@ def test_release_compilation_is_content_addressed_and_feature_unified():
     assert order == sorted(order)
 
 
+def test_stable_release_compile_uses_parallel_thin_lto():
+    prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
+    script = next(step for step in prepare["steps"] if step.get("name") == "Compile canonical release inputs")["run"]
+    assert "CARGO_PROFILE_RELEASE_LTO=thin" in script
+    assert "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16" in script
+    assert 'if [[ "$FAST_CODEGEN" != "true" ]]' in script
+
+
 def test_determinism_gate_compares_cached_and_cold_binaries_without_writing_caches():
     workflow = load_workflow(ROOT / ".github/workflows/release-native-determinism.yml")
     assert set(workflow[True]) == {"workflow_dispatch"}

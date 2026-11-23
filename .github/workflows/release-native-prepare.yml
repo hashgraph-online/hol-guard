@@ -214,6 +214,12 @@ jobs:
           # prereleases (GitHub release assets, never PyPI); refuse any other version.
           [[ "$FAST_CODEGEN" != "true" ]] || [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+a[1-9][0-9]*$ ]]
           [[ "$FAST_CODEGEN" != "true" ]] || export CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+          # Stable production builds use thin LTO with parallel codegen. This keeps
+          # release optimization and symbol stripping while avoiding the serial
+          # whole-program pass that dominates cold hosted-runner builds.
+          if [[ "$FAST_CODEGEN" != "true" ]]; then
+            export CARGO_PROFILE_RELEASE_LTO=thin CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+          fi
           cargo_config=()
           if [[ "$FAST_CODEGEN" == "true" && -n "$ALPHA_WORKSPACE_OPT_LEVEL" ]]; then
             python scripts/release/workspace_opt_profile.py --opt-level "$ALPHA_WORKSPACE_OPT_LEVEL" --output "$RUNNER_TEMP/alpha-workspace-profile.toml"
