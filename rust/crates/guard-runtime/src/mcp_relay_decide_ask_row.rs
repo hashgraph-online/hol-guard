@@ -30,9 +30,9 @@ const ASK_PROJECTION: &str = "mcp_relay_ask_projection";
 /// The `McpCallProjection` fields the queued item reads.
 pub(crate) struct Projection {
     /// `display_launch_target`.
-    pub(super) launch_target: String,
-    pub(super) risk_summary: String,
-    pub(super) browser_intent: Option<Value>,
+    pub(crate) launch_target: String,
+    pub(crate) risk_summary: String,
+    pub(crate) browser_intent: Option<Value>,
 }
 
 /// `self._call_projector.project(tool_name, params, artifact)`.

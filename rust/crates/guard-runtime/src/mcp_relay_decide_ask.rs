@@ -75,6 +75,7 @@ pub(super) const REVIEWABLE: [&str; 2] = ["review", "require-reapproval"];
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
 
 const ASK_UNSUPPORTED: &str = "mcp_relay_ask_unsupported";
+const ASK_PROJECTION: &str = "mcp_relay_ask_projection";
 const ASK_QUEUE_FAILED: &str = "mcp_relay_ask_queue_failed";
 const REMEMBER_UNSUPPORTED: &str = "mcp_relay_remember_unsupported";
 
@@ -214,7 +215,15 @@ fn prepare_with_connector_setup(
     if connector_setup.is_none() && !signals.iter().any(|signal| !signal.is_empty()) {
         return Err(ASK_UNSUPPORTED);
     }
-    let projection = project(request, artifact)?;
+    let projection = match project(request, artifact) {
+        Ok(projection) => projection,
+        Err(_) if connector_setup.is_some() => super::ask_row::Projection {
+            launch_target: format!("{}.{}", request.build.server_name, request.build.tool_name),
+            risk_summary: "MCP connector setup requires review.".to_owned(),
+            browser_intent: None,
+        },
+        Err(_) => return Err(ASK_PROJECTION),
+    };
     let mut item = review_item(
         artifact,
         artifact_hash,
