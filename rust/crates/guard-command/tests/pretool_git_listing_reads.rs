@@ -23,6 +23,16 @@ fn listing_inspections_are_proven_reads() {
             "git shortlog -sn -20",
             "git shortlog -20 HEAD",
             "git shortlog -s -n -1",
+            // A summary of the last stretch of work. The date each limit
+            // carries goes to git's own approximate-date reader, which starts
+            // no program and opens no file.
+            "git shortlog -sn --since=2.weeks",
+            "git shortlog --since=2.weeks",
+            "git shortlog --since 2.weeks -s",
+            "git shortlog -sn --after=2026-11-01 --before=2026-11-23",
+            "git shortlog --until 2026/11/23 -s",
+            "git shortlog -sn --since-as-filter=1.month",
+            "git shortlog -sn --since=\"last monday\"",
             "git check-ignore -v src",
             "git check-ignore build/ dist/",
             "git check-ignore -q node_modules",
@@ -52,6 +62,13 @@ fn listing_inspections_are_proven_reads() {
             "git shortlog -20x",
             "git shortlog -2,0",
             "git shortlog --unknown-option",
+            // A date limit is only proven for the characters a date is
+            // written with, so a value that could name a command substitution
+            // or reach outside the repository keeps its review.
+            "git shortlog -sn --since=$(whoami)",
+            "git shortlog -sn --since=`date`",
+            "git shortlog --since=",
+            "git shortlog -sn --since",
             // A bundle is only a bundle when every letter is a known flag.
             "git shortlog -sx",
             "git check-ignore --unknown-option src",

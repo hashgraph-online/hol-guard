@@ -28,7 +28,8 @@ const SHORTLOG_FLAGS: [&str; 10] = [
     "--no-merges",
 ];
 
-/// `shortlog` options whose value names a grouping or a commit range.
+/// `shortlog` options whose value names a grouping, a commit range or the
+/// span of history to count.
 ///
 /// `--format` and `--pretty` are not here. A pretty format expands `%G`,
 /// which verifies signatures through the configured program, so a shortlog
@@ -36,7 +37,21 @@ const SHORTLOG_FLAGS: [&str; 10] = [
 /// one does. `--group` reaches the same expansion through
 /// `--group=format:<format>`, so [`shortlog_value`] admits only the groupings
 /// that name a field of the commit itself.
-const SHORTLOG_VALUES: [&str; 2] = ["--group", "--max-count"];
+///
+/// The date limits are the ordinary way a summary is asked for a span of
+/// work (`git shortlog -sn --since=2.weeks`). Each carries a date git hands
+/// to its own approximate-date reader, which starts no program and reads no
+/// file, so [`date_token`] admits the characters a date is written with and
+/// nothing a shell or a path would need.
+const SHORTLOG_VALUES: [&str; 7] = [
+    "--group",
+    "--max-count",
+    "--since",
+    "--since-as-filter",
+    "--after",
+    "--until",
+    "--before",
+];
 
 /// Whether the value one of those options carries is a proven read.
 fn shortlog_value(name: &str, value: &str) -> bool {
@@ -46,8 +61,21 @@ fn shortlog_value(name: &str, value: &str) -> bool {
                 || value.strip_prefix("trailer:").is_some_and(trailer_token)
         }
         "--max-count" => !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
+        "--since" | "--since-as-filter" | "--after" | "--until" | "--before" => date_token(value),
         _ => false,
     }
+}
+
+/// Whether a value is written the way a date is: the words, digits and
+/// separators git's approximate-date reader accepts, and nothing that names
+/// a path, a program or a shell step.
+fn date_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(byte, b' ' | b'.' | b':' | b'-' | b'+' | b'/' | b',')
+        })
 }
 
 /// Whether a `trailer:` grouping names a trailer the way a commit message

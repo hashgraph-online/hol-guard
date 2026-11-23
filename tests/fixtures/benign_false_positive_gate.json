@@ -46667,6 +46667,57 @@
       "expect": "allow"
     },
     {
+      "id": "git-shortlog-date-limited-summary",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git shortlog -sn --since=2.weeks"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-shortlog-date-range-summary",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git shortlog -sn --after=2026-11-01 --before=2026-11-23"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-shortlog-date-limit-separate-word",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git shortlog --since 2.weeks -s"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-shortlog-non-integer-limit-still-reviews",
       "fix_area": "git",
       "harnesses": [
