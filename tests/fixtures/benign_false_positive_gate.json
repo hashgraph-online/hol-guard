@@ -26902,6 +26902,142 @@
       "expect": "not_allow"
     },
     {
+      "id": "python-heredoc-import-after-git-readers",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --check && git diff && python3 - <<'EOF'\nimport json\nprint(json.dumps({'probe': 1}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "python-heredoc-import-after-listing-and-piped-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls; git log --oneline -5 | head -20; python3 - <<'EOF'\nimport json\nprint(json.dumps([]))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-python-heredoc-import-after-file-writer",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -i 's/a/b/' README.md; python3 - <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "python-heredoc-import-after-nul-separated-diff-names",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --name-only -z; python3 - <<'EOF'\nimport json\nprint(json.dumps({'probe': 2}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-python-heredoc-import-after-quoted-diff-output",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --out'put'=README.md; python3 - <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-python-heredoc-import-after-ripgrep-hostname-helper",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --hostname-bin=./hostname-helper -n TODO .; python3 - <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-python-heredoc-import-after-reader-redirect",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md > probe_notes.py; python3 - <<'EOF'\nimport probe_notes\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-python-heredoc-import-between-readers",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls; python3 - <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF\nls"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "python-heredoc-non-ascii-text-in-strings-and-comments",
       "fix_area": "shell",
       "harnesses": [

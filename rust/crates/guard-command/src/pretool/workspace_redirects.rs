@@ -58,7 +58,7 @@ fn project_mapped(raw: &str) -> Option<(String, Vec<usize>)> {
     project_scan(raw).map(|(projected, map, _, _)| (projected, map))
 }
 
-/// The last field: Python after a leading `cd`, which only `contained` takes.
+/// The last field: Python after a leading `cd` or readers, which only `contained` takes.
 fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool, bool)> {
     let chars: Vec<char> = raw.chars().collect();
     let mut out = String::with_capacity(raw.len());
@@ -156,7 +156,7 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool, bool)> {
     // route the same command keeps without the redirect.
     let projected = crate::pretool::script_content::foreground_job(projected).unwrap_or(projected);
     let entered = wide && !crate::pretool::script_content::fed::python_alone(projected);
-    if entered && !cd::python_after_cd(projected) {
+    if entered && !readers::python_after_lead(projected) {
         return None;
     }
     let map = map[lead..lead + projected.len()].to_vec();
@@ -244,7 +244,7 @@ pub(super) fn contained(
     // followed by plain readers. One it declines, such as a write to
     // `.tool-versions`, or a chain beside local Git writes, runs here.
     let (stripped, _, names_files, entered) = project_scan(command)?;
-    if entered && !cd::enters_cwd(&stripped, context) {
+    if entered && !readers::lead_admitted(&stripped, command, context) {
         return None;
     }
     // Removing an input redirect drops the program it feeds, so a program
@@ -323,7 +323,7 @@ pub(super) fn contained(
     let raw = super::evaluate_envelope(
         harness,
         event,
-        &cd::reviewed_payload(payload, command, entered),
+        &readers::reviewed_payload(payload, command, &stripped, entered),
         None,
         deadline,
         context,
@@ -492,6 +492,8 @@ fn literal_target(target: &str) -> bool {
 
 #[path = "workspace_redirects_cd.rs"]
 mod cd;
+#[path = "workspace_redirects_readers.rs"]
+mod readers;
 #[cfg(test)]
 #[path = "workspace_redirects_tests.rs"]
 mod tests;
