@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from ..native_guard_store import NativeGuardStoreUnavailable
@@ -35,7 +36,7 @@ EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY = "guard_exact_cloud_review_capability"
 EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY = "guard_exact_cloud_review_revocation"
 EXACT_CLOUD_REVIEW_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 EXACT_CLOUD_REVIEW_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
-_FEATURE = "native-exact-cloud-review-v1"
+_FEATURE = "native-exact-cloud-review-v2"
 _COMMAND = "exact-cloud-review"
 _UNAVAILABLE = "native_exact_cloud_review_unavailable"
 # The runtime's answer when the capability reached the binding check and the
@@ -108,12 +109,21 @@ _FOR_SIGNING = object()
 
 
 def _signing_key(store: GuardStore, envelope: object, *, create: bool = False) -> dict[str, object]:
-    """The local key: always for signing, and for checking only an envelope it could check."""
+    """The local key: always for signing, and for checking only an envelope it could check.
+
+    The runtime reads a plain encrypted-file vault itself, so only the home
+    crosses the request; this side still mints the key when asked to.
+    """
 
     if envelope is not _FOR_SIGNING and not create and not isinstance(envelope, dict):
         return {"key": None, "key_id": None}
-    from .command_capability_keys import _signing_material_for_resident
+    from .command_capability_keys import _resident_reads_key, _signing_material_for_resident
 
+    guard_home = getattr(store, "guard_home", None)
+    if guard_home is not None and _resident_reads_key(store):
+        if create:
+            store._policy_integrity_secret_material(create=True)  # pyright: ignore[reportPrivateUsage]
+        return {"vault_home": str(Path(guard_home).resolve())}
     key, key_id = _signing_material_for_resident(store, create=create)
     return {"key": key, "key_id": key_id}
 

@@ -115,7 +115,7 @@ def test_a_running_resident_answers_without_spawning_a_helper(monkeypatch: pytes
     assert _capability_digest({"a": 1}, _Store()) == "resident"
     assert spawned == []
     assert sent[0]["operation"] == "exact_cloud_review"
-    assert sent[0]["required_feature"] == "native-exact-cloud-review-resident-v1"
+    assert sent[0]["required_feature"] == "native-exact-cloud-review-resident-v2"
     assert sent[0]["request"] == {
         "schema": "guard-exact-cloud-review-resident-request.v1",
         "request": {"op": "digest", "payload": {"a": 1}},
