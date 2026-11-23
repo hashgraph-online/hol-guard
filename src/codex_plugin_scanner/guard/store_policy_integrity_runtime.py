@@ -107,12 +107,7 @@ class StorePolicyIntegrityAdminMixin:
     def get_policy_decision(self, decision_id: int) -> dict[str, object] | None:
         from .store_policy_decision import get_policy_decision_payload
 
-        return get_policy_decision_payload(
-            self,
-            decision_id=decision_id,
-            approval_gate_policy_source=_APPROVAL_GATE_POLICY_SOURCE,
-            now=_now(),
-        )
+        return get_policy_decision_payload(self, decision_id=decision_id, now=_now())
 
     def _attach_policy_source_contexts(self, items: Sequence[dict[str, object]]) -> None:
         """Add the remembered command and workspace context chosen by the native store.
