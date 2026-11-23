@@ -182,9 +182,9 @@ pub(super) enum Settled {
 ///
 /// `policy` and `artifact` are the post-claim resolution's, because that is
 /// what the proxy renders every package leg of this answer from. The lane
-/// answers the route as it answers any other: a forward still refuses a
-/// binding to external archives the relay retains none of, and a queued
-/// request still takes the bound blocked-request mode.
+/// answers the route as it answers any other: a forward the relay did not bind
+/// to the external archives its evaluation demands is still refused, and a
+/// queued request still takes the bound blocked-request mode.
 pub(super) fn settled(
     postclaimed: Postclaimed,
     tool: &str,

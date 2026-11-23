@@ -135,6 +135,7 @@ fn bound() -> QueueBinding<'static> {
     QueueBinding {
         blocked_request_mode: Some("safe-alternative"),
         redaction_level: Some("full"),
+        archive_bound: None,
     }
 }
 

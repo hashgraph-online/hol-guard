@@ -23,9 +23,10 @@
 //! not hold (`mcp_relay_decide_package_ask.rs`).
 //!
 //! A forward is answered rather than forwarded when its evaluation only
-//! permits a request bound to the external archives it verified. The relay
-//! retains no verified blob, so that binding is refused and the call takes the
-//! terminal block the proxy answers a refused binding with
+//! permits a request bound to the external archives it verified, and the
+//! relay did not bind it to them. A claimed call carries the relay's binding
+//! (`external_archive_bound`); any other call has none to carry. Such a call
+//! takes the terminal block the proxy answers a refused binding with
 //! (`mcp_relay_decide_package_archive.rs`).
 //!
 //! Not every leg of this lane is a package answer. The three the tool policy
@@ -131,6 +132,9 @@ pub(super) struct PackageAnswer {
 pub(super) struct QueueBinding<'a> {
     pub(super) blocked_request_mode: Option<&'a str>,
     pub(super) redaction_level: Option<&'a str>,
+    /// Whether the relay bound a claimed call to the external archives its
+    /// evaluation verified; `None` when it holds none (`external_archive_bound`).
+    pub(super) archive_bound: Option<bool>,
 }
 
 /// Decide one relayed package call with no inline approval in hand.
@@ -205,14 +209,18 @@ pub(super) fn answered(
         observed_notices: Vec::new(),
     };
     if let PackageRoute::Forward { .. } = route {
-        if package_archive::requires_binding(&policy.evaluation) {
+        let refused = match binding.archive_bound {
+            Some(bound) => !bound,
+            None => package_archive::requires_binding(&policy.evaluation),
+        };
+        if refused {
             // `_bound_external_archive_mcp_request` (`runtime_mcp.py:1747`): a
             // forward whose evaluation resolved a package from an external
             // tarball is bound to the blobs that evaluation verified before it
-            // is written to the child. The relay retains no blob, so the
-            // binding is refused and the call is the terminal `mcp_unbound`
-            // block (`:1755`). The replacement route is not a forward, so the
-            // answer it is rendered from settles here.
+            // is written to the child. A call the relay could not bind, or
+            // one that needs a binding the relay holds no blob for, is the
+            // terminal `mcp_unbound` block (`:1755`). The replacement route is
+            // not a forward, so the answer it is rendered from settles here.
             let refused = package_archive::unbound(policy)?;
             let blocked = PackageRoute::TerminalPackage {
                 policy_action: "block".to_owned(),

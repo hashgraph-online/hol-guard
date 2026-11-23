@@ -19,6 +19,7 @@ fn bound(blocked_request_mode: &'static str) -> QueueBinding<'static> {
     QueueBinding {
         blocked_request_mode: Some(blocked_request_mode),
         redaction_level: Some("full"),
+        archive_bound: None,
     }
 }
 
@@ -302,10 +303,12 @@ fn a_queued_request_defers_under_every_other_blocked_request_mode() {
         QueueBinding {
             blocked_request_mode: None,
             redaction_level: Some("full"),
+            archive_bound: None,
         },
         QueueBinding {
             blocked_request_mode: Some("safe-alternative"),
             redaction_level: None,
+            archive_bound: None,
         },
     ] {
         assert_eq!(
@@ -426,4 +429,37 @@ fn a_forward_the_relay_cannot_bind_to_its_archives_is_blocked_instead() {
                 .to_owned()
         ],
     );
+}
+
+#[test]
+fn the_relays_own_binding_decides_whether_a_claimed_forward_goes_through() {
+    let mut demanding = policy("allow", json!([]));
+    demanding.evaluation.insert(
+        "external_archive_source_hashes".to_owned(),
+        json!(["0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"]),
+    );
+    let decide = |archive_bound: Option<bool>, resolved: PackagePolicy| {
+        answered(
+            decide_package(
+                "enforce",
+                TOOL,
+                SERVER,
+                &policy("allow", json!([])),
+                QueueBinding {
+                    archive_bound,
+                    ..bound("safe-alternative")
+                },
+                || Ok((tool(GuardAction::Allow), resolved)),
+            )
+            .expect("the call is answered"),
+        )
+    };
+    // Bound to the verified blobs: the call forwards, rewritten by the relay.
+    let forwarded = decide(Some(true), demanding.clone());
+    assert_eq!(forwarded.block, None);
+    assert_eq!(forwarded.decision, "package-allow");
+    // A binding the relay could not make blocks even a call that demanded none.
+    let refused = decide(Some(false), policy("allow", json!([])));
+    assert_eq!(refused.decision, "terminal-package-block");
+    assert!(refused.block.is_some());
 }

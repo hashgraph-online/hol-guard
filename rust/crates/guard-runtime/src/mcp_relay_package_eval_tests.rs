@@ -197,21 +197,18 @@ fn a_relay_without_a_workspace_evaluates_a_request_bound_to_none() {
 }
 
 #[test]
-fn the_relay_retains_no_archive_blob() {
-    let request = package_eval_request(
-        &facts("/home/dev/.hol-guard", Some("/home/dev/app")),
-        &intent("npm install left-pad"),
-        true,
-    );
-
+fn only_the_post_claim_evaluation_retains_archive_blobs() {
+    let facts = facts("/home/dev/.hol-guard", Some("/home/dev/app"));
+    let intent = intent("npm install left-pad");
+    let post_claim = package_eval_request(&facts, &intent, true);
+    assert!(post_claim.external_archive_network_authorized);
     assert!(
-        request.external_archive_network_authorized,
-        "a post-claim evaluation may download an archive"
+        post_claim.retain_external_archive_blob,
+        "the relay binds the forwarded call to the blobs it verified"
     );
-    assert!(
-        !request.retain_external_archive_blob,
-        "the evidence a retained blob carries is not this caller's to keep"
-    );
+    let pre_claim = package_eval_request(&facts, &intent, false);
+    assert!(!pre_claim.external_archive_network_authorized);
+    assert!(!pre_claim.retain_external_archive_blob);
 }
 
 #[test]
