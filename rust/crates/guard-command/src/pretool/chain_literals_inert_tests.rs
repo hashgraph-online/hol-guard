@@ -384,8 +384,16 @@ fn printed_values_take_the_display_stand_in() {
             format!("echo \"version: {v}\""),
         ),
         (
-            "printf '%s\\n' \"$(cat VERSION)\"".to_owned(),
-            format!("printf '%s\\n' \"{v}\""),
+            "printf 'version %s\\n' \"$(cat VERSION)\"".to_owned(),
+            format!("printf 'version %s\\n' \"{v}\""),
+        ),
+        (
+            "printf '%s\\n' \"release $(cat VERSION)\"".to_owned(),
+            format!("printf '%s\\n' \"release {v}\""),
+        ),
+        (
+            "echo -n \"$(cat VERSION) is current\"".to_owned(),
+            format!("echo -n \"{v} is current\""),
         ),
         (
             "ls && echo \"lines: $(wc -l < package.json)\" | head -1".to_owned(),
@@ -396,8 +404,8 @@ fn printed_values_take_the_display_stand_in() {
             format!("for d in a b; do echo \"d: {v}\"; done"),
         ),
         (
-            "echo \"$(cat package.json)\" | sh".to_owned(),
-            format!("echo \"{v}\" | sh"),
+            "echo \"run: $(cat package.json)\" | sh".to_owned(),
+            format!("echo \"run: {v}\" | sh"),
         ),
     ] {
         assert_eq!(
@@ -445,6 +453,14 @@ fn values_used_as_more_than_output_stay_opaque() {
         // Split and matched by the shell.
         "echo $(cat x)",
         "echo '$(cat x)' \"$(cat x)\"x$(cat y)",
+        // The print adds nothing of its own to the value.
+        "echo \"$(cat x)\"",
+        "echo -n -e \"$(cat x)\"",
+        "printf '%s' \"$(cat x)\"",
+        "printf '%s\\n' \"$(cat x)\"",
+        "printf '%-10.3s%%\\t' \"$(cat x)\"",
+        "printf '%s' \"$(cat workspace/notes)\" \"$(cat x)\"",
+        "echo \"$(cat x)\" | sh",
         // Nested or heredoc-fed substitutions.
         "echo \"$(cat $(ls))\"",
         "echo \"$(cat `ls`)\"",

@@ -25,7 +25,9 @@
 //!   reads (`cd`, an assignment, `alias`, a function definition), since the
 //!   inner command is judged where the chain starts;
 //! - the inner command expands a variable or a substitution of its own,
-//!   which judging it alone would not resolve as the shell does.
+//!   which judging it alone would not resolve as the shell does;
+//! - the print adds no text of its own (`printf '%s' "$(cat f)"`), so the
+//!   wrapper does nothing but put a second layer around the read.
 
 use crate::shell_structure::ShellCommandSubstitution;
 
@@ -93,13 +95,126 @@ pub(super) fn display_slot(
             break;
         }
     }
-    match words.split_first() {
-        Some((program, _)) if program == "echo" => true,
-        Some((program, arguments)) if program == "printf" => arguments
-            .first()
-            .is_some_and(|format| !format.starts_with('-')),
-        _ => false,
+    let printf = match words.split_first() {
+        Some((program, _)) if program == "echo" => false,
+        Some((program, arguments))
+            if program == "printf"
+                && arguments
+                    .first()
+                    .is_some_and(|format| !format.starts_with('-')) =>
+        {
+            true
+        }
+        _ => return false,
+    };
+    labelled(chars, spans, begins, substitution, printf)
+}
+
+/// Whether the print adds text of its own to the value, as in `echo
+/// "version: $(...)"` or `printf 'lines: %s\n' "$(...)"`.
+///
+/// A bare `printf '%s' "$(cat f)"` or `echo "$(cat f)"` prints exactly what
+/// the inner command would print alone, so the wrapper adds nothing but a
+/// second layer around the read, and it keeps review. The label is looked
+/// for from the print's first argument to the quote that closes the value.
+/// Echo options, printf conversions, escapes, quotes and other substitutions
+/// are not a label.
+fn labelled(
+    chars: &[char],
+    spans: &[ShellCommandSubstitution],
+    begins: usize,
+    substitution: &ShellCommandSubstitution,
+    printf: bool,
+) -> bool {
+    let mut close = None;
+    let mut escaped = false;
+    for (at, &character) in chars.iter().enumerate().skip(substitution.end) {
+        if spans.iter().any(|span| span.start <= at && at < span.end) {
+            continue;
+        }
+        if escaped {
+            escaped = false;
+        } else if character == '\\' {
+            escaped = true;
+        } else if character == '"' {
+            close = Some(at);
+            break;
+        }
     }
+    let Some(close) = close else {
+        return false;
+    };
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut words: Vec<String> = Vec::new();
+    let mut word = String::new();
+    for (at, &character) in chars.iter().enumerate().take(close).skip(begins) {
+        if spans.iter().any(|span| span.start <= at && at < span.end) {
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            // An escape is not a label, quoted or not: printf reads `\n`
+            // in its format as a newline.
+            '\\' => escaped = true,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            c if c.is_ascii_whitespace() && !single && !double => {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+            }
+            c => word.push(c),
+        }
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    let mut words = words.as_slice();
+    while let Some((first, rest)) = words.split_first() {
+        if matches!(first.as_str(), "do" | "then" | "else" | "!") {
+            words = rest;
+        } else {
+            break;
+        }
+    }
+    words
+        .iter()
+        .skip(1)
+        .filter(|word| printf || !word.starts_with('-'))
+        .any(|word| {
+            let text = if printf {
+                without_conversions(word)
+            } else {
+                word.clone()
+            };
+            text.chars().any(char::is_alphanumeric)
+        })
+}
+
+/// `word` with its printf conversions (`%s`, `%-10.3d`, `%%`) removed.
+fn without_conversions(word: &str) -> String {
+    let mut text = String::with_capacity(word.len());
+    let mut characters = word.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character != '%' {
+            text.push(character);
+            continue;
+        }
+        while characters
+            .next_if(|c| matches!(c, '-' | '+' | ' ' | '#' | '0'..='9' | '.' | '*'))
+            .is_some()
+        {}
+        if characters
+            .next_if(|c| c.is_ascii_alphabetic() || *c == '%')
+            .is_none()
+        {
+            text.push(character);
+        }
+    }
+    text
 }
 
 /// The complete words of `segment` that end before the substitution, with
