@@ -69,13 +69,19 @@ fn import_holders_untouched(code: &str) -> bool {
         if code[found.end()..].trim_start().starts_with('.') {
             return true;
         }
+        let after = code[found.end()..].trim_start();
+        // An alias can mutate the holder namespace later; keep all
+        // constant-name imports dynamic when the holder is renamed.
+        if after.split_whitespace().next() == Some("as") {
+            return false;
+        }
         let line_start = code[..found.start()]
             .rfind(['\n', ';'])
             .map_or(0, |at| at + 1);
         let before = code[line_start..found.start()].trim();
         let mut words = before.split_whitespace();
         let statement = matches!(words.next(), Some("import" | "from"));
-        statement && words.last() != Some("as")
+        statement
     })
 }
 
@@ -248,6 +254,8 @@ mod tests {
             "import builtins, os\nsetattr(builtins, '__imp' + 'ort__', os.system)",
             "import importlib, os\nsetattr(importlib, 'import_' + 'module', os.system)",
             "import builtins as b\nb.__dict__['x'] = 1",
+            "import builtins as b, os\nsetattr(b, '__imp' + 'ort__', os.system)",
+            "import importlib as il, os\nsetattr(il, 'import_' + 'module', os.system)",
             "import os\nb = __builtins__\nb.update(x=os.system)",
             "import sys\nsys.modules['importlib'] = fake",
             "import helpers as importlib",
