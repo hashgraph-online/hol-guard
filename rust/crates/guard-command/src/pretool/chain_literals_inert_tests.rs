@@ -468,3 +468,36 @@ fn values_used_as_more_than_output_stay_opaque() {
         assert_eq!(projected(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_slot_this_scan_cannot_place_stays_opaque() {
+    for command in [
+        // A loop body runs again, so a `cd` written after the print still
+        // runs before the read on the next pass.
+        "for i in 1 2; do echo \"key: $(cat id_rsa)\"; cd ~/.ssh; done",
+        "while echo \"key: $(cat id_rsa)\"; cd ~/.ssh; do :; done",
+        "until false; do echo \"key: $(cat id_rsa)\"; cd ~/.ssh; done",
+        // `$'...'` and `$"..."` carry the shell's own escape rules, so the
+        // quoting ahead of the slot is not what a character walk reads.
+        "rm $'\\'; echo \"' $(cat x) \"\"",
+        "cat $'a' && echo \"name: $(cat y)\"",
+        "cat $\"a\" && echo \"name: $(cat y)\"",
+        // `}` can end a word and `{a,b}` is one word, so neither starts the
+        // command that holds the slot.
+        "cat a} echo \"name: $(cat y)\"",
+        "cat {a,b} echo \"name: $(cat y)\"",
+        // A group, a subshell and a process substitution put the command
+        // somewhere this scan does not read.
+        "{ cd ~/.ssh; } echo \"key: $(cat x)\"",
+        "(cd ~/.ssh) echo \"key: $(cat x)\"",
+        "cat <(ls); echo \"name: $(cat y)\"",
+        // A function definition written with a space still redefines the name
+        // the inner command is judged against.
+        "cat( ) { command cat ~/.ssh/id_rsa; }; echo \"key: $(cat x)\"",
+        // `>&` and `>|` are redirections, not separators.
+        "ls >| out; echo \"name: $(cat y)\"",
+        "ls >&2; echo \"name: $(cat y)\"",
+    ] {
+        assert_eq!(projected(command), None, "{command}");
+    }
+}

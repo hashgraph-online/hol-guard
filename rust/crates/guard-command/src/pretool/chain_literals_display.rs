@@ -26,6 +26,15 @@
 //!   inner command is judged where the chain starts;
 //! - the inner command expands a variable or a substitution of its own,
 //!   which judging it alone would not resolve as the shell does;
+//! - the command uses `$'...'` or `$"..."`, whose escapes this scan reads
+//!   differently from the shell, so the quoting state ahead of the slot
+//!   cannot be trusted;
+//! - grouping, a subshell, a process substitution or a redirection stands
+//!   ahead of the slot (`(`, `)`, `{`, `}`, `<`, `>`), where the word
+//!   boundaries are not the ones this scan reads;
+//! - a loop keyword opens a body that runs again, in which case steering
+//!   written after the slot still runs before it on the next pass, so the
+//!   whole command is read for steering rather than the text ahead;
 //! - the print adds no text of its own (`printf '%s' "$(cat f)"`), so the
 //!   wrapper does nothing but put a second layer around the read.
 
@@ -39,6 +48,9 @@ const MAX_BODY_CHARS: usize = 256;
 
 /// Words that change, for the rest of the chain, the directory, the
 /// variables or the meaning of a command name.
+/// Keywords that open a body the shell runs more than once.
+const LOOP_WORDS: &str = "for while until select";
+
 const STEERING_WORDS: &str = ". alias builtin cd command declare enable eval exec export \
     function hash local popd pushd readonly set setopt shopt source typeset unalias unset";
 
@@ -60,6 +72,9 @@ pub(super) fn display_slot(
     {
         return false;
     }
+    if dollar_quoted(chars, spans) {
+        return false;
+    }
     let (mut single, mut double, mut escaped) = (false, false, false);
     let mut begins = 0usize;
     for (at, &character) in chars.iter().enumerate().take(substitution.start) {
@@ -74,11 +89,23 @@ pub(super) fn display_slot(
             '\\' if !single => escaped = true,
             '\'' if !double => single = !single,
             '"' if !single => double = !double,
-            ';' | '&' | '|' | '\n' | '(' | ')' | '{' | '}' if !single && !double => begins = at + 1,
+            // Grouping, a subshell, a process substitution and a redirection
+            // all put the command holding the slot somewhere this scan does
+            // not read: `}` can close a group or end a word, `{a,b}` is one
+            // word, and `>&` or `>|` is a redirection, not a separator.
+            '(' | ')' | '{' | '}' | '<' | '>' if !single && !double => return false,
+            ';' | '&' | '|' | '\n' if !single && !double => begins = at + 1,
             _ => {}
         }
     }
-    if single || !double || steered(chars, spans, substitution.start) {
+    // A loop body runs again, so a `cd` written after the slot still runs
+    // before it on the next pass; read the whole command for steering then.
+    let steering_end = if looped(chars, spans) {
+        chars.len()
+    } else {
+        substitution.start
+    };
+    if single || !double || steered(chars, spans, steering_end) {
         return false;
     }
     let segment: Vec<char> = chars[begins..substitution.start].to_vec();
@@ -302,7 +329,9 @@ fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bo
         if !quoted && character == '=' && assignment_head(&word) {
             return true;
         }
-        previous = character;
+        if !character.is_ascii_whitespace() {
+            previous = character;
+        }
     }
     words.iter().any(|word| {
         STEERING_WORDS
@@ -321,4 +350,54 @@ fn assignment_head(word: &str) -> bool {
         .next()
         .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
         && characters.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Whether the command uses `$'...'` or `$"..."`, whose contents the shell
+/// reads with its own escape rules. The scans here walk quotes one character
+/// at a time, so a `\\'` inside `$'...'` would leave them a quote out of step
+/// with the shell and the word holding the slot would be the wrong one.
+fn dollar_quoted(chars: &[char], spans: &[ShellCommandSubstitution]) -> bool {
+    chars.windows(2).enumerate().any(|(at, pair)| {
+        pair[0] == '$'
+            && (pair[1] == '\'' || pair[1] == '"')
+            && !spans.iter().any(|span| span.start <= at && at < span.end)
+    })
+}
+
+/// Whether an unquoted loop keyword appears anywhere in the command. A word
+/// inside quotes counts too: reading it as a keyword only refuses the slot.
+fn looped(chars: &[char], spans: &[ShellCommandSubstitution]) -> bool {
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut word = String::new();
+    let mut words: Vec<String> = Vec::new();
+    for (at, &character) in chars.iter().enumerate() {
+        if spans.iter().any(|span| span.start <= at && at < span.end) {
+            word.push('x');
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            word.push(character);
+            continue;
+        }
+        match character {
+            '\\' if !single => escaped = true,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            c if c.is_ascii_whitespace() || ";&|(){}".contains(c) => {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+            }
+            c => word.push(c),
+        }
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words.iter().any(|word| {
+        LOOP_WORDS
+            .split_ascii_whitespace()
+            .any(|entry| entry == word)
+    })
 }
