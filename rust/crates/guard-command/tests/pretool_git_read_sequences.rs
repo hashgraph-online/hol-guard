@@ -490,3 +490,72 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
         );
     }
 }
+
+// Agents name a directory once and reuse it: `dir=/tmp/work; ls "$dir";
+// git status`. A bare lowercase assignment runs nothing and sets a variable
+// Git never reads, so the later read keeps its proof. An uppercase name, one
+// a shell or proxy reads, a command prefix, and any value that runs a
+// substitution keep the floor.
+#[test]
+fn a_shell_local_variable_before_a_git_read_keeps_its_proof() {
+    let root =
+        std::env::temp_dir().join(format!("guard-shell-local-variable-{}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home, &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+    git(&repository, &home, &["init", "--quiet"]);
+    git(
+        &repository,
+        &home,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    git(&repository, &home, &["config", "user.name", "fixture"]);
+    std::fs::write(repository.join("package.json"), "{}\n").unwrap();
+    git(&repository, &home, &["add", "-A"]);
+    git(&repository, &home, &["commit", "--quiet", "-m", "fixture"]);
+
+    for command in [
+        "h=/tmp/fixture-home; git status --short",
+        "dir=\"$HOME/projects\"; git status --short && git log --oneline -3",
+        "out_dir=/tmp/report; echo done; git status --short",
+    ] {
+        assert_ne!(
+            reason(&home, &repository, command),
+            FLOOR,
+            "{command}: {}",
+            reason(&home, &repository, command)
+        );
+    }
+    for command in [
+        "H=/tmp/fixture-home; git status --short",
+        "GIT_DIR=/tmp/elsewhere; git status --short",
+        "path=/tmp/bin; git status --short",
+        "http_proxy=http://127.0.0.1:9; git status --short",
+        "h=$(id -u); git status --short",
+        "h=`id -u`; git status --short",
+        "h=$HOME/x; git status --short",
+        "a[$(id -u)]=1; git status --short",
+        "h=/tmp/x git status --short; git log --oneline -1",
+    ] {
+        let controls = github_controls("enabled");
+        let result = evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            Some(&controls),
+            None,
+            home.to_str(),
+            repository.to_str(),
+        );
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}
