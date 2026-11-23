@@ -467,6 +467,12 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
             _ROWS.get(case.case_id, []), result, description, home=fixture.home, guard_home=fixture.guard_home
         )
         return
+    if case.expect == "review":
+        assert case.case_id not in _PENDING_FIX, "review cases cannot be pending_fix"
+        assert approvals > 0, f"review case did not create an approval row: {description}"
+        assert _decision(result) != "allow", f"review case was allowed: {description}"
+        assert _reason(result) not in BUDGET_MISS_REASONS, f"native review unavailable: {description}"
+        return
     gap = always_gap(_ROWS.get(case.case_id, [])) if _always_expected(case) else []
     if case.expect == "allow_or_review":
         # A named child can require approval, but must not lose its executable
