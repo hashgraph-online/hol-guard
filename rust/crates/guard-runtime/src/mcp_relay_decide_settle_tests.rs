@@ -7,6 +7,18 @@ use serde_json::json;
 use super::*;
 use crate::hook_direct_evidence::MAX_RECORD_BYTES;
 
+#[test]
+fn missing_approval_center_uses_the_loopback_default() {
+    assert_eq!(
+        approval_center_origin("/missing-guard-home", None),
+        "http://127.0.0.1:4781"
+    );
+    assert_eq!(
+        approval_center_origin("/missing-guard-home", Some("http://127.0.0.1:9876")),
+        "http://127.0.0.1:9876"
+    );
+}
+
 /// A full evidence queue refuses before the approval row is written, so no
 /// pending request is left that neither a receipt nor an answer names.
 #[test]
