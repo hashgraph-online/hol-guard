@@ -55,6 +55,9 @@ pub(crate) fn drain(
     mcp_relay_receipt::write_detached(home, peeked.settled, queue.unwritten());
     let mut paged = peeked.records;
     let store_fatal = record_page(queue, home, writer_source, &mut paged)?;
+    if has_unfinished_records(&paged, home) {
+        return Err(UNHANDLED.to_owned());
+    }
     drop(recording);
     let sequences: Vec<u64> = paged.iter().map(|paged| paged.seq).collect();
     let records: Vec<Value> = paged.into_iter().map(|paged| paged.record).collect();
@@ -178,10 +181,20 @@ fn commit_queued(
     let mut paged = peeked.records;
     let paged_count = paged.len();
     let store_fatal = record_page(queue, home, writer_source, &mut paged)?;
-    // Without a configured writer, record_page only validates the receipt.
-    // Keep any such record that still needs work on the queue.
+    // A mixed page can contain ordinary direct-hook records that still need
+    // the daemon writer after the resident has committed its relay receipts.
+    // Those records stay queued while the committed relay records are already
+    // forgotten by `keep_handed_back`.
     if has_unfinished_records(&paged, home) {
-        return Err(UNHANDLED.to_owned());
+        let progressed = paged_count.saturating_sub(paged.len());
+        if progressed == 0 {
+            return Err(UNHANDLED.to_owned());
+        }
+        return Ok(CommittedPage {
+            record_count: progressed,
+            remaining: queue.pending_len(),
+            store_fatal,
+        });
     }
     // The commit page included resident-owned records so `record_page` could
     // write them. Acknowledging the cursor is therefore sufficient. Do not
@@ -265,9 +278,6 @@ fn record_page(
         .any(|item| item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call"))
     {
         return Err("mcp_relay_record_not_plain".to_owned());
-    }
-    if has_unfinished_records(paged, home) {
-        return Err(UNHANDLED.to_owned());
     }
     Ok(fatal)
 }

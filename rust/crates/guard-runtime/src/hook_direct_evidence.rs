@@ -287,6 +287,13 @@ impl DirectEvidenceQueue {
             && state.bytes + (state.reserved + 2) * MAX_RECORD_BYTES <= MAX_QUEUED_BYTES
     }
 
+    pub(crate) fn pending_len(&self) -> usize {
+        self.state
+            .lock()
+            .map(|state| state.records.len())
+            .unwrap_or(0)
+    }
+
     /// Queue one record, or refuse it when the queue cannot hold it.
     pub(crate) fn offer(&self, record: Value) -> bool {
         self.try_offer(record).is_ok()
