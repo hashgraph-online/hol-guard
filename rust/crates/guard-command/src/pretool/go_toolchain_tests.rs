@@ -83,6 +83,12 @@ fn the_settings_that_choose_a_toolchain_are_screened() {
         "GOINSECURE",
         "GOPATH",
         "GOMODCACHE",
+        "GOCACHEPROG",
+        "GOAUTH",
+        "goauth",
+        "GONOPROXY",
+        "GOVCS",
+        "GOWORK",
         "XDG_CONFIG_HOME",
     ] {
         assert!(go_toolchain_selector(name), "{name}");
@@ -130,6 +136,11 @@ fn a_stored_setting_decides_whether_the_banner_is_read() {
         "GOPATH=/opt/gopath\n",
         "GOMODCACHE=/opt/modcache\n",
         "GOFLAGS=-toolexec=/opt/wrap\n",
+        "GOCACHEPROG=/opt/cacheprog\n",
+        "GOAUTH=command /opt/sign\n",
+        "GOWORK=/opt/go.work\n",
+        "GOVCS=*:all\n",
+        "GONOPROXY=example.test/*\n",
         "GOBIN=/opt/bin\nGOTOOLCHAIN=path\n",
     ] {
         std::fs::write(&path, contents).unwrap();
@@ -177,6 +188,7 @@ fn the_probe_reads_the_queries_only_where_nothing_selects_a_toolchain() {
         home_dir: Some(&home),
         cwd: Some(&cwd),
         go_toolchain_inert: inert,
+        shell_home_matches: true,
         ..Default::default()
     };
 
@@ -215,6 +227,18 @@ fn the_probe_reads_the_queries_only_where_nothing_selects_a_toolchain() {
         assert!(safe_go_probe(&words("version"), context(true)));
     }
 
+    // The stored file is read under the home the hook reported, so a shell
+    // whose own `HOME` names somewhere else is not proved by reading it.
+    assert!(!safe_go_probe(
+        &words("version"),
+        super::super::PathContext {
+            home_dir: Some(&home),
+            cwd: Some(&cwd),
+            go_toolchain_inert: true,
+            ..Default::default()
+        }
+    ));
+
     // A relative home is not a home this proof can read.
     assert!(!safe_go_probe(
         &words("version"),
@@ -222,6 +246,7 @@ fn the_probe_reads_the_queries_only_where_nothing_selects_a_toolchain() {
             home_dir: Some("relative/home"),
             cwd: Some(&cwd),
             go_toolchain_inert: true,
+            shell_home_matches: true,
             ..Default::default()
         }
     ));
@@ -230,6 +255,7 @@ fn the_probe_reads_the_queries_only_where_nothing_selects_a_toolchain() {
         super::super::PathContext {
             cwd: Some(&cwd),
             go_toolchain_inert: true,
+            shell_home_matches: true,
             ..Default::default()
         }
     ));

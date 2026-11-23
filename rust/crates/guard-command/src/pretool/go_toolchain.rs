@@ -14,13 +14,19 @@
 //! line it falls back to, name a release -- `go1.25.3` -- and nothing else:
 //! the go command refuses a name that is not a release, so the file cannot
 //! point at a directory the way a `rust-toolchain.toml` `path` entry can.
-//! The named release is fetched as the module `golang.org/toolchain` and
-//! checked against the checksum database before it runs, the same way rustup
-//! downloads and verifies a channel that a toolchain file selects, which
-//! [`super::rust_toolchain`] already admits.
+//! A release the command has to fetch arrives as the module
+//! `golang.org/toolchain` and is checked against the checksum database
+//! before it runs, the same way rustup downloads and verifies a channel that
+//! a toolchain file selects, which [`super::rust_toolchain`] already admits.
 //!
-//! So the proof here is about the settings that can break that chain rather
-//! than about the workspace file:
+//! Before fetching, the command looks on `PATH` for a program named after
+//! the release. That lookup picks among the session's installed programs by
+//! a name the go command itself constrains to a release spelling, and `PATH`
+//! is already what decides which `go` runs at all: a directory that could
+//! plant a `go1.25.3` there could plant a `go`. So the workspace file
+//! selects between the user's own toolchains, not between a toolchain and
+//! arbitrary code, and the proof below is about the settings that can break
+//! that chain rather than about the workspace file:
 //!
 //! - `GOTOOLCHAIN=path` runs a `go1.N` found on `PATH`, which is a local
 //!   binary and not a verified download, and `GOTOOLCHAIN=go1.N` names one
@@ -33,10 +39,16 @@
 //!   the cache is used as it is found, so the cache's location chooses the
 //!   binary just as surely as the download does.
 //! - `GOFLAGS` adds options to every invocation, including ones that name a
-//!   program.
-//! - `GOENV`, and `XDG_CONFIG_HOME` on the platforms that use it, move the
-//!   file below, so a redirected one is a second place every setting above
-//!   could come from.
+//!   program, `GOCACHEPROG` names a program the command runs as its build
+//!   cache, and `GOAUTH=command <prog>` runs one to sign the requests a
+//!   toolchain download makes.
+//! - `GONOPROXY`, `GOVCS` and `GOWORK` move the same decisions: the first
+//!   two choose which fetches skip the proxy and which may run a
+//!   version-control tool, and the third names the workspace file the switch
+//!   is read from.
+//! - `GOENV`, `XDG_CONFIG_HOME` on the platforms that use it, and `APPDATA`
+//!   on Windows, move the file below, so a redirected one is a second place
+//!   every setting above could come from.
 //!
 //! The same settings have a stored spelling: `go env -w` writes them to the
 //! go environment file under the user configuration directory, which the
@@ -120,8 +132,12 @@ fn env_setting_runs_compiler(name: &str) -> bool {
 
 /// Whether the toolchain that answers the query can only be the one on
 /// `PATH` or a release the go command downloads and verifies itself.
+///
+/// The stored file below is read under the home the hook reported, so a
+/// shell whose own `HOME` names somewhere else is not proved by reading it:
+/// the go command would read a file this proof never opened.
 fn toolchain_selection_is_official(context: super::PathContext<'_>) -> bool {
-    if !context.go_toolchain_inert {
+    if !context.go_toolchain_inert || !context.shell_home_matches {
         return false;
     }
     let Some(home) = context.home_dir.map(Path::new) else {
@@ -135,9 +151,9 @@ fn toolchain_selection_is_official(context: super::PathContext<'_>) -> bool {
 
 /// Where the go command keeps the settings `go env -w` writes.
 ///
-/// `GOENV` would move the file and `XDG_CONFIG_HOME` would move the
-/// directory holding it; both are screened in the environment, so the
-/// defaults below are the only places left. Both Unix spellings are read on
+/// `GOENV` would move the file and `XDG_CONFIG_HOME`, or `APPDATA` on
+/// Windows, would move the directory holding it; all are screened in the
+/// environment, so the defaults below are the only places left. Both Unix spellings are read on
 /// every host rather than behind a target switch, because a file at either
 /// path is a file the go command on that host would read.
 fn go_env_files(home: &Path) -> Vec<PathBuf> {
@@ -209,8 +225,13 @@ pub(crate) fn go_toolchain_selector(name: &str) -> bool {
             | "GOINSECURE"
             | "GOPATH"
             | "GOMODCACHE"
+            | "GOCACHEPROG"
+            | "GOAUTH"
+            | "GONOPROXY"
+            | "GOVCS"
+            | "GOWORK"
             | "XDG_CONFIG_HOME"
-    )
+    ) || (cfg!(windows) && name == "APPDATA")
 }
 
 #[cfg(test)]
