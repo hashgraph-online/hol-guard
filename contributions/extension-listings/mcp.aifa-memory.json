@@ -8,6 +8,7 @@
     "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
     "Per upstream HOSTED-POLICY.md, all tools/call invocations (including memory_about, plans, and partner_kit) require a per-user Bearer key from https://aifa.works/mcp.",
     "The hosted backend at aifa.works is closed source; upstream policy and live verification script are published at https://github.com/MaksimGalatin/aifa-memory-mcp (HOSTED-POLICY.md and scripts/conformance.py).",
+    "The hosted backend stores conversation text in plaintext without an expiry date, and users cannot currently delete that stored text through self-service.",
     "A maintainer profile is not a security certification or an official upstream endorsement."
   ],
   "documentationUrl": "https://github.com/MaksimGalatin/aifa-memory-mcp/blob/main/HOSTED-POLICY.md",
