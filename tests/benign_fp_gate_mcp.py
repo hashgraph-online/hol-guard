@@ -22,6 +22,8 @@ import sys
 import tempfile
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -32,6 +34,7 @@ from codex_plugin_scanner.guard.cli.commands_mcp_relay_launch import RELAY_COMMA
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.mcp_tool_calls import RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+from codex_plugin_scanner.guard.resident_evidence_client import ResidentEvidenceClient
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
@@ -39,6 +42,7 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity,
 from codex_plugin_scanner.guard.store import GuardStore
 
 if TYPE_CHECKING:
+    from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
     from tests.benign_fp_gate_fixture import BenignFixture
 
 SERVERS = ("echo-mcp", "echo-ready")
@@ -47,6 +51,7 @@ READY_TOOL = "lookup"
 _SESSION_SECONDS = 30.0
 _WARM_SECONDS = 30.0
 _ROW_SECONDS = 10.0
+_DRAIN_SECONDS = 30.0
 # The answer to a call the relay could not decide yet (`mcp_relay_authority::NO_DECISION`).
 _NO_DECISION = "HOL Guard could not obtain a native decision for this tool call."
 # The stderr line naming why (`mcp_relay_resident_defer::DEFER_LINE_PREFIX`).
@@ -270,6 +275,33 @@ def _warming(response: dict[str, Any]) -> bool:
     """Whether the relay refused the call only because its resident had no decision yet."""
     error = response.get("error")
     return isinstance(error, dict) and error.get("message") == _NO_DECISION
+
+
+@contextmanager
+def evidence_drained(worker: HookWorker) -> Iterator[None]:
+    """Bind the gate's lane with its evidence drain, as a daemon host binds it.
+
+    The relay decides only on a lane whose evidence a drain records. The gate's
+    worker has no activity writer, so the lane it publishes names no drain and
+    the relay defers every call; a daemon host always runs one. Run the cases
+    with the resident's writer and its drain, then put the worker back.
+    """
+    publisher = worker.policy_snapshot_publisher
+    started = worker.activity_writer is None
+    if started:
+        worker.activity_writer = ResidentEvidenceClient(store=worker.store)
+        worker._start_direct_evidence_drain()  # pyright: ignore[reportPrivateUsage]
+        publisher.request_publish()
+    deadline = time.monotonic() + _DRAIN_SECONDS
+    while not getattr(publisher, "_direct_lane_evidence_bound", False) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    try:
+        yield
+    finally:
+        if started:
+            worker._stop_direct_evidence_drain()  # pyright: ignore[reportPrivateUsage]
+            worker.activity_writer = None
+            publisher.request_publish()
 
 
 def replay(
