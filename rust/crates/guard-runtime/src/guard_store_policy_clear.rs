@@ -29,8 +29,20 @@ use crate::guard_store_policy_source_context::policy_source_contexts;
 use crate::guard_store_policy_upsert::{advance_generation, signing_material};
 use crate::policy_decision_lookup_op::{normalized_workspace_path, workspace_policy_key};
 
+#[path = "guard_store_policy_resign.rs"]
+mod resign;
+
 const POLICY_SCOPES: [&str; 5] = ["global", "harness", "workspace", "artifact", "publisher"];
 const APPROVAL_GATE_POLICY_SOURCE: &str = "approval-gate";
+
+/// The policy clear and the integrity resign, which share the clear's
+/// generation advance.
+pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
+    if method == "resign_policy_rows" {
+        return resign::resign_policy_rows(connection, args);
+    }
+    clear_policy_decisions(connection, args)
+}
 
 /// `GuardStore.clear_policy_decisions` (`store_policy_integrity_runtime.py`).
 pub(crate) fn clear_policy_decisions(connection: &Connection, args: &Args) -> StoreResult<Value> {

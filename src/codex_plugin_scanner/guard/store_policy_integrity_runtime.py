@@ -449,7 +449,6 @@ class StorePolicyIntegrityAdminMixin:
         now: str,
     ) -> dict[str, object]:
         require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant, now=now)
-        next_control_state: dict[str, object] | None = None
         with self._connect() as connection:
             backup_path = self._backup_policy_database(connection, now=now)
             state = self._refresh_policy_integrity_state(
@@ -468,7 +467,7 @@ class StorePolicyIntegrityAdminMixin:
                 raise RuntimeError("Guard could not access the policy integrity control state.")
             rows = self._load_local_policy_rows(connection, harness=harness)
             preserved = 0
-            cleared = 0
+            clear_ids: set[int] = set()
             legacy_ids: list[int] = []
             unknown_key_ids: list[int] = []
             rollback_row_ids: list[int] = []
@@ -491,11 +490,7 @@ class StorePolicyIntegrityAdminMixin:
                         if decision_id in preserve_decision_ids:
                             blocked_preserve_row_ids.append(decision_id)
                         elif clear_unselected:
-                            cursor = connection.execute(
-                                "delete from policy_decisions where decision_id = ?",
-                                (decision_id,),
-                            )
-                            cleared += int(cursor.rowcount if cursor.rowcount is not None else 0)
+                            clear_ids.add(decision_id)
                     continue
                 if integrity_result.status == "missing_integrity":
                     legacy_ids.append(decision_id)
@@ -505,25 +500,11 @@ class StorePolicyIntegrityAdminMixin:
                     selected_preserved_ids.add(decision_id)
                     preserved += 1
                 elif clear_unselected:
-                    cursor = connection.execute(
-                        "delete from policy_decisions where decision_id = ?",
-                        (decision_id,),
-                    )
-                    cleared += int(cursor.rowcount if cursor.rowcount is not None else 0)
-            next_control_state = self._advance_policy_integrity_generation(
-                connection,
-                now=now,
-                key=key,
-                key_id=key_id,
-                trusted_state=trusted_state,
-                force_sign_decision_ids=selected_preserved_ids,
-            )
-            connection.commit()
-            if (
-                next_control_state is not None
-                and self._finalize_policy_integrity_control_state(next_control_state) is False
-            ):
-                raise RuntimeError("Guard policy integrity control state could not be finalized.")
+                    clear_ids.add(decision_id)
+        cleared = self._native_resign_policy_rows(
+            trusted_state, key=key, key_id=key_id, now=now, clear_ids=clear_ids, force_ids=selected_preserved_ids
+        )
+        with self._connect() as connection:
             final_state, counts, items = self._policy_integrity_scan(
                 connection,
                 now=now,
@@ -563,7 +544,7 @@ class StorePolicyIntegrityAdminMixin:
         now: str,
         include_items: bool = True,
     ) -> dict[str, object]:
-        next_control_state: dict[str, object] | None = None
+        resign: tuple[dict[str, object], bytes, str, set[int]] | None = None
         with self._connect() as connection:
             state = self._refresh_policy_integrity_state(
                 connection,
@@ -573,12 +554,7 @@ class StorePolicyIntegrityAdminMixin:
             )
             key, key_id = self._policy_integrity_secret_material(create=True)
             trusted_state = self._load_policy_integrity_control_state(create=True)
-            if not (
-                state.get("mode") == "protected"
-                and key is not None
-                and key_id is not None
-                and trusted_state is not None
-            ):
+            if state.get("mode") != "protected" or key is None or key_id is None or trusted_state is None:
                 connection.rollback()
             else:
                 rows = self._load_local_policy_rows(connection)
@@ -594,20 +570,12 @@ class StorePolicyIntegrityAdminMixin:
                     for row, result in zip(rows, results, strict=True)
                     if result.status in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES
                 }
-                next_control_state = self._advance_policy_integrity_generation(
-                    connection,
-                    now=now,
-                    key=key,
-                    key_id=key_id,
-                    trusted_state=trusted_state,
-                    force_sign_decision_ids=force_sign_ids,
-                )
-                connection.commit()
-        if (
-            next_control_state is not None
-            and self._finalize_policy_integrity_control_state(next_control_state) is False
-        ):
-            raise RuntimeError("Guard policy integrity control state could not be finalized.")
+                resign = (trusted_state, key, key_id, force_sign_ids)
+        if resign is not None:
+            trusted_state, key, key_id, force_sign_ids = resign
+            _ = self._native_resign_policy_rows(
+                trusted_state, key=key, key_id=key_id, now=now, clear_ids=set(), force_ids=force_sign_ids
+            )
         if include_items:
             return self.verify_policy_integrity(harness=harness)
         return self.get_policy_integrity_status(harness=harness)
@@ -706,6 +674,37 @@ class StorePolicyIntegrityAdminMixin:
                 raise RuntimeError("Guard policy integrity control state is invalid.")
             if self._finalize_policy_integrity_control_state(next_control_state) is False:
                 raise RuntimeError("Guard policy integrity control state could not be finalized.")
+        return int(payload["cleared"])
+
+    def _native_resign_policy_rows(
+        self,
+        trusted_state: dict[str, object],
+        *,
+        key: bytes,
+        key_id: str,
+        now: str,
+        clear_ids: set[int],
+        force_ids: set[int],
+    ) -> int:
+        """Delete ``clear_ids`` and sign the remaining rows forward in the resident."""
+
+        payload = self._native_store_call(
+            "resign_policy_rows",
+            {
+                "now": now,
+                "current_generation": self._begin_policy_integrity_generation(trusted_state),
+                "clear_decision_ids": sorted(clear_ids),
+                "force_sign_decision_ids": sorted(force_ids),
+                **integrity_key_fields(getattr(self, "_policy_integrity_secret_store", None), key, key_id),
+            },
+        )
+        next_control_state = payload.get("next_control_state") if isinstance(payload, dict) else None
+        if not isinstance(payload, dict) or not isinstance(payload.get("cleared"), int):
+            raise RuntimeError("Guard policy integrity rows were not re-signed.")
+        if not isinstance(next_control_state, dict):
+            raise RuntimeError("Guard policy integrity control state is invalid.")
+        if self._finalize_policy_integrity_control_state(next_control_state) is False:
+            raise RuntimeError("Guard policy integrity control state could not be finalized.")
         return int(payload["cleared"])
 
     def get_latest_diff(self, harness: str, artifact_id: str) -> dict[str, object] | None:

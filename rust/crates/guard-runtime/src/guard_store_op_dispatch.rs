@@ -60,7 +60,7 @@ use crate::guard_store_outbox_queries as queries;
 use crate::guard_store_outbox_reads as reads;
 use crate::guard_store_outbox_recover::recover_sequences;
 use crate::guard_store_outbox_requeue::{repair_rejected_correlation, requeue_method};
-use crate::guard_store_policy_clear::clear_policy_decisions;
+use crate::guard_store_policy_clear::dispatch as policy_clear;
 use crate::guard_store_policy_import as policy_import;
 use crate::guard_store_policy_source_context::policy_source_contexts;
 use crate::guard_store_policy_upsert::upsert_policy;
@@ -91,7 +91,7 @@ pub(crate) fn dispatch(
 ) -> StoreResult<Value> {
     match method {
         "upsert_policy" => upsert_policy(connection, args),
-        "clear_policy_decisions" => clear_policy_decisions(connection, args),
+        "clear_policy_decisions" | "resign_policy_rows" => policy_clear(connection, method, args),
         "import_policy_rows" => policy_import::import_policy_rows(connection, args),
         "apply_mcp_policy_request" => policy_import::apply_mcp_policy_request(connection, args),
         "policy_rows_fingerprint" => policy_import::policy_rows_fingerprint(connection, args),
