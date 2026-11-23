@@ -276,6 +276,10 @@ class BusinessSourceMutation:
     committed_anchor: KeyAuthenticatedBusinessSourceAnchor
     previous_source: KeyAuthenticatedBusinessSource | None = None
 
+    def witness_text(self) -> str:
+        """The installation witness for the committed anchor, as stored."""
+        return _witness(self.committed_anchor).decode("utf-8")
+
     def stage_on_connection(self, connection: sqlite3.Connection, *, now: str) -> None:
         """The existing request owner commits its status and this witness together."""
         if not connection.in_transaction:
@@ -283,7 +287,7 @@ class BusinessSourceMutation:
         connection.execute(
             "insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?) "
             "on conflict(state_key) do update set payload_json=excluded.payload_json, updated_at=excluded.updated_at",
-            (INSTALLATION_STATE_KEY, _witness(self.committed_anchor).decode("utf-8"), now),
+            (INSTALLATION_STATE_KEY, self.witness_text(), now),
         )
 
 

@@ -9,6 +9,12 @@
 //! generation advances with every new row signed, as
 //! `_import_policy_rows_on_connection` did.
 //!
+//! A business-source install sends `business_witness`, the installation
+//! witness the Python source owner built for its committed anchor. It must be
+//! a `replace` with no rows: the imported rows go, the generation advances,
+//! and the witness lands in `sync_state` in the same transaction, as
+//! `BusinessSourceMutation.stage_on_connection` did beside the row writes.
+//!
 //! `apply_mcp_policy_request` runs the same write inside the request's own
 //! transaction. Every check comes first, so a refused apply writes nothing
 //! except the expiry of a request found past its deadline:
@@ -37,6 +43,8 @@ use crate::guard_store_policy_upsert::{advance_generation, signing_material};
 const IMPORT_SOURCE: &str = "policy-yaml-import";
 const RECOVERY_PREFIX: &str = "business_policy_request_recovered_v1/";
 const INTEGRITY_STATE_KEY: &str = "policy_integrity";
+/// `native_business_source_store.INSTALLATION_STATE_KEY`.
+const BUSINESS_WITNESS_KEY: &str = "business_source_installation_v1";
 /// The imported-row columns a policy document is rebuilt from.
 const FINGERPRINT_COLUMNS: &str = "decision_id, harness, scope, artifact_id, artifact_hash, \
      workspace, publisher, action, reason, owner, source, expires_at, \
@@ -64,7 +72,21 @@ fn rows_fingerprint(connection: &Connection) -> StoreResult<String> {
 
 /// `GuardStore.import_policy_document` (`store_policy_document.py`).
 pub(crate) fn import_policy_rows(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    let witness = business_witness(args)?;
     let (inserted, replaced, next_control_state) = write_rows(connection, args)?;
+    if let Some(witness) = witness {
+        exec(
+            connection,
+            "insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?) \
+             on conflict(state_key) do update set payload_json = excluded.payload_json, \
+             updated_at = excluded.updated_at",
+            &[
+                json!(BUSINESS_WITNESS_KEY),
+                json!(witness),
+                json!(args.str("now")?),
+            ],
+        )?;
+    }
     Ok(json!({
         "inserted": inserted,
         "replaced": replaced,
@@ -101,6 +123,22 @@ pub(crate) fn apply_mcp_policy_request(connection: &Connection, args: &Args) -> 
         },
         "next_control_state": next_control_state,
     }))
+}
+
+/// The installation witness a business-source install stages, checked before
+/// any row is touched: only a `replace` with no rows may carry one.
+fn business_witness<'a>(args: &Args<'a>) -> StoreResult<Option<&'a str>> {
+    let Some(witness) = args.opt_str("business_witness")? else {
+        return Ok(None);
+    };
+    let no_rows = args
+        .raw("rows")
+        .and_then(Value::as_array)
+        .is_some_and(Vec::is_empty);
+    if witness.is_empty() || args.str("mode")? != "replace" || !no_rows {
+        return value_error("native_business_source_installation_incoherent");
+    }
+    Ok(Some(witness))
 }
 
 fn refused(code: &str) -> StoreResult<Option<Value>> {

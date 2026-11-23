@@ -357,6 +357,7 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "cache_advisories"
         | "upsert_policy"
         | "clear_policy_decisions"
+        | "resign_policy_rows"
         | "import_policy_rows"
         | "apply_mcp_policy_request"
         | "stage_mcp_policy_request"
