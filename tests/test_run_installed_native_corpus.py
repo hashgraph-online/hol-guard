@@ -7,6 +7,7 @@ import subprocess
 import pytest
 
 from scripts import run_installed_canary, run_installed_native_corpus
+from tests import guard_command_corpus_runner as corpus_runner
 
 
 def test_timeout_detail_keeps_recent_frames_when_later_progress_is_noisy() -> None:
@@ -65,7 +66,12 @@ def test_phase_timer_accumulates_cost_without_logging_case_material(monkeypatch,
     assert "batch=2 elapsed=0.500 total=0.750" in output.err
 
 
-@pytest.mark.parametrize("platform,expected_timeout", [("win32", 180), ("linux", 60)])
+# The POSIX cap follows the source runner's own worker deadline, which the
+# corpus fixture's evaluation budget sets; Windows keeps its own fixed cap.
+@pytest.mark.parametrize(
+    "platform,expected_timeout",
+    [("win32", 180), ("linux", corpus_runner.WORKER_TIMEOUT_SECONDS)],
+)
 def test_installed_worker_keeps_platform_specific_hard_timeout(monkeypatch, platform, expected_timeout):
     monkeypatch.setattr(run_installed_native_corpus.sys, "platform", platform)
     captured = []

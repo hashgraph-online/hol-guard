@@ -19,8 +19,27 @@ from typing import TypedDict, cast
 # aggregate peak below the 512 MiB corpus budget, including coverage overhead.
 EVALUATION_SHARD_COUNT = 3
 MAX_CONCURRENT_WORKERS = EVALUATION_SHARD_COUNT
-WORKER_TIMEOUT_SECONDS = 60
 REPO_ROOT = Path(__file__).parents[1]
+MANIFEST_PATH = REPO_ROOT / "tests" / "fixtures" / "guard-command-corpus" / "seed-manifest.json"
+
+
+def _evaluation_budget_seconds() -> int:
+    """The per-worker evaluation budget the corpus fixture declares."""
+    payload = cast(object, json.loads(MANIFEST_PATH.read_text(encoding="utf-8")))
+    if not isinstance(payload, dict):
+        raise ValueError("command corpus seed manifest must be an object")
+    return int(str(cast(dict[str, object], payload)["evaluation_budget_seconds"]))
+
+
+# A worker that overruns the budget must still report what it measured. When
+# the kill deadline equals the budget, the coordinator only ever sees
+# `TimeoutExpired`, which names no elapsed time and cannot say whether the
+# corpus grew or the host was slow, and the readable budget assertion in
+# `test_guard_command_corpus.py` can never run. The deadline is therefore the
+# budget plus the spawn and import overhead a worker pays before it evaluates
+# anything, and the budget itself is asserted on the returned measurement.
+WORKER_SPAWN_OVERHEAD_SECONDS = 15
+WORKER_TIMEOUT_SECONDS = _evaluation_budget_seconds() + WORKER_SPAWN_OVERHEAD_SECONDS
 SYNTHETIC_CWD = REPO_ROOT / "workspace"
 SYNTHETIC_HOME = REPO_ROOT / "home"
 if str(REPO_ROOT) not in sys.path:
