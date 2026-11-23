@@ -32,12 +32,13 @@ fn explicit_choice(config: &Map<String, Value>, key: &str, id: Option<&str>) -> 
 /// Whether `decision` is due only to Guard not recognising the server.
 fn non_recognition(subject: &McpToolPolicySubjectV1, decision: &Decision) -> bool {
     let command = subject.artifact.command.as_deref().unwrap_or("");
-    matches!(decision.action, GuardAction::Allow | GuardAction::Review)
-        && matches!(
-            decision.policy_action(),
-            GuardAction::Allow | GuardAction::Review
-        )
-        && decision.signals.is_empty()
+    matches!(
+        decision.action,
+        GuardAction::Allow | GuardAction::Warn | GuardAction::Review
+    ) && matches!(
+        decision.policy_action(),
+        GuardAction::Allow | GuardAction::Warn | GuardAction::Review
+    ) && decision.signals.is_empty()
         && decision.risk_categories.is_empty()
         && BASE_SOURCES.contains(&decision.source.as_str())
         && matches!(
@@ -103,8 +104,11 @@ pub(crate) fn unrecognized_allow_setup(
     subject: &McpToolPolicySubjectV1,
     decision: &Decision,
 ) -> Option<Value> {
-    if decision.action != GuardAction::Allow
-        || decision.policy_action() != GuardAction::Allow
+    if !matches!(decision.action, GuardAction::Allow | GuardAction::Warn)
+        || !matches!(
+            decision.policy_action(),
+            GuardAction::Allow | GuardAction::Warn
+        )
         || !decision.signals.is_empty()
         || matches!(
             decision.source.as_str(),
