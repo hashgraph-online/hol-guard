@@ -254,7 +254,14 @@ fn record_page(
             .iter()
             .any(|item| item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call"))
         {
-            return Err("mcp_relay_record_not_plain".to_owned());
+            let code = paged
+                .iter()
+                .find(|item| {
+                    item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call")
+                })
+                .map(|item| mcp_relay_receipt::rejection_code(&item.record))
+                .unwrap_or("unknown");
+            return Err(format!("mcp_relay_record_not_plain:{code}"));
         }
         return Ok(None);
     };
@@ -277,7 +284,12 @@ fn record_page(
         .iter()
         .any(|item| item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call"))
     {
-        return Err("mcp_relay_record_not_plain".to_owned());
+        let code = paged
+            .iter()
+            .find(|item| item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call"))
+            .map(|item| mcp_relay_receipt::rejection_code(&item.record))
+            .unwrap_or("unknown");
+        return Err(format!("mcp_relay_record_not_plain:{code}"));
     }
     Ok(fatal)
 }

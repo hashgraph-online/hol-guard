@@ -116,6 +116,10 @@ pub(crate) fn is_plain(record: &Value) -> bool {
     plain_either(record)
 }
 
+pub(crate) fn rejection_code(record: &Value) -> &'static str {
+    record::rejection_code(record)
+}
+
 fn plain_either(record: &Value) -> bool {
     plain(record).is_some() || package::plain(record).is_some()
 }
