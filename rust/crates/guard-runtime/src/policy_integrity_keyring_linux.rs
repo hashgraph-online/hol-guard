@@ -28,7 +28,7 @@ use std::time::Instant;
 use secret_service::blocking::SecretService;
 use secret_service::EncryptionType;
 
-use super::mirrored::{Primary, WriteFailure};
+use super::mirrored::{Existing, Primary, WriteFailure};
 
 /// `KeyringBackend.appid` for the Python library's own items.
 const APPLICATION: &str = "Python keyring library";
@@ -83,6 +83,27 @@ impl SecretServiceKeyring {
 
 fn read(service_name: &str, secret_id: &str) -> Result<Option<String>, ()> {
     let service = SecretService::connect(EncryptionType::Dh).map_err(|_| ())?;
+    read_from(&service, service_name, secret_id)
+}
+
+/// Read one item, telling a session bus with no Secret Service apart from a
+/// service that could not give the item.
+fn lookup(service_name: &str, secret_id: &str) -> Existing {
+    let Ok(service) = SecretService::connect(EncryptionType::Dh) else {
+        return Existing::NoService;
+    };
+    match read_from(&service, service_name, secret_id) {
+        Ok(Some(_)) => Existing::Present,
+        Ok(None) => Existing::Absent,
+        Err(()) => Existing::Unreadable,
+    }
+}
+
+fn read_from(
+    service: &SecretService<'_>,
+    service_name: &str,
+    secret_id: &str,
+) -> Result<Option<String>, ()> {
     let collection = service.get_default_collection().map_err(|_| ())?;
     if collection.is_locked().map_err(|_| ())? {
         return Err(());
@@ -134,6 +155,16 @@ fn write(service_name: &str, secret_id: &str, value: &str) -> Result<(), WriteFa
         )
         .map(|_| ())
         .map_err(|error| create_failure(&error))
+}
+
+impl SecretServiceKeyring {
+    /// What the keyring holds for `secret_id`, within the deadline. A
+    /// service that does not answer in time is unreadable, not absent.
+    pub(super) fn existing(&self, secret_id: &str) -> Existing {
+        let (service_name, secret_id) = (self.service_name.clone(), secret_id.to_owned());
+        self.bounded(None, move || Ok(lookup(&service_name, &secret_id)))
+            .unwrap_or(Existing::Unreadable)
+    }
 }
 
 impl Primary for SecretServiceKeyring {

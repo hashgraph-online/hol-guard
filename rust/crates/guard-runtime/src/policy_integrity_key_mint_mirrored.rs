@@ -89,6 +89,33 @@ pub(super) fn mint(
     }
 }
 
+/// What a read of the keyring copy of one secret found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Existing {
+    /// No Secret Service on the session bus. Python's store then has no
+    /// keyring to mirror and reads the vault alone.
+    NoService,
+    /// The keyring answered and holds no copy.
+    Absent,
+    /// The keyring holds a copy, which Python prefers on its next read.
+    Present,
+    /// A Secret Service answered but its copy could not be read: locked, or
+    /// the exchange failed or ran out of time.
+    Unreadable,
+}
+
+/// Whether the vault write of a control state may stand. Only a keyring copy
+/// Python would prefer must be brought in step, and a failed update or an
+/// unreadable copy refuses the write, since the stale copy would roll the
+/// generation back. Without a Secret Service the vault is the selected store.
+pub(super) fn mirror_control_state(found: Existing, update: impl FnOnce() -> bool) -> bool {
+    match found {
+        Existing::NoService | Existing::Absent => true,
+        Existing::Present => update(),
+        Existing::Unreadable => false,
+    }
+}
+
 #[cfg(test)]
 #[path = "policy_integrity_key_mint_mirrored_tests.rs"]
 mod tests;
