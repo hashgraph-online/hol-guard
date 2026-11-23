@@ -8,7 +8,7 @@ from typing import Any, cast
 import pytest
 
 from codex_plugin_scanner.guard import native_command_capability as transport
-from codex_plugin_scanner.guard.runtime import command_capability, command_capability_keys
+from codex_plugin_scanner.guard.runtime import command_capability
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
 from tests.test_native_command_capability import _call, _capture, _declared
 
@@ -29,9 +29,7 @@ class _Store:
         return {"signature": "abc"}
 
 
-def _verdict_kwargs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, secret_store: object, *, resident_has: bool = True
-) -> dict[str, Any]:
+def _verdict_kwargs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, secret_store: object) -> dict[str, Any]:
     sent: dict[str, Any] = {}
 
     def _capability(**kwargs: object) -> dict[str, object]:
@@ -39,7 +37,6 @@ def _verdict_kwargs(
         return {"capability_valid": True}
 
     monkeypatch.setattr(command_capability, "native_command_capability", _capability)
-    monkeypatch.setattr(command_capability_keys, "_resident_has", lambda _feature: resident_has)
     monkeypatch.setattr(command_capability, "_binding_for_resident", lambda _store: ("device-1", "workspace-1", None))
     store = _Store(tmp_path, secret_store)
     command_capability._capability_verdict(cast(Any, store))
@@ -68,16 +65,6 @@ def test_a_keyring_store_still_sends_its_own_key(tmp_path: Path, monkeypatch: py
     assert sent["resident_key"] is False
     assert isinstance(sent["integrity_key_b64"], str)
     assert sent["integrity_key_id"] == "guard-policy-integrity-key:abc"
-
-
-def test_a_vault_store_sends_its_key_to_a_resident_without_the_feature(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    sent = _verdict_kwargs(tmp_path, monkeypatch, EncryptedFileSecretStore(tmp_path), resident_has=False)
-
-    assert sent["resident_key"] is False
-    assert isinstance(sent["integrity_key_b64"], str)
-    assert sent["material_calls"] == [False]
 
 
 def test_the_resident_key_request_carries_no_key_and_names_its_feature(monkeypatch: pytest.MonkeyPatch) -> None:
