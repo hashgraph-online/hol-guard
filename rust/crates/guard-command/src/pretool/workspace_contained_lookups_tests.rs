@@ -25,10 +25,7 @@ fn a_lookup_of_a_program_on_path_still_runs_contained() {
     if reason("omp", control, &ws, true) == CONTAINED {
         for command in ["which sh", "command -v sh", "type sh"] {
             let reason = reason("omp", command, &ws, true);
-            assert!(
-                reason == CONTAINED || reason != "native_command_review_required",
-                "{command}: {reason}"
-            );
+            assert_eq!(reason, CONTAINED, "{command}");
         }
     }
     let _ = std::fs::remove_dir_all(&ws);

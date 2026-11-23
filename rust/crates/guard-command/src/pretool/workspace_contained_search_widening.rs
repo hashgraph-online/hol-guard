@@ -8,11 +8,11 @@
 //! still read a secret kept under any other name and print it.
 //!
 //! An inclusion glob is the common case: `rg --files -g '*.md'` is how agents
-//! list files. ripgrep lets a whitelisting glob bring back a hidden entry, so
-//! a glob keeps the review only when the search roots hold a hidden entry the
-//! glob actually brings back. Every other way of widening keeps it outright.
+//! list files. ripgrep lets a whitelisting glob bring back a hidden or ignored
+//! file, so a glob keeps the review only when the search roots hold such a
+//! file the glob actually brings back. Every other way of widening keeps it
+//! outright.
 
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -41,6 +41,49 @@ const TOOL_DOTFILES: &[&str] = &[
     ".rgignore",
 ];
 
+/// Short flags that take a value, in the same argument or the next one.
+const SHORT_WITH_VALUE: &str = "ABCdEefgjMmrtT";
+
+/// Long flags that take a value when it is not given with `=`.
+const LONG_WITH_VALUE: &[&str] = &[
+    "after-context",
+    "before-context",
+    "color",
+    "colors",
+    "context",
+    "context-separator",
+    "dfa-size-limit",
+    "encoding",
+    "engine",
+    "field-context-separator",
+    "field-match-separator",
+    "file",
+    "generate",
+    "glob",
+    "hostname-bin",
+    "hyperlink-format",
+    "iglob",
+    "ignore-file",
+    "max-columns",
+    "max-count",
+    "max-depth",
+    "maxdepth",
+    "max-filesize",
+    "path-separator",
+    "pre",
+    "pre-glob",
+    "regex-size-limit",
+    "regexp",
+    "replace",
+    "sort",
+    "sortr",
+    "threads",
+    "type",
+    "type-add",
+    "type-clear",
+    "type-not",
+];
+
 /// Whether a segment runs `rg` so that it reaches hidden or ignored files.
 /// `cwd` is the directory the command's relative paths resolve against.
 pub(super) fn widens_past_ignore_rules(model: &crate::CanonicalCommandV1, cwd: &Path) -> bool {
@@ -58,13 +101,19 @@ struct Inclusion {
 }
 
 fn segment_widens(arguments: &[String], cwd: &Path) -> bool {
-    let mut inclusions = Vec::new();
-    let mut operands = Vec::new();
+    let mut globs = Vec::new();
+    let mut positionals = Vec::new();
+    // Set when the pattern comes from a flag, or there is none: every
+    // positional is then a path.
+    let mut pattern_from_flag = false;
     // `--` is not read as the end of options: `--context-separator --` takes
     // it as a value, so a flag after it may still be live.
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
-        let glob = if let Some(long) = argument.strip_prefix("--") {
+        if argument == "--" {
+            continue;
+        }
+        if let Some(long) = argument.strip_prefix("--") {
             let (name, value) = match long.split_once('=') {
                 Some((name, value)) => (name, Some(value.to_owned())),
                 None => (long, None),
@@ -73,50 +122,68 @@ fn segment_widens(arguments: &[String], cwd: &Path) -> bool {
             {
                 return true;
             }
-            if !matches!(name, "glob" | "iglob") {
+            if matches!(name, "files" | "file" | "regexp" | "type-list") {
+                pattern_from_flag = true;
+            }
+            if value.is_none() && !LONG_WITH_VALUE.contains(&name) {
                 continue;
             }
             let Some(value) = value.or_else(|| arguments.next().cloned()) else {
                 return true;
             };
-            Some((value, name == "iglob"))
+            if matches!(name, "glob" | "iglob") {
+                globs.push((value, name == "iglob"));
+            }
         } else if let Some(letters) = argument
             .strip_prefix('-')
             .filter(|letters| !letters.is_empty())
         {
-            // A short bundle such as `-nu` or `-g*.ts`; letters after `g` are its value.
-            let (flags, value) = match letters.split_once('g') {
-                Some((flags, value)) => (flags, Some(value)),
-                None => (letters, None),
-            };
-            if flags.contains(['u', '.', 'L']) {
-                return true;
-            }
-            match value {
-                None => continue,
-                Some("") => match arguments.next() {
-                    Some(value) => Some((value.clone(), false)),
-                    None => return true,
-                },
-                Some(value) => Some((value.to_owned(), false)),
+            // A short bundle such as `-nu` or `-g*.ts`; the letters after the
+            // first flag that takes a value are that value.
+            for (index, letter) in letters.char_indices() {
+                if matches!(letter, 'u' | '.' | 'L') {
+                    return true;
+                }
+                if !SHORT_WITH_VALUE.contains(letter) {
+                    continue;
+                }
+                let rest = &letters[index + letter.len_utf8()..];
+                let value = if rest.is_empty() {
+                    match arguments.next() {
+                        Some(value) => value.clone(),
+                        None => return true,
+                    }
+                } else {
+                    rest.to_owned()
+                };
+                match letter {
+                    'e' | 'f' => pattern_from_flag = true,
+                    'g' => globs.push((value, false)),
+                    _ => {}
+                }
+                break;
             }
         } else {
-            operands.push(argument.as_str());
-            None
-        };
-        if let Some((text, ignore_case)) = glob {
-            // An exclusion glob only removes files from the search.
-            if !text.starts_with('!') {
-                inclusions.push(Inclusion { text, ignore_case });
-            }
+            positionals.push(argument.as_str());
         }
     }
+    // An exclusion glob only removes files from the search.
+    let inclusions: Vec<Inclusion> = globs
+        .into_iter()
+        .filter(|(text, _)| !text.starts_with('!'))
+        .map(|(text, ignore_case)| Inclusion { text, ignore_case })
+        .collect();
     if inclusions.is_empty() {
         return false;
     }
-    // The pattern cannot be told from a root by position alone, so every
-    // operand naming a directory is walked; with none, ripgrep searches `cwd`.
-    let mut roots: Vec<PathBuf> = operands
+    // Without a pattern flag the first positional is the pattern, even when
+    // it names a directory. With no directory to search, ripgrep searches `cwd`.
+    let paths = if pattern_from_flag {
+        &positionals[..]
+    } else {
+        positionals.get(1..).unwrap_or(&[])
+    };
+    let mut roots: Vec<PathBuf> = paths
         .iter()
         .map(|operand| cwd.join(operand))
         .filter(|path| std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir()))
@@ -128,7 +195,8 @@ fn segment_widens(arguments: &[String], cwd: &Path) -> bool {
 }
 
 /// Whether walking `roots` the way ripgrep does with these inclusion globs
-/// reaches a hidden file, or a file inside a hidden directory.
+/// reaches a file its ignore rules would otherwise skip: a hidden file, a file
+/// inside a hidden directory, or a file an ignore file excludes.
 fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusion]) -> bool {
     let mut inspected = 0_usize;
     let mut pending: Vec<Pending> = roots
@@ -136,27 +204,23 @@ fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusi
         .map(|root| Pending {
             directory: root.clone(),
             hidden: false,
+            ignored: false,
             matched: false,
             in_repository: in_repository(root),
-            ignored_names: Rc::new(ancestor_ignored_names(root)),
+            rules: Rc::new(ancestor_rules(root)),
         })
         .collect();
     while let Some(current) = pending.pop() {
         let Ok(entries) = std::fs::read_dir(&current.directory) else {
             continue;
         };
-        // ripgrep reads `.gitignore` only inside a git repository.
-        let local = if current.in_repository {
-            IgnoredNames::read(&current.directory)
+        let local = IgnoreFile::read(&current.directory, current.in_repository);
+        let rules = if local.rules.is_empty() {
+            Rc::clone(&current.rules)
         } else {
-            IgnoredNames::default()
-        };
-        let below = if local.anywhere.is_empty() {
-            Rc::clone(&current.ignored_names)
-        } else {
-            let mut names = (*current.ignored_names).clone();
-            names.extend(local.anywhere.iter().cloned());
-            Rc::new(names)
+            let mut rules = (*current.rules).clone();
+            rules.push(Rc::new(local));
+            Rc::new(rules)
         };
         for entry in entries {
             inspected += 1;
@@ -179,10 +243,11 @@ fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusi
             let hidden = current.hidden || name.starts_with('.');
             let matched = current.matched || included(&path, &name, cwd, inclusions);
             if kind.is_dir() {
+                // A rule this walk cannot read prunes nothing, so the walk
+                // reads more rather than less.
+                let ignored = is_ignored(&rules, &path, &name, true, false);
                 // A hidden or ignored directory is entered only when a glob
                 // names it or could name something inside it.
-                let ignored = !local.kept.contains(name.as_ref())
-                    && (local.here.contains(name.as_ref()) || below.contains(name.as_ref()));
                 if (name.starts_with('.') || ignored)
                     && !matched
                     && !included(&path.join(INSIDE), INSIDE, cwd, inclusions)
@@ -192,11 +257,16 @@ fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusi
                 pending.push(Pending {
                     directory: path,
                     hidden,
+                    ignored: current.ignored || ignored,
                     matched,
                     in_repository: current.in_repository,
-                    ignored_names: Rc::clone(&below),
+                    rules: Rc::clone(&rules),
                 });
-            } else if hidden && matched && !TOOL_DOTFILES.contains(&name.as_ref()) {
+            } else if matched
+                && !TOOL_DOTFILES.contains(&name.as_ref())
+                && (hidden || current.ignored || is_ignored(&rules, &path, &name, false, true))
+            {
+                // A rule this walk cannot read counts as excluding the file.
                 return true;
             }
         }
@@ -208,58 +278,117 @@ struct Pending {
     directory: PathBuf,
     /// Inside a hidden directory.
     hidden: bool,
+    /// Inside a directory an ignore file excludes.
+    ignored: bool,
     /// Inside a directory an inclusion glob names.
     matched: bool,
     /// Inside a git repository, where ripgrep honours `.gitignore`.
     in_repository: bool,
-    /// Directory names an ignore file above this one excludes at any depth.
-    ignored_names: Rc<HashSet<String>>,
+    /// The ignore files that apply here, outermost first.
+    rules: Rc<Vec<Rc<IgnoreFile>>>,
 }
 
-/// The plain directory names one `.gitignore` excludes. Only literal names
-/// are read: a rule with a wildcard or an inner `/` is left out, which only
-/// makes the walk read more, never less.
-#[derive(Default)]
-struct IgnoredNames {
-    /// Unanchored names, excluded at any depth below this directory.
-    anywhere: HashSet<String>,
-    /// `/name` rules, excluded only directly inside this directory.
-    here: HashSet<String>,
-    /// Names a `!` rule here puts back; never pruned.
-    kept: HashSet<String>,
+/// The rules of the ignore files in one directory, in rising precedence:
+/// `.git/info/exclude` and `.gitignore` inside a repository, then `.ignore`
+/// and `.rgignore`, which ripgrep reads everywhere.
+struct IgnoreFile {
+    base: PathBuf,
+    rules: Vec<Rule>,
 }
 
-impl IgnoredNames {
-    fn read(directory: &Path) -> Self {
-        let mut names = Self::default();
-        let Ok(text) = std::fs::read_to_string(directory.join(".gitignore")) else {
-            return names;
+impl IgnoreFile {
+    fn read(directory: &Path, in_repository: bool) -> Self {
+        let mut names = Vec::new();
+        if in_repository {
+            names.extend([".git/info/exclude", ".gitignore"]);
+        }
+        names.extend([".ignore", ".rgignore"]);
+        let rules = names
+            .into_iter()
+            .filter_map(|name| std::fs::read_to_string(directory.join(name)).ok())
+            .flat_map(|text| {
+                text.lines()
+                    .take(MAX_IGNORE_LINES)
+                    .filter_map(Rule::parse)
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        Self {
+            base: directory.to_path_buf(),
+            rules,
+        }
+    }
+}
+
+/// One gitignore line.
+struct Rule {
+    pattern: String,
+    negated: bool,
+    /// Matched against the path from the ignore file's directory, not the name.
+    anchored: bool,
+    directory_only: bool,
+}
+
+impl Rule {
+    fn parse(line: &str) -> Option<Self> {
+        let line = line.trim_end();
+        if line.is_empty() || line.starts_with('#') {
+            return None;
+        }
+        let (negated, rule) = match line.strip_prefix('!') {
+            Some(rule) => (true, rule),
+            None => (false, line),
         };
-        for line in text.lines().take(MAX_IGNORE_LINES) {
-            let line = line.trim();
-            let (negated, rule) = match line.strip_prefix('!') {
-                Some(rule) => (true, rule),
-                None => (false, line),
-            };
-            if rule.is_empty() || rule.starts_with('#') {
-                continue;
-            }
-            let anchored = rule.starts_with('/');
-            let name = rule.trim_start_matches('/').trim_end_matches('/');
-            if name.is_empty() || name.contains(['/', '*', '?', '[', '\\']) {
-                continue;
-            }
-            if negated {
-                names.kept.insert(name.to_owned());
-            } else if anchored {
-                names.here.insert(name.to_owned());
-            } else {
-                names.anywhere.insert(name.to_owned());
+        let rule = rule.strip_prefix('\\').unwrap_or(rule);
+        let directory_only = rule.ends_with('/');
+        let rule = rule.trim_end_matches('/');
+        let anchored = rule.contains('/');
+        let pattern = rule.trim_start_matches('/');
+        if pattern.is_empty() {
+            return None;
+        }
+        Some(Self {
+            pattern: pattern.to_owned(),
+            negated,
+            anchored,
+            directory_only,
+        })
+    }
+
+    /// `None` when the rule cannot be read for this entry.
+    fn matches(&self, base: &Path, path: &Path, name: &str, is_dir: bool) -> Option<bool> {
+        if self.directory_only && !is_dir {
+            return Some(false);
+        }
+        let subject = if self.anchored {
+            path.strip_prefix(base).ok()?.to_str()?.replace('\\', "/")
+        } else {
+            name.to_owned()
+        };
+        crate::pretool::search_scope_glob::glob_matches(&self.pattern, &subject).ok()
+    }
+}
+
+/// Whether the ignore files that apply exclude this entry. The deepest file
+/// decides, and within a file the last matching line; `unreadable` is the
+/// answer when a rule cannot be read.
+fn is_ignored(
+    files: &[Rc<IgnoreFile>],
+    path: &Path,
+    name: &str,
+    is_dir: bool,
+    unreadable: bool,
+) -> bool {
+    for file in files.iter().rev() {
+        for rule in file.rules.iter().rev() {
+            match rule.matches(&file.base, path, name, is_dir) {
+                Some(true) => return !rule.negated,
+                Some(false) => {}
+                None => return unreadable,
             }
         }
-        names.anywhere.retain(|name| !names.kept.contains(name));
-        names
     }
+    false
 }
 
 fn in_repository(root: &Path) -> bool {
@@ -268,23 +397,24 @@ fn in_repository(root: &Path) -> bool {
         .any(|ancestor| ancestor.join(".git").exists())
 }
 
-/// Unanchored names the `.gitignore` files between `root` and its repository
-/// top exclude. ripgrep reads those ancestors too.
-fn ancestor_ignored_names(root: &Path) -> HashSet<String> {
-    let mut names = HashSet::new();
-    if !in_repository(root) {
-        return names;
-    }
+/// The ignore files in the directories above `root` that ripgrep also reads:
+/// git's up to the repository top, `.ignore` and `.rgignore` above it too.
+fn ancestor_rules(root: &Path) -> Vec<Rc<IgnoreFile>> {
+    // A root that is a repository top reads no git rules from above it.
+    let mut inside = !root.join(".git").exists() && in_repository(root);
+    let mut files = Vec::new();
     for ancestor in root.ancestors().skip(1).take(MAX_ANCESTORS) {
-        names.extend(IgnoredNames::read(ancestor).anywhere);
-        if ancestor.join(".git").exists() {
-            break;
+        let reads_git_rules = inside;
+        if inside && ancestor.join(".git").exists() {
+            inside = false;
+        }
+        let file = IgnoreFile::read(ancestor, reads_git_rules);
+        if !file.rules.is_empty() {
+            files.push(Rc::new(file));
         }
     }
-    if root.join(".git").exists() {
-        names.clear();
-    }
-    names
+    files.reverse();
+    files
 }
 
 /// Whether one inclusion glob names this entry, read the way ripgrep reads an

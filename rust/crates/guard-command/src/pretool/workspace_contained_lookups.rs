@@ -6,7 +6,9 @@
 //! definitions, so for a name no PATH directory holds it reports "not found"
 //! where the session would print a function body or an alias. That is a wrong
 //! answer, not a safe one, and the review the lookup earned is the honest
-//! response. A name PATH does resolve gets the same answer in the sandbox.
+//! response. This covers only names no PATH directory holds. A session alias
+//! or function that shadows a program on PATH is not seen here: the sandbox
+//! reports the program, which is also what a non-interactive shell runs.
 
 use std::path::Path;
 
