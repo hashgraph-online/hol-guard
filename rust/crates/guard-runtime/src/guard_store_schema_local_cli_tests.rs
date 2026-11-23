@@ -177,3 +177,37 @@ fn a_marker_of_the_wrong_type_is_invalid() {
         .expect("marker");
     assert_eq!(refusal(&connection), "invalid local CLI schema marker");
 }
+
+#[test]
+fn a_failed_rebuild_keeps_the_previous_tables_and_marker() {
+    let connection = store_at(6, &checksum(6));
+    connection
+        .execute_batch(V1_OBSERVATION)
+        .expect("observation");
+    connection.execute_batch(CATALOG_TABLE).expect("v6 catalog");
+    connection
+        .execute_batch(
+            "create table local_cli_command_grant (cli_id text not null, \
+             command_id text not null, state text not null, primary key (cli_id, command_id)); \
+             insert into local_cli_command_grant values ('cli', 'status', 'maybe');",
+        )
+        .expect("v6 grant the rebuilt table rejects");
+    for _ in 0..2 {
+        ensure_local_cli(&connection).expect_err("the copy fails");
+        assert_eq!(marker(&connection), (6, checksum(6)));
+        let renamed: i64 = connection
+            .query_row(
+                "select count(*) from sqlite_master where name = 'local_cli_command_grant_v6'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count");
+        assert_eq!(renamed, 0, "the rename is rolled back");
+        let state: String = connection
+            .query_row("select state from local_cli_command_grant", [], |row| {
+                row.get(0)
+            })
+            .expect("row kept");
+        assert_eq!(state, "maybe");
+    }
+}
