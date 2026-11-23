@@ -303,7 +303,14 @@ fn signed(
         return finalized.get("generation").and_then(Value::as_u64);
     }
     if !committed {
-        put(home, &mut secrets, &control_ref, &current);
+        if !put(home, &mut secrets, &control_ref, &current) {
+            // A failed mirror must not strand the vault's pending generation
+            // when the store write never committed. Restore the encrypted
+            // copy directly so the next save can retry the operation.
+            if let Ok(serialized) = serde_json::to_string(&current) {
+                let _ = secrets.set_secret(&control_ref, &serialized);
+            }
+        }
     }
     // A committed write re-signed every local row at the next generation, so
     // the earlier state would reject them all as a rollback. The pending
