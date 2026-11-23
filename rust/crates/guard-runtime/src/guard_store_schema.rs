@@ -17,6 +17,8 @@ mod base_b;
 mod columns;
 #[path = "guard_store_schema_indexes.rs"]
 mod indexes;
+#[path = "guard_store_schema_versions.rs"]
+mod versions;
 
 /// The base statements, in the order the Python store runs them.
 pub(crate) fn base_statements() -> impl Iterator<Item = &'static str> {
@@ -87,9 +89,66 @@ pub(crate) fn create_cache_indexes(connection: &Connection) -> rusqlite::Result<
 }
 
 /// Create the approval-queue indexes. They read columns the approval upgrade
-/// adds, so they run after it.
+/// adds, so they run after it. A store from before version 9 first drops the
+/// index that version replaced.
 pub(crate) fn create_approval_indexes(connection: &Connection) -> rusqlite::Result<()> {
+    if !versions::applied(connection, 9)? {
+        connection.execute_batch(versions::DROP_RETIRED_APPROVAL_GROUP_INDEX)?;
+    }
     run_all(connection, &indexes::APPROVAL_INDEXES)
+}
+
+/// Record `version` unless it is already recorded.
+pub(crate) fn record_version(
+    connection: &Connection,
+    version: i64,
+    now: &str,
+) -> rusqlite::Result<()> {
+    if versions::applied(connection, version)? {
+        return Ok(());
+    }
+    versions::record(connection, version, now)
+}
+
+/// Create the receipt envelope table and, once, move legacy inline envelopes
+/// into it (version 5).
+pub(crate) fn upgrade_receipt_envelopes(
+    connection: &Connection,
+    now: &str,
+) -> rusqlite::Result<()> {
+    connection.execute_batch(versions::RECEIPT_ENVELOPES_TABLE)?;
+    if versions::applied(connection, 5)? {
+        return Ok(());
+    }
+    versions::migrate_v5_receipt_envelopes(connection)?;
+    versions::record(connection, 5, now)
+}
+
+/// Once per listed version, ask the resident to rebuild the receipt rollups
+/// (version 6 introduced them; version 16 changed how `warn` is bucketed).
+pub(crate) fn request_rollup_rebuilds(connection: &Connection, now: &str) -> rusqlite::Result<()> {
+    for version in [6, 16] {
+        if versions::applied(connection, version)? {
+            continue;
+        }
+        versions::request_rollup_rebuild(connection, now)?;
+        versions::record(connection, version, now)?;
+    }
+    Ok(())
+}
+
+/// Insert the local device row unless it is already there.
+pub(crate) fn ensure_local_device(
+    connection: &Connection,
+    installation_id: &str,
+    now: &str,
+) -> rusqlite::Result<()> {
+    versions::ensure_local_device(connection, installation_id, now)
+}
+
+/// Reopen approvals the legacy wait timeout expired.
+pub(crate) fn reopen_expired_approvals(connection: &Connection) -> rusqlite::Result<()> {
+    connection.execute_batch(versions::REOPEN_EXPIRED_APPROVALS)
 }
 
 /// Create the receipt indexes, then the receipt rollup tables and their
@@ -104,6 +163,10 @@ pub(crate) fn create_receipt_rollups(connection: &Connection) -> rusqlite::Resul
 pub(crate) fn create_storage_maintenance(connection: &Connection) -> rusqlite::Result<()> {
     run_all(connection, &indexes::STORAGE_MAINTENANCE)
 }
+
+#[cfg(test)]
+#[path = "guard_store_schema_versions_tests.rs"]
+mod versions_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_indexes_tests.rs"]
