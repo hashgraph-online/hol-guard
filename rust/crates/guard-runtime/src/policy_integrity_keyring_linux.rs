@@ -130,6 +130,14 @@ fn connect_failure(error: &secret_service::Error) -> Existing {
         Service::Zbus(zbus::Error::MethodError(name, _, _)) => {
             ABSENT_SERVICE_ERRORS.contains(&name.as_str())
         }
+        // No session bus at all: no address to dial (a headless or SSH
+        // session), or a bus socket that is not there. Any other I/O error
+        // reached a bus and stays unreadable.
+        Service::Zbus(zbus::Error::Address(_)) => true,
+        Service::Zbus(zbus::Error::InputOutput(io)) => matches!(
+            io.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+        ),
         _ => false,
     };
     if absent {
@@ -257,6 +265,29 @@ mod tests {
             connect_failure(&secret_service::Error::ZbusFdo(zbus::fdo::Error::TimedOut(
                 "bus busy".to_owned()
             ))),
+            Existing::Unreadable
+        ));
+        for kind in [
+            std::io::ErrorKind::NotFound,
+            std::io::ErrorKind::ConnectionRefused,
+        ] {
+            let error = zbus::Error::InputOutput(std::sync::Arc::new(kind.into()));
+            assert!(matches!(
+                connect_failure(&secret_service::Error::Zbus(error)),
+                Existing::NoService
+            ));
+        }
+        assert!(matches!(
+            connect_failure(&secret_service::Error::Zbus(zbus::Error::Address(
+                "no session bus address".to_owned()
+            ))),
+            Existing::NoService
+        ));
+        let denied = zbus::Error::InputOutput(std::sync::Arc::new(
+            std::io::ErrorKind::PermissionDenied.into(),
+        ));
+        assert!(matches!(
+            connect_failure(&secret_service::Error::Zbus(denied)),
             Existing::Unreadable
         ));
         for error in [
