@@ -45302,6 +45302,7 @@
     {
       "id": "shell-realpath-absent-credential-name",
       "fix_area": "shell",
+      "contained_ok": true,
       "harnesses": [
         "codex",
         "zcode",
