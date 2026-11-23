@@ -4,7 +4,7 @@
 use serde_json::{json, Map, Value};
 
 use super::super::super::tests::request_store;
-use super::{list_policy_decision_rows, read_policy_decision_row};
+use super::{list_local_policy_rows, list_policy_decision_rows, read_policy_decision_row};
 use crate::guard_store_args::Args;
 
 fn listed(connection: &rusqlite::Connection, args: Value) -> Vec<(String, String)> {
@@ -145,4 +145,46 @@ fn a_decision_id_that_is_not_an_integer_is_refused() {
         assert!(read_policy_decision_row(&connection, &Args(&args)).is_err());
     }
     assert!(read_policy_decision_row(&connection, &Args(&Map::new())).is_err());
+}
+
+fn local(connection: &rusqlite::Connection, args: Value) -> Vec<(String, String, Option<String>)> {
+    let args: Map<String, Value> = args.as_object().cloned().unwrap_or_default();
+    let reply = list_local_policy_rows(connection, &Args(&args)).unwrap();
+    reply["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            assert!(row.as_object().unwrap().contains_key("payload_mac"));
+            (
+                row["harness"].as_str().unwrap().to_owned(),
+                row["source"].as_str().unwrap().to_owned(),
+                row["expires_at"].as_str().map(str::to_owned),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn local_rows_leave_out_remote_sources_but_keep_temporary_grants() {
+    let connection = seeded();
+    assert_eq!(
+        local(&connection, json!({})),
+        vec![
+            (
+                "codex".to_owned(),
+                "approval-gate".to_owned(),
+                Some("2026-10-16T10:00:00Z".to_owned())
+            ),
+            ("codex".to_owned(), "approval-gate".to_owned(), None),
+            ("codex".to_owned(), "manual".to_owned(), None),
+        ]
+    );
+}
+
+#[test]
+fn a_harness_narrows_the_local_rows() {
+    let connection = seeded();
+    assert!(local(&connection, json!({"harness": "claude-code"})).is_empty());
+    assert_eq!(local(&connection, json!({"harness": "codex"})).len(), 3);
 }
