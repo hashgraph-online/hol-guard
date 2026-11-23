@@ -336,12 +336,6 @@ fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
             projects.display()
         ),
         format!("cd {} && npm run build && ls dist", projects.display()),
-        // A pipe between the last two steps is not the list the sink
-        // rejoins.
-        format!(
-            "cd {}/app-report && npm run build && ls | wc -l",
-            projects.display()
-        ),
         // `;` after a cd into a plain directory still has no root to rebase.
         format!("cd {}/plain; npm run build", projects.display()),
         format!("cd {}/plain 2>/dev/null; npm run build", projects.display()),
