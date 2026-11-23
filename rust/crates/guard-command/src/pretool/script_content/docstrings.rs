@@ -27,15 +27,33 @@ static DOC_COPY: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Code that hands back a docstring's value: by name, through a code
 /// object's constants, or through an attribute or namespace lookup whose
-/// name the scan cannot read as plain text (`getattr(f, '__d' 'oc__')`).
+/// name the scan cannot read as plain text. `getattr` is checked apart.
 static READS_DOCSTRING: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"__doc__|\bgetdoc\b|\bfunc_doc\b|\bco_consts\b|\b__code__\b|\bfunc_code\b",
         r"|\b__getattribute__\b|\battrgetter\b|\b__dict__\b|\b(?:vars|globals|locals)\s*\(",
-        r#"|\bgetattr(?:_static)?\s*\((?:[^,()]|\([^()]*\))*,\s*(?:[^'"\s]|"[^"]*"\s*[^\s,)]|'[^']*'\s*[^\s,)])"#,
     ))
     .unwrap()
 });
+
+static GETATTR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bgetattr(?:_static)?\b").unwrap());
+
+/// The one `getattr` shape whose attribute the scan can read: a direct call
+/// whose name is a single plain identifier literal (`getattr(obj, 'name')`).
+static PLAIN_GETATTR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"^\s*\((?:[^,()]|\([^()]*\))*,\s*(?:'\w+'|"\w+")\s*[,)]"#).unwrap()
+});
+
+/// Whether `code` reads a docstring back. Every mention of `getattr` counts,
+/// unless it is a call with a plain identifier for the name: an alias
+/// (`g = getattr`), unpacked arguments or a name built at run time could
+/// all name `__doc__`.
+fn reads(code: &str) -> bool {
+    READS_DOCSTRING.is_match(code)
+        || GETATTR
+            .find_iter(code)
+            .any(|found| !PLAIN_GETATTR.is_match(&code[found.end()..]))
+}
 
 /// A definition that runs user code when an attribute is assigned, which
 /// would see the value of a copied docstring.
@@ -52,9 +70,9 @@ pub(in crate::pretool) fn read_any<S: AsRef<str>>(sources: &[S]) -> bool {
     sources.iter().any(|source| {
         let source = source.as_ref();
         if hooked {
-            READS_DOCSTRING.is_match(source)
+            reads(source)
         } else {
-            READS_DOCSTRING.is_match(&DOC_COPY.replace_all(source, ""))
+            reads(&DOC_COPY.replace_all(source, ""))
         }
     })
 }
@@ -205,6 +223,9 @@ mod tests {
             "print(open(object.__getattribute__(f, n)).read())\n",
             "print(open(operator.attrgetter(n)(f)).read())\n",
             "print(open(vars(C)[n]).read())\n",
+            "a = (f, '__d' 'oc__')\nprint(open(getattr(*a)).read())\n",
+            "g = getattr\nprint(open(g(f, n)).read())\n",
+            "print(open(getattr(list((f,))[0], n)).read())\n",
         ] {
             assert!(read(code), "{code}");
         }
