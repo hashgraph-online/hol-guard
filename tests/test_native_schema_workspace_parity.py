@@ -29,9 +29,13 @@ def _normal(text: str) -> str:
 
 def _rust_statements(name: str) -> list[str]:
     source = SQL.read_text(encoding="utf-8")
-    match = re.search(rf"const {name}: \[&str; \d+\] = \[(.*?)\n\];", source, re.S)
+    match = re.search(rf"const {name}: \[&str; (\d+)\] = \[(.*?)\n\];", source, re.S)
     assert match is not None, name
-    return re.findall(r'r##"(.*?)"##', match.group(1), re.S)
+    statements = re.findall(r'r##"(.*?)"##', match.group(2), re.S)
+    # Every element must be a parsed literal: a statement in another literal
+    # form would run natively while escaping the comparison below.
+    assert len(statements) == int(match.group(1)), name
+    return statements
 
 
 def _rust_version(name: str) -> int:
