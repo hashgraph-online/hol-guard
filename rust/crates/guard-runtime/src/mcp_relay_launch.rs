@@ -62,6 +62,26 @@ fn arg_values(args: &RelayArgs) -> Vec<Value> {
     args.args.iter().cloned().map(Value::String).collect()
 }
 
+/// The inherited value of one configured name. Windows environment names
+/// are case-insensitive, as Python's `os.environ` reads them there, so a
+/// configured name whose casing differs from the inherited one still finds it.
+fn inherited_value<'a>(
+    inherited: &'a BTreeMap<String, String>,
+    key: &str,
+    fold_case: bool,
+) -> Option<&'a String> {
+    inherited.get(key).or_else(|| {
+        fold_case
+            .then(|| {
+                inherited
+                    .iter()
+                    .find(|(name, _)| name.eq_ignore_ascii_case(key))
+                    .map(|(_, value)| value)
+            })
+            .flatten()
+    })
+}
+
 /// `_prepare_launch` plus the executable check of `_start_process`.
 pub(crate) fn prepare(
     args: &RelayArgs,
@@ -71,7 +91,10 @@ pub(crate) fn prepare(
     let configured: BTreeMap<String, String> = args
         .server_env_keys
         .iter()
-        .filter_map(|key| Some((key.clone(), inherited.get(key)?.clone())))
+        .filter_map(|key| {
+            let value = inherited_value(inherited, key, cfg!(windows))?;
+            Some((key.clone(), value.clone()))
+        })
         .collect();
     let launch_env = build_launch_environment(inherited, &configured);
     let mut child_env = launch_env.clone();

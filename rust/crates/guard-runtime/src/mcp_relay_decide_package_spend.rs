@@ -124,9 +124,6 @@ pub(super) fn spend_package(
     let evidence = integrity_evidence(&rows, &state, key)?;
     // `claim_evidence_binding(connection, bundle=False)`.
     let binding = ClaimEvidenceBindingV1::default();
-    // A claim that commits may still queue an approval row, which needs room
-    // for the block's receipt; refuse before anything is claimed.
-    room_for_row(policy_store)?;
     let connection = open_for_claim(&request.guard_home)?;
     let now = store::utc_now().ok_or(PACKAGE_CLAIM_STORE)?;
     let decisions: Vec<Value> = rows
@@ -268,7 +265,7 @@ fn after_claim(
                 packaged.outcome,
                 package_lane::PackageOutcome::AskPackage(_)
             ) {
-                return queued(started, fresh, Write::Package(packaged));
+                return queued(started, policy_store, fresh, Write::Package(packaged));
             }
             spend_budget(started)?;
             settle_package(
@@ -299,7 +296,12 @@ fn after_claim(
                             policy_action,
                             &append,
                         )?;
-                        return queued(started, fresh, Write::Tool { prepared, append });
+                        return queued(
+                            started,
+                            policy_store,
+                            fresh,
+                            Write::Tool { prepared, append },
+                        );
                     }
                     queue::safe_alternative(
                         mode,
@@ -347,7 +349,16 @@ fn resolve_claimed(
 
 /// Hold a queued answer for the commit to write, if the claim still commits
 /// inside the relay's wait.
-fn queued(started: Instant, fresh: Resolved, write: Write) -> Result<Spent, &'static str> {
+/// A claim that queues an approval row needs room for the block's receipt.
+/// Checked here, inside the claim's transaction, so a full queue rolls the
+/// claim back; a claim that forwards or answers never needs that room.
+fn queued(
+    started: Instant,
+    policy_store: &PolicySnapshotStore,
+    fresh: Resolved,
+    write: Write,
+) -> Result<Spent, &'static str> {
+    room_for_row(policy_store)?;
     spend_budget(started)?;
     Ok(Spent::Queued(Box::new(Queued { fresh, write })))
 }
