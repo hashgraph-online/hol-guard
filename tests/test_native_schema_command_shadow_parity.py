@@ -37,9 +37,13 @@ def _source() -> str:
 
 
 def _rust_statements(name: str) -> list[str]:
-    match = re.search(rf"const {name}: \[&str; \d+\] = \[(.*?)\n\];", _source(), re.S)
+    match = re.search(rf"const {name}: \[&str; (\d+)\] = \[(.*?)\n\];", _source(), re.S)
     assert match is not None, name
-    return re.findall(r'r##"(.*?)"##', match.group(1), re.S)
+    statements = re.findall(r'r##"(.*?)"##', match.group(2), re.S)
+    # Every element must be a parsed literal: a statement in another literal
+    # form would run natively while escaping the comparison below.
+    assert len(statements) == int(match.group(1)), name
+    return statements
 
 
 def _rust_statement(name: str) -> str:
