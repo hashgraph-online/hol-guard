@@ -32,9 +32,13 @@ fn explicit_choice(config: &Map<String, Value>, key: &str, id: Option<&str>) -> 
 /// Whether `decision` is due only to Guard not recognising the server.
 fn non_recognition(subject: &McpToolPolicySubjectV1, decision: &Decision) -> bool {
     let command = subject.artifact.command.as_deref().unwrap_or("");
-    decision.action == GuardAction::Review
-        && decision.policy_action() == GuardAction::Review
-        && decision.signals.is_empty()
+    matches!(
+        decision.action,
+        GuardAction::Allow | GuardAction::Warn | GuardAction::Review
+    ) && matches!(
+        decision.policy_action(),
+        GuardAction::Allow | GuardAction::Warn | GuardAction::Review
+    ) && decision.signals.is_empty()
         && decision.risk_categories.is_empty()
         && BASE_SOURCES.contains(&decision.source.as_str())
         && matches!(
@@ -91,45 +95,6 @@ pub(crate) fn connector_setup_with_catalog(
         return None;
     }
     let identity_hash = unset_connector(subject.extension.as_ref()?, catalog)?;
-    Some(setup_value(subject, identity_hash))
-}
-
-/// Fallback for a clean allow with no local decision. The relay still promotes
-/// this to a setup review before it can forward the call.
-pub(crate) fn unrecognized_allow_setup(
-    subject: &McpToolPolicySubjectV1,
-    decision: &Decision,
-) -> Option<Value> {
-    if !matches!(decision.action, GuardAction::Allow | GuardAction::Warn)
-        || !matches!(
-            decision.policy_action(),
-            GuardAction::Allow | GuardAction::Warn
-        )
-        || !decision.signals.is_empty()
-        || matches!(
-            decision.source.as_str(),
-            "local-mcp-extension"
-                | "catalog-mcp-extension"
-                | "temporary-mcp-grant"
-                | "composio-action-review"
-        )
-        || explicit_choice(
-            &subject.config,
-            "artifact_actions",
-            Some(&subject.artifact_id),
-        )
-        || explicit_choice(
-            &subject.config,
-            "publisher_actions",
-            subject.publisher.as_deref(),
-        )
-    {
-        return None;
-    }
-    let extension = subject.extension.as_ref()?;
-    let identity_hash = crate::local_mcp_grant_identity::normalized_hash(
-        extension.server.identity_hash.as_deref(),
-    )?;
     Some(setup_value(subject, identity_hash))
 }
 
