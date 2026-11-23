@@ -177,11 +177,14 @@ def allow_ready_server(store: GuardStore, identity: McpServerIdentity) -> None:
         server_args_hash=identity.args_hash,
         help_status="ok",
     )
-    definition = next(tool for tool in _TOOLS if tool["name"] == READY_TOOL)
+    definitions = tuple(_TOOLS)
     store.replace_local_cli_commands(
         cli.cli_id,
-        (LocalCliCommand(READY_TOOL, READY_TOOL, READY_TOOL, "Look a value up"),),
-        mcp_catalog=McpCatalogResult(tools=(definition,), complete=True),
+        tuple(
+            LocalCliCommand(tool["name"], tool["name"], tool["name"], tool["description"])
+            for tool in definitions
+        ),
+        mcp_catalog=McpCatalogResult(tools=definitions, complete=True),
         identity_hash=identity.identity_hash,
         seen_at=seen_at,
     )
@@ -190,7 +193,7 @@ def allow_ready_server(store: GuardStore, identity: McpServerIdentity) -> None:
         state="allowed",
         expected_revision=store.read_local_cli_revision(),
         updated_at=seen_at,
-        command_states={READY_TOOL: "allow"},
+        command_states={READY_TOOL: "allow", "summarize": "review"},
     )
 
 
