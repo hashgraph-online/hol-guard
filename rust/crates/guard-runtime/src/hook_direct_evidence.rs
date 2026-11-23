@@ -426,22 +426,9 @@ impl DirectEvidenceQueue {
             })
             .collect();
         let native_count = candidates.iter().filter(|record| record.native).count();
-        let ordinary_count = state
-            .records
-            .iter()
-            .take_while(|record| {
-                record.record.get("kind").and_then(Value::as_str) != Some("mcp_tool_call")
-            })
-            .count();
+        let ordinary_count = candidates.len();
         let selected: Vec<_> = if native_count == 0 {
-            state
-                .records
-                .iter()
-                .take_while(|record| {
-                    record.record.get("kind").and_then(Value::as_str) != Some("mcp_tool_call")
-                })
-                .take(max_records)
-                .collect()
+            candidates.iter().copied().take(max_records).collect()
         } else {
             candidates
                 .iter()
@@ -451,9 +438,6 @@ impl DirectEvidenceQueue {
                 .collect()
         };
         let selected_len = selected.len();
-        let through = (native_count == 0)
-            .then(|| selected.last().map(|record| record.seq))
-            .flatten();
         let records = selected
             .into_iter()
             .map(|record| Paged {
@@ -469,7 +453,7 @@ impl DirectEvidenceQueue {
             } else {
                 ordinary_count.saturating_sub(selected_len)
             },
-            through,
+            through: None,
             settled: Vec::new(),
         }
     }

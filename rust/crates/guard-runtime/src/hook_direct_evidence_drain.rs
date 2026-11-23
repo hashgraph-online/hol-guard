@@ -163,6 +163,10 @@ fn commit_queued(
     let peeked = queue.acknowledge_and_peek_for_commit(DEFAULT_DRAIN_RECORDS);
     let mut paged = peeked.records;
     let paged_count = paged.len();
+    let settle_individually = paged
+        .iter()
+        .any(|item| !mcp_relay_receipt::is_plain(&item.record));
+    let selected_sequences: Vec<u64> = paged.iter().map(|item| item.seq).collect();
     let store_fatal = record_page(queue, home, writer_source, &mut paged)?;
     if let Some(item) = paged.iter().find(|item| {
         item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call")
@@ -170,6 +174,21 @@ fn commit_queued(
     }) {
         let code = mcp_relay_receipt::rejection_code(&item.record);
         return Err(format!("mcp_relay_record_not_plain:{code}"));
+    }
+    if settle_individually {
+        let mut state = queue.state.lock().map_err(|_| UNHANDLED.to_owned())?;
+        paged.retain(|item| {
+            let keep = mcp_relay_receipt::is_plain(&item.record) || record::needs_work(item, home);
+            if !keep {
+                state.forget(item.seq);
+            }
+            keep
+        });
+        for sequence in selected_sequences {
+            if !paged.iter().any(|item| item.seq == sequence) {
+                state.forget(sequence);
+            }
+        }
     }
     // A mixed page can contain ordinary direct-hook records that still need
     // the daemon writer after the resident has committed its relay receipts.
@@ -524,6 +543,23 @@ mod tests {
         assert_eq!(page.remaining, 0);
         // The record keeps its place for the daemon's own writer instead of
         // blocking the resident's page.
+        assert_eq!(queue.pending_len(), 1);
+    }
+
+    #[test]
+    fn an_ordinary_record_behind_an_uncomposed_relay_record_still_commits() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().to_str().unwrap();
+        let queue = DirectEvidenceQueue::default();
+        let mut unwritable =
+            crate::mcp_relay_receipt::tests::record("block", "policy-block", "block");
+        unwritable["policy_action"] = json!("allow");
+        assert!(queue.offer(unwritable));
+        assert!(queue.offer(json!({"ordinary": true})));
+
+        let page = commit_queued(home, &queue, None).unwrap();
+
+        assert_eq!(page.record_count, 1);
         assert_eq!(queue.pending_len(), 1);
     }
 }
