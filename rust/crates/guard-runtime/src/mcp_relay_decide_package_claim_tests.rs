@@ -63,6 +63,7 @@ fn resolved(artifact_hash: Option<&str>) -> Resolved {
             risk_categories: Vec::new(),
         },
         decision: tool(GuardAction::Allow),
+        connector_setup: None,
         mode: "enforce".to_owned(),
         redaction_level: Some("full".to_owned()),
     }

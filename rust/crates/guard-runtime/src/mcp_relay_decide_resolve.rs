@@ -90,6 +90,11 @@ fn resolve_saved(
         controls: admitted.snapshot.command_extensions.as_ref(),
     };
     let decision = run_policy(&subject, saved, connection, &catalog)?;
+    let connector_setup = crate::mcp_tool_policy_connector::connector_setup_with_catalog(
+        &subject,
+        &decision,
+        Some(&catalog),
+    );
     let packaged = match leg {
         Some(PackageLeg::Decide(intent)) => {
             let inputs = package_leg::package_inputs(
@@ -133,6 +138,7 @@ fn resolve_saved(
         Resolved {
             identity,
             decision,
+            connector_setup,
             mode: view.mode.clone(),
             redaction_level: admitted
                 .redaction_level(view.receipt_redaction_level.as_deref())

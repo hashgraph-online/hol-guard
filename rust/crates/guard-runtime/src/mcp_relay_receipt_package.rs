@@ -77,7 +77,7 @@ pub(super) struct PlainPackage<'a> {
     forward: bool,
     package: &'a Map<String, Value>,
     /// A safe-alternative block's redaction level and approval center.
-    review: Option<(&'a str, &'a str)>,
+    review: Option<(&'a str, &'a str, Option<&'a str>)>,
 }
 
 pub(super) fn plain(record: &Value) -> Option<PlainPackage<'_>> {
@@ -264,7 +264,7 @@ pub(super) fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option
     let row = review
         .zip(projected.as_ref())
         .filter(|_| REVIEWABLE.contains(&call.policy_action))
-        .and_then(|((redaction_level, center), projected)| {
+        .and_then(|((redaction_level, center, _), projected)| {
             silent_review(
                 &call,
                 &artifact,

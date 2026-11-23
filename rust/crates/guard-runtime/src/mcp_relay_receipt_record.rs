@@ -38,7 +38,7 @@ pub(super) const APPROVAL_PENDING_SOURCE: &str = "approval-center-pending";
 /// The inbox row a safe-alternative block adds, `_redaction_level`, and the
 /// approval center origin the resident links it to.
 pub(super) const REVIEW_KEY: &str = "review";
-const REVIEW_FIELDS: [&str; 2] = ["redaction_level", "approval_center_url"];
+const REVIEW_FIELDS: [&str; 3] = ["redaction_level", "approval_center_url", "queue_group_id"];
 const REDACTION_LEVELS: [&str; 3] = ["full", "partial", "none"];
 /// A safe-alternative block's decision source.
 pub(super) const SAFE_ALTERNATIVE_SOURCE: &str = "policy-safe-alternative";
@@ -136,7 +136,7 @@ pub(super) struct Plain<'a> {
     pub(super) projected_risk: Option<McpToolRiskInputV1>,
     /// A safe-alternative block's redaction level and approval center
     /// origin, which its inbox row is written with.
-    pub(super) review: Option<(&'a str, &'a str)>,
+    pub(super) review: Option<(&'a str, &'a str, Option<&'a str>)>,
 }
 
 impl Plain<'_> {
@@ -167,7 +167,7 @@ impl Plain<'_> {
 
     /// The redaction level and center of the inbox row
     /// `queue_blocked_approvals` writes for this block, if it writes one.
-    pub(super) fn silent_review(&self) -> Option<(&str, &str)> {
+    pub(super) fn silent_review(&self) -> Option<(&str, &str, Option<&str>)> {
         self.review
             .filter(|_| REVIEWABLE.contains(&self.policy_action))
     }
@@ -327,15 +327,30 @@ fn block_source_fits(queued: bool, reviewed: bool, source: &str) -> bool {
 /// `_redaction_level` with the center the resident links the row to: a
 /// known level and a loopback origin. A record from a binding with no center
 /// leaves the row, and so the receipt, to the daemon.
-pub(super) fn review_fields(review: &Value) -> Option<(&str, &str)> {
-    let review = exact_object(review, &REVIEW_FIELDS)?;
-    let level = review["redaction_level"]
+pub(super) fn review_fields(review: &Value) -> Option<(&str, &str, Option<&str>)> {
+    let review = review.as_object()?;
+    if !review
+        .keys()
+        .all(|key| REVIEW_FIELDS.contains(&key.as_str()))
+    {
+        return None;
+    }
+    let level = review
+        .get("redaction_level")?
         .as_str()
         .filter(|level| REDACTION_LEVELS.contains(level))?;
-    let center = review["approval_center_url"]
+    let center = review
+        .get("approval_center_url")?
         .as_str()
         .filter(|center| !center.trim().is_empty())?;
-    Some((level, center))
+    let group = match review.get("queue_group_id").unwrap_or(&Value::Null) {
+        Value::Null => None,
+        Value::String(group) if crate::connector_setup::is_connector_marker(group) => {
+            Some(group.as_str())
+        }
+        _ => return None,
+    };
+    Some((level, center, group))
 }
 
 /// `_queued_approval`, with at most one pending notice for its request.

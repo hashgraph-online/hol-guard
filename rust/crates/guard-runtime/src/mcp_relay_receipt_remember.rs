@@ -17,6 +17,7 @@ use std::sync::PoisonError;
 use std::time::Duration;
 
 use base64ct::{Base64UrlUnpadded, Encoding};
+use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
@@ -68,12 +69,17 @@ pub(super) fn restored(mut record: Value) -> Value {
 /// The form in which the writer handed a queued record back, when it did: as
 /// queued, or without its `remember` flag once its allow was saved, so the
 /// retry writes only the receipt and never saves the allow twice.
-pub(crate) fn handed_back(queued: &Value, unwritten: &[Value]) -> Option<Value> {
-    if unwritten.contains(queued) {
-        return Some(queued.clone());
-    }
-    let forward = stripped(queued)?;
-    unwritten.contains(&forward).then_some(forward)
+/// Match a failed writer result to the acknowledged queue entry by sequence,
+/// so equal JSON records cannot make the drain retry the wrong item.
+pub(crate) fn handed_back_with_sequence(
+    sequence: u64,
+    unwritten: &[(u64, Value)],
+) -> Option<Value> {
+    unwritten
+        .iter()
+        .find_map(|(candidate_sequence, candidate)| {
+            (*candidate_sequence == sequence).then(|| candidate.clone())
+        })
 }
 
 /// The artifact-scoped allow one remembered approval saves.
@@ -178,6 +184,9 @@ fn save_allow(
         return None;
     }
     let home = Path::new(guard_home).canonicalize().ok()?;
+    if saved_block_exists(&home, allow)? {
+        return None;
+    }
     if crate::approval_gate_consumers::require_policy_write(
         &home,
         crate::approval_gate_op::grants(),
@@ -213,6 +222,32 @@ fn save_allow(
     signed(&home, args, store)
 }
 
+/// A block committed after the inline approval wins over the remembered allow.
+/// The receipt still records because this check only skips the policy write.
+fn saved_block_exists(home: &Path, allow: &Allow<'_>) -> Option<bool> {
+    let connection = Connection::open(home.join(STORE_FILE_NAME)).ok()?;
+    connection
+        .query_row(
+            "select exists(
+                select 1 from policy_decisions
+                where harness = ?1 and scope = 'artifact'
+                  and coalesce(artifact_id, '') = coalesce(?2, '')
+                  and coalesce(artifact_hash, '') = coalesce(?3, '')
+                  and coalesce(workspace, '') = coalesce(?4, '')
+                  and coalesce(publisher, '') = ''
+                  and action = 'block'
+            )",
+            rusqlite::params![
+                allow.harness,
+                allow.artifact_id,
+                allow.artifact_hash,
+                allow.workspace,
+            ],
+            |row| row.get(0),
+        )
+        .ok()
+}
+
 /// `upsert_policy` under a protected integrity state, with the generation
 /// lock held by the caller: the pending generation
 /// lands before the row is signed and is finalized from the reply. The prior
@@ -242,7 +277,7 @@ fn signed(
         "pending_generation": next,
         "version": 1,
     });
-    if !put(&mut secrets, &control_ref, &pending) {
+    if !put(home, &mut secrets, &control_ref, &pending) {
         return None;
     }
     args.insert(
@@ -256,12 +291,12 @@ fn signed(
         .and_then(|reply| reply.get("next_control_state").cloned())
         .and_then(|proposed| finalization_state(Some(&pending), &proposed));
     if let Some(finalized) =
-        finalized.filter(|finalized| put(&mut secrets, &control_ref, finalized))
+        finalized.filter(|finalized| put(home, &mut secrets, &control_ref, finalized))
     {
         return finalized.get("generation").and_then(Value::as_u64);
     }
     if !committed {
-        put(&mut secrets, &control_ref, &current);
+        put(home, &mut secrets, &control_ref, &current);
     }
     // A committed write re-signed every local row at the next generation, so
     // the earlier state would reject them all as a rollback. The pending
@@ -283,8 +318,10 @@ fn control_state(
     }
     // `get_secret` answers `None` for a file it cannot read or decrypt as
     // well as for a missing one, so only a missing file is absent.
-    if std::fs::symlink_metadata(secrets.path_for(control_ref)).is_ok() {
-        return None;
+    match std::fs::symlink_metadata(secrets.path_for(control_ref)) {
+        Ok(_) => return None,
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => return None,
+        Err(_) => {}
     }
     let initial = json!({
         "cutover_complete": true,
@@ -292,13 +329,26 @@ fn control_state(
         "pending_generation": null,
         "version": 1,
     });
-    put(secrets, control_ref, &initial).then_some(initial)
+    put(home, secrets, control_ref, &initial).then_some(initial)
 }
 
-fn put(secrets: &mut EncryptedFileSecretStore, control_ref: &str, state: &Value) -> bool {
-    serde_json::to_string(state)
-        .ok()
-        .is_some_and(|serialized| secrets.set_secret(control_ref, &serialized).is_ok())
+fn put(
+    home: &Path,
+    secrets: &mut EncryptedFileSecretStore,
+    control_ref: &str,
+    state: &Value,
+) -> bool {
+    let Some(serialized) = serde_json::to_string(state).ok() else {
+        return false;
+    };
+    if secrets.set_secret(control_ref, &serialized).is_err() {
+        return false;
+    }
+    crate::policy_integrity_resolver::key_mint::mirror_existing_control_state(
+        home,
+        control_ref,
+        &serialized,
+    )
 }
 
 #[cfg(test)]

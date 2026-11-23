@@ -48,6 +48,7 @@ fn a_spelling_that_opens_a_file_takes_the_terminal_or_asks_about_a_unit_stays_re
         "top",
         "top -o cpu",
         "top -l 0",
+        "top -l 4294967296",
         "top -b",
         "top -b -n 0",
         "last -f /var/log/wtmp.1",

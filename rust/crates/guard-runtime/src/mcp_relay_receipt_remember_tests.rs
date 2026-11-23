@@ -8,7 +8,7 @@ use crate::encrypted_secret_store::EncryptedFileSecretStore;
 use crate::guard_store_cmd_vectors_tests::temp_home;
 use crate::guard_store_policy_upsert::tests::SCHEMA;
 use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
-use crate::mcp_relay_receipt::remember::handed_back;
+use crate::mcp_relay_receipt::remember::handed_back_with_sequence;
 use crate::mcp_relay_receipt::tests::record;
 use crate::mcp_relay_receipt::{is_plain, write};
 use crate::policy_integrity_resolver::{
@@ -95,6 +95,33 @@ fn a_remembered_forward_saves_a_signed_allow_then_its_receipt() {
             .expect("finalized control state");
     assert_eq!(control["generation"], json!(1));
     assert!(control["pending_generation"].is_null(), "{control}");
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_later_saved_block_prevents_the_drain_allow_without_losing_the_receipt() {
+    let home = store_home("relay-remember-block-wins", true);
+    Connection::open(home.join("guard.db"))
+        .unwrap()
+        .execute(
+            "insert into policy_decisions
+             (harness, scope, artifact_id, artifact_hash, action, source, updated_at)
+             values (?1, 'artifact', ?2, ?3, 'block', 'runtime-test', ?4)",
+            [
+                "codex",
+                "codex:project:shell:run_command",
+                "guard-approval-context:v1:0123456789abcdef",
+                "2026-01-01T00:00:00Z",
+            ],
+        )
+        .unwrap();
+    let before = count(&home, "runtime_receipts");
+    let unwritten = write(home.to_str().unwrap(), vec![remembered()]);
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 1);
+    let allows = saved_allows(&home);
+    assert_eq!(allows.len(), 1, "{allows:?}");
+    assert_eq!(allows[0].1, "block");
     let _ = std::fs::remove_dir_all(&home);
 }
 
@@ -267,13 +294,27 @@ fn a_record_handed_back_after_its_allow_was_saved_is_retried_without_the_flag() 
     let mut forward = queued.clone();
     forward.as_object_mut().unwrap().remove("remember");
     assert_eq!(
-        handed_back(&queued, std::slice::from_ref(&queued)),
+        handed_back_with_sequence(41, &[(41, queued.clone())]),
         Some(queued.clone())
     );
     assert_eq!(
-        handed_back(&queued, std::slice::from_ref(&forward)),
+        handed_back_with_sequence(42, &[(42, forward.clone())]),
         Some(forward.clone())
     );
-    assert_eq!(handed_back(&queued, &[]), None);
-    assert_eq!(handed_back(&forward, std::slice::from_ref(&queued)), None);
+    assert_eq!(handed_back_with_sequence(42, &[]), None);
+}
+
+#[test]
+fn equal_records_use_the_queue_sequence_when_reconciling_a_failed_write() {
+    let queued = remembered();
+    let mut forward = queued.clone();
+    forward.as_object_mut().unwrap().remove("remember");
+    assert_eq!(
+        handed_back_with_sequence(42, &[(41, queued.clone()), (42, forward.clone())]),
+        Some(forward)
+    );
+    assert_eq!(
+        handed_back_with_sequence(41, &[(41, queued.clone())]),
+        Some(queued)
+    );
 }

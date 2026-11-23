@@ -213,6 +213,10 @@ struct Claimed {
 struct Resolved {
     identity: McpToolCallIdentityPayloadV1,
     decision: Decision,
+    /// Present when the review is solely because this MCP server has no
+    /// connector decision on the device. The marker is carried into the
+    /// queued review so all of the server's calls share one setup group.
+    connector_setup: Option<Value>,
     mode: String,
     /// The bound `receipt_redaction_level`, which the inbox row is written with.
     redaction_level: Option<String>,
@@ -390,6 +394,8 @@ use encode::encode;
 mod flow;
 pub(crate) use claim::claim;
 use flow::decide;
+// `mcp_relay_decide_package_tests.rs` reaches the evaluation leg through this
+// module, so the name stays in scope for the test build.
 #[cfg(test)]
 use flow::evaluation_leg;
 #[path = "mcp_relay_decide_inline.rs"]

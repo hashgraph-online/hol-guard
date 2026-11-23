@@ -126,7 +126,27 @@ pub(super) fn queue(
     resolved: &Resolved,
     policy_action: String,
 ) -> Result<Routed, &'static str> {
-    prepare(request, admitted, resolved, policy_action, &[])?.write(request)
+    queue_with_connector_setup(request, admitted, resolved, policy_action, None)
+}
+
+/// Write an approval row for a non-recognition MCP review. The connector
+/// marker keeps the row grouped with the server's other setup calls.
+pub(super) fn queue_with_connector_setup(
+    request: &McpRelayDecideRequestV1,
+    admitted: &Admitted,
+    resolved: &Resolved,
+    policy_action: String,
+    connector_setup: Option<&Value>,
+) -> Result<Routed, &'static str> {
+    prepare_with_connector_setup(
+        request,
+        admitted,
+        resolved,
+        policy_action,
+        &[],
+        connector_setup,
+    )?
+    .write(request)
 }
 
 /// An approval request every check has passed, ready to be written.
@@ -149,6 +169,24 @@ pub(super) fn prepare(
     policy_action: String,
     evidence_append: &[Value],
 ) -> Result<Prepared, &'static str> {
+    prepare_with_connector_setup(
+        request,
+        admitted,
+        resolved,
+        policy_action,
+        evidence_append,
+        None,
+    )
+}
+
+fn prepare_with_connector_setup(
+    request: &McpRelayDecideRequestV1,
+    admitted: &Admitted,
+    resolved: &Resolved,
+    policy_action: String,
+    evidence_append: &[Value],
+    connector_setup: Option<&Value>,
+) -> Result<Prepared, &'static str> {
     if !REVIEWABLE.contains(&policy_action.as_str()) {
         return Err(ASK_UNSUPPORTED);
     }
@@ -167,7 +205,7 @@ pub(super) fn prepare(
         .as_deref()
         .ok_or(ASK_UNSUPPORTED)?;
     let signals = &resolved.decision.signals;
-    if !signals.iter().any(|signal| !signal.is_empty()) {
+    if connector_setup.is_none() && !signals.iter().any(|signal| !signal.is_empty()) {
         return Err(ASK_UNSUPPORTED);
     }
     let projection = project(request, artifact)?;
@@ -179,6 +217,13 @@ pub(super) fn prepare(
         &policy_action,
         &resolved.decision,
     );
+    if let Some(group) = connector_setup
+        .and_then(Value::as_object)
+        .and_then(|setup| setup.get("queue_group_id"))
+        .and_then(Value::as_str)
+    {
+        item.insert("queue_group_id".to_owned(), Value::String(group.to_owned()));
+    }
     append_scanner_evidence(&mut item, evidence_append);
     let now = now_isoformat().ok_or(ASK_QUEUE_FAILED)?;
     Ok(Prepared {

@@ -212,10 +212,10 @@ fn record_page(
     let plain: Vec<_> = paged
         .iter()
         .filter(|item| mcp_relay_receipt::is_plain(&item.record))
-        .map(|item| item.record.clone())
+        .map(|item| (item.seq, item.record.clone()))
         .collect();
     if !plain.is_empty() {
-        let unwritten = mcp_relay_receipt::write(home, plain);
+        let unwritten = mcp_relay_receipt::write_indexed(home, plain);
         keep_handed_back(queue, paged, &unwritten);
     }
     if has_unfinished_records(paged, home) {
@@ -231,13 +231,19 @@ fn record_page(
 /// writer finished leaves the queue now: a later record on the same page may
 /// still fail the page, and the retry must not save its allow or write its
 /// receipt again.
-fn keep_handed_back(queue: &DirectEvidenceQueue, paged: &mut Vec<Paged>, unwritten: &[Value]) {
+fn keep_handed_back(
+    queue: &DirectEvidenceQueue,
+    paged: &mut Vec<Paged>,
+    unwritten: &[(u64, Value)],
+) {
     let mut state = queue.state.lock().ok();
     paged.retain_mut(|item| {
         if !mcp_relay_receipt::is_plain(&item.record) {
             return true;
         }
-        let Some(record) = mcp_relay_receipt::remember::handed_back(&item.record, unwritten) else {
+        let Some(record) =
+            mcp_relay_receipt::remember::handed_back_with_sequence(item.seq, unwritten)
+        else {
             if let Some(state) = state.as_mut() {
                 state.forget(item.seq);
             }
@@ -282,7 +288,8 @@ mod tests {
         let mut paged = queue
             .acknowledge_and_peek(None, None, DEFAULT_DRAIN_RECORDS)
             .records;
-        keep_handed_back(&queue, &mut paged, std::slice::from_ref(&forward));
+        let sequence = paged[0].seq;
+        keep_handed_back(&queue, &mut paged, &[(sequence, forward.clone())]);
         assert_eq!(paged.len(), 1);
         assert_eq!(paged[0].record, forward);
         let again = queue
@@ -324,7 +331,8 @@ mod tests {
         let mut paged = queue
             .acknowledge_and_peek(None, None, DEFAULT_DRAIN_RECORDS)
             .records;
-        keep_handed_back(&queue, &mut paged, std::slice::from_ref(&stripped));
+        let sequence = paged[1].seq;
+        keep_handed_back(&queue, &mut paged, &[(sequence, stripped.clone())]);
         assert_eq!(paged.len(), 1);
         assert!(has_unfinished_records(&paged, ""));
         let retried = queue

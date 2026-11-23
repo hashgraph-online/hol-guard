@@ -151,12 +151,13 @@ pub(super) fn decide_package_leg(
     binding: QueueBinding<'_>,
 ) -> Result<Packaged, &'static str> {
     let resolved = inputs.resolve()?;
-    let outcome = package_lane::decide_package(
+    let outcome = package_lane::decide_package_with_inline_approval(
         &inputs.view.mode,
         &request.build.tool_name,
         &request.build.server_name,
         &resolved,
         binding,
+        request.inline.remembered.is_some(),
         // The proxy's second resolution, which reads the store the decide
         // path still holds open: the fresh tool authority, then the fresh
         // package policy.

@@ -66,7 +66,6 @@ fn availability_response_uses_the_contract_envelope() {
         "native_pre_tool_unavailable"
     );
 }
-
 #[test]
 fn fail_closed_verdict_uses_the_rust_contract_envelope() {
     let mut req = request("fail_closed_verdict");
