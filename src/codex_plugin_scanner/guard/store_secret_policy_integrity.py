@@ -746,34 +746,20 @@ class StoreSecretPolicyIntegrityMixin:
             warnings.append(POLICY_INTEGRITY_REASON_GUARD_DB_INACCESSIBLE)
         return warnings
 
-    @staticmethod
-    def _load_policy_integrity_state(connection: sqlite3.Connection) -> dict[str, object] | None:
-        row = connection.execute(
-            "select payload_json from sync_state where state_key = ?",
-            (_POLICY_INTEGRITY_STATE_KEY,),
-        ).fetchone()
-        if row is None:
-            return None
-        try:
-            payload = json.loads(str(row["payload_json"]))
-        except json.JSONDecodeError:
-            return None
-        return payload if isinstance(payload, dict) else None
+    def _native_policy_integrity_state_row(self) -> tuple[str | None, dict[str, object] | None]:
+        """The stored published state: its raw text and its parsed object."""
+        reply = self._native_store_call("read_policy_integrity_state", {})
+        text = reply.get("payload_json") if isinstance(reply, dict) else None
+        state = reply.get("state") if isinstance(reply, dict) else None
+        if not isinstance(reply, dict) or not isinstance(text, str | None) or not isinstance(state, dict | None):
+            raise RuntimeError("Guard could not read the policy integrity state.")
+        return text, state
 
-    @staticmethod
-    def _load_policy_integrity_state_cache_marker(connection: sqlite3.Connection) -> str | None:
-        row = connection.execute(
-            "select payload_json from sync_state where state_key = ?",
-            (_POLICY_INTEGRITY_STATE_KEY,),
-        ).fetchone()
-        if row is None:
-            return None
-        payload_json = row["payload_json"]
-        return str(payload_json) if isinstance(payload_json, str) and payload_json else None
+    def _load_policy_integrity_state(self) -> dict[str, object] | None:
+        return self._native_policy_integrity_state_row()[1]
 
     def _policy_integrity_cache_marker(self) -> str | None:
-        with self._connect() as connection:
-            return self._load_policy_integrity_state_cache_marker(connection)
+        return self._native_policy_integrity_state_row()[0]
 
     def _begin_policy_integrity_generation(self, trusted_state: Mapping[str, object]) -> int:
         """Persist the pending generation; return the one it advances from.
@@ -921,6 +907,13 @@ class StoreSecretPolicyIntegrityMixin:
             self._queue_policy_integrity_state_notification(connection, payload)
         return payload
 
+    def _native_has_local_policy_rows(self) -> bool:
+        reply = self._native_store_call("has_local_policy_rows", {})
+        present = reply.get("present") if isinstance(reply, dict) else None
+        if type(present) is not bool:
+            raise RuntimeError("Guard could not check for local policy rows.")
+        return present
+
     def _native_legacy_policy_row_count(self) -> int:
         reply = self._native_store_call("count_legacy_policy_rows", {})
         count = reply.get("legacy_rows") if isinstance(reply, dict) else None
@@ -966,20 +959,9 @@ class StoreSecretPolicyIntegrityMixin:
             return
 
         def compute_prepared_state(base_state: dict[str, object]) -> tuple[dict[str, object], bool]:
+            if not self._native_has_local_policy_rows():
+                return _prepared_state_without_local_rows(base_state), True
             with self._hold_storage_gate(exclusive=False):
-                connect_timeout_seconds = sqlite_connect_timeout_seconds()
-                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-                try:
-                    connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-                    local_row = connection.execute(
-                        "select 1 from policy_decisions "
-                        f"where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS} limit 1",
-                        _REMOTE_POLICY_SOURCE_PARAMS,
-                    ).fetchone()
-                finally:
-                    connection.close()
-                if local_row is None:
-                    return _prepared_state_without_local_rows(base_state), True
                 return native_prepare_policy_integrity_generation(
                     guard_home=self.guard_home,
                     store_path=self.path,

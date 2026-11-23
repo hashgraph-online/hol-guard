@@ -43,8 +43,7 @@ def _daemon_store(guard_home: Path) -> GuardStore:
 
 
 def _stored(store: GuardStore) -> object:
-    with store._connect() as connection:
-        return store._load_policy_integrity_state(connection)
+    return store._load_policy_integrity_state()
 
 
 def _published(store: GuardStore) -> dict[str, object]:

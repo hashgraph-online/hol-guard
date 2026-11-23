@@ -67,13 +67,11 @@ def _state_field_valid(value: object) -> bool:
 
 
 def _integrity_state(store: object) -> dict[str, object] | None:
-    connect = getattr(store, "_connect", None)
     load = getattr(store, "_load_policy_integrity_state", None)
-    if not callable(connect) or not callable(load):
+    if not callable(load):
         return None
     try:
-        with cast("AbstractContextManager[object]", connect()) as connection:
-            state = load(connection)
+        state = load()
     except (OSError, RuntimeError, ValueError, sqlite3.Error):
         return None
     if not isinstance(state, Mapping) or set(state) != _STATE_FIELDS:
@@ -119,10 +117,10 @@ def _refresh_integrity_state(store: object) -> bool | None:
     if not callable(connect) or not callable(refresh) or not callable(load):
         return None
     try:
+        before = load()
         with cast("AbstractContextManager[object]", connect()) as connection:
-            before = load(connection)
             refresh(connection, now=_now(), create_key=False)
-            return load(connection) != before
+        return load() != before
     except (OSError, RuntimeError, ValueError, sqlite3.Error):
         # The row stays as it was; a stale or missing one fails closed.
         return None
