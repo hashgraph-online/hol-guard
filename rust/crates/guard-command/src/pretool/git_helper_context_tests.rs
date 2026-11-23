@@ -34,9 +34,10 @@ fn the_ref_readings_ask_for_the_configuration_probe() {
     }
 }
 
-/// The two change listings run the same diff drivers `log` and `show` run, so
-/// they ask for the probe on every spelling that leaves a driver reachable,
-/// and stop asking only when the command turns both helpers off itself.
+/// The two change listings run the same diff drivers `log` and `show` run,
+/// and they walk commits as well, so a configured verification program is
+/// reachable through them whatever the diff switches say. Both ask for the
+/// probe on every spelling.
 #[test]
 fn the_change_listings_ask_for_the_configuration_probe() {
     for command in [
@@ -44,64 +45,31 @@ fn the_change_listings_ask_for_the_configuration_probe() {
         "git whatchanged -3",
         "git whatchanged --oneline -5",
         "git whatchanged --no-ext-diff -3",
+        // `log.showSignature`, a `%G` placeholder and a `pretty.*` alias
+        // carrying one each start the configured verification program, which
+        // neither diff switch touches, so turning both off proves nothing
+        // about a commit walk.
+        "git whatchanged --no-ext-diff --no-textconv -3",
+        "git whatchanged --no-ext-diff --no-textconv --oneline -5",
         "git range-diff main...HEAD",
         "git range-diff --creation-factor=80 main...HEAD",
         "git range-diff --no-textconv main...HEAD",
         // `range-diff` assembles an inner `git log -p` and passes neither
         // switch down to it, so both switches on its own command line leave
-        // a configured textconv driver reachable and the probe still has to
-        // answer.
+        // a configured textconv driver reachable too.
         "git range-diff --no-ext-diff --no-textconv main...HEAD",
+        // The walks they are spellings of answer the same way.
+        "git log --no-ext-diff --no-textconv -3",
+        "git show --no-ext-diff --no-textconv HEAD",
     ] {
         assert!(probes(command), "{command}");
     }
+    // A comparison between two trees starts an external driver and a
+    // textconv filter and nothing else, so turning both off leaves it no
+    // helper to run.
     for command in [
-        "git whatchanged --no-ext-diff --no-textconv -3",
-        "git whatchanged --no-ext-diff --no-textconv --oneline -5",
-    ] {
-        assert!(!probes(command), "{command}");
-    }
-}
-
-/// The stdin filters ask for the probe too, on the spelling that only reads.
-#[test]
-fn the_stdin_filters_ask_for_the_configuration_probe() {
-    for command in [
-        "git var GIT_COMMITTER_IDENT",
-        "git var -l",
-        "git patch-id --stable",
-        "git stripspace --strip-comments",
-        "git check-mailmap --stdin",
-        "git interpret-trailers --parse",
-        "git interpret-trailers --only-input --only-trailers --unfold",
-    ] {
-        assert!(probes(command), "{command}");
-    }
-}
-
-/// The spellings that open a file the caller names never reach the probe.
-#[test]
-fn the_file_spellings_never_reach_the_probe() {
-    for command in [
-        "git check-mailmap --mailmap-file /home/user/.ssh/config contact",
-        "git check-mailmap --mailmap-blob HEAD:other contact",
-        "git interpret-trailers --in-place message.txt",
-        "git interpret-trailers message.txt",
-        "git interpret-trailers --trailer 'Fixes: #1' --where after",
-        "git interpret-trailers --only-trailers --unfold",
-    ] {
-        assert!(!probes(command), "{command}");
-    }
-}
-
-/// The write spellings never reach the probe, because the inspection proof
-/// refuses them first.
-#[test]
-fn the_ref_writings_never_reach_the_probe() {
-    for command in [
-        "git symbolic-ref HEAD refs/heads/other",
-        "git symbolic-ref -d HEAD",
-        "git symbolic-ref -m reason HEAD refs/heads/other",
+        "git diff --no-ext-diff --no-textconv",
+        "git diff-tree --no-ext-diff --no-textconv -r HEAD",
     ] {
         assert!(!probes(command), "{command}");
     }

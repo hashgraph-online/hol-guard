@@ -49,23 +49,29 @@ fn a_helper_or_an_output_file_keeps_its_review() {
     }
 }
 
-/// Without the configuration probe `whatchanged` stays unproven unless the
-/// command turns both helpers off itself, exactly as `git log` does: a
-/// configured `diff.external` or `diff.<driver>.textconv` would otherwise
-/// start a program the command never named.
+/// Without the configuration probe neither listing is proven, however it is
+/// spelled. Both walk commits, so `log.showSignature`, a `%G` placeholder or
+/// a `pretty.*` alias carrying one starts the configured verification
+/// program, which `--no-ext-diff` and `--no-textconv` do not touch; and
+/// `range-diff` reads each range through an inner `git log -p` that it
+/// assembles itself and never gives those switches to, so a configured
+/// `diff.<driver>.textconv` runs with both of them on the command line. The
+/// probe screens all of that, and nothing else does.
 ///
-/// `range-diff` gets no such spelling. It reads each range through an inner
-/// `git log -p` that it assembles itself, and it does not pass its own
-/// `--no-ext-diff` or `--no-textconv` down to that child, so a configured
-/// `diff.<driver>.textconv` still runs with both switches on the command
-/// line. Only the configuration probe clears that read.
+/// A comparison between two trees keeps the spelling: an external driver and
+/// a textconv filter are the whole of what it can start.
 #[test]
-fn an_unprobed_listing_needs_both_helpers_turned_off() {
+fn an_unprobed_listing_needs_the_configuration_probe() {
     for text in [
         "whatchanged",
+        "whatchanged --no-ext-diff --no-textconv",
+        "whatchanged --no-ext-diff --no-textconv -3",
         "range-diff main...HEAD",
         "range-diff --no-ext-diff --no-textconv main...HEAD",
         "range-diff --no-ext-diff --no-textconv --no-dual-color main...HEAD",
+        // The commit walks they are spellings of answer the same way.
+        "log --no-ext-diff --no-textconv -3",
+        "show --no-ext-diff --no-textconv HEAD",
     ] {
         assert!(
             !safe_git_arguments(&arguments(text), false, PathContext::default()),
@@ -73,8 +79,8 @@ fn an_unprobed_listing_needs_both_helpers_turned_off() {
         );
     }
     for text in [
-        "whatchanged --no-ext-diff --no-textconv",
-        "whatchanged --no-ext-diff --no-textconv -3",
+        "diff --no-ext-diff --no-textconv",
+        "diff-tree --no-ext-diff --no-textconv -r HEAD",
     ] {
         assert!(
             safe_git_arguments(&arguments(text), false, PathContext::default()),

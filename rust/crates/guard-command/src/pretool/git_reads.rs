@@ -354,13 +354,18 @@ pub(super) fn safe_git_arguments(
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
     }
-    // These read through the diff machinery, so without the
-    // configuration probe only the spelling that turns the external driver
-    // and the textconv filter off is proven. `range-diff` is excluded from
-    // that spelling below: it reads each range through an inner `git log -p`
-    // it assembles itself and passes neither switch down to that child, so a
-    // configured `diff.<driver>.textconv` still runs with both switches on
-    // the command line. Only the probe clears a range comparison.
+    // These read through the diff machinery, so without the configuration
+    // probe only the spelling that turns the external driver and the
+    // textconv filter off is proven. That pair is the whole helper surface
+    // of a comparison between two trees, and nothing more.
+    //
+    // A commit walk reads past it. `log.showSignature`, a `%G` placeholder
+    // and a `pretty.*` alias carrying one each start the configured
+    // verification program, and neither switch touches that setting;
+    // `range-diff` also assembles an inner `git log -p` and passes neither
+    // switch down to it, so a configured `diff.<driver>.textconv` still runs
+    // with both of them on the command line. The walks are therefore proven
+    // by the probe, which screens all of it, and never by the pair alone.
     //
     // A `-C` route that discovers no
     // repository needs neither: Git dies in its own setup before it reads a
@@ -369,9 +374,10 @@ pub(super) fn safe_git_arguments(
     // own, but it still prints under `pager.cherry`, so it asks for the same
     // clearance and has no spelling of its own that answers instead: the two
     // diff switches are not options it defines.
-    let helpers_off = active_options
-        .iter()
-        .any(|argument| argument == "--no-ext-diff")
+    let helpers_off = !super::git_history_reads::verifies_signatures(subcommand)
+        && active_options
+            .iter()
+            .any(|argument| argument == "--no-ext-diff")
         && active_options
             .iter()
             .any(|argument| argument == "--no-textconv");
@@ -388,7 +394,7 @@ pub(super) fn safe_git_arguments(
     );
     if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
-            || (diff_family && subcommand != "range-diff" && helpers_off)
+            || (diff_family && helpers_off)
             || super::git_helper_context::arguments_route_to_no_repository(with_route, context))
     {
         return false;
