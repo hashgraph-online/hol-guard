@@ -126,16 +126,76 @@ pub(crate) fn is_code_value(matched: &str, rest_of_line: &str) -> bool {
 /// The rule's spacing after the separator crosses the line break, so the
 /// match reads the next line's first word as its value. `preceding` is the
 /// text before the match.
+///
+/// The swallowed word must not be a quoted literal, no bracket may still be
+/// open on the header line (`if {"password":` is a mapping entry), and the
+/// condition must read as code rather than prose: `for the admin password:`
+/// is a sentence, not a loop. The caller still scans the next line on its
+/// own, so a key there (`if not password:\n    password = "..."`) is kept.
 pub(crate) fn is_block_header(matched: &str, preceding: &str) -> bool {
     let Some(index) = matched.find([':', '=']) else {
         return false;
     };
     let line = &preceding[preceding.rfind('\n').map_or(0, |at| at + 1)..];
+    let swallowed = matched[index + 1..].trim_start_matches([' ', '\t']);
+    let Some(keyword) = BLOCK_HEADER.find(line) else {
+        return false;
+    };
+    let condition = format!("{}{}", &line[keyword.end()..], &matched[..index]);
     matched.as_bytes()[index] == b':'
-        && matched[index + 1..]
-            .trim_start_matches([' ', '\t'])
-            .starts_with(['\r', '\n'])
-        && BLOCK_HEADER.is_match(line)
+        && swallowed.starts_with(['\r', '\n'])
+        && !swallowed.trim_start().starts_with(['"', '\''])
+        && reads_as_code(&without_literals(&condition))
+}
+
+/// Python words that join names in a condition (`while not token`,
+/// `for key in keys`).
+const CONDITION_WORDS: &[&str] = &[
+    "not", "and", "or", "in", "is", "as", "if", "else", "None", "True", "False", "await",
+];
+
+/// Whether a block-header condition, with its string literals removed, is
+/// balanced and has no two plain words in a row outside Python's own.
+fn reads_as_code(condition: &str) -> bool {
+    let depth = condition.chars().fold(0i32, |depth, c| match c {
+        '(' | '[' | '{' => depth + 1,
+        ')' | ']' | '}' => depth - 1,
+        _ => depth,
+    });
+    let plain = |word: &str| {
+        !CONDITION_WORDS.contains(&word)
+            && word
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '\'')
+    };
+    let words: Vec<&str> = condition
+        .trim_matches(['"', '\''])
+        .split_whitespace()
+        .collect();
+    depth == 0
+        && !words
+            .windows(2)
+            .any(|pair| plain(pair[0]) && plain(pair[1]))
+}
+
+/// The text with each complete quoted literal replaced by a space.
+fn without_literals(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        let closes = matches!(c, '"' | '\'') && chars.clone().any(|next| next == c);
+        if closes {
+            for next in chars.by_ref() {
+                if next == c {
+                    break;
+                }
+            }
+            out.push(' ');
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// A path segment long enough to be encoded material and shaped like it:
@@ -205,6 +265,7 @@ mod tests {
     fn real_looking_values_are_still_credentials() {
         let github = ["ghp", "_abcdefghijklmnopqrstuvwxyz0123456789"].concat();
         let live = ["sk-", "live-abcdefghijklmnop1234"].concat();
+        let prod = ["Kx9-prod", "-Hunter2-value"].concat();
         let sample = ["a1b2c3d4", "e5f6g7h8i9j0"].concat();
         let jwt = ["eyJhbGciOiJIUzI1NiJ9", ".eyJzdWIiOiIxMjM0In0.c2lnbmF0dXJl"].concat();
         for text in [
@@ -230,6 +291,12 @@ mod tests {
             "password: assert".to_string(),
             "if True:\n    password: hunter2production".to_string(),
             "config:\n  password:\n    hunter2production".to_string(),
+            format!("password = \"{prod}\""),
+            format!("if not password:\n    password = \"{prod}\""),
+            format!("if token:\n    production_password = \"{prod}\""),
+            format!("if {{\"password\":\n    \"{prod}\"}}"),
+            "for the admin password:\n  hunter2production".to_string(),
+            "for the user's password:\n  hunter2production".to_string(),
         ] {
             assert!(flagged(&text), "{text:?}");
         }
