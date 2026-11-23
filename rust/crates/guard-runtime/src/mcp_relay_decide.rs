@@ -390,6 +390,10 @@ use encode::encode;
 mod flow;
 pub(crate) use claim::claim;
 use flow::decide;
+// `mcp_relay_decide_package_tests.rs` reaches the evaluation leg through this
+// module, so the name stays in scope for the test build.
+#[cfg(test)]
+use flow::evaluation_leg;
 #[path = "mcp_relay_decide_inline.rs"]
 pub(crate) mod inline;
 #[path = "mcp_relay_decide_observe.rs"]
