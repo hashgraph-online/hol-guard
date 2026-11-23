@@ -217,5 +217,8 @@ fn sibling_route(
 }
 
 #[cfg(test)]
+#[path = "contained_wrapper_plan_filter_tests.rs"]
+mod filter_tests;
+#[cfg(test)]
 #[path = "contained_wrapper_plan_tests.rs"]
 mod tests;

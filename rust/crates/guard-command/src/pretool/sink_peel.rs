@@ -705,7 +705,7 @@ fn joined_list(tokens: &[Token]) -> Option<String> {
                 return None;
             }
             text.push_str(" | ");
-            text.push_str(&filter_stage(stage, lone)?);
+            text.push_str(&filter_stage(stage)?);
         }
         if redirect.is_some() && filters == 0 {
             return None;
@@ -722,9 +722,9 @@ fn joined_list(tokens: &[Token]) -> Option<String> {
 /// One filter stage's text, or `None` when it is not a reader of standard
 /// input. A `head` or `tail` is written back from the count this module read,
 /// rather than copied, so the rejoined bound is one the peel understood. Any
-/// other reader is rejoined only for a lone command, which is the shape the
-/// peel would otherwise refuse outright.
-fn filter_stage(tokens: &[Token], lone: bool) -> Option<String> {
+/// other reader is written back as the words it was issued as, which is what
+/// the root's shell then applies to the command before it.
+fn filter_stage(tokens: &[Token]) -> Option<String> {
     let (program, arguments) = tokens.split_first()?;
     if tokens.iter().any(|token| token.1) {
         return None;
@@ -736,7 +736,7 @@ fn filter_stage(tokens: &[Token], lone: bool) -> Option<String> {
         let unit = if bytes { "-c" } else { "-n" };
         return Some(format!("{program} {unit} {count}"));
     }
-    if !lone || !output_filters::rejoined_stage(program, &arguments) {
+    if !output_filters::rejoined_stage(program, &arguments) {
         return None;
     }
     plain_words(tokens)

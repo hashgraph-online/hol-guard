@@ -17252,8 +17252,8 @@
       "expect": "allow"
     },
     {
-      "id": "neg-sibling-dashboard-vite-chain-unbounded-filter",
-      "fix_area": "negative",
+      "id": "queue-sibling-dashboard-vite-chain-reshaped-filter",
+      "fix_area": "queue",
       "harnesses": [
         "codex",
         "zcode",
@@ -17265,6 +17265,56 @@
         "command": "cd ${ORG}/service-api/dashboard && ./node_modules/.bin/vite build 2>&1 | cut -c1-80 && ./node_modules/.bin/vite build"
       },
       "cwd": "org_app",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "queue-sibling-cd-status-then-runner-grep",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git status --short && node node_modules/jest/bin/jest.js 2>&1 | grep -E \"jest-cli\""
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-sibling-cd-status-then-runner-grep-reads-a-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git status --short && node node_modules/jest/bin/jest.js 2>&1 | grep -E \"jest-cli\" ${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-sibling-cd-status-then-runner-two-stages",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git status --short && node node_modules/jest/bin/jest.js 2>&1 | grep -E \"jest-cli\" | head -5"
+      },
+      "cwd": "worktree",
       "expect": "not_allow"
     },
     {

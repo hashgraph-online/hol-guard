@@ -59,16 +59,17 @@ fn sibling_list(
 /// Whether the sink rejoins this list whole rather than peeling a filter out
 /// of it.
 ///
-/// Two or more commands after the `cd` keep the narrower grammar: each may
-/// bound its own output with one `| head -N` or `| tail -N`, optionally after
-/// `2>&1`, which is all the sink leaves in the text the root runs. A filter
-/// there bounds only the command it follows while the rest of the list still
-/// runs, so a stage that is not a bound is not the same work.
+/// Two or more commands after the `cd` may each end in one stage of plain
+/// words -- `| head -N`, `| grep -E <pattern>`, `| cut -f1` -- optionally
+/// after `2>&1`. The sink writes that stage back into the text the root runs
+/// exactly as it was issued, so the root's shell applies it to the command
+/// before it and to nothing else, which is what the issued text said. One
+/// stage per command is the bound: a second would leave the sink rejoining a
+/// chain it does not read.
 ///
-/// One command after the `cd` may instead pipe through any stages of plain
-/// words: the root's shell applies each to the command before it, exactly as
-/// the issued text did, so an ordinary `| cut` or `| sort` is the same work as
-/// `| head`. That shape is admitted only where the sink's own peel refuses the
+/// One command after the `cd` may pipe through any number of such stages,
+/// because the whole text is then one pipeline the root's shell runs as it
+/// stands. That shape is admitted only where the sink's own peel refuses the
 /// pipeline, because `sibling_cd_root` reads the shapes the peel does and
 /// keeps their narrower sink.
 fn joined_filters(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool {
@@ -103,15 +104,7 @@ fn joined_filters(model: &CanonicalCommandV1, context: PathContext<'_>) -> bool 
                         .get(index + 1)
                         .is_some_and(|next| next.pipeline_index == 1)
             }
-            1 => {
-                matches!(segment.executable.as_deref(), Some("head" | "tail"))
-                    && segment.environment_names.is_empty()
-                    && segment.wrapper_chain.is_empty()
-                    && !segment.path_overridden
-                    && super::super::contained_wrapper::output_filters::head_tail_arguments(
-                        &segment.arguments,
-                    )
-            }
+            1 => plain_stage(model, segment),
             _ => false,
         })
 }
