@@ -101,6 +101,7 @@ fn commit_batch(
     let mut record_count = 0usize;
     let mut remaining = 0;
     let mut failed = false;
+    let mut failure = None;
     let mut store_fatal = None;
     while Instant::now() < deadline && (shutdown || pages < PAGES_PER_WAKE) {
         match next() {
@@ -113,9 +114,24 @@ fn commit_batch(
                     break;
                 }
             }
-            Err(error) if pages == 0 => return Err(error),
-            Err(_) => {
+            Err(error) if pages == 0 => {
+                return encode(
+                    json!({
+                        "schema": "guard-hook-direct-evidence-batch.v1",
+                        "epoch": queue.epoch,
+                        "pages": 0,
+                        "record_count": 0,
+                        "more": false,
+                        "failed": true,
+                        "failure": error,
+                        "counters": queue.counters.snapshot(),
+                    }),
+                    store_fatal,
+                );
+            }
+            Err(error) => {
                 failed = true;
+                failure = Some(error);
                 break;
             }
         }
@@ -128,6 +144,7 @@ fn commit_batch(
             "record_count": record_count,
             "more": pages > 0 && remaining > 0 && !failed,
             "failed": failed,
+            "failure": failure,
             "counters": queue.counters.snapshot(),
         }),
         store_fatal,
@@ -216,7 +233,15 @@ fn record_page(
             .collect();
         if !plain.is_empty() {
             let unwritten = mcp_relay_receipt::write_indexed(home, plain);
+            if !unwritten.is_empty() {
+                return Err(format!("mcp_relay_receipt_unwritten:{}", unwritten.len()));
+            }
             keep_handed_back(queue, paged, &unwritten);
+        } else if paged
+            .iter()
+            .any(|item| item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call"))
+        {
+            return Err("mcp_relay_record_not_plain".to_owned());
         }
         return Ok(None);
     };
@@ -231,7 +256,15 @@ fn record_page(
         .collect();
     if !plain.is_empty() {
         let unwritten = mcp_relay_receipt::write_indexed(home, plain);
+        if !unwritten.is_empty() {
+            return Err(format!("mcp_relay_receipt_unwritten:{}", unwritten.len()));
+        }
         keep_handed_back(queue, paged, &unwritten);
+    } else if paged
+        .iter()
+        .any(|item| item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call"))
+    {
+        return Err("mcp_relay_record_not_plain".to_owned());
     }
     if has_unfinished_records(paged, home) {
         return Err(UNHANDLED.to_owned());
