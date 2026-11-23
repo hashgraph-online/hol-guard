@@ -312,8 +312,11 @@ pub(crate) fn mirror_existing_control_state(_home: &Path, control_ref: &str, sta
     // advance its control state in CI and other non-desktop environments.
     let session_bus = std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some()
         || std::env::var_os("XDG_RUNTIME_DIR")
-            .map(|dir| std::path::Path::new(&dir).join("bus").is_socket())
-            .unwrap_or(false);
+            .and_then(|dir| std::fs::symlink_metadata(std::path::Path::new(&dir).join("bus")).ok())
+            .is_some_and(|metadata| {
+                use std::os::unix::fs::FileTypeExt;
+                metadata.file_type().is_socket()
+            });
     if !session_bus {
         return true;
     }
