@@ -225,10 +225,8 @@ fn a_queued_package_request_records_the_inbox_row_it_leaves() {
 fn a_queued_package_request_uses_the_relay_origin_when_no_center_is_bound() {
     let mut queued = answer(Some(("blocked".to_owned(), json!({}))), "review");
     queued.redaction_level = Some("partial".to_owned());
-    let center = crate::mcp_relay_decide::settlement::approval_center_origin(
-        &request().guard_home,
-        None,
-    );
+    let center =
+        crate::mcp_relay_decide::settlement::approval_center_origin(&request().guard_home, None);
     let recorded = record(
         &request(),
         &json!({}),
