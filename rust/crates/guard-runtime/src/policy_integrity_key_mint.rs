@@ -307,6 +307,14 @@ fn locked_mint(home: &Path, deadline: Instant) -> Minted {
 /// rolled back when the Python store refreshes it.
 #[cfg(target_os = "linux")]
 pub(crate) fn mirror_existing_control_state(_home: &Path, control_ref: &str, state: &str) -> bool {
+    // A headless process with no session bus has no Secret Service primary
+    // copy to mirror. Treat that as the absent-keyring case so the vault can
+    // advance its control state in CI and other non-desktop environments.
+    if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_none()
+        && std::env::var_os("XDG_RUNTIME_DIR").is_none()
+    {
+        return true;
+    }
     let primary = keyring_linux::SecretServiceKeyring {
         service_name: KEYRING_SERVICE_NAME.to_owned(),
         deadline: Instant::now() + KEYRING_BUDGET,
