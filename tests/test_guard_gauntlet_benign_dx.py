@@ -53,7 +53,7 @@ from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.native_tools import native_tools_scope_error
 from ci.gauntlet.parent_fixtures import PARENT_WORKSPACE_CASE
 from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER, VITE_BUILD_MARKER
-from ci.gauntlet.source_output_fixtures import HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
+from ci.gauntlet.source_output_fixtures import FALLBACK_PATH, HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
 from ci.gauntlet.workspace_runner_fixtures import (
     HOME_BUN_ENTRY_CASE,
     WORKSPACE_QUIET_PACKAGE_TEST_CASE,
@@ -170,6 +170,7 @@ REALISM_IDS = {
     "omp-native-glob-recursive-shell-scripts",
     "omp-native-read-credential-placeholder-docs",
     "omp-native-shell-read-credential-placeholder-docs",
+    "omp-native-shell-read-credential-field-fallback-source",
     "omp-native-shell-linked-modules-build",
     "omp-native-shell-linked-modules-bun-entry",
     "omp-native-shell-doctl-reads",
@@ -310,6 +311,10 @@ def test_placeholder_docs_and_field_copies_match_the_reported_shapes(tmp_path: P
     assert "connect({ token: session.token, user: session.user })" in session
     assert "password: cfg.password, // database" in session
     for command in commands_for("omp-native-shell-read-credential-placeholder-docs"):
+        assert _shell(fixture, command).returncode == 0, command
+    links = (fixture.workspace / FALLBACK_PATH).read_text(encoding="utf-8")
+    assert "password=dest.password or self.password)" in links and "if self.password:" in links
+    for command in commands_for("omp-native-shell-read-credential-field-fallback-source"):
         assert _shell(fixture, command).returncode == 0, command
 
 

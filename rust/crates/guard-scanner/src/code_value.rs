@@ -54,6 +54,16 @@ static PROSE_TAIL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\s+[a-z]{2,}(?:[ ,]+[a-z]{2,})+").expect("prose tail rule must compile")
 });
 
+/// The start of a Python block header (`if`, `while`, `with` ...), after any
+/// line-number prefix a numbered listing (`cat -n`, `grep -n`, `rg -n`) adds.
+static BLOCK_HEADER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"^(?:[^\s:]+:)?\s*(?:\d+[:\t-])?\s*",
+        r"(?:if|elif|while|with|for|except|case|async\s+with|async\s+for)\s",
+    ))
+    .expect("block header rule must compile")
+});
+
 /// A quoted literal long enough to be a credential.
 static LONG_LITERAL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"["'`][^"'`\s]{12,}["'`]"#).expect("long literal rule must compile")
@@ -111,9 +121,26 @@ pub(crate) fn is_code_value(matched: &str, rest_of_line: &str) -> bool {
         && PROSE_TAIL.is_match(rest_of_line)
 }
 
+/// Whether a credential assignment match is the `:` that ends a Python block
+/// header, as in `if self.password:` or `if prompt == "Confirm Password":`.
+/// The rule's spacing after the separator crosses the line break, so the
+/// match reads the next line's first word as its value. `preceding` is the
+/// text before the match.
+pub(crate) fn is_block_header(matched: &str, preceding: &str) -> bool {
+    let Some(index) = matched.find([':', '=']) else {
+        return false;
+    };
+    let line = &preceding[preceding.rfind('\n').map_or(0, |at| at + 1)..];
+    matched.as_bytes()[index] == b':'
+        && matched[index + 1..]
+            .trim_start_matches([' ', '\t'])
+            .starts_with(['\r', '\n'])
+        && BLOCK_HEADER.is_match(line)
+}
+
 /// A path segment long enough to be encoded material and shaped like it:
 /// digits or mixed case, as in each part of a JWT.
-fn encoded_segment(segment: &str) -> bool {
+pub(crate) fn encoded_segment(segment: &str) -> bool {
     segment.len() >= 16
         && (segment.chars().any(|c| c.is_ascii_digit())
             || (segment.chars().any(|c| c.is_ascii_uppercase())
@@ -165,6 +192,10 @@ mod tests {
             "const authToken = req.headers.authorization;",
             "Set auth_token in your config.",
             "- auth_token: the bearer credential used by clients",
+            "    if prompt == \"Confirm Password\":\n        assert \"Confirm Password: \" in out",
+            "    if kind == \"token\":\n        return session.token",
+            "726:            if self.password:\n727-                _add(self.password)",
+            "   726\t        while not token:\n   727\t            token = fetch()",
         ] {
             assert!(!flagged(text), "{text:?}");
         }
@@ -195,6 +226,10 @@ mod tests {
             format!("export AUTH_TOKEN={jwt}; curl https://example.test"),
             "AUTH_TOKEN=config.session.value;".to_string(),
             "DB_PASSWORD=wrap(value)".to_string(),
+            "password:\n  hunter2production".to_string(),
+            "password: assert".to_string(),
+            "if True:\n    password: hunter2production".to_string(),
+            "config:\n  password:\n    hunter2production".to_string(),
         ] {
             assert!(flagged(&text), "{text:?}");
         }
