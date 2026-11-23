@@ -109,6 +109,55 @@ fn read_only_segments_before_a_git_read_keep_its_proof() {
     }
 }
 
+// Agents list or print files outside the workspace before they check status:
+// `find "$HOME/Downloads/x" -type f | sort; git status`. A `find` with no
+// action and a `sed` with no in-place edit or write command write nothing,
+// wherever they read, so the later Git read keeps its configuration proof.
+#[test]
+fn listing_find_and_printing_sed_outside_the_workspace_keep_a_git_read_proof() {
+    let root = std::env::temp_dir().join(format!("guard-write-free-steps-{}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home.join("notes"), &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+    std::fs::write(home.join("notes").join("today.md"), "notes\n").unwrap();
+    git(&repository, &home, &["init", "--quiet"]);
+    git(
+        &repository,
+        &home,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    git(&repository, &home, &["config", "user.name", "fixture"]);
+    std::fs::write(repository.join("package.json"), "{}\n").unwrap();
+    git(&repository, &home, &["add", "-A"]);
+    git(&repository, &home, &["commit", "--quiet", "-m", "fixture"]);
+
+    for command in [
+        "find \"$HOME/notes\" -maxdepth 1 -type f -print | sort; git status --short",
+        "sed -n '1,40p' \"$HOME/notes/today.md\"; git status --short",
+    ] {
+        assert_eq!(
+            action(&home, &repository, command),
+            "allow",
+            "{command}: {}",
+            reason(&home, &repository, command)
+        );
+    }
+    for command in [
+        "find \"$HOME/notes\" -maxdepth 1 -name '*.tmp' -delete; git status --short",
+        "find \"$HOME/notes\" -fprint \"$HOME/notes/list.txt\"; git status --short",
+        "find \"$HOME/notes\" -print > listing.txt; git status --short",
+        "sed -i 's/a/b/' \"$HOME/notes/today.md\"; git status --short",
+        "sed -n '1w out.txt' \"$HOME/notes/today.md\"; git status --short",
+    ] {
+        assert_ne!(action(&home, &repository, command), "allow", "{command}");
+    }
+}
+
 fn action(home: &std::path::Path, cwd: &std::path::Path, command: &str) -> String {
     let controls = github_controls("enabled");
     evaluate_pre_tool_envelope_with_context(
@@ -156,7 +205,12 @@ fn merge_base_object_names_feed_a_git_read() {
          git log --format=\"%H %ci %s\" -1 feature; echo ---base---; \
          git merge-base feature HEAD | xargs git log --format=\"%H %ci %s\" -1",
     ] {
-        assert_eq!(action(&home, &repository, command), "allow", "{command}");
+        assert_eq!(
+            action(&home, &repository, command),
+            "allow",
+            "{command}: {}",
+            reason(&home, &repository, command)
+        );
     }
     for command in [
         // Children that write, run helpers or reach the network.
@@ -316,7 +370,7 @@ fn git_brace_revision_suffixes_are_not_globs() {
         "git log -1 HEAD^{commit}",
         "git status --short && git rev-parse HEAD^{commit} && git show -s --format='%H %s' HEAD && git worktree list",
     ] {
-        assert_eq!(action(&home, &repository, command), "allow", "{command}");
+        assert_eq!(action(&home, &repository, command), "allow", "{command}: {}", reason(&home, &repository, command));
     }
     // A brace with `..` is a sequence: bash expands `.en{v..v}` to `.env`.
     std::fs::write(repository.join(".env"), "FIXTURE=1\n").unwrap();
@@ -383,7 +437,12 @@ fn an_explicit_git_allow_does_not_settle_a_glob_that_names_a_secret() {
         "git log -p -1 -- 'src/*.ts'",
         "git log -1 HEAD@{0}",
     ] {
-        assert_eq!(action(&home, &repository, command), "allow", "{command}");
+        assert_eq!(
+            action(&home, &repository, command),
+            "allow",
+            "{command}: {}",
+            reason(&home, &repository, command)
+        );
     }
 }
 

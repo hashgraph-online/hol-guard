@@ -170,6 +170,7 @@ mod inplace_edit_reason;
 pub(crate) mod recoverable_removal;
 mod repo_create_reason;
 mod root_removal;
+mod write_free_steps;
 use git_reads::safe_git_arguments;
 mod git_helper_context;
 mod git_history_reads;
