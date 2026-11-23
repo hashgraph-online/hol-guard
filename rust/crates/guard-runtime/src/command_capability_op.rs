@@ -14,10 +14,9 @@
 
 use guard_contracts::{
     command_operation_is_classified, command_operation_requires_local_approval,
-    utc_timestamp_micros, CommandCapabilityRequestV1, CommandCapabilityResultV1,
-    COMMAND_CAPABILITY_ISSUE_SKEW_SECONDS, COMMAND_CAPABILITY_MAX_BYTES,
-    COMMAND_CAPABILITY_MAX_REPLAY_ITEMS, COMMAND_CAPABILITY_MAX_TTL_SECONDS,
-    COMMAND_CAPABILITY_REQUEST_SCHEMA, COMMAND_CAPABILITY_RESULT_SCHEMA,
+    utc_timestamp_micros, CommandCapabilityRequestV1, COMMAND_CAPABILITY_ISSUE_SKEW_SECONDS,
+    COMMAND_CAPABILITY_MAX_BYTES, COMMAND_CAPABILITY_MAX_REPLAY_ITEMS,
+    COMMAND_CAPABILITY_MAX_TTL_SECONDS, COMMAND_CAPABILITY_REQUEST_SCHEMA,
     COMMAND_CAPABILITY_VERSION, COMMAND_JOB_MAX_LIFETIME_SECONDS,
 };
 use hmac::{Hmac, Mac};
@@ -29,28 +28,9 @@ use crate::package_authority_op::request_digest_with_limit;
 
 const MICROS_PER_SECOND: i64 = 1_000_000;
 
-pub(crate) fn evaluate_command_capability_request(
-    request: &CommandCapabilityRequestV1,
-) -> Result<Vec<u8>, String> {
-    let request_sha256 =
-        request_digest(request).map_err(|_| "native_command_capability_too_large".to_owned())?;
-    let (status, code, payload) = match refusal(request) {
-        Some(code) => ("error", code, None),
-        None => ("ok", "ok", Some(evaluate(request))),
-    };
-    crate::encode_response(&CommandCapabilityResultV1 {
-        schema: COMMAND_CAPABILITY_RESULT_SCHEMA.to_owned(),
-        request_id: request.request_id.clone(),
-        request_sha256,
-        status: status.to_owned(),
-        code: code.to_owned(),
-        payload,
-    })
-}
-
 /// The reply's binding digest never covers the signing key, so a caller that
 /// sees the digest learns nothing about the secret it sent.
-fn request_digest(request: &CommandCapabilityRequestV1) -> Result<String, String> {
+pub(crate) fn request_digest(request: &CommandCapabilityRequestV1) -> Result<String, String> {
     let mut material = serde_json::to_value(request)
         .map_err(|_| "native_command_capability_invalid".to_owned())?;
     if let Some(object) = material.as_object_mut() {
@@ -60,7 +40,7 @@ fn request_digest(request: &CommandCapabilityRequestV1) -> Result<String, String
 }
 
 /// The conditions the op refuses rather than answers.
-fn refusal(request: &CommandCapabilityRequestV1) -> Option<&'static str> {
+pub(crate) fn refusal(request: &CommandCapabilityRequestV1) -> Option<&'static str> {
     // A request naming another contract is not this op's to answer: the field
     // is the sender's own statement of which request shape it built.
     if request.schema != COMMAND_CAPABILITY_REQUEST_SCHEMA {
@@ -74,7 +54,7 @@ fn refusal(request: &CommandCapabilityRequestV1) -> Option<&'static str> {
     None
 }
 
-fn evaluate(request: &CommandCapabilityRequestV1) -> Value {
+pub(crate) fn evaluate(request: &CommandCapabilityRequestV1) -> Value {
     let wants_job = !request.job.is_null();
     let replayed = replay_answer(request);
     match verified_capability(request) {

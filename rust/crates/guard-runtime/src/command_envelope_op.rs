@@ -84,7 +84,7 @@ fn refusal(request: &CommandEnvelopeRequestV1) -> Option<&'static str> {
 /// The signing key and id the resident's own vault holds for `guard_home`,
 /// as the request would have carried them. No home or no stored key is no
 /// key, which `sign` and `verify` refuse as `local_signing_key_unavailable`.
-fn resident_key(guard_home: Option<&Path>) -> (Option<String>, Option<String>) {
+pub(crate) fn resident_key(guard_home: Option<&Path>) -> (Option<String>, Option<String>) {
     let Some(home) = guard_home.and_then(|home| home.canonicalize().ok()) else {
         return (None, None);
     };
@@ -126,6 +126,9 @@ fn evaluate(request: &CommandEnvelopeRequestV1, guard_home: Option<&Path>) -> Va
         Err(reason) => json!({"accepted": false, "reason": reason, "result": Value::Null}),
     }
 }
+
+#[path = "command_capability_resident_key.rs"]
+pub(crate) mod command_capability_resident_key;
 
 #[cfg(test)]
 #[path = "command_envelope_op_tests.rs"]

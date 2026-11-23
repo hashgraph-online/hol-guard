@@ -305,7 +305,10 @@ def _capability_verdict(
     """
 
     home = _resident_home(store)
-    key_b64, key_id = _signing_material_for_resident(store)
+    # A store kept in the plain vault is one the resident reads itself, so the
+    # key stays off the socket.
+    resident_key = _resident_reads_key(store)
+    key_b64, key_id = (None, None) if resident_key else _signing_material_for_resident(store)
     device_id, workspace_id, oauth_error = _binding_for_resident(store)
     current = now if now is not None else datetime.now(timezone.utc).isoformat()
     subject = job if job is not None else replay_identity
@@ -334,6 +337,7 @@ def _capability_verdict(
         replay_items=replay_items,
         replay_identity=replay_identity,
         guard_home=home,
+        resident_key=resident_key,
     )
 
 

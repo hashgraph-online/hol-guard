@@ -27,6 +27,9 @@ pub const COMMAND_CAPABILITY_REQUEST_SCHEMA: &str = "guard-command-capability-re
 pub const COMMAND_CAPABILITY_RESULT_SCHEMA: &str = "guard-command-capability-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const COMMAND_CAPABILITY_FEATURE: &str = "command-capability-v1";
+/// Capability advertised when the op can read the signing key from the
+/// resident's own encrypted-file secret store (`resident_key`).
+pub const COMMAND_CAPABILITY_RESIDENT_KEY_FEATURE: &str = "command-capability-resident-key-v1";
 /// Largest canonical request serialization the op will accept.
 pub const COMMAND_CAPABILITY_MAX_BYTES: usize = 4 * 1024 * 1024;
 /// Replay rows one request may carry. The store keeps far fewer; a caller
@@ -143,6 +146,11 @@ pub struct CommandCapabilityRequestV1 {
     /// Null asks nothing.
     #[serde(default)]
     pub replay_identity: Value,
+    /// Verify with the key the resident reads from its own encrypted-file
+    /// secret store, so the caller puts no secret on the wire. A request that
+    /// sets this must not also carry a key.
+    #[serde(default, skip_serializing_if = "core::ops::Not::not")]
+    pub resident_key: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
