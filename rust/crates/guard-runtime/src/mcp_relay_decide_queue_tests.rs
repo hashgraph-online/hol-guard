@@ -74,11 +74,7 @@ fn only_a_bound_safe_alternative_mode_blocks_in_place() {
             None,
             "review".to_owned()
         ),
-        Ok(Routed::SafeAlternative {
-            policy_action: "review".to_owned(),
-            redaction_level: "full".to_owned(),
-            center: None,
-        })
+        Err(ROUTE_UNSUPPORTED)
     );
     assert_eq!(blocked(Some("ask"), Some("full")), Err(ROUTE_UNSUPPORTED));
     assert_eq!(blocked(None, Some("full")), Err(ROUTE_UNSUPPORTED));

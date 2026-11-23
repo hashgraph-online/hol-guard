@@ -52,6 +52,7 @@ _SESSION_SECONDS = 30.0
 _WARM_SECONDS = 30.0
 _ROW_SECONDS = 10.0
 _DRAIN_SECONDS = 30.0
+_GATE_DAEMON_SESSION = "benign-gate-relay"
 # The answer to a call the relay could not decide yet (`mcp_relay_authority::NO_DECISION`).
 _NO_DECISION = "HOL Guard could not obtain a native decision for this tool call."
 # The stderr line naming why (`mcp_relay_resident_defer::DEFER_LINE_PREFIX`).
@@ -324,6 +325,16 @@ def evidence_drained(worker: HookWorker) -> Iterator[None]:
     publisher = worker.policy_snapshot_publisher
     started = worker.activity_writer is None
     if started:
+        # A daemon host records where its approval center listens; the relay
+        # links a setup block's inbox row there and defers without it.
+        now = utc_now()
+        worker.store.upsert_runtime_state(
+            session_id=_GATE_DAEMON_SESSION,
+            daemon_host="127.0.0.1",
+            daemon_port=4781,
+            started_at=now,
+            last_heartbeat_at=now,
+        )
         worker.activity_writer = ResidentEvidenceClient(store=worker.store)
         worker._start_direct_evidence_drain()  # pyright: ignore[reportPrivateUsage]
         publisher.request_publish()
@@ -336,6 +347,7 @@ def evidence_drained(worker: HookWorker) -> Iterator[None]:
         if started:
             worker._stop_direct_evidence_drain()  # pyright: ignore[reportPrivateUsage]
             worker.activity_writer = None
+            worker.store.clear_runtime_state(session_id=_GATE_DAEMON_SESSION)
             publisher.request_publish()
 
 

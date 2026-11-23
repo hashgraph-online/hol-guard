@@ -116,18 +116,21 @@ pub(super) fn route(
 }
 
 /// The queue route as the bound blocked-request mode answers it: a
-/// safe-alternative block, or a deferral for any other mode.
+/// safe-alternative block, or a deferral for any other mode. A binding with
+/// no approval center also defers: the resident writes the block's inbox row
+/// and receipt only when it knows where the row links, and nothing else
+/// records a relayed block it leaves behind.
 pub(super) fn safe_alternative(
     blocked_request_mode: Option<&str>,
     redaction_level: Option<&str>,
     center: Option<&str>,
     policy_action: String,
 ) -> Result<Routed, &'static str> {
-    match (blocked_request_mode, redaction_level) {
-        (Some(SAFE_ALTERNATIVE_MODE), Some(level)) => Ok(Routed::SafeAlternative {
+    match (blocked_request_mode, redaction_level, center) {
+        (Some(SAFE_ALTERNATIVE_MODE), Some(level), Some(center)) => Ok(Routed::SafeAlternative {
             policy_action,
             redaction_level: level.to_owned(),
-            center: center.map(str::to_owned),
+            center: Some(center.to_owned()),
         }),
         _ => Err(ROUTE_UNSUPPORTED),
     }
