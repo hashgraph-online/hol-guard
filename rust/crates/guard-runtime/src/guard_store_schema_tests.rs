@@ -22,7 +22,9 @@ fn the_base_creates_every_table_index_and_trigger() {
     create_base(&connection).expect("create");
     let created = objects(&connection);
     let count = |kind: &str| created.iter().filter(|(k, _, _)| k == kind).count();
-    assert_eq!(count("table"), 39);
+    // 39 create-table statements, but `guard_connect_states` is listed twice
+    // and the second `if not exists` creates nothing.
+    assert_eq!(count("table"), 38);
     assert_eq!(count("index"), 12);
     assert_eq!(count("trigger"), 6);
     assert_eq!(base_statements().count(), 60);
@@ -46,4 +48,17 @@ fn running_the_base_twice_changes_nothing() {
         })
         .expect("count");
     assert_eq!(again, migrations);
+}
+
+#[test]
+fn a_failed_base_run_leaves_no_partial_schema() {
+    let connection = Connection::open_in_memory().expect("open");
+    // A view under a base table's name makes that table's statement fail
+    // part-way through the run.
+    connection
+        .execute_batch("create view schema_migrations as select 1 as version")
+        .expect("blocker");
+    assert!(create_base(&connection).is_err());
+    let names: Vec<(String, String, String)> = objects(&connection);
+    assert_eq!(names.len(), 1, "{names:?}");
 }
