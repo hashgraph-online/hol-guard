@@ -8,9 +8,9 @@ use std::path::{Component, Path};
 #[path = "home_hidden_listing.rs"]
 mod home;
 pub(in crate::pretool) use home::{
-    absent_home_hidden_tool_path, home_hidden_content_read, home_hidden_directory,
-    home_hidden_link_names, home_hidden_size_summary, home_hidden_tool_directory,
-    home_hidden_walk_clears_stores, resolved_home_hidden_content_read,
+    absent_below_home_tool_directory, absent_home_hidden_tool_path, home_hidden_content_read,
+    home_hidden_directory, home_hidden_link_names, home_hidden_size_summary,
+    home_hidden_tool_directory, home_hidden_walk_clears_stores, resolved_home_hidden_content_read,
     resolved_home_hidden_listing,
 };
 
