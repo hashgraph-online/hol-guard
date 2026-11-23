@@ -85,6 +85,37 @@ def test_mcp_request_status_and_source_witness_commit_together(tmp_path: Path, n
     assert current["currentDigest"] == source.source_digest
 
 
+def test_mcp_business_apply_holds_the_generation_lock_through_finalize(tmp_path: Path, native_mcp_probe, monkeypatch):
+    store = GuardStore(tmp_path / "mcp-lock-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    pending = _stage(store, candidate, monkeypatch)
+    lock_key = str(store.guard_home / "policy-integrity-generation.lock")
+    seen: dict[str, bool] = {}
+    native_call = store._native_store_call
+    finalize = store.finalize_policy_import
+
+    def held() -> bool:
+        return lock_key in (getattr(store._policy_integrity_generation_lock_local, "held", None) or set())
+
+    def recording_call(method, args, *rest, **kwargs):
+        if method == "apply_mcp_policy_request":
+            seen["apply"] = held()
+        return native_call(method, args, *rest, **kwargs)
+
+    def recording_finalize(*args, **kwargs):
+        seen["finalize"] = held()
+        return finalize(*args, **kwargs)
+
+    monkeypatch.setattr(store, "_native_store_call", recording_call)
+    monkeypatch.setattr(store, "finalize_policy_import", recording_finalize)
+    result = policy_tools.apply_pending_policy_request(
+        store, pending["requestId"], approval_gate_grant=_grant(store, candidate)
+    )
+    assert result["status"] == "applied"
+    assert seen == {"apply": True, "finalize": True}
+
+
 def test_stale_mcp_source_is_refused_before_closing_the_newer_policy(tmp_path: Path, native_mcp_probe, monkeypatch):
     store = GuardStore(tmp_path / "stale-home")
     native_mcp_probe(store.guard_home)
