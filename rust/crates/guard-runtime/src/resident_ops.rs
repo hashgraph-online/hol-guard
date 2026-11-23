@@ -425,7 +425,7 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 )
             }
             ResidentOperationV1::CommandCapability(request) => {
-                crate::command_envelope_op::command_capability_resident_key::evaluate_command_capability_request(
+                crate::command_capability_op::resident_key::evaluate_command_capability_request(
                     &request,
                     policy_store.map(PolicySnapshotStore::guard_home),
                 )

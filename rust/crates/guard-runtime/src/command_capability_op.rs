@@ -30,7 +30,7 @@ const MICROS_PER_SECOND: i64 = 1_000_000;
 
 /// The reply's binding digest never covers the signing key, so a caller that
 /// sees the digest learns nothing about the secret it sent.
-pub(crate) fn request_digest(request: &CommandCapabilityRequestV1) -> Result<String, String> {
+fn request_digest(request: &CommandCapabilityRequestV1) -> Result<String, String> {
     let mut material = serde_json::to_value(request)
         .map_err(|_| "native_command_capability_invalid".to_owned())?;
     if let Some(object) = material.as_object_mut() {
@@ -40,7 +40,7 @@ pub(crate) fn request_digest(request: &CommandCapabilityRequestV1) -> Result<Str
 }
 
 /// The conditions the op refuses rather than answers.
-pub(crate) fn refusal(request: &CommandCapabilityRequestV1) -> Option<&'static str> {
+fn refusal(request: &CommandCapabilityRequestV1) -> Option<&'static str> {
     // A request naming another contract is not this op's to answer: the field
     // is the sender's own statement of which request shape it built.
     if request.schema != COMMAND_CAPABILITY_REQUEST_SCHEMA {
@@ -54,7 +54,7 @@ pub(crate) fn refusal(request: &CommandCapabilityRequestV1) -> Option<&'static s
     None
 }
 
-pub(crate) fn evaluate(request: &CommandCapabilityRequestV1) -> Value {
+fn evaluate(request: &CommandCapabilityRequestV1) -> Value {
     let wants_job = !request.job.is_null();
     let replayed = replay_answer(request);
     match verified_capability(request) {
@@ -478,6 +478,9 @@ fn canonical_bytes(value: &Value) -> Result<Vec<u8>, &'static str> {
 fn content_digest(payload: &[u8]) -> String {
     guard_policy_snapshot::digest_bytes(payload)
 }
+
+#[path = "command_capability_resident_key.rs"]
+pub(crate) mod resident_key;
 
 #[cfg(test)]
 #[path = "command_capability_op_tests.rs"]

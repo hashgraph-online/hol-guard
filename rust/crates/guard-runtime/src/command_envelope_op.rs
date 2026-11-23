@@ -129,9 +129,6 @@ fn evaluate(request: &CommandEnvelopeRequestV1, guard_home: Option<&Path>) -> Va
     }
 }
 
-#[path = "command_capability_resident_key.rs"]
-pub(crate) mod command_capability_resident_key;
-
 #[cfg(test)]
 #[path = "command_envelope_op_tests.rs"]
 mod tests;

@@ -170,3 +170,14 @@ fn asking_for_the_resident_key_while_naming_a_key_id_is_refused() {
         Value::from("native_command_capability_invalid")
     );
 }
+
+#[test]
+fn a_two_key_request_for_another_schema_is_refused_as_a_schema_mismatch() {
+    let mut both = request();
+    both.resident_key = true;
+    both.schema = "other".to_owned();
+    assert_eq!(
+        answer(&both, None)["code"],
+        Value::from("native_command_capability_schema_mismatch")
+    );
+}

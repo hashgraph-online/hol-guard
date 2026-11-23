@@ -11,7 +11,8 @@ use guard_contracts::{
     CommandCapabilityRequestV1, CommandCapabilityResultV1, COMMAND_CAPABILITY_RESULT_SCHEMA,
 };
 
-use crate::command_capability_op::{evaluate, refusal, request_digest};
+use super::{evaluate, refusal, request_digest};
+use crate::command_envelope_op::resident_key;
 
 pub(crate) fn evaluate_command_capability_request(
     request: &CommandCapabilityRequestV1,
@@ -19,7 +20,7 @@ pub(crate) fn evaluate_command_capability_request(
 ) -> Result<Vec<u8>, String> {
     let request_sha256 =
         request_digest(request).map_err(|_| "native_command_capability_too_large".to_owned())?;
-    let (status, code, payload) = match resident_refusal(request).or_else(|| refusal(request)) {
+    let (status, code, payload) = match refusal(request).or_else(|| resident_refusal(request)) {
         Some(code) => ("error", code, None),
         None => ("ok", "ok", Some(evaluate(&keyed(request, guard_home)))),
     };
@@ -34,7 +35,8 @@ pub(crate) fn evaluate_command_capability_request(
 }
 
 /// Asking for the resident's key while sending a key or a key id leaves two
-/// keys, and the op will not pick between them.
+/// keys, and the op will not pick between them. Checked after `refusal`, so
+/// a request for another schema is still refused as a schema mismatch.
 fn resident_refusal(request: &CommandCapabilityRequestV1) -> Option<&'static str> {
     (request.resident_key
         && (request.integrity_key_b64.is_some() || request.integrity_key_id.is_some()))
@@ -50,7 +52,7 @@ fn keyed(
 ) -> CommandCapabilityRequestV1 {
     let mut keyed = request.clone();
     if request.resident_key {
-        let (key, key_id) = super::resident_key(guard_home);
+        let (key, key_id) = resident_key(guard_home);
         keyed.integrity_key_b64 = key;
         keyed.integrity_key_id = key_id;
     }
