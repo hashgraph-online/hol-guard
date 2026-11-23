@@ -3704,6 +3704,40 @@
       "expect": "allow"
     },
     {
+      "id": "shell-limit-ulimit-reads-soft-joined-flags",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ulimit -Sn"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-limit-ulimit-soft-stack",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ulimit -Ss 8192"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "host-fact-sysctl-core-count",
       "fix_area": "shell",
       "harnesses": [

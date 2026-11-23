@@ -2510,7 +2510,7 @@
       "commands": [
         "ulimit -n 10240",
         "ulimit -Sn 10240; ulimit -Sn",
-        "ulimit -s unlimited"
+        "ulimit -Ss 8192"
       ],
       "required_tools": [
         "bash"

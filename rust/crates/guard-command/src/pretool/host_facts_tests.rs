@@ -40,6 +40,10 @@ fn a_fact_about_the_host_prints_and_runs_nothing() {
         ("tty", vec!["-s"]),
         ("ulimit", vec!["-n"]),
         ("ulimit", vec!["-a"]),
+        ("ulimit", vec!["-Sn"]),
+        ("ulimit", vec!["-Hn"]),
+        ("ulimit", vec!["-S", "-n"]),
+        ("ulimit", vec!["-Ss", "-Hs"]),
         ("sysctl", vec!["-n", "hw.ncpu"]),
         ("sysctl", vec!["hw.memsize"]),
         ("sysctl", vec!["-a"]),
@@ -91,6 +95,12 @@ fn a_spelling_that_assigns_execs_or_opens_a_file_stays_reviewed() {
         ("curl", vec!["--version"]),
         // Raises or lowers the limit rather than printing it.
         ("ulimit", vec!["-n", "4096"]),
+        ("ulimit", vec!["-Sn", "4096"]),
+        ("ulimit", vec!["-n4096"]),
+        ("ulimit", vec!["-"]),
+        ("ulimit", vec!["--"]),
+        ("ulimit", vec!["-Sx"]),
+        ("ulimit", vec![]),
         // Sets kernel state rather than reading it.
         ("sysctl", vec!["-w", "kern.maxfiles=100"]),
         ("sysctl", vec!["kern.maxfiles=100"]),
