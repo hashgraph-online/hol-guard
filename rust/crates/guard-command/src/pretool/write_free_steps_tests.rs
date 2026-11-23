@@ -115,8 +115,9 @@ fn a_sed_that_can_write_keeps_review() {
     }
 }
 
-// Verify the parser actually supplies these shell redirections to the proof:
-// a prefix of /dev/null names a different, writable file.
+// A prefix of /dev/null names a different, writable file. The parser keeps no
+// step for these, so no proof can start from them; if it ever does, the
+// redirect word check still has to refuse it.
 #[test]
 fn redirection_lookalikes_never_count_as_write_free() {
     for (command, program) in [
@@ -125,7 +126,17 @@ fn redirection_lookalikes_never_count_as_write_free() {
         ("sed -n '1p' README.md 2>/dev/nullx", "sed"),
         ("sed -n '1p' README.md >/dev/null-output", "sed"),
     ] {
-        let segment = step(command, program).expect("parser must retain the redirection segment");
-        assert!(!writes_nothing(&segment), "{command}");
+        assert!(
+            step(command, program).is_none_or(|segment| !writes_nothing(&segment)),
+            "{command}"
+        );
+    }
+    for text in [
+        "find . -type f -print 2>/dev/nullx",
+        "find . -type f -print >/dev/null-output",
+    ] {
+        let mut segment = step("find . -type f -print", "find").expect("plain find parses");
+        segment.text = text.to_owned();
+        assert!(!writes_nothing(&segment), "{text}");
     }
 }
