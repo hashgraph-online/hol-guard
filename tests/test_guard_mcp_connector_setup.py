@@ -106,9 +106,9 @@ def test_a_malformed_connector_fails_the_decision_closed(connector: object) -> N
         {"post_claim_revalidated": True, "post_claim_authority": "fresh"},
     ],
 )
-def test_connector_setup_does_not_recompute_the_native_decision(fields: dict[str, object]) -> None:
-    decision = _validated_decision(_wire(connector_setup=dict(CONNECTOR), **fields))
-    assert decision["connector_setup"] == CONNECTOR
+def test_a_connector_on_a_decision_nothing_but_non_recognition_caused_is_rejected(fields: dict[str, object]) -> None:
+    with pytest.raises(NativeMcpToolPolicyError, match="payload_invalid"):
+        _validated_decision(_wire(connector_setup=dict(CONNECTOR), **fields))
 
 
 def test_a_heuristic_review_may_name_a_connector() -> None:
