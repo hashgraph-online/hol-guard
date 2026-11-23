@@ -43,6 +43,10 @@ mod local_cli_regroup;
 mod local_cli_sql;
 #[path = "guard_store_schema_objects.rs"]
 mod objects;
+#[path = "guard_store_schema_shadow.rs"]
+mod shadow;
+#[path = "guard_store_schema_shadow_sql.rs"]
+mod shadow_sql;
 #[path = "guard_store_schema_tables.rs"]
 mod tables;
 #[path = "guard_store_schema_versions.rs"]
@@ -212,7 +216,8 @@ pub(crate) fn ensure_families(connection: &Connection, now: &str) -> StoreResult
     families::ensure_bash_operations(connection, now)?;
     workspace::ensure_assessment(connection, now)?;
     workspace::ensure_fix_proposal(connection, now)?;
-    families::ensure_workflow_capabilities(connection, now)
+    families::ensure_workflow_capabilities(connection, now)?;
+    shadow::ensure_shadow(connection, now)
 }
 
 #[cfg(test)]
