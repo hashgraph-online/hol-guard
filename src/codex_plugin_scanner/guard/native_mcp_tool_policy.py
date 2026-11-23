@@ -47,6 +47,7 @@ _OPERATION = "mcp_tool_policy_decide"
 _UNAVAILABLE = "native_mcp_tool_policy_unavailable"
 _RESIDENT_CODE = re.compile(r"^native_mcp_tool_policy_decide_[a-z_]{1,64}$")
 _CONNECTOR_SETUP_KEYS = frozenset({"reason_code", "identity_hash", "surface", "name", "queue_group_id"})
+_NON_RECOGNITION_SOURCES = frozenset({"policy", "heuristic"})
 _IDENTITY_HASH = re.compile(r"^[0-9a-f]{64}$")
 _MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _MAX_ROUNDS = 64
@@ -248,6 +249,19 @@ def _is_connector_setup(value: object) -> bool:
     )
 
 
+
+def _is_non_recognition(payload: dict[str, Any]) -> bool:
+    """Only a review that nothing but non-recognition caused may name a connector."""
+    quiet = not (payload["signals"] or payload["risk_categories"] or payload["pending_approval_reuse_decision"])
+    return (
+        payload["action"] in {"allow", "warn", "review"}
+        and payload["policy_action"] in {"allow", "warn", "review"}
+        and quiet
+        and payload["source"] in _NON_RECOGNITION_SOURCES
+        and payload["approval_reuse_claim_disposition"] is None
+        and not payload["post_claim_revalidated"]
+    )
+
 def _validated_decision(payload: object, *, proxy_requested: bool = False) -> dict[str, Any]:
     invalid = NativeMcpToolPolicyError("payload_invalid")
     if not isinstance(payload, dict) or set(payload) - {"proxy", "connector_setup"} != _PAYLOAD_KEYS:
@@ -282,6 +296,7 @@ def _validated_decision(payload: object, *, proxy_requested: bool = False) -> di
         or not isinstance(payload["post_claim_revalidated"], bool)
         or payload["post_claim_authority"] not in (None, "fresh")
         or (payload["post_claim_authority"] == "fresh") is not payload["post_claim_revalidated"]
+        or ("connector_setup" in payload and not _is_non_recognition(payload))
     ):
         raise invalid
     return payload
