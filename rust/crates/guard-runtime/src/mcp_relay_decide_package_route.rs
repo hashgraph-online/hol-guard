@@ -135,7 +135,10 @@ pub(super) fn precheck(
     }
 }
 
-/// `package_compose` over the freshly re-resolved tool and package policies.
+/// `package_compose` over the freshly re-resolved tool and package policies,
+/// with no inline approval in hand. Production always carries the inline
+/// flag, so only the route tests spell the plain call.
+#[cfg(test)]
 pub(super) fn compose(
     mode: &str,
     tool: &Decision,

@@ -133,9 +133,12 @@ pub(super) struct QueueBinding<'a> {
     pub(super) redaction_level: Option<&'a str>,
 }
 
-/// Decide one relayed package call. `re_resolve` is the proxy's second
-/// resolution: the fresh tool authority and the fresh package policy, read by
-/// the caller that holds the store.
+/// Decide one relayed package call with no inline approval in hand.
+/// `re_resolve` is the proxy's second resolution: the fresh tool authority
+/// and the fresh package policy, read by the caller that holds the store.
+/// Production always carries the inline flag, so only the lane tests spell
+/// the plain call.
+#[cfg(test)]
 pub(super) fn decide_package<F>(
     mode: &str,
     tool: &str,

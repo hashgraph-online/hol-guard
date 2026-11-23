@@ -167,7 +167,9 @@ impl Call<'_> {
         })
     }
 
-    /// Whether the route raises the client's inline elicitation.
+    /// Whether the route raises the client's inline elicitation. Production
+    /// reads the whole route; only the prompt tests ask this one question.
+    #[cfg(test)]
     pub(super) fn prompts(&self, decision: &Decision) -> bool {
         self.route(decision, None)["route"]["need"] == INLINE_APPROVAL
     }
