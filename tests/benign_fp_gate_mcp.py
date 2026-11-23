@@ -278,6 +278,41 @@ def _warming(response: dict[str, Any]) -> bool:
 
 
 @contextmanager
+def review_posture(worker: HookWorker) -> Iterator[None]:
+    """Publish the gate's home config with ``default_action = "review"``, then restore it.
+
+    The relay reads its posture from the published Guard home config. Its
+    default of ``warn`` forwards a tool nobody decided on, and the cases check
+    the review route a reviewing install takes. Wait for the new policy digest
+    so no call races the old snapshot.
+    """
+    config = worker.store.guard_home / "config.toml"
+    previous = config.read_text(encoding="utf-8") if config.exists() else None
+    config.write_text(f'{previous or ""}\ndefault_action = "review"\n', encoding="utf-8")
+    _republish(worker)
+    try:
+        yield
+    finally:
+        if previous is None:
+            config.unlink()
+        else:
+            config.write_text(previous, encoding="utf-8")
+        _republish(worker)
+
+
+def _republish(worker: HookWorker) -> None:
+    publisher = worker.policy_snapshot_publisher
+    before = (publisher.current_snapshot_binding() or {}).get("policy_digest")
+    publisher.request_publish()
+    deadline = time.monotonic() + _DRAIN_SECONDS
+    while time.monotonic() < deadline:
+        binding = publisher.current_snapshot_binding() or {}
+        if binding.get("policy_digest") not in (None, before):
+            return
+        time.sleep(0.05)
+
+
+@contextmanager
 def evidence_drained(worker: HookWorker) -> Iterator[None]:
     """Bind the gate's lane with its evidence drain, as a daemon host binds it.
 
