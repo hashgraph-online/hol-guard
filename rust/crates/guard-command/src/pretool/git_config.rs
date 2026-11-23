@@ -507,7 +507,7 @@ fn probe(
             "config",
             "--null",
             "--get-regexp",
-            "^(core\\.fsmonitor|core\\.excludesfile|core\\.attributesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
+            "^(core\\.fsmonitor|core\\.excludesfile|core\\.attributesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|fsck\\.skiplist|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
         ])
 ,
         deadline, CONFIG_LIMIT,
@@ -624,6 +624,15 @@ fn probe(
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
+        // Git reads the skip list named by every file it loads, so a later
+        // empty value does not take back the file an earlier one named: the
+        // check still opens it and can quote a line of it back. Every other
+        // setting here is decided by the last value, the way Git's own
+        // lookup reads it.
+        if key == "fsck.skiplist" && value.is_empty() {
+            effective.entry(key).or_insert(value);
+            continue;
+        }
         effective.insert(key, value);
     }
     let pager_key = format!("pager.{pager_operation}");
@@ -783,6 +792,13 @@ fn probe(
             "log.showsignature" => {
                 super::git_history_reads::verifies_signatures(rendering) && !disabled
             }
+            // A configured skip list names a file of object names Git reads
+            // before it checks anything, and a line of that file that is not
+            // an object name is quoted back in the diagnostic Git prints.
+            // A check that reads an arbitrary file and can echo a line of it
+            // keeps its review until someone reads that setting; an absent
+            // one leaves the check where it was.
+            "fsck.skiplist" => operation == "fsck" && !value.is_empty(),
             // Outside a repository grep would search every file under cwd.
             "grep.fallbacktonoindex" => operation == "grep" && !disabled,
             // A configured verification program (a very common developer

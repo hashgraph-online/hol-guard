@@ -175,6 +175,96 @@ fn an_object_store_check_is_a_proven_read() {
             );
         }
     }
+    // A configured pager runs a program when the check pages, and the check
+    // pages only because its own `pager.*` key asks it to.
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "pager.fsck", "./synthetic-never-execute"],
+    );
+    let result = session.evaluate_at("git fsck --no-progress", &session.primary);
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "--unset-all", "pager.fsck"],
+    );
+    // The check walks the index as one of its roots, so a configured monitor
+    // is a program this read can start.
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "core.fsmonitor", "./synthetic-never-execute"],
+    );
+    let result = session.evaluate_at("git fsck --no-progress", &session.primary);
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "--unset-all", "core.fsmonitor"],
+    );
+    // A configured skip list names a file Git reads before it checks
+    // anything, and a line of that file that is not an object name is
+    // quoted back in the diagnostic Git prints. The check keeps its review
+    // while that setting is there, and gets it back when it is gone.
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "fsck.skipList", "./synthetic-skip-list"],
+    );
+    for command in [
+        "git fsck",
+        "git fsck --no-progress",
+        "git fsck --connectivity-only",
+        "git fsck --strict --no-progress",
+    ] {
+        let result = session.evaluate_at(command, &session.primary);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "--unset-all", "fsck.skipList"],
+    );
+    let result = session.evaluate_at("git fsck --no-progress", &session.primary);
+    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
+    // Git reads the skip list named by every file it loads, so a later empty
+    // value does not take back the file an earlier one named. The home
+    // configuration is read before the repository's, and the check still
+    // opens the file the first setting names.
+    git(
+        &session.home,
+        &session.primary,
+        &[
+            "config",
+            "--global",
+            "fsck.skipList",
+            "./synthetic-skip-list",
+        ],
+    );
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "--local", "fsck.skipList", ""],
+    );
+    let result = session.evaluate_at("git fsck --no-progress", &session.primary);
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "--local", "--unset-all", "fsck.skipList"],
+    );
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "--global", "--unset-all", "fsck.skipList"],
+    );
+    let result = session.evaluate_at("git fsck --no-progress", &session.primary);
+    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
 }
 
 #[test]
