@@ -133,14 +133,26 @@ fn env_setting_runs_compiler(name: &str) -> bool {
 /// the command silently. A full dump can calculate compiler-dependent values.
 /// Named inert settings remain eligible for the narrower direct-read proof.
 pub(super) fn env_requires_approval_even_when_contained(arguments: &[String]) -> bool {
-    if arguments.first().map(String::as_str) != Some("env") {
+    // The go launcher can take -C before the verb. Even a named setting
+    // following -C is not proved safe: the new directory may contain a
+    // go.mod/go.work selecting an executable from PATH.
+    let mut rest = arguments;
+    while let Some(flag) = rest.first().map(String::as_str) {
+        if flag == "-C" || flag == "--C" {
+            rest = rest.get(2..).unwrap_or(&[]);
+        } else if flag.starts_with("-C=") || flag.starts_with("--C=") {
+            rest = &rest[1..];
+        } else {
+            break;
+        }
+    }
+    if rest.first().map(String::as_str) != Some("env") {
         return false;
     }
-    let operands = &arguments[1..];
-    operands.iter().all(|argument| argument == "-json")
-        || operands
-            .iter()
-            .any(|argument| env_setting_runs_compiler(argument))
+    // Only the exact, named, compiler-inert syntax is exempt. Unrecognized
+    // flags (-changed, --json, -json=true), dumps, writes, and -C all keep
+    // explicit review instead of silently falling into workspace containment.
+    !read_only_query(arguments)
 }
 
 /// Whether the toolchain that answers the query can only be the one on
