@@ -13,6 +13,6 @@ def load_json_object(path: Path) -> dict[str, object]:
         payload = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(payload, dict):
             return payload
-    except (json.JSONDecodeError, OSError):
+    except (UnicodeDecodeError, json.JSONDecodeError, OSError):
         pass
     return {}
