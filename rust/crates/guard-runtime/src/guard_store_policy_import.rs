@@ -74,6 +74,29 @@ fn rows_fingerprint(connection: &Connection) -> StoreResult<String> {
     Ok(hex::encode(Sha256::digest(encoded)))
 }
 
+#[path = "guard_store_policy_recovery.rs"]
+mod recovery;
+
+/// Whether `run` owns `method`.
+pub(crate) fn handles(method: &str) -> bool {
+    matches!(
+        method,
+        "import_policy_rows" | "apply_mcp_policy_request" | "recover_business_policy_source"
+    )
+}
+
+/// The policy import ops `handles` names.
+pub(crate) fn run(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
+    match method {
+        "import_policy_rows" => import_policy_rows(connection, args),
+        "apply_mcp_policy_request" => apply_mcp_policy_request(connection, args),
+        "recover_business_policy_source" => {
+            recovery::recover_business_policy_source(connection, args)
+        }
+        _ => Err(StoreError::Invalid("native_guard_store_args_invalid")),
+    }
+}
+
 /// `GuardStore.import_policy_document` (`store_policy_document.py`).
 pub(crate) fn import_policy_rows(connection: &Connection, args: &Args) -> StoreResult<Value> {
     let (inserted, replaced, next_control_state) = write_rows(connection, args)?;
@@ -139,17 +162,6 @@ fn business_witness<'a>(args: &Args<'a>) -> StoreResult<Option<(&'a str, Option<
         return value_error("native_business_source_installation_incoherent");
     }
     Ok(Some((witness, reported)))
-}
-
-fn stage_witness(connection: &Connection, witness: &str, now: &str) -> StoreResult<()> {
-    exec(
-        connection,
-        "insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?) \
-         on conflict(state_key) do update set payload_json = excluded.payload_json, \
-         updated_at = excluded.updated_at",
-        &[json!(BUSINESS_WITNESS_KEY), json!(witness), json!(now)],
-    )?;
-    Ok(())
 }
 
 fn refused(code: &str) -> StoreResult<Option<Value>> {
@@ -378,7 +390,7 @@ fn write_rows(connection: &Connection, args: &Args) -> StoreResult<(i64, i64, Va
     };
     let mut count = inserted.len() as i64;
     if let Some((witness, reported)) = witness {
-        stage_witness(connection, witness, now)?;
+        recovery::stage_witness(connection, witness, now)?;
         count = reported.unwrap_or(count);
     }
     Ok((count, replaced, next_control_state))
