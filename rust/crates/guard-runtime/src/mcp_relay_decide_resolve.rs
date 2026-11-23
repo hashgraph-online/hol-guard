@@ -83,7 +83,6 @@ fn resolve_saved(
     control_digest: String,
     saved: Option<&store::Saved<'_>>,
 ) -> Result<(Resolved, Option<Legged>), &'static str> {
-    let binding = &admitted.binding;
     let identity = identity(request, view, control_digest.clone(), connection)?;
     let subject = subject::subject(request, &identity, view)?;
     let catalog = crate::contributed_mcp_decision_op::Catalog {

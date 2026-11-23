@@ -19,6 +19,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from dataclasses import dataclass
@@ -47,6 +48,8 @@ _SESSION_SECONDS = 30.0
 _WARM_SECONDS = 30.0
 # The answer to a call the relay could not decide yet (`mcp_relay_authority::NO_DECISION`).
 _NO_DECISION = "HOL Guard could not obtain a native decision for this tool call."
+# The stderr line naming why (`mcp_relay_resident_defer::DEFER_LINE_PREFIX`).
+_DEFER_PREFIX = "hol-guard mcp-relay: no native decision: "
 # Default mode neither links to the review nor tells the agent to ask the user for anything.
 FORBIDDEN_WORDING = ("http", "inbox", "approv", "ask the user", "ask your", "ask them")
 _TOOLS = [
@@ -203,8 +206,12 @@ def _messages(case: McpCase) -> list[dict[str, Any]]:
     ]
 
 
-def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str, Any]]) -> dict[int, Any]:
-    """Run one relay session and return its responses by id; stdin closes after the last answer.
+def _session(
+    command: list[str], fixture: BenignFixture, messages: list[dict[str, Any]]
+) -> tuple[dict[int, Any], list[str]]:
+    """Run one relay session: its responses by id and the defer codes it named on stderr.
+
+    Stdin closes after the last answer.
 
     A watchdog kills the relay once the session outlives ``_SESSION_SECONDS``,
     so a relay that holds stdout open without answering fails the case instead
@@ -213,14 +220,17 @@ def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str
     wanted = {int(message["id"]) for message in messages}
     responses: dict[int, Any] = {}
     expired = threading.Event()
-    with subprocess.Popen(
-        command,
-        cwd=fixture.worktree,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-    ) as session:
+    with (
+        tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stderr,
+        subprocess.Popen(
+            command,
+            cwd=fixture.worktree,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=stderr,
+            text=True,
+        ) as session,
+    ):
         assert session.stdin is not None and session.stdout is not None
 
         def expire() -> None:
@@ -248,9 +258,11 @@ def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str
             raise
         finally:
             watchdog.cancel()
+        stderr.seek(0)
+        defers = [line.removeprefix(_DEFER_PREFIX).strip() for line in stderr if line.startswith(_DEFER_PREFIX)]
     if expired.is_set():
         raise TimeoutError(f"the MCP relay session did not finish within {_SESSION_SECONDS:.0f}s")
-    return {key: value for key, value in responses.items() if key in wanted}
+    return {key: value for key, value in responses.items() if key in wanted}, defers
 
 
 def _warming(response: dict[str, Any]) -> bool:
@@ -273,10 +285,14 @@ def replay(
     # resident still records it is sent again in a later session.
     deadline = time.monotonic() + _WARM_SECONDS
     while True:
-        response = _session(command, fixture, _messages(case)).get(3, {})
+        responses, defers = _session(command, fixture, _messages(case))
+        response = responses.get(3, {})
         if not _warming(response) or time.monotonic() > deadline:
             break
         time.sleep(0.25)
+    if _warming(response):
+        # Name why the relay never decided, so a failing case says more than the refusal.
+        response = {**response, "relay_defer": defers}
     rows = approval_rows(store, known)
     return response, rows, identity.identity_hash
 
@@ -285,6 +301,8 @@ def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, An
     """Why a replayed call is not what its case expects, or None when it is."""
     error = response.get("error")
     data = error.get("data", {}) if isinstance(error, dict) else {}
+    if "relay_defer" in response:
+        return f"the relay never decided the call: {response['relay_defer']}"
     if case.expect == "allow":
         if "result" not in response or rows:
             return f"an allowed server was held: {response}"

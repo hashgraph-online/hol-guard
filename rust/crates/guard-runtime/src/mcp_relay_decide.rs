@@ -389,7 +389,9 @@ use encode::encode;
 #[path = "mcp_relay_decide_flow.rs"]
 mod flow;
 pub(crate) use claim::claim;
-use flow::{decide, evaluation_leg};
+use flow::decide;
+#[cfg(test)]
+use flow::evaluation_leg;
 #[path = "mcp_relay_decide_inline.rs"]
 pub(crate) mod inline;
 #[path = "mcp_relay_decide_observe.rs"]

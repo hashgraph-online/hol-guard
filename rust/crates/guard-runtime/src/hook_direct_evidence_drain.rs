@@ -311,6 +311,7 @@ mod tests {
             let mut record =
                 crate::mcp_relay_receipt::tests::record("forward", "inline-approved", "allow");
             record["tool_name"] = json!(tool);
+            record["params"]["name"] = json!(tool);
             record["remember"] = json!(true);
             record
         };
