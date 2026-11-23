@@ -157,7 +157,7 @@ fn commit_queued(
         .recording
         .lock()
         .unwrap_or_else(|error| error.into_inner());
-    let peeked = queue.acknowledge_and_peek(None, None, DEFAULT_DRAIN_RECORDS);
+    let peeked = queue.acknowledge_and_peek_for_commit(DEFAULT_DRAIN_RECORDS);
     let mut paged = peeked.records;
     let paged_count = paged.len();
     let store_fatal = record_page(queue, home, writer_source, &mut paged)?;
@@ -166,17 +166,20 @@ fn commit_queued(
     if has_unfinished_records(&paged, home) {
         return Err(UNHANDLED.to_owned());
     }
-    let settled = match peeked.through {
-        Some(through) => queue
+    // The commit page included resident-owned records so `record_page` could
+    // write them. Acknowledging the cursor is therefore sufficient. Do not
+    // send those records through the detached writer a second time.
+    if let Some(through) = peeked.through {
+        let _ = queue
             .state
             .lock()
             .map_err(|_| UNHANDLED.to_owned())?
-            .acknowledge(through),
-        None => Vec::new(),
-    };
+            .acknowledge(through);
+    }
+    let settled = Vec::new();
     let record_count = paged_count + settled.len();
-    // Plain relay receipts retain their existing resident writer and retry
-    // queue. The client only receives aggregate diagnostics.
+    // The client only receives aggregate diagnostics after the commit has
+    // acknowledged the page.
     mcp_relay_receipt::write_detached(home, settled, queue.unwritten());
     drop(recording);
     Ok(CommittedPage {

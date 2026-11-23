@@ -394,6 +394,24 @@ impl DirectEvidenceQueue {
         ack_epoch: Option<&str>,
         max_records: usize,
     ) -> Peeked {
+        self.acknowledge_and_peek_with(ack_through, ack_epoch, max_records, false)
+    }
+
+    /// Peek a native commit page including records whose receipt the resident
+    /// owns. Ordinary daemon pages skip those records and settle them on the
+    /// acknowledgement. The native commit path must see them first so it can
+    /// write their receipt before acknowledging the cursor.
+    fn acknowledge_and_peek_for_commit(&self, max_records: usize) -> Peeked {
+        self.acknowledge_and_peek_with(None, None, max_records, true)
+    }
+
+    fn acknowledge_and_peek_with(
+        &self,
+        ack_through: Option<u64>,
+        ack_epoch: Option<&str>,
+        max_records: usize,
+        include_native: bool,
+    ) -> Peeked {
         let Ok(mut state) = self.state.lock() else {
             return Peeked {
                 records: Vec::new(),
@@ -416,7 +434,7 @@ impl DirectEvidenceQueue {
             if taken.len() >= max_records {
                 break;
             }
-            if !next.native {
+            if include_native || !next.native {
                 if !taken.is_empty() && page_bytes + next.bytes > MAX_DRAIN_BYTES {
                     break;
                 }

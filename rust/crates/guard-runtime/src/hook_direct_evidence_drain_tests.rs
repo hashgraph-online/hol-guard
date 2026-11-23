@@ -190,3 +190,29 @@ fn a_post_tool_use_is_answered_where_the_daemon_only_records_it() {
     assert_eq!(result["outcome"], "answer", "{result}");
     assert_eq!(drain(&watch, None)["records"][0]["harness"], "claude-code");
 }
+
+#[test]
+fn the_native_commit_page_includes_and_writes_plain_relay_records() {
+    use crate::guard_store_cmd_vectors_tests::temp_home;
+    use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
+    use serde_json::Value;
+
+    let home = temp_home("relay-native-commit");
+    let store = home.join("guard.db");
+    let (receipts, inventory) = vectors();
+    build_database(&store, &receipts, &inventory);
+    let queue = crate::hook_direct_evidence::DirectEvidenceQueue::default();
+    let record = crate::mcp_relay_receipt::tests::record("block", "policy-block", "block");
+    assert!(queue.offer(record));
+
+    let page: Value = serde_json::from_slice(
+        &crate::hook_direct_evidence::commit_test_batch(home.to_str().unwrap(), &queue, None)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(page["record_count"], 1);
+    assert_eq!(page["failed"], false);
+    assert_eq!(count(&home, "runtime_receipts"), 1);
+
+    let _ = std::fs::remove_dir_all(&home);
+}
