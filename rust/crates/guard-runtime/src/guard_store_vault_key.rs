@@ -38,11 +38,14 @@ pub(super) fn resolve(
         return Err(INVALID);
     }
     let home = Path::new(&request.guard_home);
-    let readable = resident_home.is_some_and(|resident| same_home(resident, home));
+    // The key comes from the resident's own enrolled home, never the
+    // request's path: a path checked once and resolved again could be
+    // swapped in between.
+    let source = resident_home.filter(|resident| same_home(resident, home));
     let mut resolved = request.clone();
     resolved.args.remove(FLAG);
-    if readable {
-        if let (Some(key), Some(key_id)) = resident_key(Some(home)) {
+    if let Some(source) = source {
+        if let (Some(key), Some(key_id)) = resident_key(Some(source)) {
             resolved.args.insert(KEY.to_owned(), Value::from(key));
             resolved.args.insert(KEY_ID.to_owned(), Value::from(key_id));
         }
