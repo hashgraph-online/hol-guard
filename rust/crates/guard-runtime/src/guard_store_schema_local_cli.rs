@@ -71,9 +71,15 @@ fn marker((version, checksum): (Value, Value)) -> StoreResult<(i64, String)> {
 fn migrate(connection: &Connection, (mut version, sum): (i64, String)) -> StoreResult<()> {
     let known = sum == checksum(version);
     while known && (1..VERSION).contains(&version) && version != UNPORTED_FROM {
-        step(connection, version)?;
-        version += 1;
-        connection.execute(MARKER_UPDATE, (version, checksum(version)))?;
+        // Each step and its marker commit together: a step that fails after
+        // a rename rolls back to the previous version's tables and marker.
+        let next = version + 1;
+        super::tables::in_savepoint(connection, "local_cli_migration_step", || {
+            step(connection, version)?;
+            connection.execute(MARKER_UPDATE, (next, checksum(next)))?;
+            Ok(())
+        })?;
+        version = next;
     }
     if known && version == VERSION {
         return Ok(());
