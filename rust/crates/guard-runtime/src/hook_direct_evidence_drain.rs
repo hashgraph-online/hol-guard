@@ -229,39 +229,44 @@ fn record_page(
         // Relayed MCP records own their Rust receipt and review-row writer.
         // They can be committed without the daemon's command-activity source,
         // which is absent in short-lived relay-only workers.
-        let plain: Vec<_> = paged
-            .iter()
-            .filter(|item| mcp_relay_receipt::is_plain(&item.record))
-            .map(|item| (item.seq, item.record.clone()))
-            .collect();
-        if !plain.is_empty() {
-            let unwritten = mcp_relay_receipt::write_indexed(home, plain);
-            let unwritten_count = unwritten.len();
-            keep_handed_back(queue, paged, &unwritten);
-            if unwritten_count > 0 {
-                return Err(format!("mcp_relay_receipt_unwritten:{unwritten_count}"));
-            }
-        }
+        write_plain(queue, home, paged, mcp_relay_receipt::write_indexed)?;
         return Ok(None);
     };
     let fatal = record::leftovers(queue, home, source, paged);
     record::drop_settled(paged, home);
     // A plain receipt that the detached writer returned stays queued until
     // its retry succeeds.
+    write_plain(queue, home, paged, mcp_relay_receipt::write_indexed)?;
+    Ok(fatal)
+}
+
+/// Write the page's plain relay receipts, then settle the queue against what
+/// the writer handed back before reporting a partial write. The bookkeeping
+/// `keep_handed_back` does is what keeps a written receipt from being written
+/// twice, so it must run even when the page ends in an error: a retry of the
+/// surviving records must not save a remembered allow or write a receipt
+/// again.
+fn write_plain(
+    queue: &DirectEvidenceQueue,
+    home: &str,
+    paged: &mut Vec<Paged>,
+    write: impl FnOnce(&str, Vec<(u64, Value)>) -> Vec<(u64, Value)>,
+) -> Result<(), String> {
     let plain: Vec<_> = paged
         .iter()
         .filter(|item| mcp_relay_receipt::is_plain(&item.record))
         .map(|item| (item.seq, item.record.clone()))
         .collect();
-    if !plain.is_empty() {
-        let unwritten = mcp_relay_receipt::write_indexed(home, plain);
-        let unwritten_count = unwritten.len();
-        keep_handed_back(queue, paged, &unwritten);
-        if unwritten_count > 0 {
-            return Err(format!("mcp_relay_receipt_unwritten:{unwritten_count}"));
-        }
+    if plain.is_empty() {
+        return Ok(());
     }
-    Ok(fatal)
+    let unwritten = write(home, plain);
+    let unwritten_count = unwritten.len();
+    keep_handed_back(queue, paged, &unwritten);
+    if unwritten_count > 0 {
+        return Err(format!("mcp_relay_receipt_unwritten:{unwritten_count}"));
+    }
+    Ok(())
 }
 
 /// Keep the plain records the writer handed back, each in the form it came
@@ -459,5 +464,66 @@ mod tests {
         assert_eq!(batch["pages"], 1);
         assert_eq!(batch["failed"], true);
         assert_eq!(batch["more"], false);
+    }
+
+    /// A page the store took only part of still settles the queue: the
+    /// written record leaves it before the partial write is reported, so the
+    /// retry of the handed-back record cannot write the finished receipt a
+    /// second time.
+    #[test]
+    fn a_partially_written_page_settles_the_queue_before_reporting_the_failure() {
+        let queue = DirectEvidenceQueue::default();
+        let relayed = |tool: &str| {
+            let mut record =
+                crate::mcp_relay_receipt::tests::record("block", "policy-block", "block");
+            record["tool_name"] = json!(tool);
+            record["params"]["name"] = json!(tool);
+            record
+        };
+        assert!(queue.offer(relayed("written")));
+        assert!(queue.offer(relayed("handed_back")));
+        let mut paged = queue
+            .acknowledge_and_peek_for_commit(DEFAULT_DRAIN_RECORDS)
+            .records;
+        assert_eq!(paged.len(), 2);
+        let unwritten = vec![(paged[1].seq, paged[1].record.clone())];
+
+        let error = write_plain(&queue, "", &mut paged, move |_, _| unwritten).unwrap_err();
+
+        assert_eq!(error, "mcp_relay_receipt_unwritten:1");
+        assert_eq!(paged.len(), 1);
+        assert_eq!(paged[0].record["tool_name"], json!("handed_back"));
+        assert_eq!(queue.pending_len(), 1);
+        let retried = queue
+            .acknowledge_and_peek_for_commit(DEFAULT_DRAIN_RECORDS)
+            .records;
+        assert_eq!(retried.len(), 1);
+        assert_eq!(retried[0].record["tool_name"], json!("handed_back"));
+    }
+
+    /// A relayed record the resident composes no receipt from stays out of
+    /// the native commit page. The page used to carry it and fail on it, and
+    /// nothing took it off the queue, so every later commit failed the same
+    /// way and the evidence behind it never drained.
+    #[test]
+    fn a_relay_record_without_a_receipt_keeps_the_native_commit_page_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().to_str().unwrap();
+        let queue = DirectEvidenceQueue::default();
+        let mut unwritable =
+            crate::mcp_relay_receipt::tests::record("block", "policy-block", "block");
+        // A block whose action names no block event: no receipt composes from
+        // it now and none would compose from it later either.
+        unwritable["policy_action"] = json!("allow");
+        assert!(!mcp_relay_receipt::is_plain(&unwritable));
+        assert!(queue.offer(unwritable));
+
+        let page = commit_queued(home, &queue, None).unwrap();
+
+        assert_eq!(page.record_count, 0);
+        assert_eq!(page.remaining, 0);
+        // The record keeps its place for the daemon's own writer instead of
+        // blocking the resident's page.
+        assert_eq!(queue.pending_len(), 1);
     }
 }
