@@ -81,7 +81,7 @@ fn binding_for_append(
 }
 
 /// Canonical immutable event payload from a complete request row.
-fn payload_json(
+pub(crate) fn payload_json(
     request: &Map<String, Value>,
     event_type: &str,
     occurred_at: &str,
@@ -130,7 +130,7 @@ thread_local! {
         const { std::cell::Cell::new(None) };
 }
 
-fn uuid4_hex() -> StoreResult<String> {
+pub(crate) fn uuid4_hex() -> StoreResult<String> {
     #[cfg(test)]
     if let Some(next) = TEST_EVENT_ID_COUNTER.with(std::cell::Cell::get) {
         TEST_EVENT_ID_COUNTER.with(|counter| counter.set(Some(next + 1)));

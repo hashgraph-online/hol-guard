@@ -49,6 +49,8 @@ mod objects;
 mod outbox;
 #[path = "guard_store_schema_outbox_insert_sql.rs"]
 mod outbox_insert_sql;
+#[path = "guard_store_schema_outbox_retired.rs"]
+mod outbox_retired;
 #[path = "guard_store_schema_outbox_sql.rs"]
 mod outbox_sql;
 #[path = "guard_store_schema_outbox_update_sql.rs"]
@@ -274,6 +276,10 @@ mod columns_tests;
 #[cfg(test)]
 #[path = "guard_store_schema_outbox_tests.rs"]
 mod outbox_tests;
+
+#[cfg(test)]
+#[path = "guard_store_schema_outbox_retired_tests.rs"]
+mod outbox_retired_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_requests_tests.rs"]
