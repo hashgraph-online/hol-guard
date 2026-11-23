@@ -543,6 +543,7 @@ mod tests {
 
         assert_eq!(page.record_count, 0);
         assert_eq!(page.remaining, 0);
+        assert!(page.store_fatal.is_none());
         // The record keeps its place for the daemon's own writer instead of
         // blocking the resident's page.
         assert_eq!(queue.pending_len(), 1);
