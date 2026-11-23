@@ -166,7 +166,6 @@ fn commit_queued(
     let settle_individually = paged
         .iter()
         .any(|item| !mcp_relay_receipt::is_plain(&item.record));
-    let selected_sequences: Vec<u64> = paged.iter().map(|item| item.seq).collect();
     let store_fatal = record_page(queue, home, writer_source, &mut paged)?;
     if let Some(item) = paged.iter().find(|item| {
         item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call")
@@ -184,11 +183,6 @@ fn commit_queued(
             }
             keep
         });
-        for sequence in selected_sequences {
-            if !paged.iter().any(|item| item.seq == sequence) {
-                state.forget(sequence);
-            }
-        }
     }
     // A mixed page can contain ordinary direct-hook records that still need
     // the daemon writer after the resident has committed its relay receipts.
