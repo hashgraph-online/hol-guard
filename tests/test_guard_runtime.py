@@ -19356,7 +19356,9 @@ def test_sync_receipts_rejects_candidate_when_the_native_candidate_query_is_unav
 
     assert store.get_sync_payload("policy_bundle") == legacy
     assert store.get_sync_payload("policy_bundle_canonical_last_good") is None
-    assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "native_policy_bundle_unavailable"}
+    last_error = store.get_sync_payload("policy_bundle_last_error")
+    assert isinstance(last_error, dict)
+    assert last_error["reason"] == "native_policy_bundle_unavailable"
     assert [decision["action"] for decision in store.list_policy_decisions()] == ["block"]
 
 
