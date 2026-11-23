@@ -539,7 +539,12 @@ pub(super) fn exact_safe_segment_with_context(
         // `go version` and a read-only `go env` print and exit, but which
         // toolchain prints them is decided first; `go_toolchain` reads that
         // choice.
-        "go" => super::go_toolchain::safe_go_probe(&segment.arguments, context),
+        "go" => {
+            // A peer step may create go.mod/go.work after the filesystem
+            // proof and before Go selects a toolchain from PATH.
+            no_peer_creates(model, segment)
+                && super::go_toolchain::safe_go_probe(&segment.arguments, context)
+        },
         "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
         "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),
         "date" => safe_reads::safe_date_arguments(&segment.arguments),
