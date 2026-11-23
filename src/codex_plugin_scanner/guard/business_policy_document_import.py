@@ -100,6 +100,28 @@ def refuse_legacy_import_over_business_source(store: GuardStore) -> None:
         raise NativePolicySnapshotError("native_business_policy_removal_requires_authority")
 
 
+def _approved_install_digest(
+    store: GuardStore,
+    document: GuardPolicyDocument,
+    mutation: BusinessSourceMutation,
+    *,
+    mode: str,
+    now: str,
+    approval_gate_grant: ApprovalGateGrant | None,
+) -> str:
+    digest = policy_document_digest(document)
+    if mode != "replace" or digest != mutation.source.source_digest:
+        raise NativePolicySnapshotError("native_business_source_installation_incoherent")
+    require_high_risk(
+        store.guard_home,
+        purpose="policy_import",
+        **policy_import_approval_binding(document, mode),
+        approval_gate_grant=approval_gate_grant,
+        now=now,
+    )
+    return digest
+
+
 def apply_business_document_on_connection(
     store: GuardStore,
     document: GuardPolicyDocument,
@@ -110,17 +132,11 @@ def apply_business_document_on_connection(
     approval_gate_grant: ApprovalGateGrant | None,
     connection: sqlite3.Connection,
 ):
+    """Install inside a caller's own transaction (MCP request apply, recovery)."""
     from .store_policy_document import PolicyDocumentImportResult
 
-    digest = policy_document_digest(document)
-    if mode != "replace" or digest != mutation.source.source_digest:
-        raise NativePolicySnapshotError("native_business_source_installation_incoherent")
-    require_high_risk(
-        store.guard_home,
-        purpose="policy_import",
-        **policy_import_approval_binding(document, mode),
-        approval_gate_grant=approval_gate_grant,
-        now=now,
+    digest = _approved_install_digest(
+        store, document, mutation, mode=mode, now=now, approval_gate_grant=approval_gate_grant
     )
     result = store._import_policy_rows_on_connection(
         connection,
@@ -146,21 +162,27 @@ def import_business_document(
     now: str,
     approval_gate_grant: ApprovalGateGrant | None,
 ):
-    with (
-        approved_business_source_mutation(
-            store, document, mode=mode, now=now, approval_gate_grant=approval_gate_grant
-        ) as mutation,
-        store._connect() as connection,
-    ):
-        connection.execute("begin immediate")
-        result = apply_business_document_on_connection(
-            store,
-            document,
-            mutation,
-            mode=mode,
-            now=now,
-            approval_gate_grant=approval_gate_grant,
-            connection=connection,
+    from .store_policy_document import PolicyDocumentImportResult
+
+    # The mutation holds the command-control authority lock. The resident
+    # drops the imported rows, advances the generation and stages the
+    # installation witness in one transaction.
+    with approved_business_source_mutation(
+        store, document, mode=mode, now=now, approval_gate_grant=approval_gate_grant
+    ) as mutation:
+        digest = _approved_install_digest(
+            store, document, mutation, mode=mode, now=now, approval_gate_grant=approval_gate_grant
         )
-        connection.commit()
-    return result
+        args = store.policy_import_args(document, [], mode="replace", now=now, digest=digest, vault_key=True)
+        args["business_witness"] = mutation.witness_text()
+        payload = store._native_store_call("import_policy_rows", args)
+        if not isinstance(payload, dict):
+            raise RuntimeError("Guard business policy was not installed.")
+        store.finalize_policy_import(payload.get("next_control_state"))
+    replaced = payload.get("replaced")
+    return PolicyDocumentImportResult(
+        document_id=document.metadata.id,
+        digest=digest,
+        inserted=len(document.rules),
+        replaced=replaced if isinstance(replaced, int) and not isinstance(replaced, bool) else 0,
+    )
