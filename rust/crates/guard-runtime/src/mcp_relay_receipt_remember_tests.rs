@@ -8,7 +8,7 @@ use crate::encrypted_secret_store::EncryptedFileSecretStore;
 use crate::guard_store_cmd_vectors_tests::temp_home;
 use crate::guard_store_policy_upsert::tests::SCHEMA;
 use crate::guard_store_tool_call_evidence_tests::{build_database, count, vectors};
-use crate::mcp_relay_receipt::remember::handed_back;
+use crate::mcp_relay_receipt::remember::{handed_back, handed_back_with_sequence};
 use crate::mcp_relay_receipt::tests::record;
 use crate::mcp_relay_receipt::{is_plain, write};
 use crate::policy_integrity_resolver::{
@@ -276,4 +276,19 @@ fn a_record_handed_back_after_its_allow_was_saved_is_retried_without_the_flag() 
     );
     assert_eq!(handed_back(&queued, &[]), None);
     assert_eq!(handed_back(&forward, std::slice::from_ref(&queued)), None);
+}
+
+#[test]
+fn equal_records_use_the_queue_sequence_when_reconciling_a_failed_write() {
+    let queued = remembered();
+    let mut forward = queued.clone();
+    forward.as_object_mut().unwrap().remove("remember");
+    assert_eq!(
+        handed_back_with_sequence(42, &[(41, queued.clone()), (42, forward.clone())]),
+        Some(forward)
+    );
+    assert_eq!(
+        handed_back(&queued, std::slice::from_ref(&queued)),
+        Some(queued)
+    );
 }

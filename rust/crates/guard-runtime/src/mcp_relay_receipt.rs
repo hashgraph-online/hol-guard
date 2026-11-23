@@ -96,6 +96,7 @@ type Args = (Map<String, Value>, Option<Map<String, Value>>);
 /// A record, its receipt's store arguments, its silent inbox row's and, for a
 /// remembered forward, the instant its allow is saved at.
 type Composed = (
+    u64,
     Value,
     Map<String, Value>,
     Option<Map<String, Value>>,
@@ -159,21 +160,49 @@ pub(crate) fn write(guard_home: &str, records: Vec<Value>) -> Vec<Value> {
     write_with_notices(guard_home, records, notice::schedule)
 }
 
+/// Write a batch while retaining each caller-supplied queue sequence in the
+/// writeback. Equal records therefore remain distinguishable to the drain.
+pub(crate) fn write_indexed(guard_home: &str, records: Vec<(u64, Value)>) -> Vec<(u64, Value)> {
+    write_with_notices_indexed(guard_home, records, notice::schedule)
+}
+
 fn write_with_notices(
     guard_home: &str,
     records: Vec<Value>,
     schedule: impl FnOnce(&str, Vec<String>),
 ) -> Vec<Value> {
+    let indexed = records
+        .into_iter()
+        .enumerate()
+        .map(|(sequence, record)| (sequence as u64, record))
+        .collect();
+    write_with_notices_indexed(guard_home, indexed, schedule)
+        .into_iter()
+        .map(|(_, record)| record)
+        .collect()
+}
+
+fn write_with_notices_indexed(
+    guard_home: &str,
+    records: Vec<(u64, Value)>,
+    schedule: impl FnOnce(&str, Vec<String>),
+) -> Vec<(u64, Value)> {
     let composed: Vec<Composed> = records
         .into_iter()
-        .filter_map(|record| {
+        .filter_map(|(sequence, record)| {
             let (record, remembered) = match record.get(remember::KEY) {
                 Some(_) => (remember::stripped(&record)?, true),
                 None => (record, false),
             };
             let stamp = Stamp::fresh()?;
             let (receipt, row) = compose(guard_home, &record, &stamp)?;
-            Some((record, receipt, row, remembered.then_some(stamp.store_now)))
+            Some((
+                sequence,
+                record,
+                receipt,
+                row,
+                remembered.then_some(stamp.store_now),
+            ))
         })
         .collect();
     if composed.is_empty() {
@@ -192,7 +221,7 @@ fn write_with_notices(
         // receipt.
         let generation = composed
             .iter()
-            .any(|(_, _, _, remembered)| remembered.is_some())
+            .any(|(_, _, _, _, remembered)| remembered.is_some())
             .then(|| remember::lock(guard_home))
             .flatten();
         let Ok(_gate) = hold_storage_gate(home, Duration::from_millis(timeout_ms.into())) else {
@@ -201,7 +230,7 @@ fn write_with_notices(
         let busy_timeout_ms = u64::from(timeout_ms).clamp(1, MAX_BUSY_TIMEOUT_MS);
         composed
             .into_iter()
-            .filter_map(|(record, receipt, row, remembered)| {
+            .filter_map(|(sequence, record, receipt, row, remembered)| {
                 // Before the receipt, as `_allow_and_forward` saves it. A
                 // record handed back after this point no longer remembers, so
                 // a retry never saves the allow twice.
@@ -211,7 +240,7 @@ fn write_with_notices(
                     });
                 }
                 if !store(guard_home, busy_timeout_ms, RECEIPT_METHOD, receipt) {
-                    return Some(record);
+                    return Some((sequence, record));
                 }
                 // After the receipt, as the proxy writes them. A row the store
                 // cannot take leaves the block without one, as
@@ -231,12 +260,17 @@ fn write_with_notices(
     unwritten
 }
 
-fn records_of(composed: Vec<Composed>) -> Vec<Value> {
+fn records_of(composed: Vec<Composed>) -> Vec<(u64, Value)> {
     composed
         .into_iter()
-        .map(|(record, _, _, remembered)| match remembered {
-            Some(_) => remember::restored(record),
-            None => record,
+        .map(|(sequence, record, _, _, remembered)| {
+            (
+                sequence,
+                match remembered {
+                    Some(_) => remember::restored(record),
+                    None => record,
+                },
+            )
         })
         .collect()
 }

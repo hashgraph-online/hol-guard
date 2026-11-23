@@ -76,6 +76,19 @@ pub(crate) fn handed_back(queued: &Value, unwritten: &[Value]) -> Option<Value> 
     unwritten.contains(&forward).then_some(forward)
 }
 
+/// Match a failed writer result to the acknowledged queue entry by sequence,
+/// so equal JSON records cannot make the drain retry the wrong item.
+pub(crate) fn handed_back_with_sequence(
+    sequence: u64,
+    unwritten: &[(u64, Value)],
+) -> Option<Value> {
+    unwritten
+        .iter()
+        .find_map(|(candidate_sequence, candidate)| {
+            (*candidate_sequence == sequence).then(|| candidate.clone())
+        })
+}
+
 /// The artifact-scoped allow one remembered approval saves.
 pub(crate) struct Allow<'a> {
     pub(crate) harness: &'a str,
