@@ -23,12 +23,21 @@ pub(crate) fn base_statements() -> impl Iterator<Item = &'static str> {
     base_a::FIRST.iter().chain(base_b::SECOND.iter()).copied()
 }
 
-/// Run every base statement on `connection`, in order.
+/// Run every base statement on `connection`, in order, inside one savepoint:
+/// a failure rolls every statement back, so no partial schema is left.
 pub(crate) fn create_base(connection: &Connection) -> rusqlite::Result<()> {
-    for statement in base_statements() {
-        connection.execute_batch(statement)?;
+    connection.execute_batch("savepoint guard_store_base")?;
+    let outcome = base_statements().try_for_each(|statement| connection.execute_batch(statement));
+    match outcome {
+        Ok(()) => connection.execute_batch("release guard_store_base"),
+        Err(error) => {
+            // The original error is the one to report; a failed rollback
+            // leaves nothing better to return.
+            let _ =
+                connection.execute_batch("rollback to guard_store_base; release guard_store_base");
+            Err(error)
+        }
     }
-    Ok(())
 }
 
 /// Add the policy columns older stores lack, then the policy lookup indexes
