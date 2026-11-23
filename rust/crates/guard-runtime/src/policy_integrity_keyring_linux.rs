@@ -178,11 +178,10 @@ fn refused<E>(_: E) -> WriteFailure {
 /// before it answered left the outcome unknown; a dismissed prompt, or any
 /// other error the service reports, created nothing.
 fn create_failure(error: &secret_service::Error) -> WriteFailure {
-    let _ = error;
-    // A submitted Secret Service request can fail after the service has
-    // accepted it. Treat every post-submit error as uncertain so the caller
-    // never mints a replacement key while this write may land.
-    WriteFailure::Unsettled
+    match error {
+        secret_service::Error::PromptDisconnected => WriteFailure::Unsettled,
+        _ => WriteFailure::Refused,
+    }
 }
 
 fn write(service_name: &str, secret_id: &str, value: &str) -> Result<(), WriteFailure> {
