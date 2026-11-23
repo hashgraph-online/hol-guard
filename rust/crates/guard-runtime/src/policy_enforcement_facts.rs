@@ -198,7 +198,10 @@ fn identity_metadata_supplied(maps: &[&Map<String, Value>], keys: &[&str]) -> bo
     })
 }
 
-pub(super) fn path_values_sensitive(maps: &[&Map<String, Value>]) -> Result<bool, String> {
+pub(super) fn path_values_sensitive(
+    maps: &[&Map<String, Value>],
+    cwd: Option<&str>,
+) -> Result<bool, String> {
     let mut sensitive = false;
     for record in maps {
         for key in PATH_KEYS {
@@ -218,9 +221,17 @@ pub(super) fn path_values_sensitive(maps: &[&Map<String, Value>]) -> Result<bool
                 // selector. The native source reader still validates it.
                 Value::Object(_) | Value::Null | Value::Bool(_) | Value::Number(_) => continue,
             };
-            sensitive |= values
-                .into_iter()
-                .any(|value| sensitive_path_family(Path::new(value)).is_some());
+            sensitive |= values.into_iter().any(|value| {
+                // The name screen reads a committed `.env.example` as the
+                // local dotenv file it is named after. The repository's index
+                // and the secret scan a tracked document already passes are
+                // what tell the two apart, and this screen has no working
+                // directory of its own to resolve the name against, so the
+                // request's own directory answers it. Every other family, and
+                // an untracked or value-bearing template, stays sensitive.
+                sensitive_path_family(Path::new(value)).is_some()
+                    && !guard_command::pretool::proven_tracked_dotenv_template(value, cwd)
+            });
         }
     }
     Ok(sensitive)
@@ -307,8 +318,9 @@ pub(super) fn payload_sensitive_target(
     codex_budget_input: Option<&Map<String, Value>>,
     codex_wait_process: Option<&Map<String, Value>>,
     omp_goal_input: Option<&Map<String, Value>>,
+    cwd: Option<&str>,
 ) -> Result<bool, String> {
-    let mut sensitive = path_values_sensitive(maps)?;
+    let mut sensitive = path_values_sensitive(maps, cwd)?;
     // A native verdict is read wherever it appears, including inside a map
     // whose names are labels.
     for record in maps {
@@ -547,11 +559,16 @@ pub(super) fn payload_facts(
     // An Oh My Pi goal input whose every field matches the tool's published
     // shape carries a token count, not a credential.
     let goal_input = omp_goal_budget_input(payload, harness);
-    let sensitive_target =
-        payload_sensitive_target(&scanned, &named, budget_input, wait_process, goal_input)?
-            || reason_code.contains("secret")
-            || reason_code.contains("credential")
-            || reason_code.contains("exfiltration");
+    let sensitive_target = payload_sensitive_target(
+        &scanned,
+        &named,
+        budget_input,
+        wait_process,
+        goal_input,
+        payload.get("cwd").and_then(Value::as_str),
+    )? || reason_code.contains("secret")
+        || reason_code.contains("credential")
+        || reason_code.contains("exfiltration");
     // A harness code tool proven to run only a constant has no effect a
     // publisher could make worse; a declared publisher still counts.
     let publisher_relevant = publisher.is_some()

@@ -70,6 +70,57 @@ pub(in crate::pretool) fn unproven(canonical: &Path, cwd: Option<&str>) -> bool 
     guard_secure_fs::credential_named_path(canonical) && !tracked_document(canonical, cwd)
 }
 
+/// [`unproven`] for a path a request names, rather than for what a command
+/// does with one. A repository commits `.env.example` beside the source it
+/// documents, and the index and secret screens a tracked document already
+/// passes are the proof that the file is the template its name claims.
+pub(in crate::pretool) fn unproven_request(canonical: &Path, cwd: Option<&str>) -> bool {
+    unproven(canonical, cwd) && !tracked_dotenv_template(canonical, cwd)
+}
+
+/// Whether `path` is a committed dotenv template of the session's repository
+/// whose values are the placeholders such a template documents.
+///
+/// The index membership and the secret screen are the ones
+/// [`tracked_document`] applies. What this does not apply is the
+/// document-extension list, because a template carries the suffix its
+/// ecosystem gave it rather than a document's, and the dotenv family screen,
+/// because the template is the file the family screen is being read past. A
+/// template holding a real value fails the secret screen and keeps its
+/// review.
+///
+/// The directories above the template are screened as the directories they
+/// are, so a template parked inside `.gnupg` or beside `.aws/credentials`
+/// keeps that family whatever the index says about it.
+pub(in crate::pretool) fn tracked_dotenv_template(path: &Path, cwd: Option<&str>) -> bool {
+    if !path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(guard_secure_fs::dotenv_template_basename)
+    {
+        return false;
+    }
+    if path
+        .parent()
+        .is_some_and(|parent| guard_secure_fs::sensitive_path_family(parent).is_some())
+    {
+        return false;
+    }
+    let Some(workspace) = cwd.and_then(|root| std::fs::canonicalize(root).ok()) else {
+        return false;
+    };
+    let same_tree =
+        repository_root(&workspace).is_some_and(|root| repository_root(path) == Some(root));
+    (same_tree || super::super::worktree_writes::same_repository_worktree(&workspace, path))
+        && !path
+            .components()
+            .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
+        && WALK.with(|walk| match walk.borrow_mut().as_mut() {
+            Some(tracked) => tracked.non_secret(path),
+            None => TrackedFiles::default().non_secret(path),
+        })
+}
+
 /// Whether `canonical` is a tracked, secret-free document of the session's
 /// repository or of a linked worktree of the same repository.
 pub(in crate::pretool) fn tracked_document(canonical: &Path, cwd: Option<&str>) -> bool {
@@ -115,6 +166,21 @@ pub(in crate::pretool) fn committed_image(path: &Path) -> bool {
             Some(tracked) => tracked.tracked_image(path),
             None => TrackedFiles::default().tracked_image(path),
         })
+}
+
+/// Whether `value`, a path as a request spelled it, resolves to a committed
+/// dotenv template [`tracked_dotenv_template`] proves.
+pub(in crate::pretool) fn resolves_to_tracked_dotenv_template(
+    value: &str,
+    cwd: Option<&str>,
+) -> bool {
+    let supplied = Path::new(value);
+    let target = match cwd {
+        _ if supplied.is_absolute() => supplied.to_path_buf(),
+        Some(cwd) => Path::new(cwd).join(supplied),
+        None => return false,
+    };
+    std::fs::canonicalize(target).is_ok_and(|canonical| tracked_dotenv_template(&canonical, cwd))
 }
 
 /// Whether `value`, a path as a command or tool spelled it, resolves to a

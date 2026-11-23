@@ -278,6 +278,15 @@ mod search_scope_glob;
 mod search_scope_ignore;
 mod search_scope_plain_skips;
 pub(crate) mod search_scope_tracked;
+
+/// Whether `value`, a path as a hook payload spelled it, resolves to a
+/// committed dotenv template: the repository's index lists it and the secret
+/// scan a tracked document already passes finds no live value in it. The
+/// policy floor reads this where its own name-only screen has no working
+/// directory to resolve against.
+pub fn proven_tracked_dotenv_template(value: &str, cwd: Option<&str>) -> bool {
+    search_scope_tracked::names::resolves_to_tracked_dotenv_template(value, cwd)
+}
 mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;
