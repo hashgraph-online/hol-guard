@@ -141,6 +141,51 @@ pub(crate) fn list(connection: &rusqlite::Connection, _args: &Args<'_>) -> Store
     Ok(Value::Array(rows.iter().map(row_payload).collect()))
 }
 
+#[path = "guard_store_managed_installs_cas.rs"]
+mod cas;
+
+/// Whether `method` is one of the managed-install row calls.
+pub(crate) fn handles(method: &str) -> bool {
+    matches!(
+        method,
+        "set_managed_install"
+            | "get_managed_install"
+            | "get_managed_install_revision"
+            | "bump_managed_install_revision"
+            | "list_managed_installs"
+            | "hook_managed_install_admission"
+            | "compare_managed_installs"
+            | "compare_and_set_managed_installs"
+    )
+}
+
+/// Whether `method` must commit at `synchronous=FULL`: the transition rows
+/// take part in a durable file inverse, so they survive power loss as well
+/// as a process exit.
+pub(crate) fn durable(method: &str) -> bool {
+    method == "compare_and_set_managed_installs"
+}
+
+pub(crate) fn dispatch(
+    connection: &rusqlite::Connection,
+    method: &str,
+    args: &Args<'_>,
+) -> StoreResult<Value> {
+    match method {
+        "set_managed_install" => set(connection, args),
+        "get_managed_install" => get(connection, args),
+        "get_managed_install_revision" => revision(connection, args),
+        "bump_managed_install_revision" => bump(connection, args),
+        "list_managed_installs" => list(connection, args),
+        "hook_managed_install_admission" => hook_admission(connection, args),
+        "compare_managed_installs" => cas::compare(connection, args),
+        "compare_and_set_managed_installs" => cas::compare_and_set(connection, args),
+        _ => Err(crate::guard_store_db::StoreError::Invalid(
+            "native_guard_store_method_unknown",
+        )),
+    }
+}
+
 #[cfg(test)]
 #[path = "guard_store_managed_installs_tests.rs"]
 mod tests;

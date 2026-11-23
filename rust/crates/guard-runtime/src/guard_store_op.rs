@@ -213,7 +213,7 @@ fn evaluate_mode(
     // on every call (see `guard_store_write_cache`).
     let connection = crate::guard_store_write_cache::open_read_write_cached(&path)?;
     connection.busy_timeout(Duration::from_millis(busy_timeout_ms))?;
-    apply_pragmas(&connection)?;
+    apply_pragmas(&connection, method)?;
     // A total read only writes for the one-time rebuild a migration requests;
     // every other call stays lock-free.
     let args = Args(prepared.as_ref().unwrap_or(request_args));
@@ -305,9 +305,11 @@ fn evaluate_mode(
     Ok((payload, generation))
 }
 
-fn apply_pragmas(connection: &Connection) -> StoreResult<()> {
+fn apply_pragmas(connection: &Connection, method: &str) -> StoreResult<()> {
     let journal: String = connection.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
-    if journal.eq_ignore_ascii_case("wal") {
+    if crate::guard_store_managed_installs::durable(method) {
+        connection.execute_batch("pragma synchronous=FULL")?;
+    } else if journal.eq_ignore_ascii_case("wal") {
         connection.execute_batch("pragma synchronous=NORMAL")?;
     }
     connection.execute_batch(&format!(
