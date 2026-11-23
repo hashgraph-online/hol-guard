@@ -131,6 +131,11 @@ fn a_sequenced_list_after_a_sibling_cd_stays_contained() {
             "cd {0}/scripts && ./report.sh 2>&1 | head -20; ./report.sh | tail -5",
             tree.display()
         ),
+        // The same list from the root itself, and a package script before a
+        // read of what it wrote.
+        format!("cd {0}; npm run build; ls dist", tree.display()),
+        format!("cd {0} && npm run build; ls dist", tree.display()),
+        format!("cd {0}/scripts; ./report.sh; ls", tree.display()),
     ] {
         assert_eq!(
             contained(&reason("omp", &home, &main, &command)),
@@ -183,4 +188,3 @@ fn a_sequenced_list_outside_that_grammar_keeps_its_review() {
     }
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
-
