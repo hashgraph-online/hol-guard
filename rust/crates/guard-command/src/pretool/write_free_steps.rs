@@ -11,7 +11,7 @@
 ///
 /// Every word must reach the program as written (`words_as_written`), and a
 /// redirect that names a file keeps review.
-pub(super) fn writes_nothing(segment: &crate::CommandSegmentV1) -> bool {
+pub(super) fn writes_nothing(segment: &crate::CommandSegmentV1, context: super::PathContext<'_>) -> bool {
     // A redirection must be the entire shell word. String replacement
     // would silently erase the prefix of `2>/dev/nullx`, even though that
     // opens a real output file rather than the harmless null device.
@@ -21,7 +21,7 @@ pub(super) fn writes_nothing(segment: &crate::CommandSegmentV1) -> bool {
         .any(|word| word.contains('>') && !matches!(word, "2>&1" | "2>/dev/null" | ">/dev/null"))
         || !segment.wrapper_chain.is_empty()
         || segment.path_overridden
-        || !words_as_written(&segment.text)
+        || !words_as_written(&segment.text, context)
     {
         return false;
     }
@@ -36,7 +36,13 @@ pub(super) fn writes_nothing(segment: &crate::CommandSegmentV1) -> bool {
 /// brace list (an unquoted `*` can expand to a file named `-delete`), no
 /// unquoted escape, and no expansion but a double-quoted `$HOME` path, which
 /// the shell can neither split nor turn into an option.
-fn words_as_written(text: &str) -> bool {
+fn words_as_written(text: &str, context: super::PathContext<'_>) -> bool {
+    // HOME must come from a verified absolute shell home, not an option
+    // such as -delete or -i that expansion can insert as a program flag.
+    let trusted_home = context.shell_home_matches
+        && context
+            .home_dir
+            .is_some_and(|home| std::path::Path::new(home).is_absolute());
     let mut plain = String::with_capacity(text.len());
     let mut quote: Option<char> = None;
     let mut rest = text;
@@ -59,7 +65,7 @@ fn words_as_written(text: &str) -> bool {
                 quote = Some(character);
                 for home in ["${HOME}", "$HOME"] {
                     if let Some(after) = rest.strip_prefix(home) {
-                        if home == "${HOME}" || after.starts_with(['/', '"']) {
+                        if trusted_home && (home == "${HOME}" || after.starts_with(['/', '"'])) {
                             plain.push_str("/home");
                             rest = after;
                         }
