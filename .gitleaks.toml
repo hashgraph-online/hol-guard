@@ -337,7 +337,6 @@ condition = "AND"
 regexTarget = "secret"
 paths = [
   '''(?:^|/)tests/fixtures/mcp_proxy_decision/call_projection_vectors\.json$''',
-  '''(?:^|/)tests/fixtures/mcp_proxy_decision/record_call_projection_vectors\.py$''',
 ]
 regexes = [
   '''^sk\-live\-0123456789abcdef0123456789abcdef$''',

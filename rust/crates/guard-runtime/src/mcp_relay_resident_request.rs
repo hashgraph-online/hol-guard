@@ -269,9 +269,8 @@ pub(super) fn evaluated_request(
 /// The same decide request again, saying the relay has no evaluation to send.
 ///
 /// The lane decides nothing without one, so the resident answers this with the
-/// refusal and hands this server's later sessions to the proxy
-/// (`mcp_relay_decide.rs`). The relay keeps its own fail-closed answer; it
-/// sends this for the mark, not for a verdict.
+/// refusal (`mcp_relay_decide_flow.rs`). The relay keeps its own fail-closed
+/// answer, and no later session changes because of it.
 pub(super) fn unsettled_payload(request: &Value) -> Option<Vec<u8>> {
     let mut request = request.as_object()?.clone();
     request.insert("package_evaluation_unsettled".to_owned(), Value::Bool(true));

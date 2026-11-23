@@ -11,7 +11,7 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
+from tests.mcp_call_projection_support import McpCallProjection, McpCallProjector
 
 
 def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:

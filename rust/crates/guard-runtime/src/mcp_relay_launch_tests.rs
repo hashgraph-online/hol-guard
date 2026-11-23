@@ -148,3 +148,17 @@ fn spawn_refuses_an_executable_that_changed_after_verification() {
         Some(IDENTITY_CHANGED.to_owned())
     );
 }
+
+#[test]
+fn a_configured_name_finds_its_value_case_insensitively_only_when_folding() {
+    let inherited = BTreeMap::from([("API_TOKEN".to_owned(), "v".to_owned())]);
+    assert_eq!(
+        super::inherited_value(&inherited, "Api_Token", true).map(String::as_str),
+        Some("v")
+    );
+    assert_eq!(super::inherited_value(&inherited, "Api_Token", false), None);
+    assert_eq!(
+        super::inherited_value(&inherited, "API_TOKEN", false).map(String::as_str),
+        Some("v")
+    );
+}

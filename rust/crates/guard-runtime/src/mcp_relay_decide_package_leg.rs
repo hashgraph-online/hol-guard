@@ -33,6 +33,7 @@ use serde_json::{Map, Value};
 
 use super::package_lane::{self, PackageOutcome, QueueBinding};
 use super::package_policy::{self, PackagePolicy, ProcessFacts};
+use super::package_route;
 use super::store::Saved;
 use super::view::HarnessView;
 use super::{run_policy, McpRelayDecideRequestV1};
@@ -55,6 +56,9 @@ pub(super) struct Packaged {
     /// The lane's own answer, or the leg the tool policy decided and the tool
     /// lane answers and records.
     pub(super) outcome: PackageOutcome,
+    /// Whether the first resolution found a saved package block, which the
+    /// proxy's route answers before it raises any prompt.
+    pub(super) saved_policy_blocks: bool,
 }
 
 /// Everything one package call's stored policy resolves from.
@@ -147,12 +151,13 @@ pub(super) fn decide_package_leg(
     binding: QueueBinding<'_>,
 ) -> Result<Packaged, &'static str> {
     let resolved = inputs.resolve()?;
-    let outcome = package_lane::decide_package(
+    let outcome = package_lane::decide_package_with_inline_approval(
         &inputs.view.mode,
         &request.build.tool_name,
         &request.build.server_name,
         &resolved,
         binding,
+        request.inline.remembered.is_some(),
         // The proxy's second resolution, which reads the store the decide
         // path still holds open: the fresh tool authority, then the fresh
         // package policy.
@@ -172,6 +177,7 @@ pub(super) fn decide_package_leg(
         artifact: inputs.artifact,
         workspace: inputs.workspace.to_owned(),
         outcome,
+        saved_policy_blocks: package_route::saved_policy_blocks(&resolved),
     })
 }
 

@@ -36,13 +36,14 @@ use super::package_claim::{self, Settled};
 use super::package_route::ToolLeg;
 use super::store::{self, STORE_UNREADABLE};
 use super::{
-    admit, ask, package, package_lane, package_leg, package_postclaim, queue, settle,
-    settle_package, Answer, HeldClaim, Legged, PackageClaimContext, PackageLeg, Resolved, Routed,
-    ASK_MODE, EVIDENCE_FULL,
+    admit, ask, package, package_lane, package_leg, package_postclaim, queue, room_for_row, settle,
+    settle_package, Answer, HeldClaim, Legged, McpRelayDecideRequestV1, PackageClaimContext,
+    PackageLeg, Resolved, Routed, ASK_MODE, EVIDENCE_FULL,
 };
 use crate::claim_reuse::claim_approval_reuse_decisions_then;
 use crate::claim_reuse_binding::evidence_is_bound;
 use crate::mcp_relay_claims::McpRelayClaimRequestV1;
+use crate::policy_decision_lookup_op::{write_audit_events, AuditEvent};
 use crate::policy_store::PolicySnapshotStore;
 use guard_command::package_intent_common::PackageIntent;
 use guard_contracts::ClaimEvidenceBindingV1;
@@ -109,7 +110,17 @@ pub(super) fn spend_package(
     if rows.is_empty() {
         return Err(PACKAGE_CLAIM_EMPTY);
     }
-    let (state, key) = store::published_integrity(&admitted.binding)?;
+    let (published, key) = store::lookup_integrity(&admitted.binding)?;
+    // The bound check compares the published state with the persisted one,
+    // which the relay's own remembered write does not touch.
+    let bound = integrity_evidence(&rows, &published, key)?;
+    // The rows are verified at the generation the decision read them at:
+    // after the relay's own remembered allow re-signed every local row, that
+    // is the generation the write was finalized at.
+    let mut state = published.clone();
+    if let Some(generation) = own_write_generation(&context.request) {
+        store::after_own_write(&mut state, generation);
+    }
     let evidence = integrity_evidence(&rows, &state, key)?;
     // `claim_evidence_binding(connection, bundle=False)`.
     let binding = ClaimEvidenceBindingV1::default();
@@ -125,7 +136,7 @@ pub(super) fn spend_package(
         &decisions,
         &now,
         &evidence,
-        &|connection, members| evidence_is_bound(connection, members, &evidence, Some(&binding)),
+        &|connection, members| evidence_is_bound(connection, members, &bound, Some(&binding)),
         false,
         &mut |connection| match after_claim(connection, context, evaluation, policy_store, started)
         {
@@ -151,6 +162,7 @@ pub(super) fn spend_package(
                     policy_store,
                 ),
                 Write::Tool { prepared, append } => {
+                    room_for_row(policy_store)?;
                     let routed = prepared.write(&context.request)?;
                     settle(&context.request, &fresh, routed, Some(append), policy_store)
                 }
@@ -159,6 +171,16 @@ pub(super) fn spend_package(
         Ok(None) => Err(refused.unwrap_or(PACKAGE_CLAIM_DECLINED)),
         Err(_) => Err(PACKAGE_CLAIM_STORE),
     }
+}
+
+/// The generation the relay's own remembered allow was finalized at, when the
+/// decision this claim spends ran after it.
+fn own_write_generation(request: &McpRelayDecideRequestV1) -> Option<u64> {
+    request
+        .inline
+        .remembered
+        .as_ref()
+        .and_then(|remembered| remembered.generation)
 }
 
 /// What a committed package claim answers with.
@@ -207,7 +229,10 @@ fn after_claim(
     connection
         .execute_batch("PRAGMA query_only = OFF")
         .map_err(|_| STORE_UNREADABLE)?;
-    let (fresh, reresolved) = reread?;
+    let (fresh, reresolved, audit) = reread?;
+    // Written in the claim's transaction, as the proxy's re-read writes them
+    // in its own; a claim that rolls back takes them with it.
+    write_audit_events(connection, &audit).map_err(|_| store::AUDIT_UNWRITTEN)?;
     let package_leg::Reresolved {
         artifact,
         workspace,
@@ -222,12 +247,7 @@ fn after_claim(
         || package_claim::package_facts(&context.claimed, &artifact, &policy, &fresh.decision),
     )?;
     let queue_binding = package_lane::QueueBinding {
-        blocked_request_mode: context
-            .admitted
-            .binding
-            .review
-            .blocked_request_mode
-            .as_deref(),
+        blocked_request_mode: context.admitted.blocked_request_mode(),
         redaction_level: fresh.redaction_level.as_deref(),
     };
     let settled = package_claim::settled(
@@ -245,7 +265,7 @@ fn after_claim(
                 packaged.outcome,
                 package_lane::PackageOutcome::AskPackage(_)
             ) {
-                return queued(started, fresh, Write::Package(packaged));
+                return queued(started, policy_store, fresh, Write::Package(packaged));
             }
             spend_budget(started)?;
             settle_package(
@@ -267,12 +287,7 @@ fn after_claim(
                 // the proxy raises no native prompt or inline elicitation for
                 // a claimed call.
                 ToolLeg::Queue { policy_action } => {
-                    let mode = context
-                        .admitted
-                        .binding
-                        .review
-                        .blocked_request_mode
-                        .as_deref();
+                    let mode = context.admitted.blocked_request_mode();
                     if mode == Some(ASK_MODE) {
                         let prepared = ask::prepare(
                             &context.request,
@@ -281,7 +296,12 @@ fn after_claim(
                             policy_action,
                             &append,
                         )?;
-                        return queued(started, fresh, Write::Tool { prepared, append });
+                        return queued(
+                            started,
+                            policy_store,
+                            fresh,
+                            Write::Tool { prepared, append },
+                        );
                     }
                     queue::safe_alternative(
                         mode,
@@ -311,23 +331,34 @@ fn resolve_claimed(
     intent: &PackageIntent,
     evaluation: &Map<String, Value>,
     policy_store: &PolicySnapshotStore,
-) -> Result<(Resolved, package_leg::Reresolved), &'static str> {
+) -> Result<(Resolved, package_leg::Reresolved, Vec<AuditEvent>), &'static str> {
+    let mut audit = Vec::new();
     let (fresh, legged) = super::resolve(
         &context.request,
         &context.admitted,
         Some(connection),
         Some(PackageLeg::Claimed(intent, evaluation)),
         policy_store,
+        &mut audit,
     )?;
     let reresolved = legged
         .and_then(Legged::reresolved)
         .ok_or(PACKAGE_CLAIM_RERESOLVE)?;
-    Ok((fresh, reresolved))
+    Ok((fresh, reresolved, audit))
 }
 
 /// Hold a queued answer for the commit to write, if the claim still commits
 /// inside the relay's wait.
-fn queued(started: Instant, fresh: Resolved, write: Write) -> Result<Spent, &'static str> {
+/// A claim that queues an approval row needs room for the block's receipt.
+/// Checked here, inside the claim's transaction, so a full queue rolls the
+/// claim back; a claim that forwards or answers never needs that room.
+fn queued(
+    started: Instant,
+    policy_store: &PolicySnapshotStore,
+    fresh: Resolved,
+    write: Write,
+) -> Result<Spent, &'static str> {
+    room_for_row(policy_store)?;
     spend_budget(started)?;
     Ok(Spent::Queued(Box::new(Queued { fresh, write })))
 }
@@ -340,3 +371,7 @@ fn spend_budget(started: Instant) -> Result<(), &'static str> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "mcp_relay_decide_package_spend_tests.rs"]
+mod tests;

@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import shlex
 import subprocess
 import tarfile
 from pathlib import Path
@@ -21,7 +20,6 @@ from codex_plugin_scanner.guard.local_supply_chain import (
     build_package_protect_payload,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
-from codex_plugin_scanner.guard.proxy.runtime_mcp import _bound_external_archive_mcp_request
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
@@ -203,75 +201,3 @@ def test_package_firewall_rejects_archive_blob_changed_after_inspection(tmp_path
     )
 
     assert bound is None
-
-
-def test_mcp_package_forward_replaces_external_url_with_verified_blob(tmp_path: Path) -> None:
-    source_url = "https://packages.example.com/demo.tgz"
-    archive_payload = b"verified MCP archive"
-    archive_path = tmp_path / "mcp-demo.tgz"
-    archive_path.write_bytes(archive_payload)
-    archive_path.chmod(0o400)
-    download = RestrictedArchiveDownload(
-        path=archive_path,
-        sha256=hashlib.sha256(archive_payload).hexdigest(),
-        size=len(archive_payload),
-        source_url=source_url,
-        final_url=source_url,
-    )
-    evaluation = SimpleNamespace(
-        external_archive_downloads=(download,),
-        reasons=({"code": "external_tarball_source"},),
-    )
-    original_arguments = {"command": f"npm install demo@{source_url}"}
-    params = {
-        "name": "shell",
-        "arguments": original_arguments,
-    }
-    message = {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": params}
-
-    bound = _bound_external_archive_mcp_request(
-        message, params, evaluation=evaluation, guard_home=tmp_path / "guard-home"
-    )
-
-    assert bound is not None
-    bound_message, bound_params = bound
-    bound_arguments = bound_params["arguments"]
-    assert isinstance(bound_arguments, dict)
-    assert bound_arguments["command"] == f"npm install demo@{archive_path}"
-    assert bound_message["params"] == bound_params
-    assert original_arguments["command"] == f"npm install demo@{source_url}"
-
-
-def test_mcp_package_forward_shell_quotes_digest_bound_path(tmp_path: Path) -> None:
-    source_url = "https://packages.example.com/demo.tgz"
-    unsafe_root = tmp_path / "archive path;not-a-command"
-    unsafe_root.mkdir()
-    archive_path = unsafe_root / "demo.tgz"
-    archive_payload = b"verified archive with unsafe path characters"
-    archive_path.write_bytes(archive_payload)
-    archive_path.chmod(0o400)
-    download = RestrictedArchiveDownload(
-        path=archive_path,
-        sha256=hashlib.sha256(archive_payload).hexdigest(),
-        size=len(archive_payload),
-        source_url=source_url,
-        final_url=source_url,
-    )
-    evaluation = SimpleNamespace(
-        external_archive_downloads=(download,),
-        external_archive_source_hashes=(hashlib.sha256(source_url.encode()).hexdigest(),),
-    )
-    params = {"name": "shell", "arguments": {"command": f"npm install demo@{source_url}"}}
-    message = {"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": params}
-
-    bound = _bound_external_archive_mcp_request(
-        message, params, evaluation=evaluation, guard_home=tmp_path / "guard-home"
-    )
-
-    assert bound is not None
-    _bound_message, bound_params = bound
-    arguments = bound_params["arguments"]
-    assert isinstance(arguments, dict)
-    command = arguments["command"]
-    assert isinstance(command, str)
-    assert shlex.split(command) == ["npm", "install", f"demo@{archive_path}"]

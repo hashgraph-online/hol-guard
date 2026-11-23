@@ -95,6 +95,9 @@ struct QueueState {
     bytes: usize,
     next_seq: u64,
     acked_through: u64,
+    /// Worst-case records promised to a caller that already took a step only
+    /// its receipt explains (see `reserve`).
+    reserved: usize,
 }
 
 impl QueueState {
@@ -131,7 +134,8 @@ impl QueueState {
     }
 
     fn holds(&self, bytes: usize) -> bool {
-        self.records.len() < MAX_QUEUED_RECORDS && self.bytes + bytes <= MAX_QUEUED_BYTES
+        self.records.len() + self.reserved < MAX_QUEUED_RECORDS
+            && self.bytes + self.reserved * MAX_RECORD_BYTES + bytes <= MAX_QUEUED_BYTES
     }
 
     /// Queue one encoded record past the queue's limits.
@@ -146,6 +150,27 @@ impl QueueState {
             native,
             activity,
         });
+    }
+
+    /// Drop the queued record `seq`, which the resident already wrote in
+    /// full, so a page that fails behind it never writes it a second time.
+    fn forget(&mut self, seq: u64) {
+        if let Some(index) = self.records.iter().position(|queued| queued.seq == seq) {
+            if let Some(queued) = self.records.remove(index) {
+                self.bytes = self.bytes.saturating_sub(queued.bytes);
+            }
+        }
+    }
+
+    /// Put `record` in place of the queued record `seq`, if it is still queued.
+    fn replace(&mut self, seq: u64, record: Value) {
+        let Some(queued) = self.records.iter_mut().find(|queued| queued.seq == seq) else {
+            return;
+        };
+        let bytes = serde_json::to_vec(&record).map_or(queued.bytes, |encoded| encoded.len());
+        queued.record = record;
+        self.bytes = (self.bytes - queued.bytes).saturating_add(bytes);
+        queued.bytes = bytes;
     }
 
     /// Add `markers` to the queued record `seq`, if it is still queued.
@@ -173,6 +198,7 @@ impl Default for QueueState {
             bytes: 0,
             next_seq: 1,
             acked_through: 0,
+            reserved: 0,
         }
     }
 }
@@ -257,8 +283,8 @@ impl DirectEvidenceQueue {
         let Ok(state) = self.state.lock() else {
             return false;
         };
-        state.records.len() + HEADROOM_RECORDS <= MAX_QUEUED_RECORDS
-            && state.bytes + 2 * MAX_RECORD_BYTES <= MAX_QUEUED_BYTES
+        state.records.len() + state.reserved + HEADROOM_RECORDS <= MAX_QUEUED_RECORDS
+            && state.bytes + (state.reserved + 2) * MAX_RECORD_BYTES <= MAX_QUEUED_BYTES
     }
 
     /// Queue one record, or refuse it when the queue cannot hold it.
@@ -426,3 +452,6 @@ mod record;
 #[cfg(test)]
 #[path = "hook_direct_evidence_tests.rs"]
 mod tests;
+
+#[path = "hook_direct_evidence_reserve.rs"]
+mod reserve;

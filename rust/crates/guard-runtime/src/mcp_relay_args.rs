@@ -126,7 +126,14 @@ pub(crate) fn parse(argv: &[String]) -> Result<RelayArgs, String> {
         server_name: required(scalars.server_name)?,
         server_id: scalars.server_id,
         source_scope: scalars.source_scope.unwrap_or_else(|| "project".to_owned()),
-        config_path: required(scalars.config_path)?,
+        // A managed Hermes server whose config entry names no file is stored
+        // with an empty `config_path`, and the launcher then leaves the flag
+        // out. The retired Python proxy accepted that, so Hermes may omit it.
+        config_path: if harness == "hermes" {
+            scalars.config_path.unwrap_or_default()
+        } else {
+            required(scalars.config_path)?
+        },
         transport: scalars
             .transport
             .unwrap_or_else(|| default_transport.to_owned()),

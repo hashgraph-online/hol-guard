@@ -1,5 +1,5 @@
-//! What the relay answers for a decided package call, and what it hands back
-//! to the proxy because answering it would write.
+//! What the relay answers for a decided package call, and what it refuses
+//! because answering it would write.
 
 use guard_command::effect_decision::GuardAction;
 use guard_command::package_execution_context::PackageExecutionContext;
@@ -163,6 +163,43 @@ fn the_composition_queues_a_package_request_the_tool_policy_permitted() {
             policy_action: "review".to_owned(),
         })),
     );
+}
+
+#[test]
+fn an_inline_approval_authorizes_only_the_current_tool_call() {
+    assert_eq!(
+        compose_with_inline_approval(
+            "enforce",
+            &tool(GuardAction::Review),
+            &policy("allow"),
+            true
+        ),
+        Ok(Decided::Package(PackageRoute::Forward {
+            policy_action: "allow".to_owned(),
+        })),
+    );
+}
+
+#[test]
+fn an_inline_approval_does_not_override_a_saved_tool_block() {
+    let mut tool = tool(GuardAction::Review);
+    tool.saved_action = Some(GuardAction::Block);
+    assert_eq!(
+        compose_with_inline_approval("enforce", &tool, &policy("allow"), true),
+        Ok(Decided::Tool(ToolLeg::StoredBlock)),
+    );
+}
+
+#[test]
+fn an_inline_approval_does_not_override_a_fresh_terminal_tool_policy() {
+    for action in [GuardAction::Block, GuardAction::SandboxRequired] {
+        assert_eq!(
+            compose_with_inline_approval("enforce", &tool(action), &policy("allow"), true),
+            Ok(Decided::Package(PackageRoute::TerminalPackage {
+                policy_action: action.as_str().to_owned(),
+            })),
+        );
+    }
 }
 
 #[test]

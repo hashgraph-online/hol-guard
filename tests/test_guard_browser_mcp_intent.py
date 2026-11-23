@@ -10,9 +10,9 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from tests.browser_mcp_intent_client import normalize_browser_mcp_intent
+from tests.mcp_call_projection_support import McpCallProjection, McpCallProjector
 
 
 def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
@@ -707,88 +707,3 @@ class TestBrowserRiskClassifierIntegration:
 
 class TestProxyBrowserIntentMetadata:
     """HGBM063-HGBM065: Proxy includes browser intent metadata."""
-
-    def test_build_artifact_payload_includes_browser_intent(self, native_context_digest: Path) -> None:
-        """HGBM063: _build_artifact_payload includes browser_intent for browser MCP."""
-        from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
-        from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjector
-
-        artifact, arguments = _browser_artifact(
-            arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
-        )
-
-        # Create a minimal proxy-like object to test the payload builder
-        class _FakeProxy:
-            _call_projector = McpCallProjector(native_context_digest)
-
-        # Call the builder unbound: it only needs the call projector
-        payload = RuntimeMcpGuardProxy._build_artifact_payload(
-            _FakeProxy(),
-            artifact=artifact,
-            artifact_hash="test-hash",
-            tool_name="navigate_page",
-            params={"arguments": arguments},
-            signals=("browser navigation to hol.org",),
-        )
-        assert "browser_intent" in payload
-        assert payload["browser_intent"]["intent"] == "browser.navigation"
-        assert payload["browser_intent"]["target_domain"] == "hol.org"
-        assert "runtime_browser_tool_call" in payload["changed_fields"]
-        assert "runtime_tool_call" in payload["changed_fields"]
-
-    def test_build_artifact_payload_no_browser_intent_for_non_browser(self, native_context_digest: Path) -> None:
-        """HGBM063: Non-browser MCP does not include browser_intent."""
-        from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
-        from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjector
-        from codex_plugin_scanner.guard.runtime.mcp_protection import (
-            build_mcp_server_identity,
-        )
-
-        server_identity = build_mcp_server_identity(
-            config_path=".mcp.json",
-            command="npx",
-            args=("-y", "@slack/mcp-server"),
-            transport="stdio",
-        )
-        artifact, arguments = _browser_artifact(
-            server_name="slack-mcp",
-            tool_name="post_message",
-            arguments={"channel": "#general", "text": "hello"},
-            server_identity=server_identity,
-        )
-
-        class _FakeProxy:
-            _call_projector = McpCallProjector(native_context_digest)
-
-        payload = RuntimeMcpGuardProxy._build_artifact_payload(
-            _FakeProxy(),
-            artifact=artifact,
-            artifact_hash="test-hash",
-            tool_name="post_message",
-            params={"arguments": arguments},
-            signals=(),
-        )
-        assert "browser_intent" not in payload
-        assert payload["changed_fields"] == ["runtime_tool_call"]
-
-    def test_launch_target_prefers_browser_label(self, native_context_digest: Path) -> None:
-        """HGBM065: launch_target is safe browser label when browser intent exists."""
-        from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
-        from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjector
-
-        artifact, arguments = _browser_artifact(
-            arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
-        )
-
-        class _FakeProxy:
-            _call_projector = McpCallProjector(native_context_digest)
-
-        payload = RuntimeMcpGuardProxy._build_artifact_payload(
-            _FakeProxy(),
-            artifact=artifact,
-            artifact_hash="test-hash",
-            tool_name="navigate_page",
-            params={"arguments": arguments},
-            signals=(),
-        )
-        assert payload["launch_target"] == "chrome-devtools navigate_page hol.org"

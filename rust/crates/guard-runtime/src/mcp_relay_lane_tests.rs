@@ -1,6 +1,6 @@
 use super::{
-    ensure_argv, gate_line, hands_off, kickable, startup, DaemonKick, Gate, Kick, LaneKick,
-    DAEMON_REFUSED, DAEMON_UNREACHABLE, KICK_INTERVAL,
+    ensure_argv, gate_line, kickable, startup, DaemonKick, Gate, Kick, LaneKick, DAEMON_REFUSED,
+    DAEMON_UNREACHABLE, KICK_INTERVAL,
 };
 use crate::mcp_relay_args::parse;
 use std::cell::Cell;
@@ -103,7 +103,6 @@ fn a_skipped_kick_keeps_probing_until_the_deadline() {
         Duration::from_millis(150),
     );
     assert_eq!(gate, Gate::NotReady("direct_lane_unbound".to_owned()));
-    assert!(!hands_off("direct_lane_unbound"));
 }
 
 #[test]
@@ -164,66 +163,22 @@ fn the_gate_line_has_a_fixed_shape() {
         "hol-guard mcp-relay: lane not ready: direct_lane_unbound\n"
     );
     assert_eq!(
-        gate_line(&Gate::NotReady(
-            "mcp_relay_session_server_proxy_tools".to_owned()
-        )),
-        "hol-guard mcp-relay: python proxy: mcp_relay_session_server_proxy_tools\n"
+        gate_line(&Gate::NotReady("mcp_relay_store_newer".to_owned())),
+        "hol-guard mcp-relay: lane not ready: mcp_relay_store_newer\n"
     );
 }
 
 #[test]
-fn only_an_unported_feature_or_a_newer_runtime_hands_the_session_to_the_proxy() {
-    for code in [
-        "mcp_relay_runtime_superseded",
-        "mcp_relay_store_newer",
-        "mcp_relay_saved_remote_policy",
-        "mcp_relay_saved_policy_unverifiable",
-        "mcp_relay_session_server_proxy_tools",
-    ] {
-        assert!(hands_off(code), "{code}");
+fn version_skew_is_not_worth_a_warm_up_wait() {
+    // A superseded resident or a newer store keeps the session native, and
+    // its first call does not wait for a lane the daemon cannot prepare.
+    for code in ["mcp_relay_runtime_superseded", "mcp_relay_store_newer"] {
+        assert!(!kickable(code), "{code}");
+        assert_eq!(
+            gate_line(&Gate::NotReady(code.to_owned())),
+            format!("hol-guard mcp-relay: lane not ready: {code}\n")
+        );
     }
-    // A lane the daemon has not prepared yet keeps the session native and
-    // its first call waits for it.
-    for code in [
-        DAEMON_UNREACHABLE,
-        "direct_lane_unbound",
-        "direct_lane_snapshot_unavailable",
-        "direct_lane_ack_missing",
-        "direct_lane_ack_mismatch",
-        "direct_lane_ack_expired",
-        "direct_lane_workspace_unknown",
-        "direct_lane_input_changed",
-        "mcp_relay_harness_unbound",
-        "mcp_relay_view_missing",
-        "mcp_relay_resident_unreachable",
-        "mcp_relay_session_server_unknown",
-    ] {
-        assert!(!hands_off(code), "{code}");
-    }
-    // A binding, store or daemon the resident cannot use keeps the session
-    // native too, and so does a review mode or redaction level the bound
-    // configs do not agree on: each call the lane cannot decide is refused,
-    // never decided by the proxy.
-    for code in [
-        DAEMON_REFUSED,
-        "mcp_relay_store_unreadable",
-        "mcp_relay_session_review_mode",
-        "mcp_relay_session_redaction_unbound",
-        "direct_lane_unsupported",
-        "mcp_relay_workspace_invalid",
-        "mcp_relay_evidence_undrained",
-        "mcp_relay_binding_incomplete",
-        "mcp_relay_view_invalid",
-        "mcp_relay_facts_unavailable",
-        "mcp_relay_request_unsendable",
-        "mcp_relay_reply_invalid",
-    ] {
-        assert!(!hands_off(code), "{code}");
-    }
-    assert!(
-        !hands_off("mcp_relay_a_code_added_later"),
-        "an unknown code keeps the session native"
-    );
 }
 
 #[test]
