@@ -669,8 +669,8 @@ pub(super) fn convert(
             execution_environment.map(|environment| environment.path.as_str()),
         )
         // The sandbox does not withhold every file the read review holds.
-        || search_widening::widens_past_ignore_rules(issued)
-        || search_widening::widens_past_ignore_rules(shaped)
+        || search_widening::widens_past_ignore_rules(issued, Path::new(cwd))
+        || search_widening::widens_past_ignore_rules(shaped, Path::new(root))
         || credential_names::names_credential_path(issued, Path::new(cwd))
         || credential_names::names_credential_path(shaped, Path::new(root))
         || removal::destroys_workspace(result, issued, &workspace)
