@@ -77,7 +77,21 @@ def native_mint_for_store(guard_home: Path, secret_store: object) -> str | None:
     keyring_service = native_mint_keyring_service(guard_home, secret_store)
     if keyring_service is None and not _vault_backed(guard_home, secret_store):
         return None
-    return native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service)
+    feature = NATIVE_MINT_FEATURE if keyring_service is None else NATIVE_KEYRING_MINT_FEATURE
+    # A compatible runtime that advertises the mint but gives no answer may
+    # have dispatched a write that is still in flight. Keep the Python mint
+    # from replacing that unknown result with a second key.
+    if not _runtime_offers(feature):
+        return None
+    return native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service) or "busy"
+
+
+def _runtime_offers(feature: str) -> bool:
+    """Whether the resident advertises the feature before dispatch."""
+
+    from .mdm.runtime_request import runtime_offers
+
+    return runtime_offers(feature)
 
 
 def _vault_backed(guard_home: Path, secret_store: object) -> bool:
