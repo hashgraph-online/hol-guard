@@ -153,6 +153,7 @@ impl Plain<'_> {
         })
         .ok()
         .map(Some)
+        .or(Some(None))
     }
 
     /// The receipt's risk categories: the projected ones, else the

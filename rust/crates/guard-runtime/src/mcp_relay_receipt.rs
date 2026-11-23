@@ -410,10 +410,12 @@ fn receipt_evidence(
         params: call.params.clone(),
         risk: None,
     })
-    .ok()?;
+    .ok();
     // `argument_entries`: only the keys the command text reads are shipped.
-    let arguments: Option<Vec<ArgumentEntry>> =
-        projection["safe_arguments"].as_object().map(|safe| {
+    let arguments: Option<Vec<ArgumentEntry>> = projection
+        .as_ref()
+        .and_then(|projection| projection["safe_arguments"].as_object())
+        .map(|safe| {
             safe.iter()
                 .filter(|(key, _)| {
                     MCP_RUNTIME_EVIDENCE_COMMAND_ARGUMENT_KEYS.contains(&key.as_str())
@@ -462,7 +464,7 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
     let plain = plain(record)?;
     let artifact = plain.artifact;
     let name = artifact["name"].as_str()?;
-    let projected = plain.projected()?;
+    let projected = plain.projected()?.flatten();
     let risk_categories = plain.risk_categories(projected.as_ref())?;
     let call = Call {
         tool_name: plain.tool_name,
@@ -477,9 +479,12 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
     // the inbox row records as well.
     let mut call_evidence = decision_evidence(plain.decision);
     call_evidence.extend(plain.append.iter().cloned());
-    let row = projected
-        .as_ref()
-        .and_then(|projected| row::silent_review(&plain, projected, &call_evidence, stamp));
+    let row = row::silent_review(
+        &plain,
+        projected.as_ref().unwrap_or(&Value::Null),
+        &call_evidence,
+        stamp,
+    );
     let mut scanner_evidence = vec![firewall_evidence];
     scanner_evidence.extend(call_evidence);
     let launch_command = artifact["command"]
