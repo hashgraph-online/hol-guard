@@ -370,9 +370,8 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         "count_legacy_policy_rows"
         | "read_policy_integrity_state"
         | "has_local_policy_rows"
-        | "list_policy_decision_rows" => {
-            Kind::Read
-        }
+        | "list_policy_decision_rows"
+        | "read_policy_decision_row" => Kind::Read,
         "policy_row_presence" | "extension_control_authority_head" => Kind::Snapshot,
         "find_local_mcp_observation" => Kind::Read,
         "ensure_local_mcp_observation"

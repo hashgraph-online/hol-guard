@@ -39,6 +39,7 @@ pub(super) fn handles(method: &str) -> bool {
             | "count_legacy_policy_rows"
             | "record_policy_integrity_state"
             | "list_policy_decision_rows"
+            | "read_policy_decision_row"
     )
 }
 
@@ -49,6 +50,7 @@ pub(super) fn run(connection: &Connection, method: &str, args: &Args) -> StoreRe
         "count_legacy_policy_rows" => count_legacy_policy_rows(connection),
         "record_policy_integrity_state" => record_policy_integrity_state(connection, args),
         "list_policy_decision_rows" => decision_list::list_policy_decision_rows(connection, args),
+        "read_policy_decision_row" => decision_list::read_policy_decision_row(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_args_invalid")),
     }
 }
