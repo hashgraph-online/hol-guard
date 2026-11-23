@@ -15,7 +15,9 @@ use regex::Regex;
 use source_lines::code_lines;
 
 mod argv;
+mod constant_import;
 mod destructive_git;
+pub(in crate::pretool) mod docstrings;
 pub(in crate::pretool) mod fed;
 pub(in crate::pretool) mod host_reach;
 mod launch;
@@ -84,7 +86,9 @@ static PYTHON_ASYNC_NETWORK: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 fn python_network(code: &str) -> bool {
-    PYTHON_NETWORK.is_match(code) || PYTHON_ASYNC_NETWORK.is_match(code)
+    PYTHON_NETWORK.is_match(code)
+        || PYTHON_NETWORK.is_match(&constant_import::as_statements(code))
+        || PYTHON_ASYNC_NETWORK.is_match(code)
 }
 static NODE_NETWORK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
@@ -748,6 +752,7 @@ fn assess_programs(
             continue;
         };
         let mut found = Findings::default();
+        let docstrings_read = sources.iter().any(|source| docstrings::read(source));
         for source in &sources {
             let code = code_lines(language, source);
             found.network |= match language {
@@ -755,7 +760,8 @@ fn assess_programs(
                 Language::Node => NODE_NETWORK.is_match(&code),
             };
             found.credential_store |= CREDENTIAL_STORE.is_match(&code);
-            found.host_reach |= fed_python && host_reach::python_reaches_host(source);
+            found.host_reach |=
+                fed_python && host_reach::python_reaches_host(source, docstrings_read);
         }
         // A local module the graph left unread could reach the host too.
         found.host_reach |= fed_python && !complete;
@@ -1128,6 +1134,8 @@ fn python_imports(source: &str, root: &Path, directory: &Path) -> Vec<PathBuf> {
             modules.push((dots, module.to_owned()));
         }
     }
+    // `__import__("pkg.sub")` loads a local module as `import pkg.sub` does.
+    modules.extend(constant_import::names(source).map(|name| (0, name.to_owned())));
     modules
         .into_iter()
         .filter(|(_, module)| {

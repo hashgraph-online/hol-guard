@@ -1,4 +1,6 @@
-use super::python_reaches_host;
+fn python_reaches_host(source: &str) -> bool {
+    super::python_reaches_host(source, super::super::docstrings::read(source))
+}
 
 #[test]
 fn programs_that_reach_the_host_are_held() {
@@ -28,6 +30,13 @@ fn programs_that_reach_the_host_are_held() {
         "x = 1; exec('print(x)')\n",
         "import builtins\nbuiltins.exec(src)\n",
         "import importlib\nimportlib.import_module('socket')\n",
+        "x = __import__('socket').create_connection\n",
+        "m = __import__('psutil')\n",
+        "m = __import__(name)\n",
+        "p = __import__('os'); p.kill(1, 9)\n",
+        "k = __import__('signal').pthread_kill\nk(1, 9)\n",
+        "b = __import__('builtins'); b.eval(text)\n",
+        "import importlib\nimportlib.import_module('importlib').import_module(name)\n",
         "import glob\nprint(glob.glob('/app/*'))\n",
         "import glob\nprint(glob.glob('/dev/*'))\n",
         "import os\nprint(os.listdir('/'))\n",
@@ -94,6 +103,10 @@ fn programs_that_reach_the_host_are_held() {
         "print(open(f'{\"etc\":/>4}/passwd').read())\n",
         "print(open(f'{\"etc\":{\"/\"}>4}/passwd').read())\n",
         "a = b = True\nopen(f'{\".\" if a else \"\"}{\"git\" if b else \"\"}/config', 'w').write('')\n",
+        "'''/etc/passwd'''\nprint(open(__doc__).read())\n",
+        "def f():\n    '/etc/passwd'\nimport inspect\nprint(open(inspect.getdoc(f)).read())\n",
+        "x = (\n    '/etc/passwd'\n)\nprint(open(x).read())\n",
+        "if True:\n    f'{open(\"/etc/passwd\").read()}'\n",
     ] {
         assert!(python_reaches_host(source), "{source}");
     }
@@ -102,6 +115,8 @@ fn programs_that_reach_the_host_are_held() {
 #[test]
 fn workspace_programs_stay_contained() {
     for source in [
+        "self._module = __import__('concurrent.futures').futures\n",
+        "import importlib\njson = importlib.import_module(\"json\")\n",
         "from collections import OrderedDict\nd = OrderedDict([('a', 1)])\nprint(list(d))\n",
         "import glob\nimport re\nprint(sorted(glob.glob('*.md')))\n",
         "import json\nimport re\nprint(json.dumps({'m': bool(re.match(r'a+', 'aaa'))}))\n",
@@ -145,6 +160,8 @@ fn workspace_programs_stay_contained() {
         "import os\nos.system('>/tmp/out.txt git log -1')\n",
         "import json\nprint(f'{\"Name\":<20}{\"Size\":>10}', f'{title:-^40}')\n",
         "import json\nprint(f'{name:{width}}/{size:>{w}}', f'{\"Total\":{width}}')\n",
+        "\"\"\"Tools.\n\n.. [1] see ../docs\n\"\"\"\nimport json\n",
+        "def chunked(it):\n    \"\"\"Split it.\n\n    .. deprecated:: 11.0\n    \"\"\"\n    return it\n",
     ] {
         assert!(!python_reaches_host(source), "{source}");
     }

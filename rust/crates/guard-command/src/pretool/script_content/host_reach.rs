@@ -16,7 +16,7 @@
 //!   from `os` or `signal`, under any name they are imported as);
 //! - code built at run time (`eval`, `exec`, `compile`, `__import__`, also
 //!   through `builtins`, and `importlib.import_module`), which the scan
-//!   cannot read;
+//!   cannot read, unless it imports a constant name (`constant_import`);
 //! - a string that names a path outside the workspace, on its own or as a
 //!   word of a command line: an absolute path other than the shared temporary
 //!   directory and the standard streams, the root directory, a relative path
@@ -57,7 +57,7 @@ mod shell;
 use super::system_files::lexical;
 use super::{code_lines, Language};
 use literals::{format_template, literal_value, spec_fill};
-use shell::{command_reaches, git_config_reads, unquote};
+use shell::{command_reaches, git_config_list_writes, unquote};
 
 const HOST_MODULES: &str = "psutil|pyperclip|pynput|pyautogui|mss|ctypes|PIL|keyboard|mouse|Xlib|Quartz|AppKit|win32api|win32gui|win32con|winreg";
 
@@ -142,18 +142,6 @@ const PATH_CALLS: &[&str] = &[
     "isdir",
     "access",
 ];
-
-/// The rest of an argument list for `git ... config`.
-static GIT_CONFIG_LIST: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(concat!(
-        r#"["']git["']\s*,\s*(?:["'][^"'\n]*["']\s*,\s*)*?["']config["']"#,
-        r#"((?:\s*,\s*["'][^"'\n]*["'])*)"#,
-    ))
-    .unwrap()
-});
-
-static QUOTED_WORD: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"["']([^"'\n]*)["']"#).unwrap());
 
 /// Absolute paths a contained program may name: the shared temporary
 /// directory and the standard streams.
@@ -275,7 +263,7 @@ const FIELD_READINGS: usize = 256;
 fn field_values(field: &str, reaches: &mut bool) -> Vec<String> {
     let mut nested = false;
     let constants = literals(field, &mut nested);
-    *reaches |= nested || names_outside_path(field);
+    *reaches |= nested || names_outside_path(field, true);
     let mut known: Vec<String> = constants
         .into_iter()
         .filter_map(|constant| constant.value)
@@ -391,9 +379,13 @@ fn joins(between: &str) -> bool {
 /// with `+` or written next to each other are also read as the string they
 /// make; when that string is itself added to something before it, a leading
 /// `/` only separates it from that, so `base + '/' + 'sub'` stays relative.
-fn names_outside_path(code: &str) -> bool {
+/// Docstrings are skipped unless `keep_docstrings` (`docstrings`).
+fn names_outside_path(code: &str, keep_docstrings: bool) -> bool {
     let mut reaches = false;
-    let found = literals(code, &mut reaches);
+    let mut found = literals(code, &mut reaches);
+    if !keep_docstrings {
+        found = super::docstrings::without(code, found, |literal| (literal.start, literal.end));
+    }
     if reaches {
         return true;
     }
@@ -439,16 +431,6 @@ fn names_outside_path(code: &str) -> bool {
     false
 }
 
-fn git_config_list_writes(code: &str) -> bool {
-    GIT_CONFIG_LIST.captures_iter(code).any(|captures| {
-        let words: Vec<&str> = QUOTED_WORD
-            .captures_iter(&captures[1])
-            .filter_map(|word| word.get(1).map(|word| word.as_str()))
-            .collect();
-        !git_config_reads(words)
-    })
-}
-
 /// Names `os` and `signal` are reachable under: themselves and their
 /// `import ... as` aliases.
 fn signal_receivers(code: &str) -> BTreeSet<&str> {
@@ -480,14 +462,16 @@ fn signals_processes(code: &str) -> bool {
 }
 
 /// Whether the Python `source` reaches past the workspace in a way the
-/// sandbox does not take away.
-pub(in crate::pretool) fn python_reaches_host(source: &str) -> bool {
+/// sandbox does not take away. `keep_docstrings` when some source the
+/// program loads reads docstrings back (`docstrings::read`).
+pub(in crate::pretool) fn python_reaches_host(source: &str, keep_docstrings: bool) -> bool {
     let code = code_lines(Language::Python, source);
     HOST_MODULE.is_match(&code)
+        || super::constant_import::held(&code, |imports| HOST_MODULE.is_match(imports))
         || signals_processes(&code)
-        || DYNAMIC_CODE.is_match(&code)
+        || DYNAMIC_CODE.is_match(&super::constant_import::without_constant_imports(&code))
         || git_config_list_writes(&code)
-        || names_outside_path(&code)
+        || names_outside_path(&code, keep_docstrings)
 }
 
 #[cfg(test)]

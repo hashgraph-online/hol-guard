@@ -367,7 +367,10 @@ fn python_program_fits(body: &[&str]) -> bool {
             crate::pretool::script_content::Language::Python,
             &source,
         )
-        && !crate::pretool::script_content::host_reach::python_reaches_host(&source)
+        && !crate::pretool::script_content::host_reach::python_reaches_host(
+            &source,
+            crate::pretool::script_content::docstrings::read(&source),
+        )
 }
 
 /// A bare CR changes Python's physical source-line boundaries; CRLF is fine.

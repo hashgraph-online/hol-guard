@@ -33,6 +33,22 @@ fn checkout(label: &str) -> (PathBuf, FixtureCleanup) {
         "import os as proc\nproc.kill(4242, 15)\n",
     )
     .unwrap();
+    for (name, source) in [
+        (
+            "lazy",
+            "class Pool:\n    def __init__(self):\n        self._module = __import__('concurrent.futures').futures\n",
+        ),
+        ("lazystop", "p = __import__('os')\np.kill(4242, 15)\n"),
+        ("lazyremote", "m = __import__('socket')\n"),
+        ("lazylocal", "m = __import__('pkg.stopper')\n"),
+        (
+            "documented",
+            "\"\"\"Tools.\n\n.. [1] See the guide.\n\"\"\"\n\ndef chunked(it):\n    \"\"\"Split it.\n\n    .. deprecated:: 1.0\n    \"\"\"\n    return it\n",
+        ),
+        ("docpath", "\"\"\"/home/user/.aws/credentials\"\"\"\n"),
+    ] {
+        std::fs::write(project.join(format!("pkg/{name}.py")), source).unwrap();
+    }
     std::fs::create_dir_all(project.join("wide")).unwrap();
     for index in 0..40 {
         std::fs::write(project.join(format!("wide/m{index}.py")), "X = 1\n").unwrap();
@@ -107,6 +123,31 @@ fn a_probe_that_imports_modules_runs_in_the_workspace_sandbox() {
 }
 
 #[test]
+fn a_probe_whose_modules_import_by_a_constant_name_runs_in_the_workspace_sandbox() {
+    let (root, _cleanup) = checkout("constant");
+    for command in [
+        "python3 - <<'PY'\nfrom pkg import lazy\nprint(lazy.Pool)\nPY",
+        "python3 - <<'PY'\nimport importlib\njson = importlib.import_module('json')\nprint(json.dumps({}))\nPY",
+        "python3 - <<'EOF'\nimport importlib\njson = importlib.import_module('json')\nprint(json.dumps({'lazy': True}))\nEOF",
+    ] {
+        let (action, reason) = outcome(&root, command);
+        assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+    }
+}
+
+#[test]
+fn a_probe_whose_modules_document_themselves_runs_in_the_workspace_sandbox() {
+    let (root, _cleanup) = checkout("documented");
+    for command in [
+        "python3 - <<'PY'\nfrom pkg import documented\nprint(documented.chunked([1]))\nPY",
+        "python3 - <<'EOF'\ndef chunk(items):\n    \"\"\"Split items into one batch.\n\n    .. note:: see the guide\n    \"\"\"\n    return [items]\n\nprint(chunk([1, 2]))\nEOF",
+    ] {
+        let (action, reason) = outcome(&root, command);
+        assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+    }
+}
+
+#[test]
 fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
     let (root, _cleanup) = checkout("misfits");
     for command in [
@@ -167,6 +208,15 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 - <<'PY'\nimport os\nprint(os.listdir('/'))\nPY",
         // A local module the program imports counts too.
         "python3 - <<'PY'\nimport pkg.stopper\nPY",
+        // So does a module it imports by a constant name, and one whose
+        // name reaches signals through an alias.
+        "python3 - <<'PY'\nimport pkg.lazylocal\nPY",
+        "python3 - <<'PY'\nimport pkg.lazystop\nPY",
+        "python3 - <<'PY'\nimport pkg.lazyremote\nPY",
+        // A docstring the program reads back is a string like any other.
+        "python3 - <<'PY'\nimport pkg.docpath\nprint(open(pkg.docpath.__doc__).read())\nPY",
+        "python3 - <<'EOF'\n\"\"\"/etc/passwd\"\"\"\nprint(open(__doc__).read())\nEOF",
+        "python3 - <<'EOF'\nimport importlib\nsock = importlib.import_module('socket')\nprint(sock.gethostname())\nEOF",
         // Every command of a command line, past wrapper option values and
         // nested shells, and paths spelled with escapes, joined literals or
         // formatted strings.
