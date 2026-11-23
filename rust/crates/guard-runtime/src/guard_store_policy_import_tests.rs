@@ -282,3 +282,57 @@ fn a_resolved_or_missing_request_is_refused() {
     let reply = apply_mcp_policy_request(&connection, &Args(&missing)).unwrap();
     assert_eq!(reply, json!({"error": "policy_request_not_found"}));
 }
+
+fn witness(connection: &Connection) -> Option<String> {
+    connection
+        .query_row(
+            "select payload_json from sync_state where state_key = 'business_source_installation_v1'",
+            [],
+            |row| row.get(0),
+        )
+        .ok()
+}
+
+#[test]
+fn a_business_install_drops_the_imported_rows_and_stages_its_witness() {
+    let connection = request_store();
+    import_policy_rows(
+        &connection,
+        &Args(&import_args("merge", vec![row("codex:project:a")], false)),
+    )
+    .unwrap();
+    let mut args = import_args("replace", Vec::new(), true);
+    args.insert(
+        "business_witness".into(),
+        json!("{\"anchor_digest\":\"d\"}"),
+    );
+
+    let reply = import_policy_rows(&connection, &Args(&args)).unwrap();
+
+    assert_eq!(reply["inserted"], json!(0));
+    assert_eq!(reply["replaced"], json!(1));
+    assert_eq!(reply["next_control_state"]["generation"], json!(4));
+    assert_eq!(
+        witness(&connection).as_deref(),
+        Some("{\"anchor_digest\":\"d\"}")
+    );
+    let stored = dump(&connection);
+    assert_eq!(stored.len(), 2);
+    assert!(stored.iter().all(|row| verifies_at(row, 4)));
+}
+
+#[test]
+fn a_business_witness_beside_rows_or_a_merge_is_refused_before_any_write() {
+    let connection = request_store();
+    let before = dump(&connection).len();
+    for (mode, rows) in [
+        ("replace", vec![row("codex:project:a")]),
+        ("merge", Vec::new()),
+    ] {
+        let mut args = import_args(mode, rows, false);
+        args.insert("business_witness".into(), json!("{}"));
+        assert!(import_policy_rows(&connection, &Args(&args)).is_err());
+    }
+    assert_eq!(dump(&connection).len(), before);
+    assert_eq!(witness(&connection), None);
+}
