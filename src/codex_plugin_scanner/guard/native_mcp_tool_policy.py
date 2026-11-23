@@ -249,7 +249,6 @@ def _is_connector_setup(value: object) -> bool:
     )
 
 
-
 def _is_non_recognition(payload: dict[str, Any]) -> bool:
     """Only a review that nothing but non-recognition caused may name a connector."""
     quiet = not (payload["signals"] or payload["risk_categories"] or payload["pending_approval_reuse_decision"])
@@ -261,6 +260,7 @@ def _is_non_recognition(payload: dict[str, Any]) -> bool:
         and payload["approval_reuse_claim_disposition"] is None
         and not payload["post_claim_revalidated"]
     )
+
 
 def _validated_decision(payload: object, *, proxy_requested: bool = False) -> dict[str, Any]:
     invalid = NativeMcpToolPolicyError("payload_invalid")
