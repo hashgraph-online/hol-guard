@@ -296,12 +296,16 @@ fn signed(
         return finalized.get("generation").and_then(Value::as_u64);
     }
     if !committed {
-        if !put(home, &mut secrets, &control_ref, &current) {
-            // A failed mirror must not strand the vault's pending generation
-            // when the store write never committed. Restore the encrypted
-            // copy directly so the next save can retry the operation.
-            if let Ok(serialized) = serde_json::to_string(&current) {
-                let _ = secrets.set_secret(&control_ref, &serialized);
+        // A failed mirror must not strand the vault's pending generation when
+        // the store write never committed. Restore the vault once, then try
+        // the primary mirror without rewriting the vault a second time.
+        if let Ok(serialized) = serde_json::to_string(&current) {
+            if secrets.set_secret(&control_ref, &serialized).is_ok() {
+                let _ = crate::policy_integrity_resolver::key_mint::mirror_existing_control_state(
+                    home,
+                    &control_ref,
+                    &serialized,
+                );
             }
         }
     }
