@@ -16,6 +16,7 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import native_harness_ops as harness_ops
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority
 from codex_plugin_scanner.guard.harness_context import HarnessContext
+from codex_plugin_scanner.guard.hook_failure_bridge import RUNTIME_MISSING
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from tests import harness_ops_support as harness_support
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
@@ -194,20 +195,17 @@ def test_hermes_bridge_render_stops_at_the_hook_deadline(tmp_path: Path, monkeyp
         raise AssertionError("an expired hook budget must not reach the resident")
 
     monkeypatch.setattr(native_hook_render, "_resident_request", forbidden)
-    stdout, _stderr, code = commands_hook_native_authority._bridge_hook_output(
+    # ``emit_hook_review`` floors the deadline before this runs; a deadline that
+    # is already spent here leaves no budget for the runtime's fail-closed
+    # document either, so the deciding event is refused on stderr instead.
+    stdout, stderr, code = commands_hook_native_authority._bridge_hook_output(
         "hermes",
         {"policy_action": "allow", "reason": "ok"},
         event_name="PreToolUse",
         guard_home=tmp_path / "guard-home",
         deadline=time.monotonic() - 0.01,
     )
-    assert json.loads(stdout) == {
-        "decision": "block",
-        "reason": "HOL Guard blocked this action.",
-        "policy_action": "block",
-        "reason_code": "native_hook_render_unavailable",
-    }
-    assert code == 2
+    assert (stdout, stderr, code) == ("", RUNTIME_MISSING, 2)
 
 
 def test_bridge_failure_for_an_observing_event_stays_silent(monkeypatch: pytest.MonkeyPatch) -> None:
