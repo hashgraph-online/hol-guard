@@ -1,9 +1,10 @@
 //! Read-only `git` invocations proven without a review.
 //!
-//! Status, diff, log, show, grep, rev-parse, merge-base, ls-files, `remote -v`, `worktree list`,
-//! branch listings, `show-ref`, `for-each-ref`, `rev-list` commit walks, `hash-object`, `config`,
-//! `ls-tree`, `cat-file` and `sparse-checkout list` reads. Diff-style reads that can run a configured helper need the
-//! helper-context probe or both `--no-ext-diff` and `--no-textconv`.
+//! Status, diff, log, `whatchanged`, `range-diff`, show, grep, rev-parse, merge-base, ls-files,
+//! `remote -v`, `worktree list`, branch listings, `show-ref`, `for-each-ref`, `rev-list` commit
+//! walks, `hash-object`, `config`, `ls-tree`, `cat-file` and `sparse-checkout list` reads.
+//! Diff-style reads that can run a configured helper need the helper-context probe or both
+//! `--no-ext-diff` and `--no-textconv`.
 
 #[path = "git_log_names.rs"]
 mod log_names;
@@ -302,6 +303,8 @@ pub(super) fn safe_git_arguments(
             | "diff-index"
             | "diff-tree"
             | "log"
+            | "whatchanged"
+            | "range-diff"
             | "show"
             | "rev-parse"
             | "ls-files"
@@ -368,7 +371,14 @@ pub(super) fn safe_git_arguments(
             .any(|argument| argument == "--no-textconv");
     let diff_family = matches!(
         subcommand,
-        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show"
+        "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
+            | "log"
+            | "whatchanged"
+            | "range-diff"
+            | "show"
     );
     if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
@@ -409,6 +419,8 @@ pub(super) fn inspection_writes_nothing(
             | "diff-index"
             | "diff-tree"
             | "log"
+            | "whatchanged"
+            | "range-diff"
             | "show"
             | "grep"
             | "merge-base"
@@ -435,6 +447,10 @@ pub(super) fn inspection_writes_nothing(
             .any(|argument| names_refused_option(argument))
         && !has_argument(&inspected[1..option_end], &[], &["--exec-path="])
 }
+
+#[cfg(test)]
+#[path = "git_reads_change_listing_tests.rs"]
+mod change_listing_tests;
 
 #[cfg(test)]
 #[path = "git_reads_config_pattern_tests.rs"]

@@ -34,6 +34,30 @@ fn the_ref_readings_ask_for_the_configuration_probe() {
     }
 }
 
+/// The two change listings run the same diff drivers `log` and `show` run, so
+/// they ask for the probe on every spelling that leaves a driver reachable,
+/// and stop asking only when the command turns both helpers off itself.
+#[test]
+fn the_change_listings_ask_for_the_configuration_probe() {
+    for command in [
+        "git whatchanged",
+        "git whatchanged -3",
+        "git whatchanged --oneline -5",
+        "git whatchanged --no-ext-diff -3",
+        "git range-diff main...HEAD",
+        "git range-diff --creation-factor=80 main...HEAD",
+        "git range-diff --no-textconv main...HEAD",
+    ] {
+        assert!(probes(command), "{command}");
+    }
+    for command in [
+        "git whatchanged --no-ext-diff --no-textconv -3",
+        "git range-diff --no-ext-diff --no-textconv main...HEAD",
+    ] {
+        assert!(!probes(command), "{command}");
+    }
+}
+
 /// The stdin filters ask for the probe too, on the spelling that only reads.
 #[test]
 fn the_stdin_filters_ask_for_the_configuration_probe() {

@@ -194,6 +194,8 @@ fn raw_paging(
             | "diff-index"
             | "diff-tree"
             | "log"
+            | "whatchanged"
+            | "range-diff"
             | "show"
             | "blame"
             | "annotate"
@@ -600,7 +602,16 @@ fn probe(
     // check prints names, and a configured driver leaves all of them alone.
     let renders_diff = matches!(
         rendering,
-        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "reflog" | "stash"
+        "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
+            | "log"
+            | "whatchanged"
+            | "range-diff"
+            | "show"
+            | "reflog"
+            | "stash"
     );
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
