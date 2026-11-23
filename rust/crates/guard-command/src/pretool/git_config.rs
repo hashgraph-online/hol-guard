@@ -764,15 +764,39 @@ fn probe(
                     && value != "cat"
             }
             key if key.starts_with("pager.") => {
-                key == pager_key
+                let own = key == pager_key;
+                // Git runs `commit-graph verify`, `refs verify` and
+                // `multi-pack-index verify` from inside `fsck`, and each child
+                // reads its own `pager.<command>` key. None of them pages by
+                // default and none inherits `core.pager` through the parent,
+                // so only one of those keys starts a program there -- but when
+                // one does, the program runs from a read that `pager.fsck`
+                // alone proved quiet. Measured on Git 2.53.
+                let fsck_child = operation == "fsck"
+                    && matches!(
+                        key,
+                        "pager.commit-graph" | "pager.refs" | "pager.multi-pack-index"
+                    );
+                (own || fsck_child)
                     && !git_pager_disabled
                     && !disabled
                     && !value.is_empty()
                     && value != "cat"
-                    && if enabled_boolean(value) {
-                        paging
+                    && if own {
+                        if enabled_boolean(value) {
+                            paging
+                        } else {
+                            configured_paging
+                        }
+                    } else if enabled_boolean(value) {
+                        // A child told to page with no program of its own
+                        // falls back to `$PAGER` or Git's default, so the
+                        // environment decides whether anything runs.
+                        !no_pager && !environment_pager.is_some_and(|disabled| disabled)
                     } else {
-                        configured_paging
+                        // A program named by the key itself overrides the
+                        // environment, exactly as the parent's own key does.
+                        !no_pager
                     }
             }
             "diff.external" => renders_diff && !no_external && !value.is_empty(),

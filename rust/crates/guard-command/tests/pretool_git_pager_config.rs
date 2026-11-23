@@ -400,3 +400,90 @@ fn piped_git_output_never_starts_a_configured_pager() {
         );
     }
 }
+
+/// `fsck` runs `commit-graph verify`, `refs verify` and `multi-pack-index
+/// verify` as children, and each child consults its own `pager.<command>`
+/// key rather than `pager.fsck`. A program named by one of those keys runs
+/// from a check that `pager.fsck` alone would prove quiet, so the proof reads
+/// them too. Disabling the pager on the command line still allows the check:
+/// `--no-pager` and `-P` reach the children as well.
+#[test]
+fn fsck_reads_the_pager_keys_of_the_commands_it_runs() {
+    let root = std::env::temp_dir().join(format!("guard-git-fsck-pager-{}", std::process::id()));
+    let home = root.join("home");
+    let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    assert!(std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()
+        .unwrap()
+        .success());
+    let config = repository.join(".git/config");
+    let enabled = github_controls("enabled");
+    for (settings, command, expected) in [
+        ("", "git fsck --no-progress", "allow"),
+        (
+            "[pager]\ncommit-graph = ./synthetic-never-execute\n",
+            "git fsck --no-progress",
+            "deny",
+        ),
+        (
+            "[pager]\nrefs = ./synthetic-never-execute\n",
+            "git fsck --no-progress",
+            "deny",
+        ),
+        (
+            "[pager]\nmulti-pack-index = ./synthetic-never-execute\n",
+            "git fsck --no-progress",
+            "deny",
+        ),
+        ("[pager]\ncommit-graph = true\n", "git fsck", "deny"),
+        (
+            "[pager]\ncommit-graph = false\n",
+            "git fsck --no-progress",
+            "allow",
+        ),
+        (
+            "[pager]\ncommit-graph = cat\n",
+            "git fsck --no-progress",
+            "allow",
+        ),
+        (
+            "[pager]\ncommit-graph = ./synthetic-never-execute\n",
+            "git --no-pager fsck --no-progress",
+            "allow",
+        ),
+        (
+            "[pager]\nrefs = ./synthetic-never-execute\n",
+            "git -P fsck --no-progress",
+            "allow",
+        ),
+        // Another command's children are its own; a check of the object store
+        // is the only read that starts these three.
+        (
+            "[pager]\ncommit-graph = ./synthetic-never-execute\n",
+            "git status --short",
+            "allow",
+        ),
+    ] {
+        std::fs::write(&config, settings).unwrap();
+        for harness in ["omp", "zcode"] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&enabled),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            assert_eq!(
+                result.decision, expected,
+                "{harness}: {command}: {settings}"
+            );
+        }
+    }
+}
