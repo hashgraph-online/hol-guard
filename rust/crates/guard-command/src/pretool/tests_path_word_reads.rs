@@ -48,6 +48,23 @@ fn resolving_a_path_word_needs_no_review_inside_the_workspace() {
     }
 }
 
+/// `cat` already prints the `ENOENT` error for an absolute path with nothing
+/// at it, and a resolver that reports where the path would be reports less
+/// than the reader that would print its bytes. The two answer the same way.
+#[test]
+fn resolving_an_absent_absolute_path_reads_no_more_than_printing_it() {
+    for command in [
+        "realpath /nonexistent-guard-sample/notes.txt",
+        "realpath -q /nonexistent-guard-sample/nested/notes.txt",
+        "readlink -f /nonexistent-guard-sample/notes.txt",
+        // The reader that prints the bytes already passes, so the resolver
+        // that prints only the path cannot need more.
+        "cat /nonexistent-guard-sample/notes.txt",
+    ] {
+        assert!(allowed(command), "{command}");
+    }
+}
+
 #[test]
 fn an_unproven_path_word_still_takes_review() {
     for command in [

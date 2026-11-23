@@ -83,12 +83,22 @@ pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1) -> 
 /// A program that opens the paths it is given only to read them, and writes
 /// what it finds to standard output. None of them takes an option that names
 /// a file to write, so the redirect screen above is the whole write surface.
+///
+/// That last condition is what keeps the list short rather than the reading
+/// itself. `sed` and `awk` read a named file and print it, but `sed -i` and
+/// `print > "name"` both put bytes on disk; `sort -o`, `uniq OUT`, macOS
+/// `base64 -o` and `file -C` each name an output file as an ordinary operand
+/// or option. A command whose write surface is wider than the redirect screen
+/// does not belong here even when the spelling in hand only reads.
 fn reads_only(executable: &str) -> bool {
     matches!(
         executable,
-        "cat"
+        "basename"
+            | "cat"
             | "cut"
             | "diff"
+            | "dirname"
+            | "du"
             | "echo"
             | "egrep"
             | "fgrep"
@@ -99,7 +109,10 @@ fn reads_only(executable: &str) -> bool {
             | "nl"
             | "printf"
             | "pwd"
+            | "readlink"
+            | "realpath"
             | "rg"
+            | "stat"
             | "tail"
             | "test"
             | "tr"

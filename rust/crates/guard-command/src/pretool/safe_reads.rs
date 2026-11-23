@@ -143,9 +143,10 @@ pub(super) fn command_read_target(
             // A read of an absolute path with nothing at it prints the same
             // error the workspace-relative spelling already prints, as long
             // as no step of the command can put a file or a link there
-            // first.
-            || (!allow_directory
-                && context.creates_nothing
+            // first. Nothing is at the path, so it is neither a file nor a
+            // directory: a caller that would accept a directory accepts this
+            // for the same reason a caller that would not already does.
+            || (context.creates_nothing
                 && super::read_paths::bounded_missing_absolute_read_target(
                     value,
                     context.home_dir,
