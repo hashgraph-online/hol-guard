@@ -33,11 +33,12 @@ pub(crate) fn evaluate_command_capability_request(
     })
 }
 
-/// Asking for the resident's key while sending one leaves two keys, and the
-/// op will not pick between them.
+/// Asking for the resident's key while sending a key or a key id leaves two
+/// keys, and the op will not pick between them.
 fn resident_refusal(request: &CommandCapabilityRequestV1) -> Option<&'static str> {
-    (request.resident_key && request.integrity_key_b64.is_some())
-        .then_some("native_command_capability_invalid")
+    (request.resident_key
+        && (request.integrity_key_b64.is_some() || request.integrity_key_id.is_some()))
+    .then_some("native_command_capability_invalid")
 }
 
 /// The request as the verifier reads it: with `resident_key`, the key and id

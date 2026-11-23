@@ -73,9 +73,11 @@ fn refusal(request: &CommandEnvelopeRequestV1) -> Option<&'static str> {
     if !command_envelope_action_supported(&request.action) {
         return Some("native_command_envelope_action_unsupported");
     }
-    // Asking for the resident's key while sending one leaves two keys, and
-    // the op will not pick between them.
-    if request.resident_key && request.integrity_key_b64.is_some() {
+    // Asking for the resident's key while sending a key or a key id leaves
+    // two keys, and the op will not pick between them.
+    if request.resident_key
+        && (request.integrity_key_b64.is_some() || request.integrity_key_id.is_some())
+    {
         return Some("native_command_envelope_invalid");
     }
     None

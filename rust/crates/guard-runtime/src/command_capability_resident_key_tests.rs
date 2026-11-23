@@ -158,3 +158,15 @@ fn asking_for_the_resident_key_while_sending_one_is_refused() {
     );
     assert_eq!(response.get("payload"), None);
 }
+
+#[test]
+fn asking_for_the_resident_key_while_naming_a_key_id_is_refused() {
+    let key_b64 = Base64UrlUnpadded::encode_string(KEY);
+    let mut id_only = resident(capability(&key_b64, KEY_ID));
+    id_only.integrity_key_id = Some(KEY_ID.to_owned());
+    let response = answer(&id_only, None);
+    assert_eq!(
+        response["code"],
+        Value::from("native_command_capability_invalid")
+    );
+}

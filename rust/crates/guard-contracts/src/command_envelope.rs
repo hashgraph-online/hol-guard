@@ -12,9 +12,11 @@
 //! The op takes the payload and either the caller's copy of the signing key
 //! or `resident_key`, which has the resident read the key from its own
 //! encrypted-file secret store, and answers one of three questions: sign this payload, verify this stored
-//! envelope, or digest this identity for the replay rows. Reading the key out
-//! of the secret store, deciding when to mint one, and persisting what comes
-//! back stay with the caller, because none of those is a verdict.
+//! envelope, or digest this identity for the replay rows. With
+//! `resident_key` the resident reads the key itself; otherwise the caller
+//! reads it out of its secret store and sends it. Deciding when to mint a key
+//! and persisting what comes back stay with the caller, because neither is a
+//! verdict.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

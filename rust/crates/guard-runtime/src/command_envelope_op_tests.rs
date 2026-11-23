@@ -218,13 +218,18 @@ fn the_resident_signs_with_the_key_in_its_own_vault() {
     assert_eq!(signed["result"]["keyId"], Value::from(key_id.clone()));
     let mut caller = request(COMMAND_ENVELOPE_ACTION_VERIFY, signed["result"].clone());
     caller.integrity_key_b64 = Some(key_b64);
-    caller.integrity_key_id = Some(key_id);
+    caller.integrity_key_id = Some(key_id.clone());
     assert_eq!(answered(&caller)["accepted"], Value::Bool(true));
     let verified = evaluate(
         &resident(COMMAND_ENVELOPE_ACTION_VERIFY, signed["result"].clone()),
         Some(home.path()),
     );
-    assert_eq!(verified["result"], grant());
+    // Verifying strips only the signature: the envelope keeps the key id it
+    // was signed under.
+    assert_eq!(verified["accepted"], Value::Bool(true));
+    let mut expected = grant();
+    expected["keyId"] = Value::from(key_id);
+    assert_eq!(verified["result"], expected);
 }
 
 #[test]
@@ -248,4 +253,11 @@ fn asking_for_the_resident_key_while_sending_one_is_refused() {
     let mut both = request(COMMAND_ENVELOPE_ACTION_SIGN, grant());
     both.resident_key = true;
     assert_eq!(refusal(&both), Some("native_command_envelope_invalid"));
+}
+
+#[test]
+fn asking_for_the_resident_key_while_naming_a_key_id_is_refused() {
+    let mut id_only = resident(COMMAND_ENVELOPE_ACTION_SIGN, grant());
+    id_only.integrity_key_id = Some("key-2".to_owned());
+    assert_eq!(refusal(&id_only), Some("native_command_envelope_invalid"));
 }

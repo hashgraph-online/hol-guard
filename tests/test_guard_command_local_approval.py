@@ -7,7 +7,7 @@ import pytest
 from codex_plugin_scanner.guard.native_command_envelope import CommandEnvelopeUnavailableError
 from codex_plugin_scanner.guard.native_command_state import CommandStateUnavailableError
 from codex_plugin_scanner.guard.runtime import command_capability as command_capability_module
-from codex_plugin_scanner.guard.runtime import command_queue
+from codex_plugin_scanner.guard.runtime import command_capability_keys, command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import (
     COMMAND_LOCAL_APPROVALS_STATE_KEY,
     COMMAND_REPLAY_STATE_KEY,
@@ -183,7 +183,7 @@ def test_an_approval_is_never_spent_against_a_digest_the_runtime_has_not_given(
     register_pending_command(store, authorized, leased)
     assert approve_pending_command(store, "job-1")["approved"] is True
 
-    real = command_capability_module.native_command_envelope
+    real = command_capability_keys.native_command_envelope
     digests = [0]
 
     def one_digest_only(**kwargs: object) -> dict[str, object]:
@@ -193,7 +193,7 @@ def test_an_approval_is_never_spent_against_a_digest_the_runtime_has_not_given(
                 raise CommandEnvelopeUnavailableError
         return real(**kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(command_capability_module, "native_command_envelope", one_digest_only)
+    monkeypatch.setattr(command_capability_keys, "native_command_envelope", one_digest_only)
     calls: list[tuple[str, dict[str, object]]] = []
 
     monkeypatch.setattr(
