@@ -6,7 +6,9 @@
 //! only documents the repository commits (see `committed_hidden`). A
 //! credential-named file is refused unless it is source code, test data
 //! below a test-data directory inside the walk, or a document or raster image
-//! the repository tracks and the tracked-file proof clears.
+//! the repository tracks and the tracked-file proof clears. A file the system
+//! package manager installed below `/usr` passes on its ownership instead
+//! (see `packaged_file`).
 use std::path::Path;
 
 /// Hidden names that carry no credentials and are common in source trees.
@@ -67,6 +69,11 @@ pub(in crate::pretool::search) fn descendant_allowed(
     root: &Path,
     is_file: bool,
 ) -> bool {
+    named_allowed(path, root, is_file)
+        || (is_file && crate::pretool::search::packaged_file::packaged_file(path))
+}
+
+fn named_allowed(path: &Path, root: &Path, is_file: bool) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };

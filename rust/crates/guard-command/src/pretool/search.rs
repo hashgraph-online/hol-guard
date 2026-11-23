@@ -11,6 +11,7 @@ pub(super) mod grep;
 mod hint;
 mod names_only;
 mod options;
+mod packaged_file;
 #[cfg(test)]
 mod repeat_walk_tests;
 mod rg;
