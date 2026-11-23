@@ -81,10 +81,7 @@ def native_mint_for_store(guard_home: Path, secret_store: object) -> str | None:
     # A compatible runtime that advertises the mint but gives no answer may
     # have dispatched a write that is still in flight. Keep the Python mint
     # from replacing that unknown result with a second key.
-    if (
-        native_policy_integrity_key_mint is _NATIVE_MINT_IMPLEMENTATION
-        and not _runtime_offers(feature)
-    ):
+    if native_policy_integrity_key_mint is _NATIVE_MINT_IMPLEMENTATION and not _runtime_offers(feature):
         return None
     return native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service) or "busy"
 
