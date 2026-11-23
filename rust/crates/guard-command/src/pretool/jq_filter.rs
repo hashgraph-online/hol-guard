@@ -33,7 +33,7 @@
 
 #[path = "jq_filter_bindings.rs"]
 mod bindings;
-pub(super) use bindings::safe_filter_binding;
+pub(in crate::pretool) use bindings::safe_filter_binding;
 #[path = "jq_filter_budget.rs"]
 mod budget;
 #[path = "jq_filter_program.rs"]
