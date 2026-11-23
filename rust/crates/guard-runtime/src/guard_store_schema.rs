@@ -19,6 +19,8 @@ mod activity_extra;
 mod activity_extra_sql;
 #[path = "guard_store_schema_activity_sql.rs"]
 mod activity_sql;
+#[path = "guard_store_schema_approvals.rs"]
+mod approvals;
 #[path = "guard_store_schema_base_a.rs"]
 mod base_a;
 #[path = "guard_store_schema_base_b.rs"]
@@ -220,7 +222,8 @@ pub(crate) fn ensure_families(connection: &Connection, now: &str) -> StoreResult
     workspace::ensure_fix_proposal(connection, now)?;
     families::ensure_workflow_capabilities(connection, now)?;
     shadow::ensure_shadow(connection, now)?;
-    requests::ensure_requests_through_approvals(connection, now)
+    requests::ensure_requests_through_approvals(connection, now)?;
+    approvals::ensure_approval_queue(connection, now)
 }
 
 #[cfg(test)]
@@ -250,6 +253,10 @@ mod versions_tests;
 #[cfg(test)]
 #[path = "guard_store_schema_indexes_tests.rs"]
 mod indexes_tests;
+
+#[cfg(test)]
+#[path = "guard_store_schema_approvals_tests.rs"]
+mod approvals_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_columns_tests.rs"]
