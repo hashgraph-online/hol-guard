@@ -178,6 +178,55 @@ fn an_oversized_stored_file_keeps_the_review() {
 }
 
 #[test]
+fn a_go_workspace_keeps_review_even_with_inert_environment() {
+    let root = temp_root("workspace-toolchain");
+    let repo = root.join("project");
+    let nested = repo.join("src");
+    std::fs::create_dir_all(&nested).unwrap();
+    let home = root.to_str().unwrap().to_owned();
+    let cwd = nested.to_str().unwrap().to_owned();
+    let context = || super::super::PathContext {
+        home_dir: Some(&home),
+        cwd: Some(&cwd),
+        go_toolchain_inert: true,
+        shell_home_matches: true,
+        ..Default::default()
+    };
+
+    // Without a workspace selector, Go has no module directive to choose
+    // another program on PATH.
+    assert!(safe_go_probe(&words("version"), context()));
+    assert!(safe_go_probe(&words("env GOPATH"), context()));
+
+    // Go 1.23.2 demonstrably runs an inert locally planted go1.24.0 program
+    // from PATH when this directive is present, even though GOTOOLCHAIN is
+    // unset and the command only asks for a version or a named setting.
+    let module = repo.join("go.mod");
+    std::fs::write(
+        &module,
+        "module example.test/guard\\ngo 1.23.0\\ntoolchain go1.24.0\\n",
+    )
+    .unwrap();
+    assert!(!safe_go_probe(&words("version"), context()));
+    assert!(!safe_go_probe(&words("env GOPATH"), context()));
+    std::fs::remove_file(&module).unwrap();
+
+    let workspace = root.join("go.work");
+    std::fs::write(&workspace, "go 1.23.0\\ntoolchain go1.24.0\\n").unwrap();
+    assert!(!safe_go_probe(&words("version"), context()));
+    std::fs::remove_file(&workspace).unwrap();
+
+    // A file whose contents cannot be trusted is treated as a potential
+    // selector too; no attempt is made to infer safety from a filename.
+    std::fs::write(&module, "module example.test/guard\\n").unwrap();
+    assert!(!safe_go_probe(&words("version"), context()));
+    std::fs::remove_file(&module).unwrap();
+    assert!(safe_go_probe(&words("version"), context()));
+
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
 fn the_probe_reads_the_queries_only_where_nothing_selects_a_toolchain() {
     let root = temp_root("probe");
     let cwd = root.join("workspace");
