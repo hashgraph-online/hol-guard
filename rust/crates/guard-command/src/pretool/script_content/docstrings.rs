@@ -3,17 +3,18 @@
 //! The host-reach screen reads every string literal of a program fed on
 //! standard input, and of the local modules it imports, as a path the
 //! program might open. Libraries document themselves in reStructuredText,
-//! whose directives start with `..` (`.. deprecated:: 1.0`, `.. [1]`), so
-//! the screen read `..` as a path climbing out of the workspace and held any
-//! probe that imported such a module. A docstring's value is never used as
-//! a path unless the program asks for it, so the screen skips docstrings:
-//! a plain string (no `f` prefix, whose fields would run) that is the first
+//! whose directives start with a bare `..` (`.. deprecated:: 1.0`,
+//! `.. [1]`), so the screen read `..` as a path climbing out of the
+//! workspace and held any probe that imported such a module; the lines
+//! they start often name relative files too (`.. include:: ../README.rst`).
+//! The screen skips a docstring when those lines are all that reaches: a plain
+//! string (no `f` prefix, whose fields would run) that is the first
 //! statement of a module or of a block, alone on its line, outside any
-//! bracket, holding prose (some whitespace), so a docstring that is only a
-//! path still counts. When the program or any module it loads can read a
+//! bracket, holding prose (some whitespace), whose other lines reach
+//! nowhere. A docstring naming an outside path anywhere else is scanned. When the program or any module it loads can read a
 //! docstring back (`__doc__`, `getdoc`, a code object's constants, an
 //! attribute named at run time, the `inspect`/`ast`/`pydoc` helpers, a
-//! class namespace hook), every string stays in the scan.
+//! class namespace hook), nothing is skipped.
 
 use std::sync::LazyLock;
 
@@ -39,6 +40,7 @@ static READS_DOCSTRING: LazyLock<Regex> = LazyLock::new(|| {
         r"|\b__getattribute__\b|\battrgetter\b|\b__dict__\b|\b(?:vars|globals|locals)\s*\(",
         r"|\bget_docstring\b|\bgetmembers(?:_static)?\b|\bgetsource(?:lines|file)?\b",
         r"|\bgetcomments\b|\bfindsource\b|\bgetblock\b|\bpydoc\b|\brender_doc\b|\bhelp\s*\(",
+        r"|\bclassify_class_attrs\b",
         r"|\bast\s*\.|\bimport\s+ast\b|\blinecache\b|\btokenize\b|\bget_source\b|\b__loader__\b",
         r"|\b__prepare__\b|\b__setitem__\b|\bmetaclass\b|\b__build_class__\b|\bnew_class\b",
     ))
@@ -49,8 +51,10 @@ static GETATTR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\bgetattr(?:_sta
 
 /// The one `getattr` shape whose attribute the scan can read: a direct call
 /// whose name is a single plain identifier literal (`getattr(obj, 'name')`).
+/// The first argument holds no quote, so a comma or bracket inside a string
+/// can never pass for the end of it.
 static PLAIN_GETATTR: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"^\s*\((?:[^,()]|\([^()]*\))*,\s*(?:'\w+'|"\w+")\s*[,)]"#).unwrap()
+    Regex::new(r#"^\s*\((?:[^,()'"]|\([^()'"]*\))*,\s*(?:'\w+'|"\w+")\s*[,)]"#).unwrap()
 });
 
 /// Whether `code` reads a docstring back. Every mention of `getattr` counts,
@@ -87,16 +91,23 @@ pub(in crate::pretool) fn read_any<S: AsRef<str>>(sources: &[S]) -> bool {
 }
 
 /// Whether `code`, a program with no other source, reads docstrings back.
+#[cfg(test)]
 pub(in crate::pretool) fn read(code: &str) -> bool {
     read_any(&[code])
 }
 
-/// `items` without the docstrings of `code`. `span` gives each item's
-/// literal as a byte range of `code`, in source order. The screen finds
+/// `items` without the docstrings of `code` that `droppable` allows to go.
+/// `span` gives each item's literal as a byte range of `code`, in source
+/// order. The screen finds
 /// literals without knowing about comments, so one may start inside a
 /// comment; it is kept, and when it runs on past the comment the brackets
 /// can no longer be counted, so no later string is skipped either.
-pub(super) fn without<T>(code: &str, items: Vec<T>, span: impl Fn(&T) -> (usize, usize)) -> Vec<T> {
+pub(super) fn without<T>(
+    code: &str,
+    items: Vec<T>,
+    span: impl Fn(&T) -> (usize, usize),
+    droppable: impl Fn(&T) -> bool,
+) -> Vec<T> {
     let bytes = code.as_bytes();
     let (mut at, mut depth, mut line_start, mut last) = (0usize, 0i64, true, None::<u8>);
     let mut lost = false;
@@ -145,7 +156,7 @@ pub(super) fn without<T>(code: &str, items: Vec<T>, span: impl Fn(&T) -> (usize,
                 let rest = rest.trim_start();
                 rest.is_empty() || rest.starts_with('#')
             });
-        if !docstring {
+        if !docstring || !droppable(&item) {
             kept.push(item);
         }
         at = end;
@@ -153,6 +164,17 @@ pub(super) fn without<T>(code: &str, items: Vec<T>, span: impl Fn(&T) -> (usize,
         last = Some(b'"');
     }
     kept
+}
+
+/// A docstring's value without its reStructuredText explicit markup lines,
+/// those whose first word is a bare `..` (`.. note:: see ../docs`,
+/// `.. include:: ../README.rst`), for the path screen to read the rest.
+pub(super) fn without_markup(value: &str) -> String {
+    value
+        .split('\n')
+        .filter(|line| line.split_whitespace().next() != Some(".."))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]
@@ -166,7 +188,7 @@ mod tests {
                 .find_iter(code)
                 .map(|found| (found.start(), found.end()))
                 .collect();
-        without(code, spans, |span| *span)
+        without(code, spans, |span| *span, |_| true)
             .into_iter()
             .map(|(start, end)| code[start..end].to_owned())
             .collect()
@@ -219,6 +241,25 @@ mod tests {
     }
 
     #[test]
+    fn only_markup_lines_are_set_aside() {
+        use super::without_markup;
+        assert_eq!(
+            without_markup(
+                "Split it.\n\n    .. deprecated:: 1.0\n    .. include:: ../README.rst\n"
+            ),
+            "Split it.\n\n"
+        );
+        assert_eq!(
+            without_markup("../sample file.txt\n.. note:: x"),
+            "../sample file.txt"
+        );
+        assert_eq!(
+            without_markup("See /etc/passwd ..\n"),
+            "See /etc/passwd ..\n"
+        );
+    }
+
+    #[test]
     fn copying_a_docstring_is_not_reading_it() {
         assert!(!read("wrapper.__doc__ = _wrapped.__doc__\n"));
         for code in [
@@ -242,6 +283,8 @@ mod tests {
             "print(open(m.__loader__.get_source('m').split()[1]).read())\n",
             "class N(dict):\n    def __setitem__(self, k, v):\n        open(v)\nclass M(type):\n    @classmethod\n    def __prepare__(c, n, b):\n        return N()\n",
             "class C(metaclass=M):\n    \"\"\"../secret.txt documentation\"\"\"\n",
+            "from inspect import classify_class_attrs\nv = [a.object for a in classify_class_attrs(C)]\n",
+            "print(open(getattr(f if \", 'name')\" else f, name)).read())\n",
         ] {
             assert!(read(code), "{code}");
         }

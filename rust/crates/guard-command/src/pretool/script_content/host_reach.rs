@@ -359,7 +359,16 @@ fn names_outside_path(code: &str, keep_docstrings: bool) -> bool {
     let mut reaches = false;
     let mut found = literals(code, &mut reaches);
     if !keep_docstrings {
-        found = super::docstrings::without(code, found, |literal| (literal.start, literal.end));
+        found = super::docstrings::without(
+            code,
+            found,
+            |literal| (literal.start, literal.end),
+            |literal| {
+                literal.value.as_deref().is_some_and(|value| {
+                    !literal_reaches(&super::docstrings::without_markup(value))
+                })
+            },
+        );
     }
     if reaches {
         return true;
@@ -406,17 +415,40 @@ fn names_outside_path(code: &str, keep_docstrings: bool) -> bool {
     false
 }
 
+/// What one source's screen needs to know about every source the program
+/// loads, since one module can change how another's code behaves.
+pub(in crate::pretool) struct Graph {
+    /// Some source reads docstrings back (`docstrings::read_any`).
+    docstrings_read: bool,
+    /// No source may rebind an import function
+    /// (`constant_import::unshadowed`).
+    imports_unshadowed: bool,
+}
+
+impl Graph {
+    /// The facts for a program made of `sources`.
+    pub(in crate::pretool) fn of<S: AsRef<str>>(sources: &[S]) -> Self {
+        Self {
+            docstrings_read: super::docstrings::read_any(sources),
+            imports_unshadowed: super::constant_import::unshadowed(sources),
+        }
+    }
+}
+
 /// Whether the Python `source` reaches past the workspace in a way the
-/// sandbox does not take away. `keep_docstrings` when some source the
-/// program loads reads docstrings back (`docstrings::read_any`).
-pub(in crate::pretool) fn python_reaches_host(source: &str, keep_docstrings: bool) -> bool {
+/// sandbox does not take away, given what `graph` says about the sources
+/// the program loads.
+pub(in crate::pretool) fn python_reaches_host(source: &str, graph: &Graph) -> bool {
     let code = code_lines(Language::Python, source);
     HOST_MODULE.is_match(&code)
         || super::constant_import::held(&code, |imports| HOST_MODULE.is_match(imports))
         || signals_processes(&code)
-        || DYNAMIC_CODE.is_match(&super::constant_import::without_constant_imports(&code))
+        || DYNAMIC_CODE.is_match(&super::constant_import::without_constant_imports(
+            &code,
+            graph.imports_unshadowed,
+        ))
         || git_config_list_writes(&code)
-        || names_outside_path(&code, keep_docstrings)
+        || names_outside_path(&code, graph.docstrings_read)
 }
 
 #[cfg(test)]

@@ -752,7 +752,7 @@ fn assess_programs(
             continue;
         };
         let mut found = Findings::default();
-        let docstrings_read = docstrings::read_any(&sources);
+        let graph = host_reach::Graph::of(&sources);
         for source in &sources {
             let code = code_lines(language, source);
             found.network |= match language {
@@ -760,8 +760,7 @@ fn assess_programs(
                 Language::Node => NODE_NETWORK.is_match(&code),
             };
             found.credential_store |= CREDENTIAL_STORE.is_match(&code);
-            found.host_reach |=
-                fed_python && host_reach::python_reaches_host(source, docstrings_read);
+            found.host_reach |= fed_python && host_reach::python_reaches_host(source, &graph);
         }
         // A local module the graph left unread could reach the host too.
         found.host_reach |= fed_python && !complete;

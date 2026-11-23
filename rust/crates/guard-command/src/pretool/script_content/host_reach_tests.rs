@@ -1,5 +1,5 @@
 fn python_reaches_host(source: &str) -> bool {
-    super::python_reaches_host(source, super::super::docstrings::read(source))
+    super::python_reaches_host(source, &super::Graph::of(&[source]))
 }
 
 #[test]
@@ -116,6 +116,12 @@ fn programs_that_reach_the_host_are_held() {
         "def f():\n    '/etc/passwd'\nimport inspect\nprint(open(inspect.getdoc(f)).read())\n",
         "x = (\n    '/etc/passwd'\n)\nprint(open(x).read())\n",
         "if True:\n    f'{open(\"/etc/passwd\").read()}'\n",
+        // A docstring naming an outside path is scanned even when no reader
+        // the scan knows appears; only reStructuredText markup lines go.
+        "class C:\n    \"\"\"../sample file.txt\"\"\"\n",
+        "def f():\n    \"\"\"Reads /etc/passwd for the demo.\n\n    .. note:: x\n    \"\"\"\n",
+        // A helper rebinding the import function in another source.
+        "m = __import__('reboot')\nimport builtins, os\nsetattr(builtins, '__imp' + 'ort__', os.system)\n",
     ] {
         assert!(python_reaches_host(source), "{source}");
     }

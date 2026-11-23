@@ -43,6 +43,55 @@ static FROM_IMPORTLIB: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)(?:^|[;:])[ \t]*from[ \t]+importlib[ \t]+import[ \t]+\(?([\w, \t]*)").unwrap()
 });
 
+/// Code that can rebind an import function without naming it: the builtins
+/// or `importlib` namespace written through (`setattr`, `__dict__`,
+/// `__setattr__`, `sys.modules`), or a module namespace written by key
+/// (`globals()`, `locals()`, `vars()`).
+static NAMESPACE_WRITE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r"\b__dict__\b|\b__setattr__\b|\bsys\s*\.\s*modules\b|\bimport\b[^\n;]*\bmodules\b",
+        r"|\b(?:globals|locals)\s*\(|\bvars\s*\(\s*\)|\b__builtins__\b",
+    ))
+    .unwrap()
+});
+
+/// A mention of the modules that hold the import functions.
+static IMPORT_HOLDER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\b(?:builtins|__builtin__|importlib)\b").unwrap());
+
+/// Whether every mention of `builtins` or `importlib` in `code` is an
+/// attribute lookup (`importlib.import_module`) or an import of the module
+/// itself. Anything else hands the module to code that may rebind its import
+/// function (`setattr(builtins, name, hook)`, `b = builtins`) or binds the
+/// name to some other module (`import helpers as importlib`).
+fn import_holders_untouched(code: &str) -> bool {
+    IMPORT_HOLDER.find_iter(code).all(|found| {
+        if code[found.end()..].trim_start().starts_with('.') {
+            return true;
+        }
+        let line_start = code[..found.start()]
+            .rfind(['\n', ';'])
+            .map_or(0, |at| at + 1);
+        let before = code[line_start..found.start()].trim();
+        let mut words = before.split_whitespace();
+        let statement = matches!(words.next(), Some("import" | "from"));
+        statement && words.last() != Some("as")
+    })
+}
+
+/// Whether the import functions keep their meaning across every one of
+/// `sources`, the program and the local modules it loads: a helper module
+/// can rebind `builtins.__import__` for the whole process, so one source
+/// that may rebind either function keeps every constant-name call dynamic.
+pub(super) fn unshadowed<S: AsRef<str>>(sources: &[S]) -> bool {
+    sources.iter().all(|source| {
+        let source = source.as_ref();
+        import_functions_unshadowed(source)
+            && import_holders_untouched(source)
+            && !NAMESPACE_WRITE.is_match(source)
+    })
+}
+
 /// Whether every mention of `__import__` and `import_module` in `code` is a
 /// call or `from importlib import import_module`. A name is evaluated to
 /// its current binding, so once the program assigns, defines, receives or
@@ -123,9 +172,10 @@ pub(super) fn held(code: &str, host_module: impl Fn(&str) -> bool) -> bool {
 /// `code` with each constant-name import replaced by the module it names, so
 /// the dynamic-code screen sees only the calls whose module it cannot read.
 /// Nothing is replaced when either import function's name may be bound to
-/// something else.
-pub(super) fn without_constant_imports(code: &str) -> Cow<'_, str> {
-    if !import_functions_unshadowed(code) {
+/// something else in `code`, or `unshadowed` (see [`unshadowed`]) is false
+/// for the program's sources.
+pub(super) fn without_constant_imports(code: &str, unshadowed: bool) -> Cow<'_, str> {
+    if !unshadowed || !import_functions_unshadowed(code) {
         return Cow::Borrowed(code);
     }
     CONSTANT_IMPORT.replace_all(code, |captures: &Captures<'_>| {
@@ -145,7 +195,7 @@ pub(super) fn without_constant_imports(code: &str) -> Cow<'_, str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{as_statements, names, without_constant_imports};
+    use super::{as_statements, names, unshadowed, without_constant_imports};
 
     #[test]
     fn a_constant_name_is_read_as_an_import() {
@@ -159,7 +209,10 @@ mod tests {
             ("m = builtins.__import__( 'socket' )", "import socket\n"),
         ] {
             assert_eq!(as_statements(code), statement, "{code}");
-            assert!(!without_constant_imports(code).contains("import"), "{code}");
+            assert!(
+                !without_constant_imports(code, unshadowed(&[code])).contains("import"),
+                "{code}"
+            );
         }
     }
 
@@ -180,7 +233,38 @@ mod tests {
             "n = __import__('posix')",
         ] {
             assert_eq!(as_statements(code), "", "{code}");
-            assert!(without_constant_imports(code).contains("import"), "{code}");
+            assert!(
+                without_constant_imports(code, unshadowed(&[code])).contains("import"),
+                "{code}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_rebinding_in_any_source_keeps_every_call_dynamic() {
+        let main = "m = __import__('reboot')";
+        for helper in [
+            "import builtins, os\nbuiltins.__import__ = os.system",
+            "import builtins, os\nsetattr(builtins, '__imp' + 'ort__', os.system)",
+            "import importlib, os\nsetattr(importlib, 'import_' + 'module', os.system)",
+            "import builtins as b\nb.__dict__['x'] = 1",
+            "import os\nb = __builtins__\nb.update(x=os.system)",
+            "import sys\nsys.modules['importlib'] = fake",
+            "import helpers as importlib",
+            "globals()[name] = hook",
+        ] {
+            assert!(!unshadowed(&[main, helper]), "{helper}");
+            assert!(
+                without_constant_imports(main, unshadowed(&[main, helper])).contains("__import__"),
+                "{helper}"
+            );
+        }
+        for helper in [
+            "import importlib\njson = importlib.import_module('json')",
+            "from importlib import import_module\nfrom importlib.metadata import version",
+            "import builtins\nprint(builtins.len([]))",
+        ] {
+            assert!(unshadowed(&[main, helper]), "{helper}");
         }
     }
 
@@ -190,7 +274,7 @@ mod tests {
             "m = __import__('caf\u{e9}')",
             "m = importlib.import_module(\"caf\u{e9}\")",
         ] {
-            assert_eq!(without_constant_imports(code), code);
+            assert_eq!(without_constant_imports(code, unshadowed(&[code])), code);
             assert_eq!(names(code).count(), 0, "{code}");
         }
     }
@@ -208,7 +292,7 @@ mod tests {
             "globals()['__import__'] = hook\nm = __import__('json')",
             "x = lambda __import__: __import__('json')",
         ] {
-            assert!(without_constant_imports(code).contains("('json')"), "{code}");
+            assert!(without_constant_imports(code, unshadowed(&[code])).contains("('json')"), "{code}");
         }
         for code in [
             "from importlib import import_module\nj = import_module('json')",
@@ -216,7 +300,7 @@ mod tests {
             "import importlib\nj = importlib.import_module('json')",
         ] {
             assert!(
-                !without_constant_imports(code).contains("('json')"),
+                !without_constant_imports(code, unshadowed(&[code])).contains("('json')"),
                 "{code}"
             );
         }
