@@ -86,6 +86,30 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
             assert_eq!(result.decision, "deny", "{harness}: {command}");
             assert_eq!(result.reason_code, "native_git_execution_context_review");
         }
+        // A comparison between two trees honors `--no-textconv`, so the
+        // configured driver cannot run and the probe clears the read.
+        for command in [
+            "git diff --no-ext-diff --no-textconv",
+            "git diff --cached --no-ext-diff --no-textconv",
+        ] {
+            let result = evaluate(command);
+            assert_eq!(
+                result.decision, "allow",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+        }
+        // `range-diff` reads each range through an inner `git log -p` it
+        // assembles itself and gives it neither switch, so the configured
+        // driver still runs and the probe must not clear the read.
+        for command in [
+            "git range-diff --no-ext-diff --no-textconv HEAD~1...HEAD",
+            "git range-diff --no-textconv HEAD~1...HEAD",
+            "git range-diff HEAD~1...HEAD",
+        ] {
+            let result = evaluate(command);
+            assert_eq!(result.decision, "deny", "{harness}: {command}");
+        }
     }
 
     let stamped = GuardExecutionEnvironmentV1 {

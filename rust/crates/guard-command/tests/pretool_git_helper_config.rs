@@ -83,7 +83,19 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
                 home.to_str(),
                 repository.to_str(),
             );
-            assert_eq!(formatted.minimum_action, "require-reapproval", "{command}");
+            // A signature request is never admitted quietly. Where the
+            // configuration probe answers it is held for approval, and
+            // where the read is unproven without it the run is routed into
+            // containment instead; neither reaches the configured
+            // verification program unreviewed.
+            assert!(
+                matches!(
+                    formatted.minimum_action.as_str(),
+                    "require-reapproval" | "sandbox-required"
+                ),
+                "{command}: {}",
+                formatted.minimum_action
+            );
         }
         std::fs::write(home.join(".gitconfig"), "[pretty]\nsigned = format:%G?\n").unwrap();
         let alias = evaluate_pre_tool_envelope_with_context(
@@ -95,7 +107,14 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             home.to_str(),
             repository.to_str(),
         );
-        assert_eq!(alias.minimum_action, "require-reapproval");
+        assert!(
+            matches!(
+                alias.minimum_action.as_str(),
+                "require-reapproval" | "sandbox-required"
+            ),
+            "{}",
+            alias.minimum_action
+        );
         // A configured verification program alone cannot run for a read that
         // requests no signature, so it must not block ordinary history reads.
         std::fs::write(

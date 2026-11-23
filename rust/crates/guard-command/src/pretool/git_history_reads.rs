@@ -331,7 +331,14 @@ pub(super) fn refreshes_the_index(subcommand: &str, rest: &[String]) -> bool {
 /// Whether the read walks commits, so that a `%G` placeholder, a `pretty.*`
 /// alias carrying one or `log.showSignature` asks for a signature and runs
 /// the configured verification program. `git reflog` is the reflog walk of
-/// `git log` and reads the same configuration.
+/// `git log` and reads the same configuration. `git whatchanged` is `git log`
+/// with each commit's raw diff attached, so it reads that configuration too.
+/// `git range-diff` prints commit headers from two ranges; it is listed with
+/// them so a configured verification program cannot be reached through a
+/// spelling nobody has read Git's source for.
 pub(super) fn verifies_signatures(subcommand: &str) -> bool {
-    matches!(subcommand, "log" | "show" | "reflog")
+    matches!(
+        subcommand,
+        "log" | "whatchanged" | "range-diff" | "show" | "reflog"
+    )
 }
