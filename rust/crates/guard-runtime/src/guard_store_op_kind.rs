@@ -19,6 +19,7 @@ pub(crate) const SELF_COMMITTING_READS: &[&str] = &[
     "complete_codex_live_decision",
     "record_codex_live_completion",
     "run_storage_housekeeping",
+    "ensure_schema",
 ];
 
 /// Whether a call can run inside a transaction that is always rolled back
@@ -380,6 +381,9 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "list_local_policy_rows" => Kind::Read,
         "policy_row_presence" | "extension_control_authority_head" => Kind::Snapshot,
         "find_local_mcp_observation" => Kind::Read,
+        // It switches the journal mode, which no transaction may hold, and
+        // then takes the write lock itself.
+        "ensure_schema" => Kind::Read,
         "ensure_local_mcp_observation"
         | "reconcile_remote_mcp_declarations"
         | "record_composio_discovery" => Kind::Write,

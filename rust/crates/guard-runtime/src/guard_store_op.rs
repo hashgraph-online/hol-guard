@@ -389,8 +389,8 @@ fn outbox_generation(connection: &Connection) -> StoreResult<i64> {
 #[path = "guard_store_vault_key.rs"]
 mod vault_key;
 
-// The native schema chain is built up behind its parity tests before the
-// store open calls it.
+// The native schema chain; `ensure_schema` runs it. Some helpers are kept
+// for the parity tests only.
 #[allow(dead_code)]
 #[path = "guard_store_schema.rs"]
 pub(crate) mod schema;

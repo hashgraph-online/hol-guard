@@ -29,6 +29,9 @@ mod catalog_writer_version;
 #[path = "guard_store_cloud_workspace_id.rs"]
 mod cloud_workspace_id;
 
+#[path = "guard_store_schema_op.rs"]
+mod schema_op;
+
 const OAUTH_STATE_KEY: &str = "oauth_local_credentials";
 const MIRROR_STATE_KEYS: [&str; 3] = [
     "managed_policy_bundle_keyring_provenance",
@@ -54,6 +57,7 @@ pub(crate) fn handles(method: &str) -> bool {
         || workspace_assessment::handles(method)
         || catalog_writer_version::handles(method)
         || cloud_workspace_id::handles(method)
+        || schema_op::handles(method)
 }
 
 pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> StoreResult<Value> {
@@ -82,6 +86,7 @@ pub(crate) fn dispatch(connection: &Connection, method: &str, args: &Args) -> St
             catalog_writer_version::dispatch(connection, args)
         }
         _ if cloud_workspace_id::handles(method) => cloud_workspace_id::dispatch(connection),
+        _ if schema_op::handles(method) => schema_op::dispatch(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }
