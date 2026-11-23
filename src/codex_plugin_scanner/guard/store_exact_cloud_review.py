@@ -9,6 +9,7 @@ from typing import Any, Protocol
 
 from .dpop_key_binding import verified_dpop_jwk_thumbprint
 from .native_store_policy import encode_key
+from .store_base import EncryptedFileSecretStore
 
 _OAUTH_KEY = "oauth_local_credentials"
 
@@ -121,11 +122,15 @@ class StoreExactCloudReviewMixin:
     ) -> dict[str, object]:
         """Claim and apply an exact receipt after rechecking all mutable state."""
 
-        integrity_key_b64: str | None = None
-        integrity_key_id: str | None = None
+        key_fields: dict[str, object] = {"integrity_key_b64": None, "integrity_key_id": None}
         if resolution_action == "allow":
             integrity_key, integrity_key_id = self._policy_integrity_secret_material(create=True)
-            integrity_key_b64 = encode_key(integrity_key)
+            # A key kept in the plain vault is one the resident reads itself,
+            # so only the flag crosses the socket; other stores send a copy.
+            if type(getattr(self, "_policy_integrity_secret_store", None)) is EncryptedFileSecretStore:
+                key_fields = {"vault_key": True}
+            else:
+                key_fields = {"integrity_key_b64": encode_key(integrity_key), "integrity_key_id": integrity_key_id}
         with self.hold_oauth_credential_lock():
             # The resident holds one transaction across the consent recheck, the
             # receipt claim, the resolution and the local authority it writes, so
@@ -152,8 +157,7 @@ class StoreExactCloudReviewMixin:
                     # again, so it resolves from the same place or an unchanged
                     # request reads as stale.
                     "cwd": _process_cwd(),
-                    "integrity_key_b64": integrity_key_b64,
-                    "integrity_key_id": integrity_key_id,
+                    **key_fields,
                 },
             )
         if not isinstance(payload, dict):

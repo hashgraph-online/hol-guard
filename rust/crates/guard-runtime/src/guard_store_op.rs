@@ -163,6 +163,13 @@ fn evaluate_mode(
     let path =
         crate::local_store_read::require_store_path(&request.store_path, &request.guard_home)
             .map_err(|_| StoreError::Invalid("native_guard_store_path_invalid"))?;
+    // A caller whose key sits in the plain vault names `vault_key` instead
+    // of shipping it; every method below then sees the key as if sent.
+    let vaulted = vault_key::resolve(
+        request,
+        owner.map(crate::policy_store::PolicySnapshotStore::guard_home),
+    )?;
+    let request = vaulted.as_ref().unwrap_or(request);
     // A paused review's request is built here and queued by the write it
     // names, so everything below sees that method.
     let started = Instant::now();
@@ -376,6 +383,9 @@ fn outbox_generation(connection: &Connection) -> StoreResult<i64> {
     )?
     .map_or(0, |row| crate::guard_store_db::int(&row, "generation")))
 }
+
+#[path = "guard_store_vault_key.rs"]
+mod vault_key;
 
 #[cfg(test)]
 pub(crate) fn method_is_snapshot_for_test(method: &str) -> bool {

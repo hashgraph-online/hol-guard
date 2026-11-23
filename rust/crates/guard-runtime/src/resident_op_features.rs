@@ -232,6 +232,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::RESIDENT_HEALTH_FEATURE,
     guard_contracts::CONTENT_DECODE_FEATURE,
     "native-exact-cloud-review-resident-v2",
+    guard_contracts::GUARD_STORE_VAULT_KEY_FEATURE,
 ];
 
 /// Feature flags for the one-shot `--stdin` helper commands that replaced
