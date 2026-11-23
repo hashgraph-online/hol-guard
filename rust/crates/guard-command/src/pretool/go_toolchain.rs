@@ -164,11 +164,18 @@ fn no_workspace_toolchain_override(cwd: Option<&str>) -> bool {
     let Some(cwd) = cwd else {
         return false;
     };
-    let Ok(directory) = fs::canonicalize(cwd) else {
+    let reported = Path::new(cwd);
+    if !reported.is_absolute() {
+        return false;
+    }
+    let Ok(directory) = fs::canonicalize(reported) else {
         return false;
     };
-    directory.is_dir()
-        && directory.ancestors().all(|parent| {
+    // Go can use the shell's logical PWD rather than the symlink-resolved
+    // directory. Check both ancestry chains so a go.mod/go.work beside a
+    // symlink cannot choose a workspace-supplied executable from PATH.
+    let ancestors_inert = |path: &Path| {
+        path.ancestors().all(|parent| {
             ["go.work", "go.mod"].iter().all(|name| {
                 matches!(
                     fs::symlink_metadata(parent.join(name)),
@@ -176,6 +183,8 @@ fn no_workspace_toolchain_override(cwd: Option<&str>) -> bool {
                 )
             })
         })
+    };
+    directory.is_dir() && ancestors_inert(reported) && ancestors_inert(&directory)
 }
 
 /// Where the go command keeps the settings `go env -w` writes.
