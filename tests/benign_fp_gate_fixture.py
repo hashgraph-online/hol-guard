@@ -73,6 +73,7 @@ from tests.benign_fp_gate_projects import (
     _bun_lockfile,
     _node_package,
     _node_toolchain,
+    _pnpm_store_package,
     _python_toolchain,
     _vendored_toolchain,
     _write,
@@ -260,6 +261,11 @@ def build_fixture(root: Path) -> BenignFixture:
     _application_database(worktree / ".tmp" / "app.db")
     # Worktree package borrowing the canonical checkout's installed node_modules through a symlink.
     _node_toolchain(parent / "dashboard")
+    # A second checkout beside the session whose dependencies pnpm installed.
+    # Resolving the launcher the package manager linked is how an agent finds
+    # which binary that project runs, and the shim is a link into the hidden
+    # content store below its `node_modules`.
+    _pnpm_store_package(home / "codegen-app", "codegen-kit", "2.1.0")
     _write(worktree / "dashboard" / "package.json", (parent / "dashboard" / "package.json").read_text())
     # pnpm's workspace root: `pnpm -w run build` runs the root package's script
     # from anywhere in the checkout. Only `packages` is set, so the install

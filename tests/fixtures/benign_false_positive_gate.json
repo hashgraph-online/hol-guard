@@ -45284,6 +45284,54 @@
       "expect": "allow"
     },
     {
+      "id": "runner-shim-realpath-resolve",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "realpath ${HOME}/codegen-app/node_modules/.bin/codegen-kit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-shim-readlink-resolve",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "readlink -f ${HOME}/codegen-app/node_modules/.bin/codegen-kit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-store-entry-realpath-resolve",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "realpath ${HOME}/codegen-app/node_modules/codegen-kit/bin/codegen-kit.js"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "shell-shasum-lockfile",
       "fix_area": "shell",
       "harnesses": [

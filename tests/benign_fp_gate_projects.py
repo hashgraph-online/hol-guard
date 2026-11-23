@@ -217,6 +217,26 @@ def _node_package(workspace: Path, name: str, version: str, binaries: tuple[str,
         shim.symlink_to(Path("..") / name / launcher)
 
 
+def _pnpm_store_package(workspace: Path, name: str, version: str) -> None:
+    """One package installed the way pnpm and Bun install: a content store below
+    ``node_modules/.pnpm``, with the project's own entry and its ``.bin`` shim
+    linked into it."""
+    project = {"name": "@acme/codegen-app", "version": "1.4.0", "devDependencies": {name: f"^{version}"}}
+    _write(workspace / "package.json", json.dumps(project, indent=2) + "\n")
+    store = workspace / "node_modules" / ".pnpm" / f"{name}@{version}" / "node_modules" / name
+    manifest = {"name": name, "version": version, "bin": {name: f"bin/{name}.js"}}
+    _write(store / "package.json", json.dumps(manifest) + "\n")
+    launcher = store / "bin" / f"{name}.js"
+    _write(launcher, f"#!/usr/bin/env node\nconsole.log('{name} {version}');\n")
+    launcher.chmod(0o755)
+    entry = workspace / "node_modules" / name
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.symlink_to(Path(".pnpm") / f"{name}@{version}" / "node_modules" / name)
+    shim = workspace / "node_modules" / ".bin" / name
+    shim.parent.mkdir(parents=True, exist_ok=True)
+    shim.symlink_to(Path("..") / name / "bin" / f"{name}.js")
+
+
 def _python_toolchain(workspace: Path) -> None:
     """Project virtualenv with the console scripts ``uv sync`` installs into it."""
     project = {

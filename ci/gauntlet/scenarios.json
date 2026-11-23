@@ -1718,6 +1718,14 @@
       ]
     },
     {
+      "id": "omp-native-shim-realpath-resolve",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": ["bash"],
+      "prompt": "The codegen-app checkout in my home directory has its dependencies installed. I want to know where its codegen-kit launcher really lives after the package manager linked it. Run the command below exactly once, as written, as a single shell command, then tell me the path it printed. Do not install anything or change any file.",
+      "commands": ["realpath {{home}}/codegen-app/node_modules/.bin/codegen-kit"]
+    },
+    {
       "id": "omp-native-git-worktree-add-link-then-list-shared-bin",
       "expectation": "allow",
       "oracle": "native-tools",
