@@ -68,11 +68,17 @@ impl Repo {
 
     /// Whether the policy floor still calls a read of `relative` sensitive.
     fn sensitive(&self, relative: &str) -> bool {
+        self.sensitive_action(relative, "Read", PreToolActionTypeV1::Harness)
+    }
+
+    /// Whether the floor calls this repository's `relative` sensitive to a
+    /// session whose working directory is `cwd`.
+    fn sensitive_from(&self, cwd: &Path, relative: &str) -> bool {
         let named = self.path().join(relative);
         let payload = json!({
             "tool_name": "Read",
             "tool_input": {"file_path": named.to_str().expect("a printable path")},
-            "cwd": self.path().to_str().expect("a printable root"),
+            "cwd": cwd.to_str().expect("a printable working directory"),
         });
         payload_facts(
             &payload,
@@ -81,6 +87,29 @@ impl Repo {
             "native_policy_reapproval_required",
         )
         .expect("a read payload")
+        .sensitive_target
+    }
+
+    /// Whether the floor calls `relative` sensitive for `tool` and `action`.
+    fn sensitive_action(
+        &self,
+        relative: &str,
+        tool: &str,
+        action: PreToolActionTypeV1,
+    ) -> bool {
+        let named = self.path().join(relative);
+        let payload = json!({
+            "tool_name": tool,
+            "tool_input": {"file_path": named.to_str().expect("a printable path")},
+            "cwd": self.path().to_str().expect("a printable root"),
+        });
+        payload_facts(
+            &payload,
+            "claude-code",
+            action,
+            "native_policy_reapproval_required",
+        )
+        .expect("a payload")
         .sensitive_target
     }
 }
@@ -140,4 +169,42 @@ fn a_template_inside_a_credential_store_keeps_its_floor() {
     repo.write(".aws/.env.example", TEMPLATE);
     repo.commit("document the variables");
     assert!(repo.sensitive(".aws/.env.example"));
+}
+
+/// The relief answers a read. A write of the same committed template would put
+/// whatever it writes into the file, so the floor keeps asking there.
+#[cfg(unix)]
+#[test]
+fn a_write_of_a_committed_template_keeps_its_floor() {
+    let repo = Repo::new();
+    repo.write(".env.example", TEMPLATE);
+    repo.commit("document the variables");
+    assert!(!repo.sensitive(".env.example"));
+    assert!(repo.sensitive_action(".env.example", "Write", PreToolActionTypeV1::FileWrite));
+    assert!(repo.sensitive_action(".env.example", "Edit", PreToolActionTypeV1::FileWrite));
+}
+
+/// Agent work runs from linked worktrees, and a worktree session reading the
+/// checkout it was cut from is the same repository seen from the other side.
+#[cfg(unix)]
+#[test]
+fn a_worktree_session_reads_the_template_of_the_checkout_it_was_cut_from() {
+    let repo = Repo::new();
+    repo.write(".env.example", TEMPLATE);
+    repo.commit("document the variables");
+    let elsewhere = tempfile::tempdir().expect("a root for the worktree");
+    let linked = elsewhere.path().join("review");
+    repo.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "review",
+        linked.to_str().expect("a printable worktree path"),
+    ]);
+    assert!(!repo.sensitive_from(&linked, ".env.example"));
+    // The relief is still the template's alone from that side.
+    repo.write(".env", TEMPLATE);
+    repo.commit("add the environment file");
+    assert!(repo.sensitive_from(&linked, ".env"));
 }

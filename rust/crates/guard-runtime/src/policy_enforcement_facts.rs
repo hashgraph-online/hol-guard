@@ -201,6 +201,7 @@ fn identity_metadata_supplied(maps: &[&Map<String, Value>], keys: &[&str]) -> bo
 pub(super) fn path_values_sensitive(
     maps: &[&Map<String, Value>],
     cwd: Option<&str>,
+    template_relief: bool,
 ) -> Result<bool, String> {
     let mut sensitive = false;
     for record in maps {
@@ -229,8 +230,13 @@ pub(super) fn path_values_sensitive(
                 // directory of its own to resolve the name against, so the
                 // request's own directory answers it. Every other family, and
                 // an untracked or value-bearing template, stays sensitive.
+                // The relief is a read's alone: a request that writes the
+                // template is not the read the gate allowed, and a write can
+                // put a live value into the file the next read would then be
+                // relieved of, so `template_relief` withholds it there.
                 sensitive_path_family(Path::new(value)).is_some()
-                    && !guard_command::pretool::proven_tracked_dotenv_template(value, cwd)
+                    && !(template_relief
+                        && guard_command::pretool::proven_tracked_dotenv_template(value, cwd))
             });
         }
     }
@@ -319,8 +325,9 @@ pub(super) fn payload_sensitive_target(
     codex_wait_process: Option<&Map<String, Value>>,
     omp_goal_input: Option<&Map<String, Value>>,
     cwd: Option<&str>,
+    template_relief: bool,
 ) -> Result<bool, String> {
-    let mut sensitive = path_values_sensitive(maps, cwd)?;
+    let mut sensitive = path_values_sensitive(maps, cwd, template_relief)?;
     // A native verdict is read wherever it appears, including inside a map
     // whose names are labels.
     for record in maps {
@@ -566,6 +573,12 @@ pub(super) fn payload_facts(
         wait_process,
         goal_input,
         payload.get("cwd").and_then(Value::as_str),
+        // A write or a configuration change is never the template read the
+        // read gate allowed, so it cannot borrow that read's relief.
+        !matches!(
+            action_type,
+            PreToolActionTypeV1::FileWrite | PreToolActionTypeV1::Config
+        ),
     )? || reason_code.contains("secret")
         || reason_code.contains("credential")
         || reason_code.contains("exfiltration");

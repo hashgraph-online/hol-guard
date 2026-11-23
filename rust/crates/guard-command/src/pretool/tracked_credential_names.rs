@@ -111,7 +111,9 @@ pub(in crate::pretool) fn tracked_dotenv_template(path: &Path, cwd: Option<&str>
     };
     let same_tree =
         repository_root(&workspace).is_some_and(|root| repository_root(path) == Some(root));
-    (same_tree || super::super::worktree_writes::same_repository_worktree(&workspace, path))
+    (same_tree
+        || super::super::worktree_writes::same_repository_worktree(&workspace, path)
+        || super::super::worktree_writes::primary_checkout_of_worktree(&workspace, path))
         && !path
             .components()
             .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
@@ -122,14 +124,17 @@ pub(in crate::pretool) fn tracked_dotenv_template(path: &Path, cwd: Option<&str>
 }
 
 /// Whether `canonical` is a tracked, secret-free document of the session's
-/// repository or of a linked worktree of the same repository.
+/// repository, of a linked worktree of the same repository, or of the primary
+/// checkout a session running from a worktree was cut from.
 pub(in crate::pretool) fn tracked_document(canonical: &Path, cwd: Option<&str>) -> bool {
     let Some(workspace) = cwd.and_then(|root| std::fs::canonicalize(root).ok()) else {
         return false;
     };
     let same_tree =
         repository_root(&workspace).is_some_and(|root| repository_root(canonical) == Some(root));
-    (same_tree || super::super::worktree_writes::same_repository_worktree(&workspace, canonical))
+    (same_tree
+        || super::super::worktree_writes::same_repository_worktree(&workspace, canonical)
+        || super::super::worktree_writes::primary_checkout_of_worktree(&workspace, canonical))
         && committed_document(canonical)
 }
 

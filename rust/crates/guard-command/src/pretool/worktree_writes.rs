@@ -58,6 +58,35 @@ pub(super) fn same_repository_worktree(workspace: &Path, target: &Path) -> bool 
             .is_some_and(|backlink| backlink == root.join(".git"))
 }
 
+/// Whether `target` lies in the primary checkout whose `.git` the linked
+/// worktree holding `workspace` shares.
+///
+/// [`same_repository_worktree`] proves the other direction, a session in the
+/// primary checkout reaching a linked worktree, and it cannot answer this one:
+/// it requires the target's `.git` to be a gitfile, which the primary
+/// checkout's never is. A session that runs from a worktree and reads the
+/// checkout it was cut from is the same repository seen from the other side,
+/// and that is the ordinary shape of agent work, so the proof holds both ways.
+pub(super) fn primary_checkout_of_worktree(workspace: &Path, target: &Path) -> bool {
+    let Some(common) = linked_worktree_common_dir(workspace) else {
+        return false;
+    };
+    let Some(primary) = common.parent() else {
+        return false;
+    };
+    // The nearest ancestor holding a `.git` entry owns the target. A nested
+    // checkout or another worktree therefore answers for itself rather than
+    // borrowing the primary checkout's identity from further up the path.
+    let Some(root) = target
+        .ancestors()
+        .find(|root| root.join(".git").symlink_metadata().is_ok())
+    else {
+        return false;
+    };
+    root.join(".git").is_dir()
+        && std::fs::canonicalize(root).is_ok_and(|resolved| resolved == primary)
+}
+
 /// The shared git directory of the linked worktree that contains `workspace`.
 /// The worktree's admin entry must sit under `<common>/worktrees` and its
 /// `gitdir` backlink must name this checkout, so a stray `.git` file cannot
