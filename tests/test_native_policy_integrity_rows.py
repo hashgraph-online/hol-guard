@@ -13,12 +13,10 @@ from codex_plugin_scanner.guard import native_policy_integrity_rows as bridge
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 from codex_plugin_scanner.guard.native_policy_integrity_rows import (
     NativePolicyIntegrityUnavailableError,
-    PolicyRowSignItem,
     PolicyRowVerifyItem,
     discard_row_signing_verifier_key,
     native_prepare_policy_integrity_generation,
     native_reconcile_policy_integrity_generation,
-    native_sign_policy_rows,
     native_verify_policy_rows,
 )
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
@@ -109,21 +107,9 @@ def test_no_rows_never_calls_the_resident(resident: _Resident, tmp_path: Path) -
     assert resident.requests == []
 
 
-def test_sign_returns_the_resident_columns(resident: _Resident, tmp_path: Path) -> None:
-    items = [PolicyRowSignItem({"decision_id": 7}, generation=4, signed_at="2026-01-01T00:00:00+00:00")]
+def test_verify_sends_the_key_and_writes_a_private_verifier(resident: _Resident, tmp_path: Path) -> None:
+    native_verify_policy_rows(guard_home=tmp_path, items=_verify(1), key=_KEY, key_id=_KEY_ID)
 
-    signed = native_sign_policy_rows(guard_home=tmp_path, items=items, key=_KEY, key_id=_KEY_ID)
-
-    assert signed == [
-        {
-            "integrity_version": 2,
-            "integrity_generation": 4,
-            "payload_hash": "h",
-            "payload_mac": "m",
-            "integrity_key_id": _KEY_ID,
-            "signed_at": "2026-01-01T00:00:00+00:00",
-        }
-    ]
     request = resident.requests[0]
     assert request["integrity_key_b64"] == base64.urlsafe_b64encode(_KEY).rstrip(b"=").decode("ascii")
     key_path = tmp_path / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME
@@ -178,23 +164,6 @@ def test_unavailable_or_unbound_replies_fail_closed(
 
     with pytest.raises(NativePolicyIntegrityUnavailableError):
         native_verify_policy_rows(guard_home=tmp_path, items=_verify(1), key=_KEY, key_id=_KEY_ID)
-
-
-def test_signature_for_another_generation_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    honest = _Resident()
-
-    def answer(**kwargs: object) -> dict[str, object] | None:
-        response = honest(**kwargs)
-        assert response is not None
-        response["payload"]["sign"][0]["integrity_generation"] = 3  # type: ignore[index]
-        return response
-
-    monkeypatch.setattr(bridge, "_resident_request", answer)
-    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
-    items = [PolicyRowSignItem({"decision_id": 1}, generation=4, signed_at="now")]
-
-    with pytest.raises(NativePolicyIntegrityUnavailableError):
-        native_sign_policy_rows(guard_home=tmp_path, items=items, key=_KEY, key_id=_KEY_ID)
 
 
 def test_rows_ship_only_integrity_columns_with_foreign_values_as_null(resident: _Resident, tmp_path: Path) -> None:

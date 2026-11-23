@@ -1,4 +1,4 @@
-"""Resident bridge for local policy-row integrity: batch verify and sign.
+"""Resident bridge for local policy-row integrity: batch verify.
 
 Rust owns every canonical payload, SHA-256 digest and HMAC-SHA256 tag through
 the resident ``policy_integrity_rows`` op. ``GuardStore`` ships the rows and
@@ -66,9 +66,6 @@ _ROW_COLUMNS = (
     "workspace",
 )
 _TALLY_FIELDS = frozenset({"rows", "has_legacy", "pending_candidates", "pending_valid", "current_valid"})
-_SIGNATURE_FIELDS = frozenset(
-    {"integrity_version", "integrity_generation", "payload_hash", "payload_mac", "integrity_key_id", "signed_at"}
-)
 
 
 class NativePolicyIntegrityUnavailableError(RuntimeError):
@@ -83,13 +80,6 @@ class PolicyRowVerifyItem:
     row: Mapping[str, object]
     degraded_mode: bool
     trusted_generation: int | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class PolicyRowSignItem:
-    row: Mapping[str, object]
-    generation: int
-    signed_at: str
 
 
 def native_verify_policy_rows(
@@ -111,20 +101,6 @@ def native_verify_policy_rows(
     wire = [_verify_wire(item) for item in items if not item.degraded_mode]
     outcomes = iter(_run(Path(guard_home), key=key, key_id=key_id, field="verify", items=wire))
     return [_degraded(item.row) if item.degraded_mode else _verification(next(outcomes)) for item in items]
-
-
-def native_sign_policy_rows(
-    *,
-    guard_home: Path | str,
-    items: Sequence[PolicyRowSignItem],
-    key: bytes,
-    key_id: str,
-) -> list[dict[str, object]]:
-    """The six integrity columns per item, in order, signed by the resident."""
-
-    wire = [_sign_wire(item) for item in items]
-    outcomes = _run(Path(guard_home), key=key, key_id=key_id, field="sign", items=wire)
-    return [_signature(outcome, item) for outcome, item in zip(outcomes, items, strict=True)]
 
 
 def native_prepare_policy_integrity_generation(
@@ -470,10 +446,6 @@ def _verify_wire(item: PolicyRowVerifyItem) -> dict[str, object]:
     return wire
 
 
-def _sign_wire(item: PolicyRowSignItem) -> dict[str, object]:
-    return {"row": _wire_row(item.row), "generation": int(item.generation), "signed_at": str(item.signed_at)}
-
-
 def _optional_text(outcome: Mapping[str, object], name: str) -> str | None:
     value = outcome.get(name)
     if value is not None and not isinstance(value, str):
@@ -517,20 +489,6 @@ def _degraded(row: Mapping[str, object]) -> PolicyIntegrityVerificationResult:
         key_id=stored("integrity_key_id"),
         message="policy_integrity_backend_unavailable",
     )
-
-
-def _signature(outcome: Mapping[str, object], item: PolicyRowSignItem) -> dict[str, object]:
-    if set(outcome) != _SIGNATURE_FIELDS:
-        raise NativePolicyIntegrityUnavailableError()
-    texts = ("payload_hash", "payload_mac", "integrity_key_id", "signed_at")
-    if not all(isinstance(outcome[name], str) and outcome[name] for name in texts):
-        raise NativePolicyIntegrityUnavailableError()
-    version, generation = outcome["integrity_version"], outcome["integrity_generation"]
-    if not isinstance(version, int) or isinstance(version, bool) or generation != item.generation:
-        raise NativePolicyIntegrityUnavailableError()
-    if outcome["signed_at"] != item.signed_at:
-        raise NativePolicyIntegrityUnavailableError()
-    return dict(outcome)
 
 
 def _dumps(value: object) -> str:

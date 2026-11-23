@@ -14,11 +14,9 @@ from collections.abc import Callable
 from .native_policy_integrity_finalize import native_policy_integrity_finalization
 from .native_policy_integrity_rows import (
     NativePolicyIntegrityUnavailableError,
-    PolicyRowSignItem,
     PolicyRowVerifyItem,
     native_prepare_policy_integrity_generation,
     native_reconcile_policy_integrity_generation,
-    native_sign_policy_rows,
     native_verify_policy_rows,
 )
 from .policy_integrity import POLICY_INTEGRITY_VERSION
@@ -840,67 +838,6 @@ class StoreSecretPolicyIntegrityMixin:
         if not self._store_policy_integrity_control_state(pending_state):
             raise RuntimeError("Guard could not persist the policy integrity control state.")
         return current_generation
-
-    def _advance_policy_integrity_generation(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        now: str,
-        key: bytes,
-        key_id: str,
-        trusted_state: dict[str, object],
-        force_sign_decision_ids: set[int] | None = None,
-        harness: str | None = None,
-    ) -> dict[str, object]:
-        current_generation = self._begin_policy_integrity_generation(trusted_state)
-        next_generation = current_generation + 1
-        sign_ids = force_sign_decision_ids or set()
-        rows = [_row_mapping(row) for row in self._load_local_policy_rows(connection, harness=harness)]
-        unforced = [row for row in rows if int(row["decision_id"]) not in sign_ids]
-        verified = self._verify_policy_rows(
-            [PolicyRowVerifyItem(row, degraded_mode=False, trusted_generation=current_generation) for row in unforced],
-            key=key,
-            key_id=key_id,
-        )
-        still_valid = {
-            int(row["decision_id"]) for row, result in zip(unforced, verified, strict=True) if result.status == "valid"
-        }
-        to_sign = [row for row in rows if int(row["decision_id"]) in sign_ids or int(row["decision_id"]) in still_valid]
-        signatures = native_sign_policy_rows(
-            guard_home=self.guard_home,
-            items=[PolicyRowSignItem(row, generation=next_generation, signed_at=now) for row in to_sign],
-            key=key,
-            key_id=key_id,
-        )
-        for row, signed in zip(to_sign, signatures, strict=True):
-            decision_id = int(row["decision_id"])
-            connection.execute(
-                """
-                update policy_decisions
-                set integrity_version = ?,
-                    integrity_generation = ?,
-                    payload_hash = ?,
-                    payload_mac = ?,
-                    integrity_key_id = ?,
-                    signed_at = ?
-                where decision_id = ?
-                """,
-                (
-                    signed["integrity_version"],
-                    signed["integrity_generation"],
-                    signed["payload_hash"],
-                    signed["payload_mac"],
-                    signed["integrity_key_id"],
-                    signed["signed_at"],
-                    decision_id,
-                ),
-            )
-        return {
-            "cutover_complete": True,
-            "generation": next_generation,
-            "pending_generation": None,
-            "version": _POLICY_INTEGRITY_CONTROL_VERSION,
-        }
 
     def _reconcile_policy_integrity_pending_generation(
         self,
