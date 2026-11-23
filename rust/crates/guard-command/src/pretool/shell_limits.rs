@@ -10,16 +10,29 @@
 //! `host_facts.rs` proves the reading spelling of `ulimit`, where a flag alone
 //! prints the limit in effect. This module proves the setting spelling, which
 //! is a different claim: not that the command changes nothing, but that what it
-//! changes is the calling shell's own soft limit and nothing else.
+//! changes is a resource bound on the calling shell's own process tree and
+//! nothing else.
 //!
-//! Two spellings stay out. `-H` writes the hard limit, which an unprivileged
-//! process can only lower and can never raise back, so the shell cannot undo
-//! it. `-c` sizes core dumps, and raising it makes the kernel write process
-//! memory -- environment variables and whatever the process had read -- into a
-//! file on the next crash, which is a disclosure a read-only prelude should not
-//! be able to arrange without review.
+//! The bare spelling writes both limits. `ulimit -n 10240` with neither `-H`
+//! nor `-S` is `ulimit -Hn 10240; ulimit -Sn 10240`, so a prelude that means to
+//! raise its soft limit also caps the hard limit at the value it asked for, and
+//! an unprivileged shell cannot raise a hard limit back afterwards. That write
+//! is irreversible, but it is irreversible only inside the tree that made it:
+//! the next shell inherits the limit its own parent holds, nothing on disk
+//! records the change, and no process outside the tree can observe it. The
+//! worst outcome is the shell capping its own work, which fails closed. The
+//! proof therefore covers both the bare and the explicit `-S` spelling, because
+//! those are the spellings a prelude asking for its own headroom actually uses.
+//!
+//! Two spellings stay out. `-H` writes the hard limit alone and raises no soft
+//! limit, so it does nothing for a prelude that wants headroom for its own
+//! work; keeping it out holds this prover to the shapes real preludes use.
+//! `-c` sizes core dumps, and raising it makes the kernel write process memory
+//! -- environment variables and whatever the process had read -- into a file on
+//! the next crash, which is a disclosure a read-only prelude should not be able
+//! to arrange without review.
 
-/// The soft resource limits whose value is the calling shell's own.
+/// The resource limits whose value is the calling shell's own.
 ///
 /// Each of these bounds something the shell and its children may consume:
 /// descriptors, processes, memory, CPU time, file size. Setting one can only
@@ -27,8 +40,8 @@
 /// cannot reach another process tree.
 const SOFT_RESOURCES: &[char] = &['d', 'f', 'l', 'm', 'n', 's', 't', 'u', 'v'];
 
-/// Whether `basename` with `arguments` sets a soft resource limit on the
-/// calling shell and does nothing else.
+/// Whether `basename` with `arguments` sets a resource limit on the calling
+/// shell's own process tree and does nothing else.
 pub(super) fn safe_shell_limit(basename: &str, arguments: &[String]) -> bool {
     if basename != "ulimit" {
         return false;
@@ -40,8 +53,9 @@ pub(super) fn safe_shell_limit(basename: &str, arguments: &[String]) -> bool {
     limit_flag(flag) && limit_value(value)
 }
 
-/// Whether `flag` selects one soft resource, optionally spelled with the `-S`
-/// that names the soft limit explicitly (`-Sn`, or `-S` folded into `-n`).
+/// Whether `flag` selects one of these resources, either bare -- which bash
+/// applies to both the soft and the hard limit -- or with the `-S` that names
+/// the soft limit alone (`-Sn`, or `-S` folded into `-n`).
 fn limit_flag(flag: &str) -> bool {
     let Some(letters) = flag.strip_prefix('-') else {
         return false;

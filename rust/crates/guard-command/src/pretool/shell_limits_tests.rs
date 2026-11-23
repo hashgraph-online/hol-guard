@@ -5,8 +5,9 @@ fn arguments(values: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn a_soft_limit_the_shell_sets_on_itself_proves() {
+fn a_limit_the_shell_sets_on_its_own_tree_proves() {
     for values in [
+        // Bare, which bash applies to the hard limit as well as the soft one.
         vec!["-n", "10240"],
         vec!["-Sn", "10240"],
         vec!["-u", "2048"],
@@ -20,7 +21,7 @@ fn a_soft_limit_the_shell_sets_on_itself_proves() {
     ] {
         assert!(
             safe_shell_limit("ulimit", &arguments(&values)),
-            "ulimit {values:?} sets the shell's own soft limit"
+            "ulimit {values:?} bounds the shell's own process tree"
         );
     }
 }
@@ -28,7 +29,7 @@ fn a_soft_limit_the_shell_sets_on_itself_proves() {
 #[test]
 fn the_hard_limit_the_core_dump_and_every_other_shape_keep_their_review() {
     for values in [
-        // The hard limit cannot be raised back, so the shell cannot undo it.
+        // A hard-only write raises no soft limit, so no prelude needs it.
         vec!["-Hn", "1024"],
         vec!["-H", "-n", "1024"],
         // A raised core limit writes process memory on the next crash.
@@ -51,7 +52,7 @@ fn the_hard_limit_the_core_dump_and_every_other_shape_keep_their_review() {
     ] {
         assert!(
             !safe_shell_limit("ulimit", &arguments(&values)),
-            "ulimit {values:?} is not a soft limit this prover reads"
+            "ulimit {values:?} is not a limit this prover reads"
         );
     }
 }
@@ -61,4 +62,17 @@ fn no_other_command_reaches_this_prover() {
     for basename in ["umask", "ulimits", "limit", "bash", "sh"] {
         assert!(!safe_shell_limit(basename, &arguments(&["-n", "10240"])));
     }
+}
+
+#[test]
+fn the_bare_spelling_is_proven_knowing_it_writes_the_hard_limit_too() {
+    // `ulimit -n N` with neither `-H` nor `-S` is `ulimit -Hn N; ulimit -Sn N`,
+    // and an unprivileged shell cannot raise a hard limit back. The proof keeps
+    // the bare spelling anyway, because that write bounds only the tree that
+    // made it and a prelude asking for its own headroom is spelled this way.
+    // Narrowing this to `-S` would send every real prelude back to review, so a
+    // change here needs the reason in the module doc, not just a tighter flag.
+    assert!(safe_shell_limit("ulimit", &arguments(&["-n", "10240"])));
+    assert!(safe_shell_limit("ulimit", &arguments(&["-Sn", "10240"])));
+    assert!(!safe_shell_limit("ulimit", &arguments(&["-Hn", "10240"])));
 }
