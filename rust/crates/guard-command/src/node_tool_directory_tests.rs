@@ -131,6 +131,33 @@ fn an_absolute_directory_travels_with_the_run() {
     assert_eq!(directory, None);
 }
 
+// The peel is lexical, so Windows is where a drive prefix actually resolves
+// somewhere else. Name a real sibling of the command's own directory, in the
+// spellings Windows accepts, and the run is not peeled there.
+#[cfg(windows)]
+#[test]
+fn a_windows_directory_outside_the_run_is_not_peeled() {
+    let root = tempfile::tempdir().expect("a root for both directories");
+    let base = root.path().join("portal");
+    let outside = root.path().join("other");
+    std::fs::create_dir_all(&base).expect("the directory the command stands in");
+    std::fs::create_dir_all(&outside).expect("a real directory outside it");
+    let native = outside.to_str().expect("a printable path").to_owned();
+    let forward = native.replace('\\', "/");
+    for named in [native.as_str(), forward.as_str()] {
+        let planned = node_tool_route(
+            &words(&["bunx", "--cwd", named, "tsc", "--noEmit"]),
+            None,
+            true,
+            Some(base.as_path()),
+        );
+        assert!(
+            !matches!(planned, NodeToolRoute::Tool { .. }),
+            "{named} names no run below the command's own directory"
+        );
+    }
+}
+
 #[test]
 fn a_directory_outside_the_run_is_not_peeled() {
     // Each of these stands where the tool's name is read, so no supported
@@ -166,7 +193,19 @@ fn a_drive_prefixed_directory_names_no_subdirectory() {
     // resolves from whatever directory the process last held on the drive.
     // Neither is below the command's own directory, so the peel stops and the
     // command keeps its review.
-    for named in ["C:/repo/other", "c:/repo/other", "C:other", "Z:"] {
+    // A network root names no drive, but it leaves the command's own
+    // directory the same way: `//server/share` resolves from that share's
+    // root, and the backslash spellings never reach a directory this route
+    // reads at all.
+    for named in [
+        "C:/repo/other",
+        "c:/repo/other",
+        "C:other",
+        "Z:",
+        "//server/share",
+        "\\\\server\\share",
+        "\\\\?\\C:\\repo",
+    ] {
         assert_eq!(named_run_directory(named, None), None, "{named}");
         assert_eq!(
             named_run_directory(named, Some(Path::new("/repo"))),
