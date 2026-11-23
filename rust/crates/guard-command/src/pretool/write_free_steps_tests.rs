@@ -43,6 +43,9 @@ fn a_find_that_can_write_or_change_its_words_keeps_review() {
         "find . -fprint listing.txt",
         "find . -fls listing.txt",
         "find . -type f -print > listing.txt",
+        // A redirect to /dev/nullx is a real file write, not /dev/null.
+        "find . -type f -print 2>/dev/nullx",
+        "find . -type f -print >/dev/null-output",
         "find . -type f -ok rm {} ;",
         "find . -name {a,-delete}",
         "find * -maxdepth 0 -print",
@@ -73,6 +76,7 @@ fn a_printing_sed_writes_nothing_wherever_it_reads() {
     for command in [
         r#"sed -n '1,240p' "$HOME/.config/tool/notes.md""#,
         "sed -n '5p;9,12p' /etc/hosts",
+        "sed -n '1p' README.md 2>/dev/null",
         "sed -e 's/a/b/' -e 's/c/d/' README.md",
         "sed '1d;$d' data.txt",
         "rg --files | sed -n '1,160p'",
@@ -99,6 +103,8 @@ fn a_sed_that_can_write_keeps_review() {
         "sed 's/a/date/e' README.md",
         "sed -f script.sed README.md",
         "sed -n '1,5p' README.md > out.txt",
+        "sed -n '1p' README.md 2>/dev/nullx",
+        "sed -n '1p' README.md >/dev/null-output",
         "sed -n '1,5p' $FILE",
         "sed -n '1,5p' *.md",
     ] {
