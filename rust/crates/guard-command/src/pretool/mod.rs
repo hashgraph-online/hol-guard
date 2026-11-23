@@ -288,11 +288,17 @@ mod tree_writers;
 pub(crate) mod version_probes;
 pub(crate) mod wget_reads;
 #[cfg(test)]
+#[path = "workspace_contained_credential_names_tests.rs"]
+mod workspace_contained_credential_names_tests;
+#[cfg(test)]
 #[path = "workspace_contained_effects_tests.rs"]
 mod workspace_contained_effects_tests;
 #[cfg(test)]
 #[path = "workspace_contained_git_tests.rs"]
 mod workspace_contained_git_tests;
+#[cfg(test)]
+#[path = "workspace_contained_lookups_tests.rs"]
+mod workspace_contained_lookups_tests;
 #[cfg(test)]
 #[path = "workspace_contained_name_pattern_tests.rs"]
 mod workspace_contained_name_pattern_tests;
@@ -302,6 +308,9 @@ mod workspace_contained_package_tests;
 #[cfg(test)]
 #[path = "workspace_contained_runner_tests.rs"]
 mod workspace_contained_runner_tests;
+#[cfg(test)]
+#[path = "workspace_contained_search_widening_tests.rs"]
+mod workspace_contained_search_widening_tests;
 #[cfg(test)]
 #[path = "workspace_contained_sibling_tests.rs"]
 mod workspace_contained_sibling_tests;

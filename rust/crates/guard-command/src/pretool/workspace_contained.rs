@@ -41,6 +41,8 @@ mod cd;
 mod chmod;
 #[path = "workspace_contained_compiled.rs"]
 mod compiled;
+#[path = "workspace_contained_credential_names.rs"]
+mod credential_names;
 #[path = "workspace_contained_cwd.rs"]
 mod cwd;
 #[path = "workspace_contained_git.rs"]
@@ -57,6 +59,8 @@ pub(super) mod kill;
 mod launch;
 #[path = "workspace_contained_links.rs"]
 mod links;
+#[path = "workspace_contained_lookups.rs"]
+mod lookups;
 #[path = "workspace_contained_package.rs"]
 pub(super) mod package;
 #[path = "workspace_contained_python.rs"]
@@ -69,6 +73,8 @@ mod removal;
 pub(super) mod runner;
 #[path = "workspace_contained_script.rs"]
 mod script;
+#[path = "workspace_contained_search_widening.rs"]
+mod search_widening;
 #[path = "workspace_contained_sed.rs"]
 mod sed;
 #[path = "workspace_contained_settings.rs"]
@@ -657,6 +663,16 @@ pub(super) fn convert(
         })
         .is_none()
         || command_shape(shaped, &workspace, command_text.filter(|_| rest.is_none())).is_none()
+        // The sandbox's fresh shell has none of the session's definitions.
+        || lookups::looks_up_session_definitions(
+            issued,
+            execution_environment.map(|environment| environment.path.as_str()),
+        )
+        // The sandbox does not withhold every file the read review holds.
+        || search_widening::widens_past_ignore_rules(issued)
+        || search_widening::widens_past_ignore_rules(shaped)
+        || credential_names::names_credential_path(issued, Path::new(cwd))
+        || credential_names::names_credential_path(shaped, Path::new(root))
         || removal::destroys_workspace(result, issued, &workspace)
         || removal::loses_work(result, issued, context, execution_environment)
         || removal::rsync_replaces_work(issued, sent_text, context, execution_environment)
