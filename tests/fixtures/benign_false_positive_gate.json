@@ -40368,6 +40368,70 @@
       "expect": "allow"
     },
     {
+      "id": "runner-named-directory-separate-word",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bunx --cwd app tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-named-directory-joined-word",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bunx --cwd=app tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-named-directory-absolute-subdirectory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bunx --cwd ${WORKTREE}/app tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "runner-named-directory-absolute-same-directory",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bunx --cwd ${WORKTREE} tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "walkup-cd-subdirectory-uv-run-pytest",
       "fix_area": "shell",
       "harnesses": [
