@@ -166,6 +166,21 @@ fn the_composition_queues_a_package_request_the_tool_policy_permitted() {
 }
 
 #[test]
+fn an_inline_approval_authorizes_only_the_current_tool_call() {
+    assert_eq!(
+        compose_with_inline_approval(
+            "enforce",
+            &tool(GuardAction::Review),
+            &policy("allow"),
+            true
+        ),
+        Ok(Decided::Package(PackageRoute::Forward {
+            policy_action: "allow".to_owned(),
+        })),
+    );
+}
+
+#[test]
 fn the_composition_hands_back_an_observed_forward() {
     // The forward runs under the authoritative action and carries the observed
     // requests the proxy queues first, plus the evidence the override leaves.

@@ -141,9 +141,33 @@ pub(super) fn compose(
     tool: &Decision,
     policy: &PackagePolicy,
 ) -> Result<Decided, &'static str> {
+    compose_with_inline_approval(mode, tool, policy, false)
+}
+
+/// Compose a package call after the client approved this call inline.
+///
+/// The approval authorizes this call only. It is carried separately from the
+/// durable `saved_action` fields, so a provider action with `remember = false`
+/// still reaches the package lane without persisting a provider-wide allow.
+pub(super) fn compose_with_inline_approval(
+    mode: &str,
+    tool: &Decision,
+    policy: &PackagePolicy,
+    inline_approved: bool,
+) -> Result<Decided, &'static str> {
+    let mut tool_facts = crate::mcp_tool_policy_proxy::facts(tool);
+    if inline_approved {
+        tool_facts.action = "allow".to_owned();
+        tool_facts.source = "inline-approved".to_owned();
+        tool_facts.current_action = None;
+        tool_facts.saved_action = None;
+        tool_facts.approval_reuse_status = None;
+        tool_facts.approval_reuse_reason_code = None;
+        tool_facts.has_pending = false;
+    }
     let answer = crate::mcp_proxy_package::package_compose(&McpPackageComposeQueryV1 {
         mode: mode.to_owned(),
-        tool: crate::mcp_tool_policy_proxy::facts(tool),
+        tool: tool_facts,
         package: package_facts(policy)?,
     });
     match kind(&answer)? {

@@ -6,6 +6,7 @@ import argparse
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -98,8 +99,7 @@ def test_a_runtime_that_cannot_start_names_the_repair(
     def missing(*_args: object) -> None:
         raise FileNotFoundError("hol-guard-runtime")
 
-    monkeypatch.setattr(launch.os, "name", platform)
-    monkeypatch.setattr(launch.os, "execv", missing)
+    monkeypatch.setattr(launch, "os", SimpleNamespace(name=platform, execv=missing))
     monkeypatch.setattr(launch.subprocess, "call", missing)
 
     assert launch.run_relay(["-m", "codex_plugin_scanner.cli"], guard_home=Path("/guard/home")) == 1

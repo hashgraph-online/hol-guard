@@ -147,13 +147,30 @@ pub(super) fn decide_package<F>(
 where
     F: FnOnce() -> Result<(Decision, PackagePolicy), &'static str>,
 {
+    decide_package_with_inline_approval(mode, tool, server, resolved, binding, false, re_resolve)
+}
+
+/// Decide one package call while carrying a current-call inline approval.
+/// Durable saved policy remains unchanged when this flag is set.
+pub(super) fn decide_package_with_inline_approval<F>(
+    mode: &str,
+    tool: &str,
+    server: &str,
+    resolved: &PackagePolicy,
+    binding: QueueBinding<'_>,
+    inline_approved: bool,
+    re_resolve: F,
+) -> Result<PackageOutcome, &'static str>
+where
+    F: FnOnce() -> Result<(Decision, PackagePolicy), &'static str>,
+{
     if let Some(route) = package_route::precheck(mode, resolved)? {
         // The precheck answers on the package policy alone, so every leg it
         // decides is this lane's own.
         return answered(&route, tool, server, resolved, binding);
     }
     let (authority, policy) = re_resolve()?;
-    match package_route::compose(mode, &authority, &policy)? {
+    match package_route::compose_with_inline_approval(mode, &authority, &policy, inline_approved)? {
         Decided::Package(route) => answered(&route, tool, server, &policy, binding),
         Decided::Tool(leg) => Ok(PackageOutcome::ToolLeg(leg)),
         Decided::ClaimPackage => Ok(PackageOutcome::ClaimPackage(Box::new(
