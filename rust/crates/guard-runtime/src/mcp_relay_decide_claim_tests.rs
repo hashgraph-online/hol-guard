@@ -45,6 +45,7 @@ fn fresh(action: GuardAction, artifact_hash: &str) -> Resolved {
             risk_categories: Vec::new(),
         },
         decision,
+        connector_setup: None,
         mode: "enforce".to_owned(),
         redaction_level: None,
     }

@@ -236,7 +236,13 @@ fn decide_once(
                 // proxy queues it before it replies to the client.
                 Some(ASK_MODE) => {
                     room_for_row(policy_store)?;
-                    ask::queue(request, &admitted, &resolved, policy_action)?
+                    ask::queue_with_connector_setup(
+                        request,
+                        &admitted,
+                        &resolved,
+                        policy_action,
+                        resolved.connector_setup.as_ref(),
+                    )?
                 }
                 _ => queue::safe_alternative(
                     mode,

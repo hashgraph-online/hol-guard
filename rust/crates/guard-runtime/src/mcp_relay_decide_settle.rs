@@ -72,8 +72,30 @@ pub(super) fn settle(
             if let Some(center) = center {
                 fields["approval_center_url"] = json!(center);
             }
+            if let Some(setup) = resolved.connector_setup.as_ref() {
+                if let Some(group) = setup.get("queue_group_id").and_then(Value::as_str) {
+                    fields["queue_group_id"] = json!(group);
+                }
+            }
             review = Some(fields);
             let (message, data) = queue::safe_alternative_block(tool, server, &decision.signals);
+            let (message, mut data) = (message, data);
+            let message = if resolved.connector_setup.is_some() {
+                crate::blocked_request_mode::connector_setup_reason_for(
+                    server,
+                    "mcp",
+                    false,
+                    &[],
+                    false,
+                    false,
+                )
+            } else {
+                message
+            };
+            if resolved.connector_setup.is_some() {
+                data["guardReasonCode"] =
+                    Value::String("runtime_tool_call_connector_setup_required".to_owned());
+            }
             (
                 Some(Answer::Block { message, data }),
                 "block",
@@ -88,6 +110,23 @@ pub(super) fn settle(
             approval: raised,
         } => {
             approval = Some(raised);
+            let message = if resolved.connector_setup.is_some() {
+                crate::blocked_request_mode::connector_setup_reason_for(
+                    server,
+                    "mcp",
+                    true,
+                    &[],
+                    false,
+                    false,
+                )
+            } else {
+                message
+            };
+            let mut data = data;
+            if resolved.connector_setup.is_some() {
+                data["guardReasonCode"] =
+                    Value::String("runtime_tool_call_connector_setup_required".to_owned());
+            }
             (
                 Some(Answer::Block { message, data }),
                 "block",

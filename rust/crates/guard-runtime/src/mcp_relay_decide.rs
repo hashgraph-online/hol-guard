@@ -213,6 +213,10 @@ struct Claimed {
 struct Resolved {
     identity: McpToolCallIdentityPayloadV1,
     decision: Decision,
+    /// Present when the review is solely because this MCP server has no
+    /// connector decision on the device. The marker is carried into the
+    /// queued review so all of the server's calls share one setup group.
+    connector_setup: Option<Value>,
     mode: String,
     /// The bound `receipt_redaction_level`, which the inbox row is written with.
     redaction_level: Option<String>,
