@@ -515,7 +515,7 @@ pub(super) fn live_identity(
 }
 
 /// `daemon_state_matches_current_runtime` against a named current identity.
-pub(super) fn state_matches(current: &Map<String, Value>, payload: &Map<String, Value>) -> bool {
+pub(crate) fn state_matches(current: &Map<String, Value>, payload: &Map<String, Value>) -> bool {
     runtime_matches_current(current, payload)
 }
 
