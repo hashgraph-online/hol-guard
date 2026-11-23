@@ -5,7 +5,8 @@
 /// which can assign a variable. Text inside single quotes or behind a
 /// backslash is printed as written and runs nothing; double quotes still
 /// expand. ANSI-C quoting (`$'...'`) expands nothing either and ends at its
-/// first quote that no backslash escapes.
+/// first quote that no backslash escapes. `$$` is the shell's process id, so
+/// a quote after it opens a plain single-quoted string.
 #[cfg(test)]
 fn runs_arithmetic(text: &str) -> bool {
     any_arithmetic_body(text, |_| true)
@@ -27,6 +28,7 @@ fn any_arithmetic_body(text: &str, reads: impl Fn(&str) -> bool) -> bool {
     let (mut single, mut double, mut index) = (false, false, 0);
     while index < bytes.len() {
         match bytes[index] {
+            b'$' if !single && bytes.get(index + 1) == Some(&b'$') => index += 1,
             b'$' if !single && !double && bytes.get(index + 1) == Some(&b'\'') => {
                 index = ansi_c_close(bytes, index + 2);
             }
@@ -128,6 +130,8 @@ mod tests {
             "echo \"it's\" $((PATH=10))",
             "echo $'\\'' $((PATH=10))",
             "echo \"$'\" $((PATH=10))",
+            "echo $$'\\'$((PATH=1)); last -n 1",
+            "echo \"$$\"$((PATH=1))",
         ] {
             assert!(super::runs_arithmetic(text), "{text}");
         }
