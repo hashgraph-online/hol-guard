@@ -29,10 +29,11 @@ def _options(**fields: object) -> argparse.Namespace:
 
 
 def test_the_relay_argv_keeps_every_value_bound_to_its_flag() -> None:
+    guard_home = Path("/guard/home")
     argv = launch.relay_argv(
         "codex-mcp-proxy",
         _options(),
-        guard_home=Path("/guard/home"),
+        guard_home=guard_home,
         server_command="node",
         server_args=["--inspect", "server.js"],
         server_id="mcp_server:codex:project:docs:1",
@@ -44,7 +45,7 @@ def test_the_relay_argv_keeps_every_value_bound_to_its_flag() -> None:
         "codex_plugin_scanner.cli",
         "guard",
         "codex-mcp-proxy",
-        "--guard-home=/guard/home",
+        f"--guard-home={guard_home}",
         "--home=/home/agent",
         "--workspace=/work/space",
         "--server-name=docs",

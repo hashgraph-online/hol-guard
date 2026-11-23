@@ -159,7 +159,7 @@ pub(super) fn compose_with_inline_approval(
     inline_approved: bool,
 ) -> Result<Decided, &'static str> {
     let mut tool_facts = crate::mcp_tool_policy_proxy::facts(tool);
-    if inline_approved {
+    if inline_approved && tool_facts.action != "block" {
         let saved_tool_block =
             (tool_facts.saved_action.as_deref() == Some("block")).then(|| "block".to_owned());
         tool_facts.action = "allow".to_owned();

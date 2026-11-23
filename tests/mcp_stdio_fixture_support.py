@@ -32,6 +32,8 @@ def child_command(marker_path: Path) -> list[str]:
                 "for line in sys.stdin:",
                 "    message = json.loads(line)",
                 "    message_id = message.get('id')",
+                "    if message_id is None:",
+                "        continue",
                 "    method = message.get('method')",
                 "    if method == 'initialize':",
                 "        result = {'protocolVersion': '2025-06-18', 'capabilities': {'tools': {}}, "

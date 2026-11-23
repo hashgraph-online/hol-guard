@@ -268,6 +268,7 @@ fn after_claim(
                 packaged.outcome,
                 package_lane::PackageOutcome::AskPackage(_)
             ) {
+                room_for_row(policy_store)?;
                 return queued(started, fresh, Write::Package(packaged));
             }
             spend_budget(started)?;
@@ -292,6 +293,7 @@ fn after_claim(
                 ToolLeg::Queue { policy_action } => {
                     let mode = context.admitted.blocked_request_mode();
                     if mode == Some(ASK_MODE) {
+                        room_for_row(policy_store)?;
                         let prepared = ask::prepare(
                             &context.request,
                             &context.admitted,

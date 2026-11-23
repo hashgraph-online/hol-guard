@@ -63,6 +63,8 @@ import sys
 TOOLS = {_TOOLS!r}
 for line in sys.stdin:
     message = json.loads(line)
+    if "id" not in message:
+        continue
     method = message.get("method")
     if method == "initialize":
         result = {{"protocolVersion": "2025-06-18", "capabilities": {{"tools": {{}}}},
@@ -200,7 +202,17 @@ def allow_ready_server(store: GuardStore, identity: McpServerIdentity) -> None:
 def _messages(case: McpCase) -> list[dict[str, Any]]:
     call = {"name": case.tool, "arguments": case.arguments}
     return [
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "hol-guard-benign-gate", "version": "1.0.0"},
+            },
+        },
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
         {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": call},
     ]
@@ -213,7 +225,7 @@ def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str
     so a relay that holds stdout open without answering fails the case instead
     of hanging the gate.
     """
-    wanted = {int(message["id"]) for message in messages}
+    wanted = {int(message["id"]) for message in messages if "id" in message}
     responses: dict[int, Any] = {}
     expired = threading.Event()
     with subprocess.Popen(
@@ -236,6 +248,8 @@ def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str
             for message in messages:
                 session.stdin.write(json.dumps(message) + "\n")
                 session.stdin.flush()
+                if "id" not in message:
+                    continue
                 for line in session.stdout:
                     answer = json.loads(line)
                     if isinstance(answer.get("id"), int):
@@ -245,7 +259,7 @@ def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str
                 if message["id"] not in responses:
                     break
             session.stdin.close()
-            session.wait(timeout=_SESSION_SECONDS)
+            exit_status = session.wait(timeout=_SESSION_SECONDS)
         except BaseException:
             session.kill()
             raise
@@ -253,6 +267,8 @@ def _session(command: list[str], fixture: BenignFixture, messages: list[dict[str
             watchdog.cancel()
     if expired.is_set():
         raise TimeoutError(f"the MCP relay session did not finish within {_SESSION_SECONDS:.0f}s")
+    if exit_status != 0:
+        raise RuntimeError(f"the MCP relay exited with status {exit_status}")
     return {key: value for key, value in responses.items() if key in wanted}
 
 
@@ -276,10 +292,13 @@ def replay(
     # resident still records it is sent again in a later session.
     deadline = time.monotonic() + _WARM_SECONDS
     while True:
-        response = _session(command, fixture, _messages(case)).get(3, {})
+        responses = _session(command, fixture, _messages(case))
+        if 3 not in responses:
+            raise RuntimeError("the MCP relay did not answer tools/call")
+        response = responses[3]
         if not _warming(response) or time.monotonic() > deadline:
             break
-        time.sleep(0.25)
+        time.sleep(min(0.25, max(0.0, deadline - time.monotonic())))
     rows = approval_rows(store, known)
     return response, rows, identity.identity_hash
 
