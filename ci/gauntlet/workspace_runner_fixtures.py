@@ -100,6 +100,10 @@ WORKSPACE_TSC_STATUS_REPORT_CASE = "omp-native-workspace-typecheck-status-report
 # in YAML rather than JSON, so the pin the verdict reads is the same fact
 # written in another dialect.
 WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
+# The same checker in a workspace whose packages read their type-check settings
+# from a base at the checkout root. The run starts inside the package, so the
+# base the project extends sits one directory above it.
+WORKSPACE_SHARED_BASE_TSC_CASE = "omp-native-workspace-shared-base-tsc"
 # The other runner a Node project installs for itself, named the way a developer
 # narrows a run: the file to run beside the option that stops Vitest watching.
 # A filter is not a Vitest command, so the run is the same single pass the bare
@@ -163,6 +167,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_TSC_GENERATED_PROJECT_CASE,
         WORKSPACE_TSC_STATUS_REPORT_CASE,
         WORKSPACE_PNPM_TSC_CASE,
+        WORKSPACE_SHARED_BASE_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
@@ -547,6 +552,29 @@ _GENERATED_PROJECT_FILES = {
 }
 
 
+# The same checker in a workspace that keeps its type-check settings in one
+# place: a base at the checkout root, and a package that extends it and
+# declares the no-emit mode beside its own sources. The run starts inside the
+# package, so the base it reads sits above the run directory.
+_WORKSPACE_BASE_TYPESCRIPT_FILES = {
+    **_TYPESCRIPT_FILES,
+    "package.json": (
+        '{\n  "name": "synthetic-workspace",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "workspaces": [\n    "packages/*"\n  ],\n'
+        f'  "devDependencies": {{\n    "typescript": "{_TYPESCRIPT_VERSION}"\n  }}\n}}\n'
+    ),
+    "tsconfig.base.json": (
+        '{\n  "compilerOptions": {\n    "strict": true,\n    "skipLibCheck": true\n  }\n}\n'
+    ),
+    "packages/app/tsconfig.json": (
+        '{\n  "extends": "../../tsconfig.base.json",\n'
+        '  "compilerOptions": {\n    "noEmit": true\n  },\n'
+        '  "include": ["src"]\n}\n'
+    ),
+    "packages/app/src/settings.ts": "export const settings = { retries: 3 };\n",
+}
+
+
 # pnpm resolves the same dependency and writes the same pin as YAML: one key
 # per release under a top-level `packages` mapping, repeated under `snapshots`.
 _PNPM_LOCK = (
@@ -822,6 +850,13 @@ _INSTALLS = {
     WORKSPACE_PNPM_TSC_CASE: _Install(
         "tsc",
         _PNPM_TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_SHARED_BASE_TSC_CASE: _Install(
+        "tsc",
+        _WORKSPACE_BASE_TYPESCRIPT_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",

@@ -186,6 +186,15 @@ class BenignFixture:
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
             "feature_app": feature_app_path(self.home),
             "pnpm_monorepo": self.home / "Code" / "acme-platform",
+            # A package inside a workspace whose shared type-check base sits at
+            # the checkout root, one directory above the run.
+            "workspace_package": self.home / "Code" / "atlas-tools" / "packages" / "app",
+            # The same workspace's checkout root, where an agent starts before
+            # it steps into the package it wants to check.
+            "workspace_monorepo": self.home / "Code" / "atlas-tools",
+            # The package in that workspace whose base turns on `incremental`,
+            # so the same type check writes a build-info file.
+            "workspace_incremental_package": self.home / "Code" / "atlas-tools" / "packages" / "tool",
             "stale_lockfile_app": stale_lockfile_app_path(self.home),
             "linked_worktree": self.linked_worktree,
             "linked_sources": linked_sources_path(self.home),

@@ -2930,6 +2930,18 @@
       ]
     },
     {
+      "id": "omp-native-workspace-shared-base-tsc",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Type-check the app package of this workspace, whose project extends the shared base at the checkout root: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
+      "commands": [
+        "cd packages/app && npx tsc -p tsconfig.json"
+      ]
+    },
+    {
       "id": "omp-native-workspace-node-options-vm-modules-prefix",
       "expectation": "allow",
       "oracle": "native-tools",

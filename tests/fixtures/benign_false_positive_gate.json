@@ -37657,6 +37657,70 @@
       "expect": "allow"
     },
     {
+      "id": "toolchain-workspace-base-npx-tsc-named-project",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsc -p tsconfig.json"
+      },
+      "cwd": "workspace_package",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-workspace-base-npx-tsc-default-project",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsc"
+      },
+      "cwd": "workspace_package",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-workspace-base-npx-tsc-from-checkout-root",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd packages/app && npx tsc -p tsconfig.json"
+      },
+      "cwd": "workspace_monorepo",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-toolchain-workspace-incremental-base-npx-tsc",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx tsc -p tsconfig.json"
+      },
+      "cwd": "workspace_incremental_package",
+      "expect": "not_allow"
+    },
+    {
       "id": "toolchain-stale-second-lockfile-npx-no-install-tsc",
       "fix_area": "shell",
       "harnesses": [
