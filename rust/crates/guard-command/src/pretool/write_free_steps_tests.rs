@@ -114,3 +114,18 @@ fn a_sed_that_can_write_keeps_review() {
         );
     }
 }
+
+// Verify the parser actually supplies these shell redirections to the proof:
+// a prefix of /dev/null names a different, writable file.
+#[test]
+fn redirection_lookalikes_never_count_as_write_free() {
+    for (command, program) in [
+        ("find . -type f -print 2>/dev/nullx", "find"),
+        ("find . -type f -print >/dev/null-output", "find"),
+        ("sed -n '1p' README.md 2>/dev/nullx", "sed"),
+        ("sed -n '1p' README.md >/dev/null-output", "sed"),
+    ] {
+        let segment = step(command, program).expect("parser must retain the redirection segment");
+        assert!(!writes_nothing(&segment), "{command}");
+    }
+}
