@@ -283,8 +283,10 @@ fn control_state(
     }
     // `get_secret` answers `None` for a file it cannot read or decrypt as
     // well as for a missing one, so only a missing file is absent.
-    if std::fs::symlink_metadata(secrets.path_for(control_ref)).is_ok() {
-        return None;
+    match std::fs::symlink_metadata(secrets.path_for(control_ref)) {
+        Ok(_) => return None,
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => return None,
+        Err(_) => {}
     }
     let initial = json!({
         "cutover_complete": true,
