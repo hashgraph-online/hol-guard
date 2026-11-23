@@ -350,6 +350,11 @@ def drain_report(worker: HookWorker) -> dict[str, object]:
         else {name: getattr(drain, name, None) for name in ("pages", "records", "failures")},
         "transport": callable(transport) and transport() is not None,
         "bound": getattr(publisher, "_direct_lane_evidence_bound", None),
+        # Which receipts the drain wrote, so a missing review row names its step.
+        "receipts": [
+            {key: receipt.get(key) for key in ("artifact_name", "policy_decision", "approval_source", "harness")}
+            for receipt in worker.store.list_receipts(limit=5)
+        ],
     }
 
 

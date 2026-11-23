@@ -680,8 +680,9 @@ def test_mcp_connectors_are_set_up_before_they_are_reviewed(
     """A stdio MCP server the admin never decided on is held as setup; one they decided on is not."""
     fixture, worker = gate_environment
     with review_posture(worker), evidence_drained(worker):
-        failure = mcp_failure(case, *replay(case, fixture, worker.store))
-        report = drain_report(worker) if failure else None
+        response, rows, identity = replay(case, fixture, worker.store)
+        failure = mcp_failure(case, response, rows, identity)
+        report = {**drain_report(worker), "error": response.get("error")} if failure else None
     assert failure is None, f"{failure}: {case.case_id} {report}"
 
 
