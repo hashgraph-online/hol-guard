@@ -120,7 +120,7 @@ def test_release_compilation_is_content_addressed_and_feature_unified():
     for steps in (prepare_steps, publish_steps, wheel_steps):
         cache = next(item for item in steps if "rust-cache@" in item.get("uses", ""))
         # The prepare workflow adds "-fast" only for alpha fast-codegen builds; wheel jobs and
-        # every stable build keep the shared fat-profile key.
+        # every stable build keep the shared release-profile key.
         assert cache["with"]["prefix-key"] in {
             "release-native-v1",
             "release-native-v1${{ inputs.fast_codegen == true && '-fast' || '' }}",
@@ -138,6 +138,16 @@ def test_release_compilation_is_content_addressed_and_feature_unified():
         script.index("prepared_native.py pack"),
     ]
     assert order == sorted(order)
+
+
+def test_stable_release_compile_uses_parallel_thin_lto():
+    prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
+    assert prepare["env"]["CARGO_PROFILE_RELEASE_LTO"] == "${{ inputs.fast_codegen == true && 'false' || 'thin' }}"
+    assert prepare["env"]["CARGO_PROFILE_RELEASE_CODEGEN_UNITS"] == "16"
+    script = next(step for step in prepare["steps"] if step.get("name") == "Compile canonical release inputs")["run"]
+    assert "CARGO_PROFILE_RELEASE_LTO=thin" in script
+    assert "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16" in script
+    assert 'if [[ "$FAST_CODEGEN" != "true" ]]' in script
 
 
 def test_determinism_gate_compares_cached_and_cold_binaries_without_writing_caches():
