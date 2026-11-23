@@ -367,7 +367,10 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "decline_mcp_policy_request"
         | "fail_mcp_policy_request" => Kind::Write,
         "list_pending_mcp_policy_requests" | "policy_rows_fingerprint" => Kind::Snapshot,
-        "count_legacy_policy_rows" | "read_policy_integrity_state" | "has_local_policy_rows" => {
+        "count_legacy_policy_rows"
+        | "read_policy_integrity_state"
+        | "has_local_policy_rows"
+        | "list_policy_decision_rows" => {
             Kind::Read
         }
         "policy_row_presence" | "extension_control_authority_head" => Kind::Snapshot,
