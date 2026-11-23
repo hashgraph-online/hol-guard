@@ -71,7 +71,7 @@ impl RelayAuthority for ResidentRelayAuthority {
             };
             output = self.exchange(&guard_home, &payload);
         }
-        match output.as_deref().and_then(reply) {
+        let verdict = match output.as_deref().and_then(reply) {
             Some(Reply::Forward { ticket }) => ToolCallVerdict::Forward(ForwardTicket {
                 message,
                 expected,
@@ -102,7 +102,11 @@ impl RelayAuthority for ResidentRelayAuthority {
                 defer::note(&cause);
                 ToolCallVerdict::Respond(undecided_response(id, params, &cause))
             }
+        };
+        if matches!(verdict, ToolCallVerdict::Respond(_)) {
+            self.flush_direct_evidence(&guard_home);
         }
+        verdict
     }
 
     fn claim(&mut self, ticket: ClaimTicket) -> ToolCallVerdict {
@@ -203,6 +207,30 @@ impl RelayAuthority for ResidentRelayAuthority {
 
     fn catalog_complete(&mut self, tools: &[Value]) {
         self.report_server(tools);
+    }
+}
+
+impl ResidentRelayAuthority {
+    /// Commit evidence queued by this decision before the relay answers the
+    /// client. The daemon drain remains the normal path, while this bounded
+    /// pass closes the response-to-inbox race for short-lived relay sessions.
+    fn flush_direct_evidence(&mut self, guard_home: &Path) {
+        let payload = json!({
+            "operation": "hook_direct_evidence_commit",
+            "deadline_budget_ms": 500,
+            "request": {
+                "guard_home": guard_home,
+                "batch": {"budget_ms": 250, "shutdown": false},
+            },
+        });
+        let Ok(payload) = serde_json::to_vec(&payload) else {
+            return;
+        };
+        let _ = self.exchange_until(
+            guard_home,
+            &payload,
+            Instant::now() + Duration::from_millis(500),
+        );
     }
 }
 
