@@ -2177,7 +2177,7 @@
         "cd {{home}}/other-project && node node_modules/jest/bin/jest.js --ci 2>&1 | cat -v"
       ],
       "decision_paths": [
-        "native_workspace_containment_required"
+        "native_vitest_readonly_containment_required"
       ]
     },
     {
