@@ -130,3 +130,36 @@ fn a_changed_health_table_is_refused() {
         "incompatible command_activity_health schema object"
     );
 }
+
+#[test]
+fn a_busy_release_rolls_the_savepoint_back() {
+    let directory = tempfile::tempdir().expect("directory");
+    let path = directory.path().join("guard.db");
+    let connection = Connection::open(&path).expect("open");
+    connection
+        .busy_timeout(std::time::Duration::ZERO)
+        .expect("no wait");
+    connection
+        .execute_batch("pragma journal_mode = delete; create table keep (id integer)")
+        .expect("setup");
+    let reader = Connection::open(&path).expect("reader");
+    reader
+        .execute_batch("begin; select count(*) from keep")
+        .expect("shared lock");
+    let outcome = super::tables::in_savepoint(&connection, "probe", || {
+        connection
+            .execute_batch("create table added (id integer)")
+            .map_err(StoreError::from)
+    });
+    assert!(outcome.is_err());
+    assert!(connection.is_autocommit());
+    reader.execute_batch("rollback").expect("release reader");
+    let tables: i64 = connection
+        .query_row(
+            "select count(*) from sqlite_master where type = 'table'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count");
+    assert_eq!(tables, 1);
+}

@@ -20,16 +20,16 @@ pub(super) fn in_savepoint<T>(
     body: impl FnOnce() -> StoreResult<T>,
 ) -> StoreResult<T> {
     connection.execute_batch(&format!("savepoint {name}"))?;
-    match body() {
-        Ok(value) => {
-            connection.execute_batch(&format!("release {name}"))?;
-            Ok(value)
-        }
-        Err(error) => {
-            connection.execute_batch(&format!("rollback to {name}; release {name}"))?;
-            Err(error)
-        }
-    }
+    // A failed final release (SQLITE_BUSY from a reader's lock) leaves the
+    // savepoint open, so it is rolled back like a failed body; the first
+    // error is the one reported.
+    let outcome = body().and_then(|value| {
+        connection.execute_batch(&format!("release {name}"))?;
+        Ok(value)
+    });
+    outcome.inspect_err(|_| {
+        let _ = connection.execute_batch(&format!("rollback to {name}; release {name}"));
+    })
 }
 
 /// Require `table` to have exactly `columns` and the primary key `key`, in
