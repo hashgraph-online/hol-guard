@@ -9,9 +9,12 @@
 //! model in the parent does.
 //!
 //! The literal directory before the first wildcard is the root of the walk.
-//! It must be a bounded directory read, and none of its components may be
-//! hidden, so the harness homes keep their own Markdown-only proof and every
-//! other dot directory keeps its review. Wildcard components follow the
+//! It must be a bounded directory read. Its components may be hidden, as in
+//! `~/.nvm/versions/node/v25.2.1/lib/node_modules/*/package.json`: every word
+//! the walk produces still has to clear the literal read proof, which owns
+//! the rules for dot directories below home (credential stores, a tool's own
+//! configuration, the harness homes), so the glob reads exactly what the same
+//! reads written out one by one would. Wildcard components follow the
 //! parent's model: only `*` and `?`, ASCII case ignored, and a hidden or
 //! non-ASCII entry a pattern would match sends the read to review. A matched
 //! directory name is checked like a matched file name: whitespace or a glob
@@ -156,8 +159,10 @@ fn literal_read(word: &str, context: super::super::super::PathContext<'_>) -> bo
 }
 
 /// A literal component of the walk's root: the leading empty component of an
-/// absolute path, a leading `~` or `.`, or a visible name.
+/// absolute path, a leading `~` or `.`, or a plain name, which may be hidden.
+/// `..` never qualifies, since its rest is not a plain name.
 fn root_component(index: usize, component: &str) -> bool {
     (index == 0 && (component.is_empty() || component == "~" || component == "."))
-        || (!component.contains(['*', '?']) && super::plain_component(component))
+        || (!component.contains(['*', '?'])
+            && super::plain_component(component.strip_prefix('.').unwrap_or(component)))
 }

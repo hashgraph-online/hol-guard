@@ -214,6 +214,7 @@ pub mod pretool_grep_unmatched_glob_operand;
 pub mod pretool_grok_native_tool_names;
 pub mod pretool_guard_diagnostics;
 pub mod pretool_hidden_listing_globs;
+pub mod pretool_hidden_root_globs;
 pub mod pretool_home_aliases;
 pub mod pretool_home_cd;
 pub mod pretool_home_dotdir_content_reads;
