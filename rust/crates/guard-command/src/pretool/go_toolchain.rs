@@ -138,7 +138,9 @@ pub(super) fn env_requires_approval_even_when_contained(arguments: &[String]) ->
     }
     let operands = &arguments[1..];
     operands.iter().all(|argument| argument == "-json")
-        || operands.iter().any(|argument| env_setting_runs_compiler(argument))
+        || operands
+            .iter()
+            .any(|argument| env_setting_runs_compiler(argument))
 }
 
 /// Whether the toolchain that answers the query can only be the one on
