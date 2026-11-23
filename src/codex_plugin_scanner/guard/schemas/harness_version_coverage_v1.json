@@ -1,6 +1,6 @@
 {
   "schema_version": "hol-guard-harness-version-coverage.v1",
-  "revision": "2026-11-22.1",
+  "revision": "2026-11-23.1",
   "harnesses": [
     {
       "harness": "omp",
@@ -25,8 +25,8 @@
       ],
       "records": [
         {
-          "harness_version": "18.22.2",
-          "guard_version": "3.61.0",
+          "harness_version": "19.1.0",
+          "guard_version": "3.62.0",
           "platforms": [
             "linux-x86_64"
           ],
@@ -39,8 +39,8 @@
             "result": "passed"
           },
           "evidence_level": "unit_test",
-          "evidence_reference": "https://github.com/hashgraph-online/hol-guard/actions/runs/44976803044",
-          "observed_at": "2026-11-22T03:12:26Z"
+          "evidence_reference": "https://github.com/hashgraph-online/hol-guard/actions/runs/45260576615",
+          "observed_at": "2026-11-23T20:44:23Z"
         }
       ]
     }
