@@ -20,6 +20,8 @@ def test_eval_lane_uses_the_supported_javascript_session_bridge(tmp_path: Path) 
     config = json.loads((tmp_path / "agent" / "config.yml").read_text())
     assert config["eval"] == {"js": True, "py": False}
     assert config["launch"] == {"enabled": False}
+    # Auto-QA's report_issue prompt line is upstream telemetry, never part of a case.
+    assert config["dev"] == {"autoqa": False}
     # Print mode exits after the primary turn; wait for actual delegated
     # results instead of abandoning background agents at process shutdown.
     assert config["async"] == {"enabled": False}
