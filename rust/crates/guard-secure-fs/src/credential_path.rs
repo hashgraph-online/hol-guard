@@ -2,7 +2,8 @@
 //! directory that stores credentials.
 
 use super::{
-    is_source_code_extension, sensitive_external_filename, win32_name, EXTERNAL_SENSITIVE_PARTS,
+    is_source_code_extension, sensitive_external_filename, wallet_key_named, win32_name,
+    EXTERNAL_SENSITIVE_PARTS,
 };
 use crate::source_path::design_system_token;
 use std::path::Path;
@@ -48,7 +49,15 @@ pub fn credential_named_path(path: &Path) -> bool {
         .map(win32_name)
         .filter(|part| !part.is_empty());
     let name = parts.next_back();
-    (!schema_script && name.is_some_and(|name| sensitive_external_filename(Path::new(name))))
+    // `wallet_key_named` is the other half of the container rule in
+    // `sensitive_path_family`. A name that only spells the marker out in a
+    // document extension the committed-document proof can read back is a note
+    // about keys rather than a key, so it is screened here, where that proof
+    // clears it, instead of being refused outright as a container.
+    (!schema_script
+        && name.is_some_and(|name| {
+            sensitive_external_filename(Path::new(name)) || wallet_key_named(name)
+        }))
         || parts.any(credential_directory)
 }
 
@@ -169,6 +178,25 @@ const MIGRATION_WORDS: [&str; 2] = ["migration", "migrations"];
 mod tests {
     use super::credential_named_path;
     use std::path::Path;
+
+    /// A document named for a key keeps a name review the committed-document
+    /// proof can clear. The container family used to refuse it outright, with
+    /// no relief available anywhere.
+    #[test]
+    fn a_key_named_document_keeps_a_clearable_name_review() {
+        for path in [
+            "docs/auth/private-key-jwt-client-auth.md",
+            "contracts/wallet-key-rotation.json",
+            "config/private_key_jwt.toml",
+            "deploy/WALLET-KEY-ROTATION.yaml",
+        ] {
+            assert!(credential_named_path(Path::new(path)), "{path}");
+        }
+        // Source code is inspected under its own rules, as it was before.
+        for path in ["src/auth/private_key_jwt.ts", "src/wallet_key.rs"] {
+            assert!(!credential_named_path(Path::new(path)), "{path}");
+        }
+    }
 
     #[test]
     fn credential_stores_keep_review_while_feature_directories_do_not() {
