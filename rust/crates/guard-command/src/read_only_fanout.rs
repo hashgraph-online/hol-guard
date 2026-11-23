@@ -36,14 +36,15 @@ pub(crate) const OBJECT_NAME_PLACEHOLDER: &str = "0123456789abcdef0123456789abcd
 
 /// Children worth proving at all. Each still has to pass its own read-only
 /// proof with the file operand appended; this list adds no admission.
-const CHILDREN: [&str; 10] = [
-    "cat", "head", "tail", "wc", "grep", "rg", "ls", "stat", "od", "echo",
+const CHILDREN: [&str; 11] = [
+    "cat", "head", "tail", "wc", "grep", "rg", "ls", "stat", "od", "echo", "basename",
 ];
 
 /// Children that print counts, metadata or their own arguments, never file
 /// contents. `echo` opens nothing at all: `find src -exec echo {} +` prints
-/// the paths the walk found, which is what `ls` already prints.
-const METADATA_CHILDREN: [&str; 4] = ["wc", "ls", "stat", "echo"];
+/// the paths the walk found, which is what `ls` already prints. `basename`
+/// opens nothing either and prints the last component of each path.
+const METADATA_CHILDREN: [&str; 5] = ["wc", "ls", "stat", "echo", "basename"];
 
 const MAX_ROOTS: usize = 8;
 const MAX_PATTERN_BYTES: usize = 256;

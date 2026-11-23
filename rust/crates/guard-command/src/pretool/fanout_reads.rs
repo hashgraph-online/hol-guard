@@ -92,13 +92,14 @@ fn producer_allowed(
 }
 
 /// A child that prints only what the directory entry says about each file:
-/// its name, size, owner and times. `wc` reads the bytes to count them, so it
-/// stays bound to the workspace with the readers.
+/// its name, size, owner and times. `basename` opens nothing and prints the
+/// last component of each name the walk already lists. `wc` reads the bytes
+/// to count them, so it stays bound to the workspace with the readers.
 fn metadata_child(child: &[String]) -> bool {
     child.first().is_some_and(|name| {
         matches!(
             crate::parser_executables::executable_basename(name),
-            "ls" | "stat"
+            "ls" | "stat" | "basename"
         )
     })
 }
@@ -139,7 +140,18 @@ fn metadata_roots<R: AsRef<str>>(
         return false;
     }
     roots.iter().all(|root| {
-        let root = root.as_ref();
+        // `$HOME` and `${HOME}` name the directory `~` names, and
+        // `home_targets_unquoted` has already turned back a segment that
+        // keeps either spelling literal. Unlike `~`, the variable is split on
+        // the shell's IFS, so a home holding whitespace or a glob character
+        // keeps its review.
+        let tilde = super::directory_targets::home_variable::tilde_spelling(root.as_ref());
+        if tilde.is_some()
+            && !super::directory_targets::home_variable::home_expands_to_one_word(Some(home))
+        {
+            return false;
+        }
+        let root = tilde.as_deref().unwrap_or(root.as_ref());
         let spelled = match root.strip_prefix("~/") {
             Some(rest) => std::path::Path::new(home).join(rest),
             None => std::path::Path::new(cwd).join(root),
