@@ -1,10 +1,21 @@
 //! A search widened past ignore rules keeps its review: a hidden file an
 //! ignore rule puts back in reach may hold a secret the sandbox does not list.
 use crate::pretool::workspace_contained_tests::{reason, workspace, CONTAINED};
+use std::path::PathBuf;
+
+/// Removes a fixture workspace even when its test panics.
+struct Cleanup(PathBuf);
+
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
 
 #[test]
 fn a_search_widened_past_ignore_rules_keeps_its_review() {
     let ws = workspace("search-widening", true);
+    let _cleanup = Cleanup(ws.clone());
     std::fs::create_dir_all(ws.join("src")).unwrap();
     std::fs::write(ws.join(".gitignore"), ".env*\n").unwrap();
     std::fs::write(ws.join("src/.gitignore"), "!.env.test.ts\n").unwrap();
@@ -21,12 +32,12 @@ fn a_search_widened_past_ignore_rules_keeps_its_review() {
     ] {
         assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
     }
-    let _ = std::fs::remove_dir_all(&ws);
 }
 
 #[test]
 fn an_inclusion_glob_that_brings_back_no_hidden_file_still_runs_contained() {
     let ws = workspace("search-widening-plain", true);
+    let _cleanup = Cleanup(ws.clone());
     for directory in ["src", "docs", ".github/workflows"] {
         std::fs::create_dir_all(ws.join(directory)).unwrap();
     }
@@ -45,12 +56,12 @@ fn an_inclusion_glob_that_brings_back_no_hidden_file_still_runs_contained() {
     ] {
         assert_eq!(reason("omp", command, &ws, true), CONTAINED, "{command}");
     }
-    let _ = std::fs::remove_dir_all(&ws);
 }
 
 #[test]
 fn an_inclusion_glob_naming_a_hidden_directory_keeps_its_review() {
     let ws = workspace("search-widening-hidden-dir", true);
+    let _cleanup = Cleanup(ws.clone());
     std::fs::create_dir_all(ws.join("src/.local")).unwrap();
     std::fs::write(ws.join("src/app.ts"), "export const KEY = 1;\n").unwrap();
     std::fs::write(
@@ -66,5 +77,4 @@ fn an_inclusion_glob_naming_a_hidden_directory_keeps_its_review() {
             "{command}"
         );
     }
-    let _ = std::fs::remove_dir_all(&ws);
 }

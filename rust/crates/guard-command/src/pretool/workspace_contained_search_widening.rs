@@ -12,7 +12,13 @@
 //! file, so a glob keeps the review only when the search roots hold such a
 //! file the glob actually brings back. Every other way of widening keeps it
 //! outright.
+//!
+//! The walk does not reproduce ripgrep's ignore precedence. Wherever it is
+//! unsure, it answers "keeps review": any rule that excludes a file counts even
+//! if another puts it back, and an ignore file or directory it cannot read in
+//! full, a search after `cd`, or a path deeper than it looks all keep review.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -24,22 +30,14 @@ mod walk_tests;
 /// than this cannot be answered before the command runs, so it keeps review.
 const MAX_INSPECTED: usize = 20_000;
 
-/// Lines read from one ignore file, and parent directories searched for them.
+/// The most of one ignore file the walk reads; a larger one keeps review.
 const MAX_IGNORE_LINES: usize = 1_024;
+const MAX_IGNORE_BYTES: u64 = 64 * 1024;
+/// Parent directories searched for ignore files and the repository top.
 const MAX_ANCESTORS: usize = 32;
 
 /// A name no real entry has, standing for "anything inside this directory".
 const INSIDE: &str = "\u{1}";
-
-/// Dotfiles a repository commits for its tools; none of them holds a secret.
-const TOOL_DOTFILES: &[&str] = &[
-    ".gitignore",
-    ".gitattributes",
-    ".gitkeep",
-    ".keep",
-    ".ignore",
-    ".rgignore",
-];
 
 /// Short flags that take a value, in the same argument or the next one.
 const SHORT_WITH_VALUE: &str = "ABCdEefgjMmrtT";
@@ -87,11 +85,22 @@ const LONG_WITH_VALUE: &[&str] = &[
 /// Whether a segment runs `rg` so that it reaches hidden or ignored files.
 /// `cwd` is the directory the command's relative paths resolve against.
 pub(super) fn widens_past_ignore_rules(model: &crate::CanonicalCommandV1, cwd: &Path) -> bool {
+    // After a directory change the search runs from somewhere this check does
+    // not follow, so its globs and roots cannot be read against `cwd`.
+    let mut moved = false;
     model.segments.iter().any(|segment| {
-        let Some(executable) = segment.executable.as_deref() else {
+        let Some(name) = segment
+            .executable
+            .as_deref()
+            .and_then(|executable| executable.rsplit('/').next())
+        else {
             return false;
         };
-        executable.rsplit('/').next() == Some("rg") && segment_widens(&segment.arguments, cwd)
+        if matches!(name, "cd" | "pushd" | "popd") {
+            moved = true;
+            return false;
+        }
+        name == "rg" && segment_widens(&segment.arguments, cwd, moved)
     })
 }
 
@@ -100,18 +109,20 @@ struct Inclusion {
     ignore_case: bool,
 }
 
-fn segment_widens(arguments: &[String], cwd: &Path) -> bool {
+fn segment_widens(arguments: &[String], cwd: &Path, moved: bool) -> bool {
     let mut globs = Vec::new();
     let mut positionals = Vec::new();
+    let mut fold_case = false;
     // Set when the pattern comes from a flag, or there is none: every
     // positional is then a path.
     let mut pattern_from_flag = false;
-    // `--` is not read as the end of options: `--context-separator --` takes
-    // it as a value, so a flag after it may still be live.
+    // A `--` that a flag takes as its value (`--context-separator --`) is
+    // consumed with that flag; one left standing ends the options.
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
         if argument == "--" {
-            continue;
+            positionals.extend(arguments.by_ref().map(String::as_str));
+            break;
         }
         if let Some(long) = argument.strip_prefix("--") {
             let (name, value) = match long.split_once('=') {
@@ -124,6 +135,11 @@ fn segment_widens(arguments: &[String], cwd: &Path) -> bool {
             }
             if matches!(name, "files" | "file" | "regexp" | "type-list") {
                 pattern_from_flag = true;
+            }
+            match name {
+                "glob-case-insensitive" => fold_case = true,
+                "no-glob-case-insensitive" => fold_case = false,
+                _ => {}
             }
             if value.is_none() && !LONG_WITH_VALUE.contains(&name) {
                 continue;
@@ -167,14 +183,21 @@ fn segment_widens(arguments: &[String], cwd: &Path) -> bool {
             positionals.push(argument.as_str());
         }
     }
-    // An exclusion glob only removes files from the search.
+    // An exclusion glob only removes files from the search; ignoring it can
+    // only make the walk find more.
     let inclusions: Vec<Inclusion> = globs
         .into_iter()
         .filter(|(text, _)| !text.starts_with('!'))
-        .map(|(text, ignore_case)| Inclusion { text, ignore_case })
+        .map(|(text, ignore_case)| Inclusion {
+            text,
+            ignore_case: ignore_case || fold_case,
+        })
         .collect();
     if inclusions.is_empty() {
         return false;
+    }
+    if moved {
+        return true;
     }
     // Without a pattern flag the first positional is the pattern, even when
     // it names a directory. With no directory to search, ripgrep searches `cwd`.
@@ -199,22 +222,31 @@ fn segment_widens(arguments: &[String], cwd: &Path) -> bool {
 /// inside a hidden directory, or a file an ignore file excludes.
 fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusion]) -> bool {
     let mut inspected = 0_usize;
-    let mut pending: Vec<Pending> = roots
-        .iter()
-        .map(|root| Pending {
+    let mut pending = Vec::new();
+    for root in roots {
+        // A repository top or ignore file beyond the ancestor budget would go unread.
+        if root.ancestors().nth(MAX_ANCESTORS).is_some() {
+            return true;
+        }
+        let Some(rules) = ancestor_rules(root) else {
+            return true;
+        };
+        pending.push(Pending {
             directory: root.clone(),
             hidden: false,
             ignored: false,
             matched: false,
             in_repository: in_repository(root),
-            rules: Rc::new(ancestor_rules(root)),
-        })
-        .collect();
+            rules: Rc::new(rules),
+        });
+    }
     while let Some(current) = pending.pop() {
         let Ok(entries) = std::fs::read_dir(&current.directory) else {
-            continue;
+            return true;
         };
-        let local = IgnoreFile::read(&current.directory, current.in_repository);
+        let Some(local) = IgnoreFile::read(&current.directory, current.in_repository) else {
+            return true;
+        };
         let rules = if local.rules.is_empty() {
             Rc::clone(&current.rules)
         } else {
@@ -243,12 +275,13 @@ fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusi
             let hidden = current.hidden || name.starts_with('.');
             let matched = current.matched || included(&path, &name, cwd, inclusions);
             if kind.is_dir() {
-                // A rule this walk cannot read prunes nothing, so the walk
-                // reads more rather than less.
-                let ignored = is_ignored(&rules, &path, &name, true, false);
-                // A hidden or ignored directory is entered only when a glob
-                // names it or could name something inside it.
-                if (name.starts_with('.') || ignored)
+                let hits = RuleHits::of(&rules, &path, &name, true);
+                // A directory is pruned only when a rule excludes it and none
+                // puts it back or could not be read, so the walk reads more
+                // rather than less. A hidden or pruned directory is entered
+                // only when a glob names it or could name something inside it.
+                let pruned = hits.excluded && !hits.kept && !hits.unreadable;
+                if (name.starts_with('.') || pruned)
                     && !matched
                     && !included(&path.join(INSIDE), INSIDE, cwd, inclusions)
                 {
@@ -257,16 +290,19 @@ fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusi
                 pending.push(Pending {
                     directory: path,
                     hidden,
-                    ignored: current.ignored || ignored,
+                    ignored: current.ignored || hits.excluded || hits.unreadable,
                     matched,
                     in_repository: current.in_repository,
                     rules: Rc::clone(&rules),
                 });
             } else if matched
-                && !TOOL_DOTFILES.contains(&name.as_ref())
-                && (hidden || current.ignored || is_ignored(&rules, &path, &name, false, true))
+                && (hidden || current.ignored || {
+                    // Any rule excluding the file counts, even one another rule
+                    // overrides, and so does a rule this walk cannot read.
+                    let hits = RuleHits::of(&rules, &path, &name, false);
+                    hits.excluded || hits.unreadable
+                })
             {
-                // A rule this walk cannot read counts as excluding the file.
                 return true;
             }
         }
@@ -297,27 +333,57 @@ struct IgnoreFile {
 }
 
 impl IgnoreFile {
-    fn read(directory: &Path, in_repository: bool) -> Self {
+    /// `None` when an ignore file here cannot be read in full.
+    fn read(directory: &Path, in_repository: bool) -> Option<Self> {
         let mut names = Vec::new();
         if in_repository {
-            names.extend([".git/info/exclude", ".gitignore"]);
+            if directory.join(".git").is_dir() {
+                names.push(".git/info/exclude");
+            }
+            names.push(".gitignore");
         }
         names.extend([".ignore", ".rgignore"]);
-        let rules = names
-            .into_iter()
-            .filter_map(|name| std::fs::read_to_string(directory.join(name)).ok())
-            .flat_map(|text| {
-                text.lines()
-                    .take(MAX_IGNORE_LINES)
-                    .filter_map(Rule::parse)
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        Self {
+        let mut rules = Vec::new();
+        for name in names {
+            if let Some(text) = read_bounded(&directory.join(name))? {
+                if text.lines().nth(MAX_IGNORE_LINES).is_some() {
+                    return None;
+                }
+                rules.extend(text.lines().filter_map(Rule::parse));
+            }
+        }
+        Some(Self {
             base: directory.to_path_buf(),
             rules,
-        }
+        })
     }
+}
+
+/// The text of a small regular file: `Some(None)` when there is no file,
+/// `None` when it exists but cannot be read in full without blocking.
+fn read_bounded(path: &Path) -> Option<Option<String>> {
+    let metadata = match std::fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+            ) =>
+        {
+            return Some(None);
+        }
+        Err(_) => return None,
+    };
+    if !metadata.is_file() || metadata.len() > MAX_IGNORE_BYTES {
+        return None;
+    }
+    let mut text = String::new();
+    std::fs::File::open(path)
+        .ok()?
+        .take(MAX_IGNORE_BYTES + 1)
+        .read_to_string(&mut text)
+        .ok()?;
+    (text.len() as u64 <= MAX_IGNORE_BYTES).then_some(Some(text))
 }
 
 /// One gitignore line.
@@ -369,26 +435,32 @@ impl Rule {
     }
 }
 
-/// Whether the ignore files that apply exclude this entry. The deepest file
-/// decides, and within a file the last matching line; `unreadable` is the
-/// answer when a rule cannot be read.
-fn is_ignored(
-    files: &[Rc<IgnoreFile>],
-    path: &Path,
-    name: &str,
-    is_dir: bool,
+/// How the rules of every ignore file that applies meet one entry.
+#[derive(Default)]
+struct RuleHits {
+    /// Some rule excludes it.
+    excluded: bool,
+    /// Some `!` rule puts it back.
+    kept: bool,
+    /// Some rule could not be read for it.
     unreadable: bool,
-) -> bool {
-    for file in files.iter().rev() {
-        for rule in file.rules.iter().rev() {
-            match rule.matches(&file.base, path, name, is_dir) {
-                Some(true) => return !rule.negated,
-                Some(false) => {}
-                None => return unreadable,
+}
+
+impl RuleHits {
+    fn of(files: &[Rc<IgnoreFile>], path: &Path, name: &str, is_dir: bool) -> Self {
+        let mut hits = Self::default();
+        for file in files {
+            for rule in &file.rules {
+                match rule.matches(&file.base, path, name, is_dir) {
+                    Some(true) if rule.negated => hits.kept = true,
+                    Some(true) => hits.excluded = true,
+                    Some(false) => {}
+                    None => hits.unreadable = true,
+                }
             }
         }
+        hits
     }
-    false
 }
 
 fn in_repository(root: &Path) -> bool {
@@ -399,7 +471,8 @@ fn in_repository(root: &Path) -> bool {
 
 /// The ignore files in the directories above `root` that ripgrep also reads:
 /// git's up to the repository top, `.ignore` and `.rgignore` above it too.
-fn ancestor_rules(root: &Path) -> Vec<Rc<IgnoreFile>> {
+/// `None` when one of them cannot be read in full.
+fn ancestor_rules(root: &Path) -> Option<Vec<Rc<IgnoreFile>>> {
     // A root that is a repository top reads no git rules from above it.
     let mut inside = !root.join(".git").exists() && in_repository(root);
     let mut files = Vec::new();
@@ -408,13 +481,13 @@ fn ancestor_rules(root: &Path) -> Vec<Rc<IgnoreFile>> {
         if inside && ancestor.join(".git").exists() {
             inside = false;
         }
-        let file = IgnoreFile::read(ancestor, reads_git_rules);
+        let file = IgnoreFile::read(ancestor, reads_git_rules)?;
         if !file.rules.is_empty() {
             files.push(Rc::new(file));
         }
     }
     files.reverse();
-    files
+    Some(files)
 }
 
 /// Whether one inclusion glob names this entry, read the way ripgrep reads an
