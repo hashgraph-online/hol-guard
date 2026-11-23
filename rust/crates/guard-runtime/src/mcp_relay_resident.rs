@@ -126,6 +126,9 @@ pub(crate) struct ResidentRelayAuthority {
     /// of that same call carries. One slot: the relay hands the answer over
     /// with nothing else running, and the next request spends it.
     inline_answer: Option<InlineReply>,
+    /// The verified blobs each forwarded package call was bound to, by its
+    /// evidence ticket, kept until the child answers that call.
+    archives: Vec<(String, archive::Retained)>,
 }
 
 /// What a commit request did with one ticket.
@@ -187,6 +190,7 @@ impl ResidentRelayAuthority {
             report: None,
             inline_available: false,
             inline_answer: None,
+            archives: Vec::new(),
         }
     }
 
@@ -257,13 +261,16 @@ impl ResidentRelayAuthority {
         &self,
         ticket: &str,
         evaluation: Option<Map<String, Value>>,
+        archive_bound: Option<bool>,
     ) -> Option<Vec<u8>> {
         let facts = self.facts.as_ref()?;
         let mut request = json!({"guard_home": facts.guard_home, "ticket": ticket});
+        let fields = request.as_object_mut()?;
         if let Some(evaluation) = evaluation {
-            request
-                .as_object_mut()?
-                .insert("package_evaluation".to_string(), Value::Object(evaluation));
+            fields.insert("package_evaluation".to_string(), Value::Object(evaluation));
+        }
+        if let Some(bound) = archive_bound {
+            fields.insert("external_archive_bound".to_string(), Value::Bool(bound));
         }
         serde_json::to_vec(&json!({"operation": "mcp_relay_claim", "request": request})).ok()
     }
@@ -289,7 +296,7 @@ impl ResidentRelayAuthority {
         let environment = request::process_environment()?;
         // The decide path's evaluation is the pre-claim one, which the proxy
         // runs with no external-archive network of its own.
-        let evaluation = self.evaluation(request, false)?;
+        let (evaluation, _none) = self.evaluation(request, false)?;
         request::evaluated_request(request, environment, evaluation)
     }
 
@@ -302,7 +309,7 @@ impl ResidentRelayAuthority {
         &mut self,
         request: &Value,
         external_archive_network: bool,
-    ) -> Option<Map<String, Value>> {
+    ) -> Option<(Map<String, Value>, archive::Retained)> {
         let intent = crate::mcp_relay_decide::relayed_package_intent(request.clone())?;
         let session = self.facts.as_ref()?;
         let guard_home = session.guard_home.clone();
@@ -327,21 +334,12 @@ impl ResidentRelayAuthority {
             &mut transport,
         )
         .ok()?;
-        // Neither evaluation retains a verified archive: `package_eval_request`
-        // asks for none, so no answer here binds one. An evaluation that
-        // demands the binding is answered as the refusal instead
-        // (`mcp_relay_decide_package_archive.rs`). A retained blob would make
-        // that answer wrong, and this process has no path to the proxy's
-        // binding, so the call fails closed.
-        if !settled.retained_archives.is_empty() {
-            // `_cleanup_external_archive_downloads` (`runtime_mcp.py:1795`):
-            // whatever answers the call, no staged blob outlives it.
-            for archive in &settled.retained_archives {
-                archive.cleanup();
-            }
-            return None;
-        }
-        settled.payload.as_object().cloned()
+        // Only the post-claim evaluation asks to retain verified blobs; they
+        // are removed when the returned holder is dropped, whatever answers
+        // the call (`_cleanup_external_archive_downloads`).
+        let retained = archive::Retained::new(settled.retained_archives);
+        let payload = settled.payload.as_object().cloned()?;
+        Some((payload, retained))
     }
 
     /// Tell the resident this call has no evaluation to decide from.
@@ -411,6 +409,8 @@ fn send(resident: &Resident, payload: &[u8], deadline: Instant) -> Result<Vec<u8
     .map_err(|error| error.retryable_teardown)
 }
 
+#[path = "mcp_relay_resident_archive.rs"]
+mod archive;
 #[path = "mcp_relay_resident_authority.rs"]
 mod authority;
 #[path = "mcp_relay_resident_defer.rs"]

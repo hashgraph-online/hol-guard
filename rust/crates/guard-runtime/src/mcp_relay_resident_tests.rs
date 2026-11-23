@@ -383,13 +383,7 @@ fn without_a_resident_every_call_is_blocked() {
     let expected = ToolCallVerdict::Respond(no_decision_response(message.get("id"), &call));
     let mut unbound = ResidentRelayAuthority {
         facts: None,
-        resident: None,
-        commits: Commits::default(),
-        kick: None,
-        warming: false,
-        report: None,
-        inline_available: false,
-        inline_answer: None,
+        ..authority()
     };
     assert_eq!(unbound.decide(&message, &call, None, &catalog), expected);
     // A claim goes only to the resident that decided the call.
@@ -400,16 +394,7 @@ fn without_a_resident_every_call_is_blocked() {
         request: json!(null),
     };
     assert_eq!(unbound.claim(ticket), expected);
-    let mut unreachable = ResidentRelayAuthority {
-        facts: Some(facts()),
-        resident: None,
-        commits: Commits::default(),
-        kick: None,
-        warming: false,
-        report: None,
-        inline_available: false,
-        inline_answer: None,
-    };
+    let mut unreachable = authority();
     assert_eq!(
         unreachable.decide(&message, &call, None, &catalog),
         expected
@@ -435,6 +420,7 @@ fn authority() -> ResidentRelayAuthority {
         report: None,
         inline_available: false,
         inline_answer: None,
+        archives: Vec::new(),
     }
 }
 
@@ -528,7 +514,7 @@ fn the_second_send_carries_the_evaluation_and_nothing_else_new() {
 fn the_second_claim_carries_the_evaluation_and_the_held_ticket() {
     let authority = authority();
     let first: Value =
-        serde_json::from_slice(&authority.claim_payload("claim-1:1", None).unwrap()).unwrap();
+        serde_json::from_slice(&authority.claim_payload("claim-1:1", None, None).unwrap()).unwrap();
     assert_eq!(first["operation"], json!("mcp_relay_claim"));
     assert_eq!(first["request"]["ticket"], json!("claim-1:1"));
     let evaluation: Map<String, Value> = [("decision".to_owned(), json!("allow"))]
@@ -536,7 +522,7 @@ fn the_second_claim_carries_the_evaluation_and_the_held_ticket() {
         .collect();
     let second: Value = serde_json::from_slice(
         &authority
-            .claim_payload("claim-1:2", Some(evaluation))
+            .claim_payload("claim-1:2", Some(evaluation), None)
             .unwrap(),
     )
     .unwrap();

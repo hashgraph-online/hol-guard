@@ -42,6 +42,11 @@ pub(crate) struct McpRelayClaimRequestV1 {
     /// ticket. A tool call's claim carries none.
     #[serde(default)]
     pub(crate) package_evaluation: Option<Map<String, Value>>,
+    /// Whether the relay bound the call to the external archives that
+    /// evaluation verified: `false` when it could not, absent when the call
+    /// was left as received. A call the relay could not bind never forwards.
+    #[serde(default)]
+    pub(crate) external_archive_bound: Option<bool>,
 }
 
 struct Held<T> {

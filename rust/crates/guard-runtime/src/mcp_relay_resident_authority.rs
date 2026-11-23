@@ -107,31 +107,47 @@ impl RelayAuthority for ResidentRelayAuthority {
 
     fn claim(&mut self, ticket: ClaimTicket) -> ToolCallVerdict {
         let no_decision = ToolCallVerdict::Respond(ticket.no_decision());
-        let Some(payload) = self.claim_payload(&ticket.claim, None) else {
+        let Some(payload) = self.claim_payload(&ticket.claim, None, None) else {
             return no_decision;
         };
         let mut answered = self.send_claim(&payload);
         let asked = answered.as_deref().and_then(reply);
+        let mut binding = None;
         // A package call's claim is spent against an evaluation the authority
         // runs after the claim, whose archive and registry rounds this relay
         // performs. The claim request cannot carry them either, so the
         // authority holds the same rows against a fresh ticket and asks for
         // the evaluation. The round that asked spent nothing.
         if let Some(Reply::Evaluate { ticket: Some(held) }) = asked {
-            let Some(evaluation) = self.evaluation(&ticket.request, true) else {
+            let Some((evaluation, retained)) = self.evaluation(&ticket.request, true) else {
                 return no_decision;
             };
-            let Some(payload) = self.claim_payload(&held, Some(evaluation)) else {
+            // `_bound_external_archive_mcp_request`: the resident answers a
+            // call this relay could not bind with the `mcp_unbound` block.
+            let null = Value::Null;
+            let params = ticket.message.get("params").unwrap_or(&null);
+            let bound = super::archive::bind(params, &evaluation, &retained);
+            let Some(payload) = self.claim_payload(&held, Some(evaluation), bound.bound()) else {
                 return no_decision;
             };
             answered = self.send_claim(&payload);
+            binding = Some((bound, retained));
         }
         match answered.as_deref().and_then(reply) {
-            Some(Reply::Forward { ticket: evidence }) => ToolCallVerdict::Forward(ForwardTicket {
-                message: ticket.message,
-                expected: ticket.expected,
-                evidence: Some(evidence),
-            }),
+            Some(Reply::Forward { ticket: evidence }) => {
+                let mut message = ticket.message;
+                if let Some((super::archive::Binding::Bound(params), retained)) = binding {
+                    if let Some(fields) = message.as_object_mut() {
+                        fields.insert("params".to_owned(), params);
+                    }
+                    self.archives.push((evidence.clone(), retained));
+                }
+                ToolCallVerdict::Forward(ForwardTicket {
+                    message,
+                    expected: ticket.expected,
+                    evidence: Some(evidence),
+                })
+            }
             Some(Reply::Block { message, data }) => {
                 let params = ticket
                     .message
@@ -160,6 +176,7 @@ impl RelayAuthority for ResidentRelayAuthority {
     }
 
     fn boundary_changed(&mut self, ticket: ForwardTicket) -> Value {
+        self.release_archives(ticket.evidence.as_deref());
         // The call was never written, so its evidence is never committed.
         let params = ticket
             .message
@@ -171,6 +188,8 @@ impl RelayAuthority for ResidentRelayAuthority {
     }
 
     fn complete(&mut self, ticket: ForwardTicket, response: Value) -> Value {
+        // The child has answered, so the blobs it was bound to are done.
+        self.release_archives(ticket.evidence.as_deref());
         self.commits.due.extend(ticket.evidence);
         response
     }

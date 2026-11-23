@@ -128,6 +128,7 @@ fn resolve_saved(
                     blocked_request_mode: admitted.blocked_request_mode(),
                     redaction_level: admitted
                         .redaction_level(view.receipt_redaction_level.as_deref()),
+                    archive_bound: None,
                 },
             )?)))
         }

@@ -85,10 +85,10 @@ pub(crate) fn package_eval_request(
         workspace_dir: facts.workspace.map(str::to_owned),
         now: None,
         external_archive_network_authorized,
-        // The relay keeps no blob: the evidence a retained archive carries is
-        // the proxy's to persist, and the resident's answer is complete
-        // without one.
-        retain_external_archive_blob: false,
+        // `retain_external_archive_blob=external_archive_network_authorized`
+        // (`runtime_mcp.py:1391`): the post-claim evaluation keeps the blobs
+        // it verified, so the relay can bind the call to them.
+        retain_external_archive_blob: external_archive_network_authorized,
         runtime_private_metadata: private_metadata,
         sync_auth_context_override: None,
         package_entitlement_override: None,

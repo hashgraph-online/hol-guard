@@ -138,8 +138,13 @@ pub(super) fn spend_package(
         &evidence,
         &|connection, members| evidence_is_bound(connection, members, &bound, Some(&binding)),
         false,
-        &mut |connection| match after_claim(connection, context, evaluation, policy_store, started)
-        {
+        &mut |connection| match after_claim(
+            connection,
+            context,
+            (evaluation, request.external_archive_bound),
+            policy_store,
+            started,
+        ) {
             Ok(spent) => Ok(Some(spent)),
             Err(reason) => {
                 refused = Some(reason);
@@ -213,7 +218,7 @@ enum Write {
 fn after_claim(
     connection: &Connection,
     context: &PackageClaimContext,
-    evaluation: &Map<String, Value>,
+    (evaluation, archive_bound): (&Map<String, Value>, Option<bool>),
     policy_store: &PolicySnapshotStore,
     started: Instant,
 ) -> Result<Spent, &'static str> {
@@ -249,6 +254,7 @@ fn after_claim(
     let queue_binding = package_lane::QueueBinding {
         blocked_request_mode: context.admitted.blocked_request_mode(),
         redaction_level: fresh.redaction_level.as_deref(),
+        archive_bound,
     };
     let settled = package_claim::settled(
         postclaimed,

@@ -8,17 +8,11 @@
 //! it to the child, and answers a call it cannot bind with the terminal
 //! `mcp_unbound` block.
 //!
-//! The relay never reaches the bound branch. It authorizes the external-archive
-//! network only for the evaluation it runs after a claim, and both evaluations
-//! ask for `retain_external_archive_blob: false` (`mcp_relay_package_eval.rs`),
-//! so neither holds a verified blob to bind to. A post-claim evaluation that
-//! retained one is refused on the relay's own lane
-//! (`mcp_relay_resident.rs`), since this process has no path to the proxy's
-//! binding. Python in that same state asks
-//! `native_external_archive_bind` for the empty binding with
-//! `requires_binding=True`, which answers `unbound`, and the forward becomes the
-//! block. This module is that one reachable branch: which evaluations demand the
-//! binding, and the override the refusal is answered with.
+//! The relay binds the call itself (`mcp_relay_resident_archive.rs`): the
+//! evaluation it runs after a claim retains the blobs it verified, and the
+//! claim carries whether the request was bound to them. This module decides
+//! which evaluations demand the binding, and composes the override a call
+//! that lacks it is answered with.
 
 use serde_json::{Map, Value};
 
