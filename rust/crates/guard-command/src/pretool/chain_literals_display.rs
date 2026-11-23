@@ -339,8 +339,9 @@ fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bo
             .split_ascii_whitespace()
             .any(|entry| entry == word)
     }) || words
-        .windows(2)
-        .any(|pair| pair[0] == "printf" && pair[1].starts_with("-v"))
+        .iter()
+        .position(|word| word == "printf")
+        .is_some_and(|at| words[at + 1..].iter().any(|word| word.starts_with("-v")))
 }
 
 /// Whether `word` so far is `NAME=`, the start of an assignment.
