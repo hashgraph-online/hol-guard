@@ -465,17 +465,8 @@ pub(crate) fn dispatch(
         }
         "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
-        "set_managed_install" => crate::guard_store_managed_installs::set(connection, args),
-        "get_managed_install" => crate::guard_store_managed_installs::get(connection, args),
-        "get_managed_install_revision" => {
-            crate::guard_store_managed_installs::revision(connection, args)
-        }
-        "bump_managed_install_revision" => {
-            crate::guard_store_managed_installs::bump(connection, args)
-        }
-        "list_managed_installs" => crate::guard_store_managed_installs::list(connection, args),
-        "hook_managed_install_admission" => {
-            crate::guard_store_managed_installs::hook_admission(connection, args)
+        _ if crate::guard_store_managed_installs::handles(method) => {
+            crate::guard_store_managed_installs::dispatch(connection, method, args)
         }
         "list_events_after" | "list_events" => cloud_events::list_log(connection, method, args),
         "list_cloud_exceptions" => crate::policy_bundle_cloud_exceptions::list(connection, args),

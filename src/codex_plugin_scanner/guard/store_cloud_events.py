@@ -55,8 +55,11 @@ class StoreCloudEventsMixin:
     ) -> bool:
         """Compare every row before invoking the file inverse; commit rows together.
 
-        A crash during the callback rolls SQLite back. The signed file plan
-        can then recover its independently durable before/after byte states.
+        The runtime compares the rows, the callback mutates the files, and the
+        runtime compares them again and writes them in one transaction. The
+        caller holds the Codex install lock every managed-install writer takes,
+        so no row moves in between. A crash during the callback leaves the rows
+        unwritten; the signed file plan recovers its durable byte states.
         """
         from .native_owned import require_codex_install_owner
 
@@ -64,63 +67,22 @@ class StoreCloudEventsMixin:
         harnesses = [change[0] for change in changes]
         if len(harnesses) != len(set(harnesses)):
             raise ValueError("Duplicate managed-install transition target")
-        with self._connect() as connection:
-            # These rows participate in the durable file inverse. Preserve
-            # them across power loss as well as process interruption.
-            connection.execute("pragma synchronous=FULL")
-            connection.execute("begin immediate")
-            for harness, allowed, replacement in changes:
-                if not allowed or (replacement is not None and replacement.get("harness") != harness):
-                    raise ValueError("Invalid managed-install transition target")
-                row = connection.execute(
-                    "select harness, active, workspace, manifest_json, updated_at "
-                    "from managed_installs where harness = ?",
-                    (harness,),
-                ).fetchone()
-                current = (
-                    None
-                    if row is None
-                    else {
-                        "harness": str(row["harness"]),
-                        "active": bool(row["active"]),
-                        "workspace": row["workspace"],
-                        "manifest": json.loads(str(row["manifest_json"])),
-                        "updated_at": str(row["updated_at"]),
-                    }
-                )
-                if current not in allowed:
-                    return False
-            before_mutation()
-            for harness, _allowed, replacement in changes:
-                if replacement is None:
-                    connection.execute("delete from managed_installs where harness = ?", (harness,))
-                else:
-                    connection.execute(
-                        """insert into managed_installs (harness, active, workspace, manifest_json, updated_at)
-                        values (?, ?, ?, ?, ?) on conflict(harness) do update set
-                        active = excluded.active, workspace = excluded.workspace,
-                        manifest_json = excluded.manifest_json, updated_at = excluded.updated_at""",
-                        (
-                            harness,
-                            1 if replacement["active"] else 0,
-                            replacement["workspace"],
-                            json.dumps(replacement["manifest"]),
-                            replacement["updated_at"],
-                        ),
-                    )
-            connection.execute(
-                """insert into sync_state (state_key, payload_json, updated_at) values (?, ?, ?)
-                on conflict(state_key) do update set
-                payload_json = json_object('revision',
-                    coalesce(json_extract(sync_state.payload_json, '$.revision'), 0) + 1),
-                updated_at = excluded.updated_at""",
-                (
-                    "managed_install_revision",
-                    '{"revision": 1}',
-                    datetime.now(timezone.utc).isoformat(),
-                ),
+        for harness, allowed, replacement in changes:
+            if not allowed or (replacement is not None and replacement.get("harness") != harness):
+                raise ValueError("Invalid managed-install transition target")
+        encoded = [
+            {"harness": harness, "allowed": list(allowed), "replacement": _encoded_replacement(replacement)}
+            for harness, allowed, replacement in changes
+        ]
+        if not self._native_store_call("compare_managed_installs", {"changes": encoded}):
+            return False
+        before_mutation()
+        return bool(
+            self._native_store_call(
+                "compare_and_set_managed_installs",
+                {"changes": encoded, "now": datetime.now(timezone.utc).isoformat()},
             )
-        return True
+        )
 
     def get_managed_install(self, harness: str) -> dict[str, object] | None:
         row = self._native_store_call("get_managed_install", {"harness": harness})
@@ -403,6 +365,19 @@ class StoreCloudEventsMixin:
             "add_event",
             {"event_name": event_name, "payload_json": json.dumps(payload), "occurred_at": now},
         )
+
+
+def _encoded_replacement(replacement: dict[str, object] | None) -> dict[str, object] | None:
+    """The row to write, with its manifest encoded as ``json.dumps`` stores it."""
+    if replacement is None:
+        return None
+    return {
+        "harness": replacement["harness"],
+        "active": bool(replacement["active"]),
+        "workspace": replacement["workspace"],
+        "manifest_json": json.dumps(replacement["manifest"]),
+        "updated_at": replacement["updated_at"],
+    }
 
 
 def _managed_install_row(row: dict[str, object]) -> dict[str, object]:
