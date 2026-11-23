@@ -122,6 +122,7 @@ fn own_approval_wait_passes_the_subprocess_floor() {
         &json!({}),
         inspection_review(),
         false,
+        None,
     )
     .unwrap();
     assert_eq!(held.decision, "deny");
@@ -131,6 +132,7 @@ fn own_approval_wait_passes_the_subprocess_floor() {
         &json!({}),
         inspection_review(),
         true,
+        None,
     )
     .unwrap();
     assert_eq!(passed.decision, "allow");
@@ -147,6 +149,7 @@ fn own_approval_wait_keeps_other_reviews_and_sensitive_targets() {
         &json!({}),
         other,
         true,
+        None,
     )
     .unwrap();
     assert_eq!(held.decision, "deny");
@@ -159,6 +162,7 @@ fn own_approval_wait_keeps_other_reviews_and_sensitive_targets() {
         &json!({}),
         sensitive,
         true,
+        None,
     )
     .unwrap();
     assert_eq!(held.decision, "deny");

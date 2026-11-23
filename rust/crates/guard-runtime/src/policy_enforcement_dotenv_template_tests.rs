@@ -91,6 +91,7 @@ impl Repo {
             PreToolActionTypeV1::Harness,
             true,
             "native_policy_reapproval_required",
+            None,
         )
         .expect("a read payload")
         .sensitive_target
@@ -118,6 +119,7 @@ impl Repo {
             action,
             read_request,
             "native_policy_reapproval_required",
+            None,
         )
         .expect("a payload")
         .sensitive_target
@@ -290,5 +292,38 @@ fn a_template_in_a_repository_nested_inside_a_worktree_keeps_its_floor() {
     assert!(
         repo.sensitive_named(repo.path(), &nested.join(".env.example")),
         "the nested checkout owns the file, not the worktree above it"
+    );
+}
+
+/// A harness that leaves `cwd` out of its payload still reports the working
+/// directory on the hook envelope, and the read gate resolves a relative path
+/// against that one. The relief is proven against the same directory.
+#[cfg(unix)]
+#[test]
+fn a_relative_template_resolves_against_the_hook_working_directory() {
+    let repo = Repo::new();
+    repo.write(".env.example", TEMPLATE);
+    repo.commit("template");
+    let payload = json!({
+        "tool_name": "Read",
+        "tool_input": {"file_path": ".env.example"},
+    });
+    let sensitive = |cwd: Option<&str>| {
+        payload_facts(
+            &payload,
+            "claude-code",
+            PreToolActionTypeV1::Harness,
+            true,
+            "native_policy_reapproval_required",
+            cwd,
+        )
+        .expect("a read payload")
+        .sensitive_target
+    };
+    let root = repo.path().to_str().expect("a printable root");
+    assert!(!sensitive(Some(root)));
+    assert!(
+        sensitive(None),
+        "without a working directory nothing proves the template"
     );
 }

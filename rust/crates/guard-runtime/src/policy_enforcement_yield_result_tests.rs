@@ -19,6 +19,7 @@ fn facts(payload: &Value, harness: &str, reason_code: &str) -> bool {
         PreToolActionTypeV1::Harness,
         true,
         reason_code,
+        None,
     )
     .expect("yield payload")
     .sensitive_target

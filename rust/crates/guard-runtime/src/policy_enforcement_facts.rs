@@ -535,14 +535,20 @@ pub(super) fn payload_changed_hash(maps: &[&Map<String, Value>]) -> Result<bool,
 /// `read_request` says the call this payload describes only reads what it
 /// names. The template relief the read gate grants belongs to that request
 /// alone, so every caller states it rather than letting an action type that
-/// can also write borrow it.
+/// can also write borrow it. `cwd` is the working directory the hook
+/// reports, the one the read gate resolved the request against.
 pub(super) fn payload_facts(
     payload: &Value,
     harness: &str,
     action_type: PreToolActionTypeV1,
     read_request: bool,
     reason_code: &str,
+    cwd: Option<&str>,
 ) -> Result<PolicyFacts, String> {
+    // The read gate resolves a relative path against the hook's verified
+    // working directory, so the relief it grants is proven against the same
+    // one. The payload's own `cwd` answers only a caller that has none.
+    let cwd = cwd.or_else(|| payload.get("cwd").and_then(Value::as_str));
     let mut maps = Vec::new();
     let mut nodes = 0usize;
     collect_fact_maps(payload, 0, &mut nodes, &mut maps)?;
@@ -577,7 +583,7 @@ pub(super) fn payload_facts(
         budget_input,
         wait_process,
         goal_input,
-        payload.get("cwd").and_then(Value::as_str),
+        cwd,
         // Only a read is the request the read gate proved the template for.
         // A write, a configuration change, an MCP call that writes and every
         // other action keep the family screen, because what they put in the
