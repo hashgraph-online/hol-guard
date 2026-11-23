@@ -20,6 +20,7 @@ from tests.guard_command_corpus_native_contract import (
     expected_native_rejection_groups,
     expected_original_gap_groups,
 )
+from tests.guard_command_corpus_runner import WORKER_SPAWN_OVERHEAD_SECONDS
 from tests.guard_command_decision_diff import (
     BASE_RELEASE_SHA,
     REPORT_SCHEMA_VERSION,
@@ -337,7 +338,7 @@ def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     ("hash_seed", "timezone", "locale"),
     # A single environment variant proves independence pairwise against the shared
     # base digest (env-independence == base == variant); a second variant repeats
-    # the same ~70s fresh-process eval without adding a new property.
+    # the same whole fresh-process eval without adding a new property.
     [("8731", "US/Pacific", "C.UTF-8")],
     ids=["pacific"],
 )
@@ -348,7 +349,7 @@ def test_fresh_process_report_is_environment_independent_and_bounded(
     expected_digest = _authoritative_report_digest
     manifest = load_seed_manifest()
     evaluation_budget_seconds = int(str(manifest["evaluation_budget_seconds"]))
-    spawn_overhead_seconds = 15
+    spawn_overhead_seconds = WORKER_SPAWN_OVERHEAD_SECONDS
     environ = os.environ.copy()
     # The test conftest defaults HOL_GUARD_NATIVE to "off" outside regression lanes;
     # the report runner forces the supplied native binary only when the mode is unset.
@@ -365,7 +366,10 @@ def test_fresh_process_report_is_environment_independent_and_bounded(
         [sys.executable, str(script), "--metrics"],
         check=False,
         capture_output=True,
-        timeout=evaluation_budget_seconds + spawn_overhead_seconds,
+        # The kill deadline must sit above the bound asserted below, or an
+        # overrun arrives as `TimeoutExpired` with no elapsed time in it and a
+        # slow host cannot be told apart from a corpus that grew.
+        timeout=evaluation_budget_seconds + spawn_overhead_seconds * 2,
         env=environ,
     )
     assert completed.returncode == 0, completed.stderr.decode(errors="replace")[-4000:]

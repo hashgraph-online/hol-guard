@@ -29,7 +29,7 @@ from scripts.installed_canary_proof import (
 if TYPE_CHECKING:
     from tests.guard_command_corpus_oracle_types import OracleRecord
 
-_FROZEN_MANIFEST_SHA256 = "9cb33472d122058e8ede6ede57d55d0ebf29b832f8b4eb5321a2309862cf3728"
+_FROZEN_MANIFEST_SHA256 = "789a4e1b2f3ceda89d5a3427ab87c7eff520b8cdd6c195657985f9ae5d204832"
 # These counts belong to the source-bound 51k corpus validated by the manifest above.
 _FROZEN_CORPUS_CASE_COUNT = 51_000
 _FROZEN_NATIVE_REJECTION_COUNT = 20_835

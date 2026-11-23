@@ -243,7 +243,7 @@ fn a_turn_context_beyond_the_read_tail_is_unknown() {
     assert_eq!(turn(&payload), Turn::WorkspaceWrite);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[test]
 fn a_contained_call_in_codex_sandbox_runs_behind_the_sandbox_check() {
     use std::time::{Duration, Instant};

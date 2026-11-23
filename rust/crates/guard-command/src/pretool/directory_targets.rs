@@ -478,6 +478,43 @@ impl<'a> super::PathContext<'a> {
         cwd: Option<&'a str>,
         execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> Self {
+        let fields = match execution_environment {
+            Some(_) => Self::session_fields(home_dir, cwd, execution_environment),
+            None => {
+                inherited_session::fields(home_dir, || Self::session_fields(home_dir, cwd, None))
+            }
+        };
+        Self {
+            literal_words: &[],
+            home_dir,
+            cwd,
+            cdpath_unset: fields.cdpath_unset,
+            rustup_override_absent: fields.rustup_override_absent,
+            go_toolchain_inert: fields.go_toolchain_inert,
+            cargo_config_inert: fields.cargo_config_inert,
+            npm_config_inert: fields.npm_config_inert,
+            pip_config_inert: fields.pip_config_inert,
+            python_environment_inert: fields.python_environment_inert,
+            shell_home_matches: fields.shell_home_matches,
+            ripgrep_config_absent: fields.ripgrep_config_absent,
+            gem_config_absent: fields.gem_config_absent,
+            http_config_absent: fields.http_config_absent,
+            openssl_config_absent: fields.openssl_config_absent,
+            // A session knows its environment, not the command, so the
+            // proof that no step creates a filesystem entry is set where a
+            // command model is in hand.
+            creates_nothing: false,
+            psql_environment: fields.psql_environment,
+            // Only the hook knows which Guard home it reported.
+            guard_home: None,
+        }
+    }
+
+    fn session_fields(
+        home_dir: Option<&str>,
+        cwd: Option<&str>,
+        execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> SessionFields {
         let cdpath_unset = execution_environment.is_some_and(|environment| {
             environment.has_valid_shape()
                 && !environment
@@ -674,10 +711,7 @@ impl<'a> super::PathContext<'a> {
         let shell_home_matches = Self::shell_home_matches_for(home_dir, execution_environment);
         let psql_environment =
             super::safe_scalar::psql_environment(execution_environment, shell_home_matches);
-        Self {
-            literal_words: &[],
-            home_dir,
-            cwd,
+        SessionFields {
             cdpath_unset,
             rustup_override_absent,
             go_toolchain_inert,
@@ -690,15 +724,27 @@ impl<'a> super::PathContext<'a> {
             gem_config_absent,
             http_config_absent,
             openssl_config_absent,
-            // A session knows its environment, not the command, so the
-            // proof that no step creates a filesystem entry is set where a
-            // command model is in hand.
-            creates_nothing: false,
             psql_environment,
-            // Only the hook knows which Guard home it reported.
-            guard_home: None,
         }
     }
+}
+
+/// What a session's environment settles before any command is read.
+#[derive(Clone, Copy)]
+pub(super) struct SessionFields {
+    cdpath_unset: bool,
+    rustup_override_absent: bool,
+    go_toolchain_inert: bool,
+    cargo_config_inert: bool,
+    npm_config_inert: bool,
+    pip_config_inert: bool,
+    python_environment_inert: bool,
+    shell_home_matches: bool,
+    ripgrep_config_absent: bool,
+    gem_config_absent: bool,
+    http_config_absent: bool,
+    openssl_config_absent: bool,
+    psql_environment: super::PsqlEnvironment,
 }
 
 const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
@@ -951,3 +997,104 @@ mod tests_relative_cd;
 #[cfg(test)]
 #[path = "tests_relative_cd_windows.rs"]
 mod tests_relative_cd_windows;
+
+/// The runtime's own environment, read once for every command one batch
+/// evaluates.
+///
+/// A session with no stamped environment inherits the runtime's, and reading
+/// it walks every variable the process holds several times over. That
+/// environment, and the home it is checked against, are the same for every
+/// command a batch carries, so inside [`scope`] the first command's reading
+/// is reused by the rest. Outside a scope every call reads afresh.
+pub mod inherited_session {
+    use std::cell::RefCell;
+
+    use super::SessionFields;
+
+    /// Each home a batch has read, with what its environment settled.
+    type Readings = Vec<(Option<String>, SessionFields)>;
+
+    thread_local! {
+        static READINGS: RefCell<Option<Readings>> = const { RefCell::new(None) };
+    }
+
+    /// Run `body` with the inherited environment read at most once per home.
+    pub fn scope<R>(body: impl FnOnce() -> R) -> R {
+        struct Restore(Option<Readings>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                let previous = self.0.take();
+                READINGS.with(|readings| *readings.borrow_mut() = previous);
+            }
+        }
+        let previous = READINGS.with(|readings| readings.borrow_mut().replace(Vec::new()));
+        let _restore = Restore(previous);
+        body()
+    }
+
+    pub(super) fn fields(
+        home_dir: Option<&str>,
+        read: impl FnOnce() -> SessionFields,
+    ) -> SessionFields {
+        let known = READINGS.with(|readings| {
+            readings.borrow().as_ref().map(|readings| {
+                readings
+                    .iter()
+                    .find(|(home, _)| home.as_deref() == home_dir)
+                    .map(|(_, fields)| *fields)
+            })
+        });
+        match known {
+            Some(Some(fields)) => fields,
+            Some(None) => {
+                let fields = read();
+                READINGS.with(|readings| {
+                    if let Some(readings) = readings.borrow_mut().as_mut() {
+                        readings.push((home_dir.map(str::to_owned), fields));
+                    }
+                });
+                fields
+            }
+            None => read(),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::cell::Cell;
+
+        use super::{fields, scope};
+        use crate::pretool::PathContext;
+
+        fn counted(reads: &Cell<usize>, home: Option<&str>) {
+            fields(home, || {
+                reads.set(reads.get() + 1);
+                PathContext::session_fields(home, None, None)
+            });
+        }
+
+        #[test]
+        fn a_batch_reads_the_inherited_environment_once_per_home() {
+            let reads = Cell::new(0);
+            counted(&reads, Some("/home/a"));
+            counted(&reads, Some("/home/a"));
+            assert_eq!(reads.get(), 2, "outside a batch every session reads afresh");
+            scope(|| {
+                counted(&reads, Some("/home/a"));
+                counted(&reads, Some("/home/a"));
+                counted(&reads, Some("/home/b"));
+                counted(&reads, None);
+                counted(&reads, None);
+                scope(|| counted(&reads, Some("/home/a")));
+                counted(&reads, Some("/home/b"));
+            });
+            assert_eq!(
+                reads.get(),
+                2 + 4,
+                "one reading per home, and a nested batch starts its own"
+            );
+            counted(&reads, Some("/home/a"));
+            assert_eq!(reads.get(), 7, "the batch's readings end with it");
+        }
+    }
+}

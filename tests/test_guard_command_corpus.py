@@ -48,7 +48,12 @@ from tests.guard_command_corpus_oracle import (
     iter_adversarial_oracle,
     iter_benign_oracle,
 )
-from tests.guard_command_corpus_runner import linux_peak_rss_mib_from_status, peak_rss_mib
+from tests.guard_command_corpus_runner import (
+    WORKER_SPAWN_OVERHEAD_SECONDS,
+    WORKER_TIMEOUT_SECONDS,
+    linux_peak_rss_mib_from_status,
+    peak_rss_mib,
+)
 from tests.native_command_test_support import real_native_command_evaluation
 
 _OPAQUE_ID = re.compile(r"c-[0-9a-f]{24}")
@@ -181,9 +186,24 @@ def test_manifest_binds_generator_oracle_fixtures_counts_and_budgets() -> None:
     assert manifest["oracle_source_sha256"] == {path.name: _sha256(path) for path in oracle_paths}
     assert manifest["pairs_sha256"] == _sha256(PAIRS_PATH)
     assert manifest["known_gaps_sha256"] == _sha256(KNOWN_GAPS_PATH)
-    assert manifest["evaluation_budget_seconds"] == 60
+    assert manifest["evaluation_budget_seconds"] == 90
     assert manifest["evaluation_rss_budget_mib"] == 512
     assert MANIFEST_PATH.stat().st_size < 24_000
+
+
+def test_worker_deadline_leaves_room_to_report_a_budget_overrun() -> None:
+    """A worker killed at the budget reports no elapsed time at all.
+
+    The coordinator raises `TimeoutExpired` in that case, which names neither
+    the measurement nor the shard, so a slow host and a grown corpus look
+    identical and the budget assertion below never runs. The deadline must
+    therefore sit above the budget by at least the overhead a worker pays
+    before it evaluates its first case.
+    """
+    budget = int(str(load_seed_manifest()["evaluation_budget_seconds"]))
+
+    assert WORKER_SPAWN_OVERHEAD_SECONDS > 0
+    assert budget + WORKER_SPAWN_OVERHEAD_SECONDS == WORKER_TIMEOUT_SECONDS
 
 
 def test_inputs_are_exact_unique_opaque_shuffled_and_label_free() -> None:
@@ -368,7 +388,10 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
             check=True,
             capture_output=True,
             text=True,
-            timeout=90,
+            # The coordinator must outlive a worker the deadline above kills,
+            # so that an overrun is reported as the measured elapsed time
+            # rather than as a timeout here with no numbers in it.
+            timeout=WORKER_TIMEOUT_SECONDS + WORKER_SPAWN_OVERHEAD_SECONDS * 2,
             cwd=Path.cwd(),
             # Evaluation is the resident's verdict, so the runner and its
             # workers must always run in force mode. Jobs that bind the
