@@ -75,6 +75,15 @@ from .store_schema_columns import (
     RECEIPT_COLUMNS,
     ensure_columns,
 )
+from .store_schema_versions import (
+    DROP_RETIRED_APPROVAL_GROUP_INDEX,
+    RECEIPT_ENVELOPES_TABLE,
+    REOPEN_EXPIRED_APPROVALS,
+    ensure_local_device,
+    migrate_v5_receipt_envelopes,
+    record_schema_version,
+    schema_version_applied,
+)
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
 from .store_storage_maintenance import (
     STORAGE_MAINTENANCE_MIGRATION_VERSION,
@@ -704,9 +713,9 @@ class StoreConnectionSchemaMixin:
             ensure_columns(connection, "guard_local_once_approvals", LOCAL_ONCE_COLUMNS)
             connection.execute(LOCAL_ONCE_INDEX_STATEMENT)
             ensure_columns(connection, "runtime_receipts", RECEIPT_COLUMNS)
-            self._ensure_runtime_receipt_envelopes_table(connection)
+            connection.execute(RECEIPT_ENVELOPES_TABLE)
             if not self._schema_version_applied(connection, version=5):
-                self._migrate_v5_receipt_envelopes(connection)
+                migrate_v5_receipt_envelopes(connection)
                 self._record_schema_version(connection, version=5)
             ensure_columns(connection, "approval_requests", APPROVAL_COLUMNS)
             ensure_watch_only_approval_schema(connection, schema=self)
@@ -714,7 +723,7 @@ class StoreConnectionSchemaMixin:
                 _backfill_approval_queue_columns_compat(connection)
                 self._record_schema_version(connection, version=3)
             if not self._schema_version_applied(connection, version=9):
-                connection.execute("drop index if exists idx_approval_group_status")
+                connection.execute(DROP_RETIRED_APPROVAL_GROUP_INDEX)
             for idx_stmt in approval_index_statements():
                 connection.execute(idx_stmt)
             ensure_review_event_outbox_schema(connection, datetime.now(timezone.utc).isoformat())
@@ -764,13 +773,7 @@ class StoreConnectionSchemaMixin:
             # Preserve the legacy wait-timeout recovery without reopening cards
             # deliberately superseded by a fresh, canonically bound request.
             # A reopened pending card must not retain a terminal expiry reason.
-            connection.execute(
-                """
-                update approval_requests
-                set status = 'pending', reason = null, resolved_at = null
-                where status = 'expired' and reason = 'Expired after waiting for review.'
-                """
-            )
+            connection.execute(REOPEN_EXPIRED_APPROVALS)
             self._repair_store_permissions()
 
     def _initialize_policy_integrity(self) -> None:
@@ -873,79 +876,6 @@ class StoreConnectionSchemaMixin:
             connection.execute(f"pragma busy_timeout={original_busy_timeout_ms}")
 
     @staticmethod
-    def _ensure_runtime_receipt_envelopes_table(connection: sqlite3.Connection) -> None:
-        connection.execute(
-            """
-            create table if not exists runtime_receipt_envelopes (
-              receipt_id text primary key references runtime_receipts(receipt_id) on delete cascade,
-              envelope_full_json text,
-              envelope_redacted_json text not null
-            )
-            """
-        )
-
-    @staticmethod
-    def _migrate_v5_receipt_envelopes(connection: sqlite3.Connection) -> None:
-        rows = connection.execute("pragma table_info(runtime_receipts)").fetchall()
-        existing = {str(row["name"]) for row in rows}
-        if "action_envelope_json" not in existing:
-            return
-        connection.execute(
-            """
-            insert into runtime_receipt_envelopes (receipt_id, envelope_full_json, envelope_redacted_json)
-            select receipt_id, action_envelope_json, '{}'
-            from runtime_receipts
-            where action_envelope_json is not null
-              and not exists (
-                select 1 from runtime_receipt_envelopes
-                where runtime_receipt_envelopes.receipt_id = runtime_receipts.receipt_id
-              )
-            """
-        )
-        connection.execute("drop table if exists runtime_receipts_new")
-        connection.execute(
-            """
-            create table runtime_receipts_new (
-              receipt_id text primary key,
-              harness text not null,
-              artifact_id text not null,
-              artifact_hash text not null,
-              policy_decision text not null,
-              capabilities_summary text not null default '',
-              changed_capabilities_json text not null,
-              provenance_summary text not null,
-              user_override text,
-              artifact_name text,
-              source_scope text,
-              scanner_evidence_json text not null default '[]',
-              timestamp text not null,
-              diff_summary text,
-              approval_source text,
-              approval_request_id text,
-              raw_command_text text
-            )
-            """
-        )
-        connection.execute(
-            """
-            insert into runtime_receipts_new (
-              rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
-              capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
-              artifact_name, source_scope, scanner_evidence_json, timestamp, diff_summary,
-              approval_source, approval_request_id, raw_command_text
-            )
-            select
-              rowid, receipt_id, harness, artifact_id, artifact_hash, policy_decision,
-              capabilities_summary, changed_capabilities_json, provenance_summary, user_override,
-              artifact_name, source_scope, scanner_evidence_json, timestamp, diff_summary,
-              approval_source, null, null
-            from runtime_receipts
-            """
-        )
-        connection.execute("drop table runtime_receipts")
-        connection.execute("alter table runtime_receipts_new rename to runtime_receipts")
-
-    @staticmethod
     def _ensure_approval_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
         rows = connection.execute("pragma table_info(approval_requests)").fetchall()
         existing = {str(row["name"]) for row in rows}
@@ -955,38 +885,15 @@ class StoreConnectionSchemaMixin:
 
     @staticmethod
     def _record_schema_version(connection: sqlite3.Connection, *, version: int) -> None:
-        connection.execute(
-            """
-            insert or ignore into schema_migrations (version, applied_at)
-            values (?, ?)
-            """,
-            (version, _now()),
-        )
+        record_schema_version(connection, version=version, applied_at=_now())
 
     @staticmethod
     def _schema_version_applied(connection: sqlite3.Connection, *, version: int) -> bool:
-        row = connection.execute(
-            "select 1 from schema_migrations where version = ?",
-            (version,),
-        ).fetchone()
-        return row is not None
+        return schema_version_applied(connection, version=version)
 
     @staticmethod
     def _ensure_local_device(connection: sqlite3.Connection) -> None:
-        row = connection.execute(
-            "select device_key from guard_devices where device_key = ?",
-            (_DEVICE_ROW_KEY,),
-        ).fetchone()
-        if row is not None:
-            return
-        now = _now()
-        connection.execute(
-            """
-            insert into guard_devices (device_key, installation_id, device_label, created_at, updated_at)
-            values (?, ?, ?, ?, ?)
-            """,
-            (_DEVICE_ROW_KEY, uuid4().hex, "Local machine", now, now),
-        )
+        ensure_local_device(connection, installation_id=uuid4().hex, now=_now())
 
     def list_table_names(self) -> list[str]:
         names = self._native_store_call("list_table_names", {})
