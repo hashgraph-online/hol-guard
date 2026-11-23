@@ -792,10 +792,7 @@ pub(super) fn exact_safe_segment_with_context(
         // the operands as files would claim a read that never happens and
         // would leave the ordinary `numfmt --to=iec 1048576` under review.
         "numfmt" => super::stdin_filters::safe_number_arguments(&segment.arguments),
-        "sort" | "uniq" | "cut" | "tr" | "paste" | "join" | "column" | "nl" | "tac" | "rev"
-        | "fold" | "expand" | "unexpand" | "fmt" | "comm" | "strings" | "hexdump" | "xxd"
-        | "pr" | "shuf" | "iconv" | "ul" | "tsort" | "zcat" | "gzcat" | "bzcat" | "xzcat"
-        | "lzcat" | "zstdcat" => {
+        name if super::stdin_filters::text_filter_program(name) => {
             (segment.pipeline_index > 0
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments))
                 || super::stdin_filters::safe_file_arguments(basename, &segment.arguments, context)
