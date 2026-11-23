@@ -1,4 +1,4 @@
-use super::{go_env_inert, go_toolchain_selector, read_only_query, safe_go_probe};
+use super::{env_requires_approval_even_when_contained, go_env_inert, go_toolchain_selector, read_only_query, safe_go_probe};
 use std::path::{Path, PathBuf};
 
 fn words(command: &str) -> Vec<String> {
@@ -63,6 +63,33 @@ fn the_printing_queries_are_read_and_the_writing_ones_are_not() {
         "env GOPATH=/tmp",
     ] {
         assert!(!read_only_query(&words(arguments)), "go {arguments}");
+    }
+}
+
+#[test]
+fn compiler_derived_go_environment_reads_keep_approval_even_in_a_sandbox() {
+    for arguments in [
+        "env",
+        "env -json",
+        "env CGO_CFLAGS",
+        "env CGO_CPPFLAGS",
+        "env CGO_CXXFLAGS",
+        "env CGO_FFLAGS",
+        "env CGO_LDFLAGS",
+        "env PKG_CONFIG",
+        "env GOGCCFLAGS",
+        "env -json CGO_CFLAGS",
+    ] {
+        assert!(
+            env_requires_approval_even_when_contained(&words(arguments)),
+            "go {arguments}"
+        );
+    }
+    for arguments in ["version", "env GOPATH", "env GOROOT", "env -json GOVERSION"] {
+        assert!(
+            !env_requires_approval_even_when_contained(&words(arguments)),
+            "go {arguments}"
+        );
     }
 }
 
