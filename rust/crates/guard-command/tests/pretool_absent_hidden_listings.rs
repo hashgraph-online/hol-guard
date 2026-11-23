@@ -268,6 +268,8 @@ fn a_probe_below_an_existing_tool_directory_reads_nothing() {
     std::fs::create_dir_all(root.join(".config/gh")).unwrap();
     std::fs::create_dir_all(root.join(".aws")).unwrap();
     std::fs::create_dir_all(root.join(".ssh")).unwrap();
+    std::fs::create_dir_all(root.join(".codex/sessions")).unwrap();
+    std::fs::create_dir_all(root.join(".claude/projects")).unwrap();
     std::fs::create_dir_all(root.join("work")).unwrap();
     let root = std::fs::canonicalize(&root).unwrap();
     // A link in the existing prefix is judged where it leads.
@@ -291,6 +293,10 @@ fn a_probe_below_an_existing_tool_directory_reads_nothing() {
             ("ls -la ~/.config/gh/extra", false),
             ("ls -la ~/.config/newtool", false),
             ("ls -la ~/.nvm/versions/node/v24.9.0/.secrets/extra", false),
+            // The harness homes list, but a probe below them keeps its review.
+            ("ls -la ~/.codex/missing", false),
+            ("ls -la ~/.codex/sessions/2026", false),
+            ("ls -la ~/.claude/projects/missing", false),
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,

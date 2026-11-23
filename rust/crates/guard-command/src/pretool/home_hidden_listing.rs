@@ -229,6 +229,37 @@ pub(in crate::pretool) fn absent_home_hidden_tool_path(
     }
 }
 
+/// Whether `expanded` is a missing path whose deepest existing part,
+/// `ancestor`, is a tool's own directory in the home directory, such as
+/// `~/.nvm/versions/node/v24.9.0` before its first global install created
+/// `lib`.
+///
+/// A present-path listing of `ancestor` already prints its entries, so a
+/// missing name below it says no more than that listing does. The whole
+/// spelled path goes through [`absent_home_hidden_tool_path`]'s store
+/// screens. The harness homes (`~/.codex`, `~/.claude`) are left out: their
+/// entry names list, but a probe for a session, log or plugin path that is
+/// not there answers what the agent has done, so it keeps its review.
+pub(in crate::pretool) fn absent_below_home_tool_directory(
+    expanded: &Path,
+    ancestor: &Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let Some(parent) = ancestor.to_str() else {
+        return false;
+    };
+    let Some((_, relative)) = resolved_home_entry(parent, home_dir, cwd) else {
+        return false;
+    };
+    let harness_home = lowered_names(&relative)
+        .first()
+        .is_some_and(|first| HARNESS_HOME_NAMES.contains(&first.as_str()));
+    !harness_home
+        && absent_home_hidden_tool_path(expanded, ancestor, home_dir)
+        && home_hidden_tool_directory(parent, home_dir, cwd)
+}
+
 /// How many entries of a tool directory are read before the screen below
 /// gives up. A tool keeps tens of entries at its top level; a root holding
 /// thousands is not the inventory this proof is for.
