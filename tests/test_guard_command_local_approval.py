@@ -69,7 +69,8 @@ def test_only_the_grant_operations_ship_the_signing_secret(tmp_path: Path, monke
     calls: list[tuple[str, bool]] = []
 
     def recorded(guard_home: Path, op: str, **kwargs: object) -> object:
-        calls.append((op, kwargs.get("integrity_key_b64") is not None))
+        names_key = kwargs.get("integrity_key_b64") is not None or kwargs.get("vault_key") is True
+        calls.append((op, names_key))
         return real(guard_home, op, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(command_capability_module, "native_command_state", recorded)

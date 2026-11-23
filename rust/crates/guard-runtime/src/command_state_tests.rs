@@ -22,7 +22,7 @@ pub(super) fn home() -> tempfile::TempDir {
     home
 }
 
-fn identity(id: &str) -> Map<String, Value> {
+pub(super) fn identity(id: &str) -> Map<String, Value> {
     json!({
         "id": id,
         "operation": "guard.example",
@@ -63,7 +63,7 @@ fn keyed(mut fields: Value) -> Value {
     fields
 }
 
-fn register(home: &Path, id: &str) -> Value {
+pub(super) fn register(home: &Path, id: &str) -> Value {
     call(
         home,
         "register_pending",
@@ -73,7 +73,7 @@ fn register(home: &Path, id: &str) -> Value {
     .unwrap()
 }
 
-fn items(home: &Path, key: &str) -> Vec<Map<String, Value>> {
+pub(super) fn items(home: &Path, key: &str) -> Vec<Map<String, Value>> {
     let conn = Connection::open(home.join(STORE_FILE_NAME)).unwrap();
     state_items(&conn, key).unwrap()
 }

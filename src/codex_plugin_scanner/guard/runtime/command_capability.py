@@ -25,8 +25,8 @@ from ..store import GuardStore
 from .command_capability_keys import (
     CommandCapabilityError,
     _envelope,
+    _ledger_key,
     _resident_home,
-    _signing_material_for_resident,
     _verify_key,
 )
 from .time_support import parse_utc_timestamp
@@ -393,13 +393,14 @@ def _ledger(
     Pending approvals, local grants and replay rows are each read, changed and
     written back whole. The runtime does that in one SQLite transaction, so
     review drain threads and other processes cannot drop each other's rows.
-    ``signing`` passes the local signing secret for the operations that sign
-    or verify a grant; whether a grant is genuine is the runtime's answer.
+    ``signing`` names the key for the operations that sign or verify a grant:
+    a plain encrypted-file vault is read by the ledger itself (``vault_key``),
+    so the key never crosses the request; any other store passes its own copy.
+    Whether a grant is genuine is the runtime's answer.
     """
 
     if signing:
-        key_b64, key_id = _signing_material_for_resident(store, create=False)
-        fields = {**fields, "integrity_key_b64": key_b64, "integrity_key_id": key_id}
+        fields = {**fields, **_ledger_key(store)}
     try:
         return native_command_state(_resident_home(store), op, now=now, **fields)
     except CommandStateUnavailableError as error:

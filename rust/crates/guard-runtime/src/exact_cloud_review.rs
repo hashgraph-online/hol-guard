@@ -18,6 +18,11 @@
 //!   "binding", "now"}` answers `{"capability", "digest"}`;
 //! - `{"op": "job", "job", "now"}` answers `{"identity"}`.
 //!
+//! `sign`, `verify` and `capability` may name `vault_home` instead of `key`
+//! and `key_id`: the runtime then reads the key from that Guard home's own
+//! vault, so it never crosses the request. The resident only reads its own
+//! home's vault.
+//!
 //! A refusal answers `{"error": code}` with the Python code verbatim, plus
 //! `drift_digest` when the capability names another OAuth binding, so the
 //! caller can revoke exactly that capability. A `null` binding means the
@@ -29,7 +34,6 @@
 
 use std::io::Read;
 
-use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_contracts::{utc_timestamp_micros, write_canonical_json_utf8};
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
@@ -66,11 +70,15 @@ enum Request {
     Sign {
         key: Option<String>,
         key_id: Option<String>,
+        #[serde(default)]
+        vault_home: Option<String>,
         payload: Map<String, Value>,
     },
     Verify {
         key: Option<String>,
         key_id: Option<String>,
+        #[serde(default)]
+        vault_home: Option<String>,
         envelope: Value,
     },
     Digest {
@@ -79,6 +87,8 @@ enum Request {
     Capability {
         key: Option<String>,
         key_id: Option<String>,
+        #[serde(default)]
+        vault_home: Option<String>,
         capability: Value,
         revocation: Value,
         binding: Option<Map<String, Value>>,
@@ -90,23 +100,9 @@ enum Request {
     },
 }
 
-/// The local signing key as the request carries it.
-struct SigningKey<'a> {
-    key: Option<&'a str>,
-    key_id: Option<&'a str>,
-}
-
-impl SigningKey<'_> {
-    fn material(&self) -> Result<(Vec<u8>, &str), Refusal> {
-        let key = self
-            .key
-            .and_then(|key| Base64UrlUnpadded::decode_vec(key).ok());
-        match (key, self.key_id) {
-            (Some(key), Some(key_id)) => Ok((key, key_id)),
-            _ => Err(Refusal::code("cloud_review_signing_key_unavailable")),
-        }
-    }
-}
+#[path = "exact_cloud_review_key.rs"]
+mod key;
+use key::{signing_key, Caller, SigningKey};
 
 /// A refusal code, or a request the runtime cannot read at all.
 #[derive(Debug, PartialEq)]
@@ -135,7 +131,7 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
         return Err("exact_cloud_review_request_too_large".to_owned());
     }
     let request: Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    serde_json::to_vec(&answer(request)?)
+    serde_json::to_vec(&answer(request, Caller::Helper)?)
         .map_err(|_| "exact_cloud_review_response_encode_failed".to_owned())
 }
 
@@ -162,13 +158,16 @@ impl std::fmt::Debug for ExactCloudReviewResidentRequest {
 
 /// The resident's answer: the same JSON the `exact-cloud-review` helper
 /// prints, under `answer`. A refusal is an answer; only a fault is an error.
+/// `guard_home` is the resident's own home, the only vault it reads a key from.
 pub(crate) fn evaluate_resident_request(
     request: ExactCloudReviewResidentRequest,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
+    let guard_home = owner.map(crate::policy_store::PolicySnapshotStore::guard_home);
     if request.schema != RESIDENT_REQUEST_SCHEMA {
         return Err(invalid());
     }
-    let answer = answer(request.request)?;
+    let answer = answer(request.request, Caller::Resident(guard_home))?;
     crate::encode_response(&json!({
         "schema": RESIDENT_RESULT_SCHEMA,
         "status": "ok",
@@ -180,37 +179,37 @@ fn invalid() -> String {
     "exact_cloud_review_request_invalid".to_owned()
 }
 
-fn answer(request: Value) -> Result<Value, String> {
+fn answer(request: Value, caller: Caller<'_>) -> Result<Value, String> {
     let request: Request = serde_json::from_value(request).map_err(|_| invalid())?;
     let answered = match request {
         Request::Sign {
             key,
             key_id,
+            vault_home,
             payload,
-        } => {
-            sign(&signing_key(&key, &key_id), payload).map(|envelope| json!({"envelope": envelope}))
-        }
+        } => signing_key(key, key_id, vault_home, caller)
+            .and_then(|key| sign(&key, payload))
+            .map(|envelope| json!({"envelope": envelope})),
         Request::Verify {
             key,
             key_id,
+            vault_home,
             envelope,
-        } => verify(&signing_key(&key, &key_id), &envelope)
+        } => signing_key(key, key_id, vault_home, caller)
+            .and_then(|key| verify(&key, &envelope))
             .map(|unsigned| json!({"unsigned": unsigned})),
         Request::Digest { payload } => digest(&payload).map(|digest| json!({"digest": digest})),
         Request::Capability {
             key,
             key_id,
+            vault_home,
             capability,
             revocation,
             binding,
             now,
-        } => verified_capability(
-            &signing_key(&key, &key_id),
-            &capability,
-            &revocation,
-            binding.as_ref(),
-            &now,
-        ),
+        } => signing_key(key, key_id, vault_home, caller).and_then(|key| {
+            verified_capability(&key, &capability, &revocation, binding.as_ref(), &now)
+        }),
         Request::Job { job, now } => {
             job_identity(&job, &now).map(|identity| json!({"identity": identity}))
         }
@@ -220,13 +219,6 @@ fn answer(request: Value) -> Result<Value, String> {
         Err(Refusal::Code(code, None)) => Ok(json!({"error": code})),
         Err(Refusal::Code(code, Some(drift))) => Ok(json!({"error": code, "drift_digest": drift})),
         Err(Refusal::Fault(code)) => Err(code.to_owned()),
-    }
-}
-
-fn signing_key<'a>(key: &'a Option<String>, key_id: &'a Option<String>) -> SigningKey<'a> {
-    SigningKey {
-        key: key.as_deref(),
-        key_id: key_id.as_deref(),
     }
 }
 
@@ -252,7 +244,7 @@ fn hmac_hex(key: &[u8], message: &[u8]) -> Result<String, Refusal> {
 
 /// `_sign`: the fields, the key id they are signed under, and the HMAC over
 /// exactly those bytes.
-fn sign(key: &SigningKey<'_>, payload: Map<String, Value>) -> Result<Map<String, Value>, Refusal> {
+fn sign(key: &SigningKey, payload: Map<String, Value>) -> Result<Map<String, Value>, Refusal> {
     let (key, key_id) = key.material()?;
     let mut signed = payload;
     signed.insert("keyId".to_owned(), Value::from(key_id));
@@ -262,7 +254,7 @@ fn sign(key: &SigningKey<'_>, payload: Map<String, Value>) -> Result<Map<String,
 }
 
 /// `_verify`: the envelope's unsigned fields when its HMAC is genuine.
-fn verify(key: &SigningKey<'_>, envelope: &Value) -> Result<Map<String, Value>, Refusal> {
+fn verify(key: &SigningKey, envelope: &Value) -> Result<Map<String, Value>, Refusal> {
     let envelope = envelope
         .as_object()
         .ok_or(Refusal::code("cloud_review_capability_missing"))?;
@@ -285,7 +277,7 @@ fn verify(key: &SigningKey<'_>, envelope: &Value) -> Result<Map<String, Value>, 
 /// names this device's OAuth binding and no revocation covers it. `binding`
 /// is the caller's binding, or `None` when it could not read one.
 fn verified_capability(
-    key: &SigningKey<'_>,
+    key: &SigningKey,
     capability: &Value,
     revocation: &Value,
     binding: Option<&Map<String, Value>>,
