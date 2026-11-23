@@ -110,9 +110,7 @@ def _bridge_hook_output(
     # delivery floor a decided answer gets.
     failure_deadline = _delivery_deadline(deadline)
     if canonical == "muse":
-        return native_stderr_hook_failure(
-            canonical, event_name, _BRIDGE_BLOCK_REASON, deadline=failure_deadline
-        )
+        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON, deadline=failure_deadline)
     if canonical == "hermes":
         return _failure_output(
             canonical,
