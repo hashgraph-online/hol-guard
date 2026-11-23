@@ -309,15 +309,12 @@ fn a_status_echo_after_a_sibling_cd_stays_contained() {
             "{command}"
         );
     }
-    for command in [
-        // Not the tail the sink peels: a quoting the sink cannot read.
-        format!("cd {} && npm run build; echo 'rc=$?'", tree.display()),
-    ] {
-        assert!(
-            !contained(&reason("omp", &home, &main, &command)),
-            "{command}"
-        );
-    }
+    // Not the tail the sink peels: a quoting the sink cannot read.
+    let unreadable_quoting = format!("cd {} && npm run build; echo 'rc=$?'", tree.display());
+    assert!(
+        !contained(&reason("omp", &home, &main, &unreadable_quoting)),
+        "{unreadable_quoting}"
+    );
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
 
