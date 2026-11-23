@@ -715,6 +715,7 @@
       "src/pretool/source_reads.rs",
       "src/pretool/stderr_merge.rs",
       "src/pretool/stdin_filter_options.rs",
+      "src/pretool/stdin_filter_sort.rs",
       "src/pretool/stdin_filters.rs",
       "src/pretool/symlink_writes.rs",
       "src/pretool/temporary_directories.rs",
