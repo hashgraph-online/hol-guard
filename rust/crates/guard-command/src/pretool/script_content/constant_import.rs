@@ -66,12 +66,12 @@ static IMPORT_HOLDER: LazyLock<Regex> =
 /// name to some other module (`import helpers as importlib`).
 fn import_holders_untouched(code: &str) -> bool {
     IMPORT_HOLDER.find_iter(code).all(|found| {
-        if code[found.end()..].trim_start().starts_with('.') {
+        let after = code[found.end()..].trim_start();
+        if after.starts_with('.') {
             return true;
         }
-        let after = code[found.end()..].trim_start();
-        // An alias can mutate the holder namespace later; keep all
-        // constant-name imports dynamic when the holder is renamed.
+        // An alias escapes the attribute-read check above, so a renamed
+        // holder keeps every constant-name import dynamic.
         if after.split_whitespace().next() == Some("as") {
             return false;
         }
@@ -81,7 +81,7 @@ fn import_holders_untouched(code: &str) -> bool {
         let before = code[line_start..found.start()].trim();
         let mut words = before.split_whitespace();
         let statement = matches!(words.next(), Some("import" | "from"));
-        statement
+        statement && words.last() != Some("as")
     })
 }
 
