@@ -5,7 +5,7 @@ const KEY: &str = "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s";
 const NOW: &str = "2026-01-10T00:00:00+00:00";
 
 fn ask(request: Value) -> Value {
-    answer(request).expect("answer")
+    answer(request, Caller::Helper).expect("answer")
 }
 
 fn signed(payload: Value) -> Value {
@@ -356,9 +356,15 @@ fn job_checks_refuse_in_python_order() {
 
 #[test]
 fn unknown_requests_are_refused_and_the_command_is_named() {
-    assert_eq!(answer(json!({"op": "forget"})), Err(invalid()));
     assert_eq!(
-        answer(json!({"op": "digest", "payload": {}, "extra": 1})),
+        answer(json!({"op": "forget"}), Caller::Helper),
+        Err(invalid())
+    );
+    assert_eq!(
+        answer(
+            json!({"op": "digest", "payload": {}, "extra": 1}),
+            Caller::Helper
+        ),
         Err(invalid())
     );
     assert!(is_command("exact-cloud-review"));
@@ -377,7 +383,7 @@ fn the_resident_answers_exactly_like_the_helper() {
         panic!("routed to another operation");
     };
     let decoded: Value =
-        serde_json::from_slice(&evaluate_resident_request(request).expect("answer")).unwrap();
+        serde_json::from_slice(&evaluate_resident_request(request, None).expect("answer")).unwrap();
     assert_eq!(decoded["schema"], RESIDENT_RESULT_SCHEMA);
     assert_eq!(decoded["status"], "ok");
     assert_eq!(decoded["answer"], ask(inner));
@@ -400,5 +406,8 @@ fn the_resident_refuses_another_schema() {
         "request": {"op": "digest", "payload": {}},
     }))
     .unwrap();
-    assert_eq!(evaluate_resident_request(request).unwrap_err(), invalid());
+    assert_eq!(
+        evaluate_resident_request(request, None).unwrap_err(),
+        invalid()
+    );
 }

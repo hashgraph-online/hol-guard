@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from ..store import GuardStore
 
-RESIDENT_FEATURE = "native-exact-cloud-review-resident-v1"
+RESIDENT_FEATURE = "native-exact-cloud-review-resident-v2"
 _REQUEST_SCHEMA = "guard-exact-cloud-review-resident-request.v1"
 _RESULT_SCHEMA = "guard-exact-cloud-review-resident-result.v1"
 
