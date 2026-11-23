@@ -418,6 +418,10 @@ impl DirectEvidenceQueue {
             };
         };
         let native_count = state.records.iter().filter(|record| record.native).count();
+        if native_count == 0 {
+            drop(state);
+            return self.acknowledge_and_peek_with(None, None, max_records, false);
+        }
         let records = state
             .records
             .iter()

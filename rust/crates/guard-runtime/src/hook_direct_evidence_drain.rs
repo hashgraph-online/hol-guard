@@ -55,9 +55,6 @@ pub(crate) fn drain(
     mcp_relay_receipt::write_detached(home, peeked.settled, queue.unwritten());
     let mut paged = peeked.records;
     let store_fatal = record_page(queue, home, writer_source, &mut paged)?;
-    if has_unfinished_records(&paged, home) {
-        return Err(UNHANDLED.to_owned());
-    }
     drop(recording);
     let sequences: Vec<u64> = paged.iter().map(|paged| paged.seq).collect();
     let records: Vec<Value> = paged.into_iter().map(|paged| paged.record).collect();
@@ -117,21 +114,7 @@ fn commit_batch(
                     break;
                 }
             }
-            Err(error) if pages == 0 => {
-                return encode(
-                    json!({
-                        "schema": "guard-hook-direct-evidence-batch.v1",
-                        "epoch": queue.epoch,
-                        "pages": 0,
-                        "record_count": 0,
-                        "more": false,
-                        "failed": true,
-                        "failure": error,
-                        "counters": queue.counters.snapshot(),
-                    }),
-                    store_fatal,
-                );
-            }
+            Err(error) if pages == 0 => return Err(error),
             Err(error) => {
                 failed = true;
                 failure = Some(error);
@@ -181,6 +164,13 @@ fn commit_queued(
     let mut paged = peeked.records;
     let paged_count = paged.len();
     let store_fatal = record_page(queue, home, writer_source, &mut paged)?;
+    if let Some(item) = paged.iter().find(|item| {
+        item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call")
+            && !mcp_relay_receipt::is_plain(&item.record)
+    }) {
+        let code = mcp_relay_receipt::rejection_code(&item.record);
+        return Err(format!("mcp_relay_record_not_plain:{code}"));
+    }
     // A mixed page can contain ordinary direct-hook records that still need
     // the daemon writer after the resident has committed its relay receipts.
     // Those records stay queued while the committed relay records are already
@@ -250,18 +240,6 @@ fn record_page(
                 return Err(format!("mcp_relay_receipt_unwritten:{}", unwritten.len()));
             }
             keep_handed_back(queue, paged, &unwritten);
-        } else if paged
-            .iter()
-            .any(|item| item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call"))
-        {
-            let code = paged
-                .iter()
-                .find(|item| {
-                    item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call")
-                })
-                .map(|item| mcp_relay_receipt::rejection_code(&item.record))
-                .unwrap_or("unknown");
-            return Err(format!("mcp_relay_record_not_plain:{code}"));
         }
         return Ok(None);
     };
@@ -280,16 +258,6 @@ fn record_page(
             return Err(format!("mcp_relay_receipt_unwritten:{}", unwritten.len()));
         }
         keep_handed_back(queue, paged, &unwritten);
-    } else if paged
-        .iter()
-        .any(|item| item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call"))
-    {
-        let code = paged
-            .iter()
-            .find(|item| item.record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call"))
-            .map(|item| mcp_relay_receipt::rejection_code(&item.record))
-            .unwrap_or("unknown");
-        return Err(format!("mcp_relay_record_not_plain:{code}"));
     }
     Ok(fatal)
 }
