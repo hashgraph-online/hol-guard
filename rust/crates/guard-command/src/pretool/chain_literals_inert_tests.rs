@@ -396,6 +396,11 @@ fn printed_values_take_the_display_stand_in() {
             format!("echo -n \"{v} is current\""),
         ),
         (
+            // A preceding printf without -v does not change the environment.
+            "printf '%s' ready && echo \"version: $(cat VERSION)\"".to_owned(),
+            format!("printf '%s' ready && echo \"version: {v}\""),
+        ),
+        (
             "ls && echo \"lines: $(wc -l < package.json)\" | head -1".to_owned(),
             format!("ls && echo \"lines: {v}\" | head -1"),
         ),
