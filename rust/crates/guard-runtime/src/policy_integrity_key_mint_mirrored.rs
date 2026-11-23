@@ -138,7 +138,7 @@ pub(super) fn mirror_control_state(
 /// Whether the vault already carries the fallback-preferred marker for
 /// `key_ref`. Python then reads and writes the vault alone, so a control write
 /// stands on the vault without consulting the keyring.
-pub(super) fn vault_preferred(vault: &EncryptedFileSecretStore, key_ref: &str) -> bool {
+pub(super) fn vault_preferred(vault: &mut EncryptedFileSecretStore, key_ref: &str) -> bool {
     let marker = format!("{FALLBACK_PREFERENCE_PREFIX}{key_ref}");
     vault.get_secret(&marker).as_deref() == Some("1")
 }
