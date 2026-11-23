@@ -51,15 +51,13 @@ pub(super) fn signing_key(
     if key.is_some() || key_id.is_some() || !vault_home.is_absolute() {
         return Err(Refusal::Fault("exact_cloud_review_request_invalid"));
     }
-    let readable = match caller {
-        Caller::Helper => true,
-        Caller::Resident(home) => home.is_some_and(|home| same_home(home, &vault_home)),
+    // The resident reads its own enrolled home, never the caller's path: a
+    // path checked once and resolved again could be swapped in between.
+    let source = match caller {
+        Caller::Helper => Some(vault_home.as_path()),
+        Caller::Resident(home) => home.filter(|home| same_home(home, &vault_home)),
     };
-    let (key, key_id) = if readable {
-        resident_key(Some(&vault_home))
-    } else {
-        (None, None)
-    };
+    let (key, key_id) = source.map_or((None, None), |home| resident_key(Some(home)));
     Ok(SigningKey { key, key_id })
 }
 
