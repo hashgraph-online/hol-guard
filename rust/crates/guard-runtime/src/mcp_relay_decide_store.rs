@@ -123,6 +123,32 @@ pub(crate) fn saved<'c>(
     saved_at(connection, binding, guard_home, harness, now)
 }
 
+/// The evidence for a readable store that holds no saved row: every lookup
+/// misses, as the proxy's does, and no key or integrity state is shipped
+/// because no local row needs one. The package leg still resolves its policy
+/// from it; only a store that cannot be read has no package policy at all.
+pub(crate) fn empty<'c>(
+    connection: &'c Connection,
+    guard_home: &str,
+) -> Result<Saved<'c>, &'static str> {
+    Ok(Saved {
+        connection,
+        store_path: Path::new(guard_home)
+            .join(STORE_FILE_NAME)
+            .to_string_lossy()
+            .into_owned(),
+        guard_home: guard_home.to_owned(),
+        now: utc_now().ok_or(SAVED_UNVERIFIABLE)?,
+        has_local_policy: false,
+        integrity_state: Value::Null,
+        key_b64: Zeroizing::new(String::new()),
+        key_id: String::new(),
+        bundle_identities: Vec::new(),
+        exception_bundle: Default::default(),
+        audit: RefCell::new(Vec::new()),
+    })
+}
+
 /// `saved`, judged at the caller's `now`: the cached bundle is validated at
 /// the same time the lookup is evaluated at.
 pub(crate) fn saved_at<'c>(
@@ -206,8 +232,8 @@ pub(super) fn write_audit(guard_home: &str, events: &[AuditEvent]) -> Result<(),
 /// after the snapshot (`write_audit`). A claim procures the
 /// same evidence (`_claim_integrity_evidence`), so the claim and the package
 /// spend read with it too.
-/// Without a key, or with a state that names another key, the saved rows
-/// cannot be verified, so the call is refused.
+/// Without a key, with a state that names another key, or with no published
+/// generation, the saved rows cannot be verified, so the call is refused.
 pub(crate) fn lookup_integrity(
     binding: &DirectLaneBinding,
 ) -> Result<
@@ -223,7 +249,12 @@ pub(crate) fn lookup_integrity(
     ) else {
         return Err(SAVED_UNVERIFIABLE);
     };
-    if state.enforcement != "enforce" || state.key_id.as_deref() != Some(key.key_id.as_str()) {
+    // Without a published generation the row verifier has no rollback floor,
+    // so an older, correctly signed local allow would still verify.
+    if state.enforcement != "enforce"
+        || state.generation.is_none()
+        || state.key_id.as_deref() != Some(key.key_id.as_str())
+    {
         return Err(SAVED_UNVERIFIABLE);
     }
     let state = serde_json::to_value(state).map_err(|_| SAVED_UNVERIFIABLE)?;

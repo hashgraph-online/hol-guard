@@ -50,6 +50,27 @@ struct Held {
 struct HeldState {
     next_seq: u64,
     records: VecDeque<Held>,
+    /// Slots promised to decisions that write rows before their forward is
+    /// held (see `reserve`).
+    reserved: usize,
+}
+
+impl HeldState {
+    fn expire(&mut self, now: Instant) {
+        self.records
+            .retain(|held| now.saturating_duration_since(held.held_at) < HOLD_TTL);
+    }
+
+    fn push(&mut self, epoch: &str, record: Value, now: Instant) -> String {
+        let seq = self.next_seq;
+        self.next_seq = self.next_seq.saturating_add(1);
+        self.records.push_back(Held {
+            seq,
+            held_at: now,
+            record,
+        });
+        format!("{epoch}:{seq}")
+    }
 }
 
 pub(crate) struct PendingRelayEvidence {
@@ -73,6 +94,7 @@ impl Default for PendingRelayEvidence {
             state: Mutex::new(HeldState {
                 next_seq: 1,
                 records: VecDeque::new(),
+                reserved: 0,
             }),
         }
     }
@@ -86,20 +108,24 @@ impl PendingRelayEvidence {
             return None;
         }
         let mut state = self.state.lock().ok()?;
-        state
-            .records
-            .retain(|held| now.saturating_duration_since(held.held_at) < HOLD_TTL);
-        if state.records.len() >= MAX_HELD_RECORDS {
+        state.expire(now);
+        if state.records.len() + state.reserved >= MAX_HELD_RECORDS {
             return None;
         }
-        let seq = state.next_seq;
-        state.next_seq = state.next_seq.saturating_add(1);
-        state.records.push_back(Held {
-            seq,
-            held_at: now,
-            record,
-        });
-        Some(format!("{}:{seq}", self.epoch))
+        Some(state.push(&self.epoch, record, now))
+    }
+
+    /// Promise one held slot to a decision that writes rows its forward's
+    /// record names, so a hold refused after those rows exist cannot happen;
+    /// `None` when no slot is free.
+    pub(crate) fn reserve(&self, now: Instant) -> Option<PendingSlot<'_>> {
+        let mut state = self.state.lock().ok()?;
+        state.expire(now);
+        if state.records.len() + state.reserved >= MAX_HELD_RECORDS {
+            return None;
+        }
+        state.reserved += 1;
+        Some(PendingSlot(Some(self)))
     }
 
     /// Move a ticket's record to the drain; a refused record stays held.
@@ -148,6 +174,34 @@ impl PendingRelayEvidence {
             .strip_prefix(':')?
             .parse::<u64>()
             .ok()
+    }
+}
+
+/// One held slot promised by `reserve`; dropping it unspent returns it.
+pub(crate) struct PendingSlot<'a>(Option<&'a PendingRelayEvidence>);
+
+impl PendingSlot<'_> {
+    /// Hold the forward's record in the promised slot. Only a record larger
+    /// than any the drain takes is refused.
+    pub(crate) fn hold(mut self, record: Value, now: Instant) -> Option<String> {
+        let pending = self.0.take()?;
+        let mut state = pending.state.lock().ok()?;
+        state.reserved = state.reserved.saturating_sub(1);
+        let bytes = serde_json::to_vec(&record).ok()?.len();
+        if bytes > MAX_RECORD_BYTES {
+            return None;
+        }
+        Some(state.push(&pending.epoch, record, now))
+    }
+}
+
+impl Drop for PendingSlot<'_> {
+    fn drop(&mut self) {
+        if let Some(pending) = self.0.take() {
+            if let Ok(mut state) = pending.state.lock() {
+                state.reserved = state.reserved.saturating_sub(1);
+            }
+        }
     }
 }
 

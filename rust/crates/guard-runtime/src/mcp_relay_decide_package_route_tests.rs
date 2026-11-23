@@ -191,6 +191,18 @@ fn an_inline_approval_does_not_override_a_saved_tool_block() {
 }
 
 #[test]
+fn an_inline_approval_does_not_override_a_fresh_terminal_tool_policy() {
+    for action in [GuardAction::Block, GuardAction::SandboxRequired] {
+        assert_eq!(
+            compose_with_inline_approval("enforce", &tool(action), &policy("allow"), true),
+            Ok(Decided::Package(PackageRoute::TerminalPackage {
+                policy_action: action.as_str().to_owned(),
+            })),
+        );
+    }
+}
+
+#[test]
 fn the_composition_hands_back_an_observed_forward() {
     // The forward runs under the authoritative action and carries the observed
     // requests the proxy queues first, plus the evidence the override leaves.

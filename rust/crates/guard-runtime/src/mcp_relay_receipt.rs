@@ -53,6 +53,8 @@ mod event;
 mod notice;
 #[path = "mcp_relay_receipt_package.rs"]
 pub(crate) mod package;
+#[path = "mcp_relay_receipt_prepare.rs"]
+mod prepare;
 #[path = "mcp_relay_receipt_record.rs"]
 mod record;
 #[path = "mcp_relay_receipt_remember.rs"]
@@ -187,34 +189,19 @@ fn write_with_notices_indexed(
     records: Vec<(u64, Value)>,
     schedule: impl FnOnce(&str, Vec<String>),
 ) -> Vec<(u64, Value)> {
-    let composed: Vec<Composed> = records
-        .into_iter()
-        .filter_map(|(sequence, record)| {
-            let (record, remembered) = match record.get(remember::KEY) {
-                Some(_) => (remember::stripped(&record)?, true),
-                None => (record, false),
-            };
-            let stamp = Stamp::fresh()?;
-            let (receipt, row) = compose(guard_home, &record, &stamp)?;
-            Some((
-                sequence,
-                record,
-                receipt,
-                row,
-                remembered.then_some(stamp.store_now),
-            ))
-        })
-        .collect();
+    // Records whose stamp could not be drawn come back for the drain to retry.
+    let (composed, mut unwritten) = prepare::prepare(guard_home, records);
     if composed.is_empty() {
-        return Vec::new();
+        return unwritten;
     }
     let home = Path::new(guard_home);
     if !home.join(STORE_FILE_NAME).is_file() {
-        return records_of(composed);
+        unwritten.extend(records_of(composed));
+        return unwritten;
     }
     let timeout_ms = sqlite_timeout_ms();
     let mut notices = Vec::new();
-    let unwritten = {
+    let failed: Vec<(u64, Value)> = {
         let _writer = WRITER.lock().unwrap_or_else(PoisonError::into_inner);
         // Before the gate, in the daemon policy writer's order. A lock that
         // stays taken costs the memory of each remembered record, never its
@@ -225,7 +212,8 @@ fn write_with_notices_indexed(
             .then(|| remember::lock(guard_home))
             .flatten();
         let Ok(_gate) = hold_storage_gate(home, Duration::from_millis(timeout_ms.into())) else {
-            return records_of(composed);
+            unwritten.extend(records_of(composed));
+            return unwritten;
         };
         let busy_timeout_ms = u64::from(timeout_ms).clamp(1, MAX_BUSY_TIMEOUT_MS);
         composed
@@ -257,6 +245,7 @@ fn write_with_notices_indexed(
     if !notices.is_empty() {
         schedule(guard_home, notices);
     }
+    unwritten.extend(failed);
     unwritten
 }
 

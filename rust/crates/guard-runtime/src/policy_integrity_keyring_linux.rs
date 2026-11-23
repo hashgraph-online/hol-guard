@@ -97,10 +97,18 @@ fn lookup(service_name: &str, secret_id: &str) -> Existing {
         Err(error) => return connect_failure(&error),
     };
     match read_from(&service, service_name, secret_id) {
-        Ok(Some(_)) => Existing::Present,
+        Ok(Some(copy)) => Existing::Present(stored_generation(&copy)),
         Ok(None) => Existing::Absent,
         Err(()) => Existing::Unreadable,
     }
+}
+
+/// The control generation a keyring copy stores, when it is a control state.
+fn stored_generation(copy: &str) -> Option<u64> {
+    serde_json::from_str::<serde_json::Value>(copy)
+        .ok()?
+        .get("generation")?
+        .as_u64()
 }
 
 /// The bus's own answers for a name nobody owns: the session bus is up but

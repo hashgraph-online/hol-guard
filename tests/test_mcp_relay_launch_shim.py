@@ -29,10 +29,11 @@ def _options(**fields: object) -> argparse.Namespace:
 
 
 def test_the_relay_argv_keeps_every_value_bound_to_its_flag() -> None:
+    guard_home = Path("/guard/home")
     argv = launch.relay_argv(
         "codex-mcp-proxy",
         _options(),
-        guard_home=Path("/guard/home"),
+        guard_home=guard_home,
         server_command="node",
         server_args=["--inspect", "server.js"],
         server_id="mcp_server:codex:project:docs:1",
@@ -44,7 +45,7 @@ def test_the_relay_argv_keeps_every_value_bound_to_its_flag() -> None:
         "codex_plugin_scanner.cli",
         "guard",
         "codex-mcp-proxy",
-        "--guard-home=/guard/home",
+        f"--guard-home={guard_home}",
         "--home=/home/agent",
         "--workspace=/work/space",
         "--server-name=docs",
@@ -120,8 +121,7 @@ def test_the_command_hands_its_argv_to_the_relay(monkeypatch: pytest.MonkeyPatch
         launched.append(argv)
 
     monkeypatch.setattr(launch, "native_hook_bridge_executable", executable)
-    monkeypatch.setattr(launch.os, "name", "posix")
-    monkeypatch.setattr(launch.os, "execv", exec_relay)
+    monkeypatch.setattr(launch, "os", SimpleNamespace(name="posix", execv=exec_relay))
 
     launch.run_relay(["-m", "codex_plugin_scanner.cli", "guard"], guard_home=Path("/guard/home"))
 

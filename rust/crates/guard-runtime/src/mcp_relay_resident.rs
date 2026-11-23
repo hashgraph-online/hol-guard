@@ -350,11 +350,13 @@ impl ResidentRelayAuthority {
     /// with the refusal the lane names. That answer no longer changes later
     /// sessions: the server stays with the relay, and its later package calls
     /// are decided as usual.
-    fn mark_unsettled(&mut self, guard_home: &Path, request: &Value) {
+    /// Tells the resident the evaluation did not settle, and returns the
+    /// cause its reply names, so a superseded runtime still says so.
+    fn mark_unsettled(&mut self, guard_home: &Path, request: &Value) -> String {
         let Some(payload) = request::unsettled_payload(request) else {
-            return;
+            return defer::REQUEST_UNSENDABLE.to_owned();
         };
-        let _ = self.exchange(guard_home, &payload);
+        defer::reply_cause(self.exchange(guard_home, &payload).as_deref())
     }
 }
 

@@ -97,31 +97,50 @@ pub(super) enum Existing {
     NoService,
     /// The keyring answered and holds no copy.
     Absent,
-    /// The keyring holds a copy, which Python prefers on its next read.
-    Present,
+    /// The keyring holds a copy, which Python prefers on its next read, with
+    /// the control generation it stores when it carries one.
+    Present(Option<u64>),
     /// A Secret Service answered but its copy could not be read: locked, or
     /// the exchange failed or ran out of time.
     Unreadable,
 }
 
 /// Whether the vault write of a control state may stand. A keyring copy
-/// Python would prefer must be brought in step, and a failed update or an
+/// Python would prefer must be brought in step, and a refused update or an
 /// unreadable copy refuses the write, since the stale copy would roll the
-/// generation back. With no Secret Service the keyring may still hold an
-/// older copy that Python would read once the bus returns, so the vault must
-/// first be marked as the preferred copy (`prefer_vault`); a vault that
-/// cannot be marked refuses the write too.
+/// generation back. An update that gave no answer may still commit, so the
+/// vault cannot be put back under it: like a missing Secret Service, the
+/// vault must first be marked as the preferred copy (`prefer_vault`), after
+/// which Python reads the vault alone whatever the keyring ends up holding.
+/// A vault that cannot be marked refuses the write too. A keyring copy at a
+/// higher generation than `writing` is never replaced: Python would trust the
+/// lowered copy on its next read, so the write is refused as for an
+/// unreadable copy. An equal generation is brought in step.
 pub(super) fn mirror_control_state(
     found: Existing,
-    update: impl FnOnce() -> bool,
+    writing: Option<u64>,
+    update: impl FnOnce() -> Result<(), WriteFailure>,
     prefer_vault: impl FnOnce() -> bool,
 ) -> bool {
     match found {
         Existing::Absent => true,
         Existing::NoService => prefer_vault(),
-        Existing::Present => update(),
+        Existing::Present(Some(stored)) if writing.is_none_or(|writing| stored > writing) => false,
+        Existing::Present(_) => match update() {
+            Ok(()) => true,
+            Err(WriteFailure::Unsettled) => prefer_vault(),
+            Err(WriteFailure::Refused) => false,
+        },
         Existing::Unreadable => false,
     }
+}
+
+/// Whether the vault already carries the fallback-preferred marker for
+/// `key_ref`. Python then reads and writes the vault alone, so a control write
+/// stands on the vault without consulting the keyring.
+pub(super) fn vault_preferred(vault: &EncryptedFileSecretStore, key_ref: &str) -> bool {
+    let marker = format!("{FALLBACK_PREFERENCE_PREFIX}{key_ref}");
+    vault.get_secret(&marker).as_deref() == Some("1")
 }
 
 /// Marks the vault as the copy Python reads for `key_ref` and its control
@@ -129,7 +148,7 @@ pub(super) fn mirror_control_state(
 /// the vault alone, and its next key write restores the keyring from it.
 pub(super) fn prefer_vault(vault: &mut EncryptedFileSecretStore, key_ref: &str) -> bool {
     let marker = format!("{FALLBACK_PREFERENCE_PREFIX}{key_ref}");
-    vault.get_secret(&marker).as_deref() == Some("1") || vault.set_secret(&marker, "1").is_ok()
+    vault_preferred(vault, key_ref) || vault.set_secret(&marker, "1").is_ok()
 }
 
 #[cfg(test)]

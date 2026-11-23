@@ -320,9 +320,16 @@ pub(crate) fn mirror_existing_control_state(
         mint_lock: None,
     };
     let key_ref = build_scoped_secret_ref(POLICY_INTEGRITY_KEY_REF, home);
+    if mirrored::vault_preferred(vault, &key_ref) {
+        return true;
+    }
+    let writing = serde_json::from_str::<serde_json::Value>(state)
+        .ok()
+        .and_then(|state| state.get("generation").and_then(serde_json::Value::as_u64));
     mirrored::mirror_control_state(
         primary.existing(control_ref),
-        || mirrored::Primary::set(&primary, control_ref, state).is_ok(),
+        writing,
+        || mirrored::Primary::set(&primary, control_ref, state),
         || mirrored::prefer_vault(vault, &key_ref),
     )
 }

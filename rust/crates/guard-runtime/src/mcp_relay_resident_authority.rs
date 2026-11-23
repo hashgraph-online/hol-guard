@@ -65,9 +65,9 @@ impl RelayAuthority for ResidentRelayAuthority {
         // again with it attached.
         if matches!(reply_of(output.as_deref()), Some(Reply::Evaluate { .. })) {
             let Some(payload) = self.evaluated(&request) else {
-                self.mark_unsettled(&guard_home, &request);
+                let cause = self.mark_unsettled(&guard_home, &request);
                 defer::note(defer::PACKAGE_UNEVALUATED);
-                return no_decision();
+                return ToolCallVerdict::Respond(undecided_response(id, params, &cause));
             };
             output = self.exchange(&guard_home, &payload);
         }
@@ -93,9 +93,9 @@ impl RelayAuthority for ResidentRelayAuthority {
             // The evaluation travels with the second send, so a second request
             // for one is an answer this exchange cannot take.
             Some(Reply::Evaluate { .. }) => {
-                self.mark_unsettled(&guard_home, &request);
+                let cause = self.mark_unsettled(&guard_home, &request);
                 defer::note(defer::PACKAGE_UNDECIDED);
-                no_decision()
+                ToolCallVerdict::Respond(undecided_response(id, params, &cause))
             }
             None => {
                 let cause = defer::reply_cause(output.as_deref());

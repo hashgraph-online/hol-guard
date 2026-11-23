@@ -337,7 +337,11 @@ fn an_unpublished_mismatched_or_moved_integrity_state_defers() {
     if let Some(state) = observed.policy_integrity_state.as_mut() {
         state.enforcement = "observe".to_owned();
     }
-    for binding in [unbound, unpublished, other_key, observed] {
+    let mut ungenerated = binding();
+    if let Some(state) = ungenerated.policy_integrity_state.as_mut() {
+        state.generation = None;
+    }
+    for binding in [unbound, unpublished, other_key, observed, ungenerated] {
         assert_eq!(
             read(&home, &binding, |_| ()).err(),
             Some("mcp_relay_saved_policy_unverifiable")
