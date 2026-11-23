@@ -213,6 +213,7 @@ fn a_probe_after_plain_readers_runs_in_the_workspace_sandbox() {
         format!("ls pkg\npython3 - {body}"),
         format!("git log --oneline -- pkg | head -20; python3 - {body}"),
         format!("rg -n X -g '*.py' && python3 {body}"),
+        format!("git diff --name-only -z; python3 - {body}"),
     ] {
         let (action, reason) = outcome(&root, &command);
         assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
@@ -229,6 +230,11 @@ fn a_probe_after_a_writer_or_before_anything_keeps_its_review() {
         format!("cp keys.py pkg/__init__.py && python3 - {body}"),
         format!("git checkout -- pkg && python3 - {body}"),
         format!("git diff --output=pkg/__init__.py && python3 - {body}"),
+        // Quotes the shell drops, abbreviations Git expands and clustered
+        // short options do not hide a writer or a preprocessor.
+        format!("git diff --o'utput'=pkg/__init__.py && python3 - {body}"),
+        format!("git diff --out=pkg/__init__.py && python3 - {body}"),
+        format!("rg -nz X pkg; python3 - {body}"),
         format!("ls > pkg/__init__.py; python3 - {body}"),
         format!("cat pkg/remote.py > pkg/__init__.py; python3 - {body}"),
         // A `cd` moves where its imports resolve.

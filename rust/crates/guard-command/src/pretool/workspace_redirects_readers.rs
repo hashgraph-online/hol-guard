@@ -15,7 +15,10 @@
 //! Git's read-only subcommands, joined by `;`, `&&`, a newline or a pipe, with
 //! no redirect (in the raw text, not only the projection), substitution,
 //! variable, assignment or option that writes a file or starts another
-//! program. A `cd` changes where the program's
+//! program. Options are read as the shell passes them, without quotes, and
+//! Git's abbreviations of a blocked option count as the option. ripgrep is a
+//! reader only when no inherited configuration file can add options to it.
+//! A `cd` changes where the program's
 //! imports resolve, so it is never a reader here. Anything after the program
 //! keeps the chain's bar.
 
@@ -33,10 +36,13 @@ const GIT_READS: &[&str] = &[
     "blame",
 ];
 
-/// Options that make a reader write a file or start another program:
-/// `git diff --output`, an external diff, and ripgrep's preprocessor and
-/// decompression.
-const STARTS_OR_WRITES: &[&str] = &["--output", "--ext-diff", "--pre", "--search-zip", "-z"];
+/// Options that make Git's readers write a file or start an external diff.
+/// Git also takes any unambiguous abbreviation of them (`--out=`).
+const GIT_STARTS_OR_WRITES: &[&str] = &["--output", "--ext-diff"];
+
+/// Options that make ripgrep start a preprocessor or a decompressor, also
+/// as `-z` in a cluster of short options (`-nz`).
+const RG_STARTS: &[&str] = &["--pre", "--search-zip"];
 
 /// Whether the program in `projected` is Python alone after a `cd` into the
 /// hook's directory or after plain readers, the two chains the projection
@@ -56,9 +62,31 @@ pub(super) fn lead_admitted(
     context: crate::pretool::PathContext<'_>,
 ) -> bool {
     match program_after_readers(projected) {
-        Some(cut) => command.trim_start().starts_with(&projected[..cut]),
+        Some(cut) => {
+            command.trim_start().starts_with(&projected[..cut])
+                && (context.ripgrep_config_absent || !runs_configured_ripgrep(&projected[..cut]))
+        }
         None => super::cd::enters_cwd(projected, context),
     }
+}
+
+/// Whether a reader in `lead` is ripgrep reading its configuration file,
+/// which can name a preprocessor (`--pre`) the words never show.
+fn runs_configured_ripgrep(lead: &str) -> bool {
+    lead.split([';', '\n', '&', '|']).any(|segment| {
+        let words = shell_words(segment);
+        words.first().is_some_and(|program| program == "rg")
+            && !words.iter().any(|word| word == "--no-config")
+    })
+}
+
+/// The words of one command as the shell passes them: the lead holds no
+/// escapes or substitutions, so only the quotes go.
+fn shell_words(segment: &str) -> Vec<String> {
+    segment
+        .split_whitespace()
+        .map(|word| word.replace(['\'', '"'], ""))
+        .collect()
 }
 
 /// The byte offset where the program starts when `projected` is plain
@@ -113,19 +141,31 @@ pub(super) fn program_after_readers(projected: &str) -> Option<usize> {
 /// Whether one command of the lead is a plain reader. Empty commands, as
 /// between two separators, read nothing.
 fn reader(segment: &str) -> bool {
-    let words: Vec<&str> = segment.split_whitespace().collect();
-    let Some(program) = words.first() else {
+    let words = shell_words(segment);
+    let Some(program) = words.first().map(String::as_str) else {
         return true;
     };
-    let named = READERS.contains(program)
-        || (*program == "git" && words.get(1).is_some_and(|verb| GIT_READS.contains(verb)));
-    named
-        && !words.iter().any(|word| {
-            let word = word.trim_matches(['\'', '"']);
-            STARTS_OR_WRITES
-                .iter()
-                .any(|option| word == *option || word.starts_with(&format!("{option}=")))
-        })
+    let blocked = match program {
+        "git"
+            if words
+                .get(1)
+                .is_some_and(|verb| GIT_READS.contains(&verb.as_str())) =>
+        {
+            GIT_STARTS_OR_WRITES
+        }
+        "rg" => RG_STARTS,
+        _ if READERS.contains(&program) => &[],
+        _ => return false,
+    };
+    !words.iter().skip(1).any(|word| {
+        let name = word.split('=').next().unwrap_or_default();
+        let long = name.len() > 2 && name.starts_with("--");
+        (long && blocked.iter().any(|option| option.starts_with(name)))
+            || (program == "rg"
+                && !word.starts_with("--")
+                && word.starts_with('-')
+                && word.contains('z'))
+    })
 }
 
 /// The payload the raw text is reviewed from. Once the readers are proved
@@ -152,7 +192,7 @@ pub(super) fn reviewed_payload(
 
 #[cfg(test)]
 mod tests {
-    use super::program_after_readers;
+    use super::{program_after_readers, runs_configured_ripgrep};
 
     #[test]
     fn readers_before_the_program_are_taken() {
@@ -164,6 +204,9 @@ mod tests {
             "rg -n 'def main' -g '*.py' && python3",
             "git status --short; cat pyproject.toml && python3 -I -",
             "git show HEAD:pkg/__init__.py | wc -l; pwd; python3 -",
+            "git diff --name-only -z; python3 -",
+            "git log --output-indicator-new=+ -1; python3 -",
+            "grep -rz x pkg; python3 -",
         ] {
             assert!(program_after_readers(projected).is_some(), "{projected}");
         }
@@ -187,6 +230,12 @@ mod tests {
             "git grep x; python3 -",
             "rg --pre ./run x; python3 -",
             "rg -z x; python3 -",
+            "rg -nz x; python3 -",
+            "rg --p'r'e=./run x; python3 -",
+            "git diff --\"out\"put=pkg/x.py; python3 -",
+            "git diff --out=pkg/x.py; python3 -",
+            "git diff --ext; python3 -",
+            "'git' diff --o'utput'=pkg/x.py; python3 -",
             "ls $HOME; python3 -",
             "ls \"$HOME\"; python3 -",
             "ls `pwd`; python3 -",
@@ -208,5 +257,15 @@ mod tests {
     fn the_program_starts_after_the_last_separator() {
         let projected = "ls pkg; python3 -";
         assert_eq!(program_after_readers(projected), Some("ls pkg;".len()));
+    }
+
+    #[test]
+    fn ripgrep_that_reads_its_configuration_file_is_seen() {
+        for lead in ["ls; rg -n x pkg | head;", "git diff && 'rg' x;"] {
+            assert!(runs_configured_ripgrep(lead), "{lead}");
+        }
+        for lead in ["rg --no-config -n x;", "git diff && ls pkg;"] {
+            assert!(!runs_configured_ripgrep(lead), "{lead}");
+        }
     }
 }
