@@ -10,7 +10,7 @@ use rusqlite::{Connection, OptionalExtension};
 
 use crate::guard_store_db::{StoreError, StoreResult};
 
-fn canonical(value: &str) -> String {
+pub(super) fn canonical(value: &str) -> String {
     value
         .trim()
         .to_lowercase()

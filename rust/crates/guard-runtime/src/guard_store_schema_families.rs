@@ -102,16 +102,9 @@ pub(super) fn ensure_receipt_binding(connection: &Connection, now: &str) -> rusq
 /// `ensure_bash_operation_schema`: the three journal tables, checked against
 /// their declared SQL, and versions 30 to 32, all inside one savepoint.
 pub(super) fn ensure_bash_operations(connection: &Connection, now: &str) -> StoreResult<()> {
-    connection.execute_batch(&format!("savepoint {BASH_SAVEPOINT}"))?;
-    let outcome = bash_operations(connection, now);
-    if outcome.is_err() {
-        connection.execute_batch(&format!(
-            "rollback to {BASH_SAVEPOINT}; release {BASH_SAVEPOINT}"
-        ))?;
-        return outcome;
-    }
-    connection.execute_batch(&format!("release {BASH_SAVEPOINT}"))?;
-    Ok(())
+    super::tables::in_savepoint(connection, BASH_SAVEPOINT, || {
+        bash_operations(connection, now)
+    })
 }
 
 fn bash_operations(connection: &Connection, now: &str) -> StoreResult<()> {

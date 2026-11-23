@@ -31,6 +31,23 @@ create table if not exists command_activity_health_active (
 )
 """
 
+HEALTH_SEED_SQL: Final = """
+insert or ignore into command_activity_health (
+  singleton, dropped_event_count, persistence_error_count,
+  last_error_code, last_error_at, schema_version
+) values (1, 0, 0, null, null, ?)
+"""
+HEALTH_ACTIVE_SEED_SQL: Final = """
+insert or ignore into command_activity_health_active (
+  singleton, command_error_active, shadow_error_active, maintenance_error_active
+)
+select singleton,
+  case when last_error_code is null then 0 else 1 end,
+  case when last_error_code is null then 0 else 1 end,
+  case when last_error_code is null then 0 else 1 end
+from command_activity_health where singleton = 1
+"""
+
 
 def ensure_command_activity_health_schema(connection: sqlite3.Connection, *, applied_at: str) -> None:
     """Create and validate v11 atomically, including its singleton seed row."""
@@ -40,29 +57,13 @@ def ensure_command_activity_health_schema(connection: sqlite3.Connection, *, app
         connection.execute(_HEALTH_TABLE_SQL)
         _validate_health_schema(connection)
         connection.execute(
-            """
-            insert or ignore into command_activity_health (
-              singleton, dropped_event_count, persistence_error_count,
-              last_error_code, last_error_at, schema_version
-            ) values (1, 0, 0, null, null, ?)
-            """,
+            HEALTH_SEED_SQL,
             (COMMAND_ACTIVITY_HEALTH_SCHEMA_VERSION,),
         )
         _validate_health_row(connection)
         connection.execute(_HEALTH_ACTIVE_TABLE_SQL)
         _validate_health_active_schema(connection)
-        connection.execute(
-            """
-            insert or ignore into command_activity_health_active (
-              singleton, command_error_active, shadow_error_active, maintenance_error_active
-            )
-            select singleton,
-              case when last_error_code is null then 0 else 1 end,
-              case when last_error_code is null then 0 else 1 end,
-              case when last_error_code is null then 0 else 1 end
-            from command_activity_health where singleton = 1
-            """
-        )
+        connection.execute(HEALTH_ACTIVE_SEED_SQL)
         _validate_health_active_row(connection)
         connection.execute(
             "insert or ignore into schema_migrations (version, applied_at) values (?, ?)",
