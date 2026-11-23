@@ -50,6 +50,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::COMMAND_CAPABILITY_FEATURE,
     guard_contracts::COMMAND_CAPABILITY_ISSUE_FEATURE,
     guard_contracts::COMMAND_ENVELOPE_FEATURE,
+    guard_contracts::COMMAND_ENVELOPE_RESIDENT_KEY_FEATURE,
     guard_contracts::APPROVAL_RESOLUTION_ELIGIBILITY_FEATURE,
     guard_contracts::CONTAINED_WRAPPER_PLAN_FEATURE,
     guard_contracts::APPROVAL_PERSIST_SELECT_FEATURE,

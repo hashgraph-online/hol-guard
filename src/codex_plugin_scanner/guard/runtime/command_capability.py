@@ -27,6 +27,7 @@ from ..native_command_state import (
 from ..portable_command import render_portable_command
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
+from ..store_base import EncryptedFileSecretStore
 from .time_support import parse_utc_timestamp
 
 COMMAND_CAPABILITY_STATE_KEY = "guard_command_capability_v1"
@@ -93,12 +94,17 @@ def _envelope(
     """
 
     home = _resident_home(store)
-    if action == "digest":
+    resident_key = action != "digest" and _resident_reads_key(store)
+    if action == "digest" or resident_key:
         # The runtime digests the payload alone and never reads the key for
         # this action, so reading the policy integrity secret out of the store
         # and putting it on the socket for every replay row and approval match
-        # would spend the secret for nothing.
+        # would spend the secret for nothing. A store kept in the plain vault
+        # is one the resident reads itself, so its key stays off the socket
+        # too; this side only mints it when the caller issues a capability.
         key_b64, key_id = None, None
+        if resident_key and create_key:
+            store._policy_integrity_secret_material(create=True)
     else:
         key_b64, key_id = _signing_material_for_resident(store, create=create_key)
     try:
@@ -108,6 +114,7 @@ def _envelope(
             integrity_key_b64=key_b64,
             integrity_key_id=key_id,
             guard_home=home,
+            resident_key=resident_key,
         )
     except CommandEnvelopeUnavailableError as error:
         # Every caller of this module already reads a `CommandCapabilityError`
@@ -229,6 +236,17 @@ def _resident_home(store: GuardStore) -> Path:
     if not isinstance(guard_home, Path):
         raise CommandCapabilityUnavailableError
     return guard_home
+
+
+def _resident_reads_key(store: GuardStore) -> bool:
+    """Whether the policy-integrity key lives where the resident reads it.
+
+    Only the plain encrypted-file vault qualifies. A system keyring, or a
+    store that mirrors one, may hold a key the resident cannot read, so those
+    callers keep sending their own copy.
+    """
+
+    return type(getattr(store, "_policy_integrity_secret_store", None)) is EncryptedFileSecretStore
 
 
 def _signing_material_for_resident(store: GuardStore, *, create: bool = False) -> tuple[str | None, str | None]:
