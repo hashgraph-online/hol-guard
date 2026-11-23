@@ -23,7 +23,7 @@ use serde_json::{json, Map, Value};
 use crate::daemon_policy_authority::load_authenticated_daemon_identity;
 
 #[path = "daemon_manage_ensure.rs"]
-mod ensure;
+pub(crate) mod ensure;
 #[cfg(all(test, unix))]
 #[path = "daemon_manage_exit_record_tests.rs"]
 mod exit_record_tests;

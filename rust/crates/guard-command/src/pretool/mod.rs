@@ -290,6 +290,7 @@ mod shell_script;
 mod sink_peel;
 mod stderr_merge;
 mod stdin_filter_options;
+mod stdin_filter_sort;
 mod stdin_filters;
 mod symlink_writes;
 mod tool_inventory_reads;
@@ -331,6 +332,7 @@ mod worktree_add;
 mod worktree_maintenance;
 mod worktree_writes;
 mod wrangler_reads;
+mod yaml_query_reads;
 
 pub mod generic;
 mod package_scripts_disabled;

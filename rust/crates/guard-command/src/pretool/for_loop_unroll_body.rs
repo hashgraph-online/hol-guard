@@ -511,14 +511,46 @@ const MARKER: char = '\u{1}';
 /// larger word keeps its review. A reference the body quotes on its own is
 /// read here as the whole word it is, because `unquote_whole_references` has
 /// already taken the quotes off.
+///
+/// A reference followed by a plain relative path, as in `cat $d/package.json`,
+/// stands alone as well. Written out it is `cat packages/*/package.json`: the
+/// pattern then has a wildcard directory, and the glob proof that walks it
+/// refuses every matched directory whose name holds whitespace or a glob
+/// character, so no name the loop would split or expand again is admitted.
+/// The loop reads `<match>/package.json` for every match, and those that
+/// exist are exactly the words the written-out pattern expands to; the rest
+/// read nothing.
 pub(crate) fn references_stand_alone(item: &str) -> bool {
     let chars: Vec<char> = item.chars().collect();
     chars.iter().enumerate().all(|(index, &current)| {
         current != MARKER
             || (index.checked_sub(1).is_none_or(|before| {
                 word_boundary(Some(chars[before])) && !escaped(&chars, before)
-            }) && word_boundary(chars.get(index + 1).copied()))
+            }) && (word_boundary(chars.get(index + 1).copied())
+                || plain_path_suffix(&chars, index + 1)
+                    .is_some_and(|end| word_boundary(chars.get(end).copied()))))
     })
+}
+
+/// The end of a `/name/name` run that starts at `start`: one or more visible
+/// or hidden components of plain filename characters, none of them `.` or
+/// `..`, so the suffix only ever descends below the matched name.
+fn plain_path_suffix(chars: &[char], start: usize) -> Option<usize> {
+    if chars.get(start) != Some(&'/') {
+        return None;
+    }
+    let end = chars[start..]
+        .iter()
+        .position(|character| {
+            !(character.is_ascii_alphanumeric()
+                || matches!(character, '/' | '.' | '_' | '-' | '+' | '@' | ','))
+        })
+        .map_or(chars.len(), |offset| start + offset);
+    let suffix: String = chars[start + 1..end].iter().collect();
+    suffix
+        .split('/')
+        .all(|component| !component.is_empty() && component != "." && component != "..")
+        .then_some(end)
 }
 
 /// Whether every reference in `item` stands inside quotes of the body's own.
@@ -608,13 +640,18 @@ pub(crate) fn unquote_whole_references(item: &str) -> String {
         if !in_double
             && current == '"'
             && chars.get(index + 1) == Some(&MARKER)
-            && chars.get(index + 2) == Some(&'"')
             && word_boundary(index.checked_sub(1).map(|before| chars[before]))
-            && word_boundary(chars.get(index + 3).copied())
         {
-            out.push(MARKER);
-            index += 3;
-            continue;
+            // `"$d"` or `"$d/package.json"`: the quoted run holds only the
+            // reference and a plain path below it, which no split or glob
+            // expansion would change.
+            let close = plain_path_suffix(&chars, index + 2).unwrap_or(index + 2);
+            if chars.get(close) == Some(&'"') && word_boundary(chars.get(close + 1).copied()) {
+                out.push(MARKER);
+                out.extend(&chars[index + 2..close]);
+                index = close + 1;
+                continue;
+            }
         }
         if current == '\\' && index + 1 < chars.len() {
             out.push(current);
