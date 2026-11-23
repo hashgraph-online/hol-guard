@@ -113,8 +113,7 @@ pub(super) fn spend_package(
     let (published, key) = store::lookup_integrity(&admitted.binding)?;
     // The bound check compares the published state with the persisted one,
     // which the relay's own remembered write does not touch.
-    let verification = store::verification_state(&published);
-    let bound = integrity_evidence(&rows, &verification, key)?;
+    let bound = integrity_evidence(&rows, &published, key)?;
     // The rows are verified at the generation the decision read them at:
     // after the relay's own remembered allow re-signed every local row, that
     // is the generation the write was finalized at.

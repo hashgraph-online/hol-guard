@@ -36,9 +36,6 @@ fn prepare_with(
             None => (record, false),
         };
         let Some((receipt, row)) = compose(guard_home, &record, &stamp) else {
-            if record.get("kind").and_then(Value::as_str) == Some("mcp_tool_call") {
-                retry.push((sequence, record));
-            }
             continue;
         };
         composed.push((

@@ -297,7 +297,8 @@ pub(super) fn rejection_code(record: &Value) -> &'static str {
         .and_then(Value::as_object)
         .and_then(|metadata| metadata.get("mcpSkillFirewall"))
         .filter(|value| value.is_object());
-    if firewall.is_none() && forward {
+    let firewall_required = forward || (!queued && !reviewed);
+    if firewall.is_none() && firewall_required {
         return "firewall";
     }
     if (queued || reviewed)

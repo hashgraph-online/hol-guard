@@ -236,10 +236,11 @@ fn record_page(
             .collect();
         if !plain.is_empty() {
             let unwritten = mcp_relay_receipt::write_indexed(home, plain);
-            if !unwritten.is_empty() {
-                return Err(format!("mcp_relay_receipt_unwritten:{}", unwritten.len()));
-            }
+            let unwritten_count = unwritten.len();
             keep_handed_back(queue, paged, &unwritten);
+            if unwritten_count > 0 {
+                return Err(format!("mcp_relay_receipt_unwritten:{unwritten_count}"));
+            }
         }
         return Ok(None);
     };
@@ -254,10 +255,11 @@ fn record_page(
         .collect();
     if !plain.is_empty() {
         let unwritten = mcp_relay_receipt::write_indexed(home, plain);
-        if !unwritten.is_empty() {
-            return Err(format!("mcp_relay_receipt_unwritten:{}", unwritten.len()));
-        }
+        let unwritten_count = unwritten.len();
         keep_handed_back(queue, paged, &unwritten);
+        if unwritten_count > 0 {
+            return Err(format!("mcp_relay_receipt_unwritten:{unwritten_count}"));
+        }
     }
     Ok(fatal)
 }

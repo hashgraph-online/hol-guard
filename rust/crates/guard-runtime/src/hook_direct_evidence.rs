@@ -417,16 +417,26 @@ impl DirectEvidenceQueue {
                 settled: Vec::new(),
             };
         };
-        let native_count = state.records.iter().filter(|record| record.native).count();
-        if native_count == 0 {
-            drop(state);
-            return self.acknowledge_and_peek_with(None, None, max_records, false);
-        }
-        let records = state
+        let candidates: Vec<_> = state
             .records
             .iter()
-            .filter(|record| record.native)
+            .filter(|record| {
+                record.native
+                    || record.record.get("kind").and_then(Value::as_str) != Some("mcp_tool_call")
+            })
+            .collect();
+        let native_count = candidates.iter().filter(|record| record.native).count();
+        let selected: Vec<_> = candidates
+            .iter()
+            .filter(|record| native_count == 0 || record.native)
             .take(max_records)
+            .collect();
+        let selected_len = selected.len();
+        let through = (native_count == 0)
+            .then(|| selected.last().map(|record| record.seq))
+            .flatten();
+        let records = selected
+            .into_iter()
             .map(|record| Paged {
                 seq: record.seq,
                 record: record.record.clone(),
@@ -435,8 +445,12 @@ impl DirectEvidenceQueue {
             .collect();
         Peeked {
             records,
-            remaining: native_count.saturating_sub(max_records),
-            through: None,
+            remaining: if native_count > 0 {
+                native_count.saturating_sub(selected_len)
+            } else {
+                candidates.len().saturating_sub(selected_len)
+            },
+            through,
             settled: Vec::new(),
         }
     }
