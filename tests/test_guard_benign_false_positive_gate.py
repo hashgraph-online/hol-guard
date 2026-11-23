@@ -34,7 +34,15 @@ from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_setup, connector_groups
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
-from tests.benign_fp_gate_mcp import McpCase, evidence_drained, mcp_cases, mcp_failure, replay, review_posture
+from tests.benign_fp_gate_mcp import (
+    McpCase,
+    drain_report,
+    evidence_drained,
+    mcp_cases,
+    mcp_failure,
+    replay,
+    review_posture,
+)
 from tests.benign_fp_gate_projects import host_tool_path
 from tests.gauntlet_replay import (
     cursor_grep_input,
@@ -673,7 +681,8 @@ def test_mcp_connectors_are_set_up_before_they_are_reviewed(
     fixture, worker = gate_environment
     with review_posture(worker), evidence_drained(worker):
         failure = mcp_failure(case, *replay(case, fixture, worker.store))
-    assert failure is None, f"{failure}: {case.case_id}"
+        report = drain_report(worker) if failure else None
+    assert failure is None, f"{failure}: {case.case_id} {report}"
 
 
 def test_pending_fix_entries_name_real_benign_cases() -> None:

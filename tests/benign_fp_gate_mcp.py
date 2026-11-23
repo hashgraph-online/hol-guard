@@ -339,6 +339,20 @@ def evidence_drained(worker: HookWorker) -> Iterator[None]:
             publisher.request_publish()
 
 
+def drain_report(worker: HookWorker) -> dict[str, object]:
+    """What the evidence drain did, named in a failing case's message."""
+    publisher = worker.policy_snapshot_publisher
+    drain = getattr(worker, "_direct_evidence_drain", None)
+    transport = getattr(publisher, "direct_evidence_transport", None)
+    return {
+        "drain": None
+        if drain is None
+        else {name: getattr(drain, name, None) for name in ("pages", "records", "failures")},
+        "transport": callable(transport) and transport() is not None,
+        "bound": getattr(publisher, "_direct_lane_evidence_bound", None),
+    }
+
+
 def replay(
     case: McpCase, fixture: BenignFixture, store: GuardStore
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
