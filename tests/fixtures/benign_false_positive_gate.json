@@ -1240,7 +1240,8 @@
         "command": "sed -n '1w out.txt' \"$HOME/other-project/notes.md\"; git status --short"
       },
       "cwd": "worktree",
-      "expect": "not_allow"
+      "expect": "not_allow",
+      "sandbox_does_not_protect": true
     },
     {
       "id": "node-package-loop-runs-an-inline-program",
