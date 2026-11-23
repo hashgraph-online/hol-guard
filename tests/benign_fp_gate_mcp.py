@@ -46,6 +46,7 @@ READY_SERVER = "echo-ready"
 READY_TOOL = "lookup"
 _SESSION_SECONDS = 30.0
 _WARM_SECONDS = 30.0
+_ROW_SECONDS = 10.0
 # The answer to a call the relay could not decide yet (`mcp_relay_authority::NO_DECISION`).
 _NO_DECISION = "HOL Guard could not obtain a native decision for this tool call."
 # The stderr line naming why (`mcp_relay_resident_defer::DEFER_LINE_PREFIX`).
@@ -183,10 +184,7 @@ def allow_ready_server(store: GuardStore, identity: McpServerIdentity) -> None:
     definitions = tuple(_TOOLS)
     store.replace_local_cli_commands(
         cli.cli_id,
-        tuple(
-            LocalCliCommand(tool["name"], tool["name"], tool["name"], tool["description"])
-            for tool in definitions
-        ),
+        tuple(LocalCliCommand(tool["name"], tool["name"], tool["name"], tool["description"]) for tool in definitions),
         mcp_catalog=McpCatalogResult(tools=definitions, complete=True),
         identity_hash=identity.identity_hash,
         seen_at=seen_at,
@@ -297,6 +295,12 @@ def replay(
         # Name why the relay never decided, so a failing case says more than the refusal.
         response = {**response, "relay_defer": defers}
     rows = approval_rows(store, known)
+    # The resident writes a stopped call's review row from its evidence drain,
+    # after the relay has answered, so a refusal waits for that row to land.
+    rows_deadline = time.monotonic() + _ROW_SECONDS
+    while not rows and "error" in response and not _warming(response) and time.monotonic() < rows_deadline:
+        time.sleep(0.1)
+        rows = approval_rows(store, known)
     return response, rows, identity.identity_hash
 
 
