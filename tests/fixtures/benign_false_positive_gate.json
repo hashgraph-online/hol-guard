@@ -18141,6 +18141,106 @@
       "contained_ok": true
     },
     {
+      "id": "home-find-exec-basename-clone-source-names",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/edge-clone/workers/api/src -maxdepth 1 -type f -exec basename {} \\; | sort"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "home-find-exec-basename-quoted-home-variable",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find \"$HOME/edge-clone/workers/api/src\" -type f -exec basename {} + | sort"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-find-exec-basename-whole-home",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME} -type f -exec basename {} \\;"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-find-exec-basename-hidden-home-folder",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/.config -type f -exec basename {} \\;"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-find-exec-basename-path-child",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/edge-clone/workers/api/src -type f -exec ./basename {} \\;"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
+      "id": "neg-find-exec-basename-single-quoted-home",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find '$HOME/edge-clone/workers/api/src' -type f -exec basename {} \\;"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
       "id": "sibling-find-exec-stat-file-times",
       "fix_area": "shell",
       "harnesses": [

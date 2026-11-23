@@ -394,6 +394,13 @@ pub(crate) fn parse_posix_command(
             && executable
                 .as_deref()
                 .is_some_and(|value| is_nested_command_executor(value, &arguments))
+            // A quoted `"$HOME/..."` root is visible only in the text as
+            // written, so a `find -exec basename` walk over one is modeled
+            // here rather than in the word-only check.
+            && !executable.as_deref().is_some_and(|value| {
+                executable_basename(value) == "find"
+                    && read_only_fanout::find_exec_modeled(&arguments, Some(&text))
+            })
         {
             return Ok(uncertain(
                 request,
