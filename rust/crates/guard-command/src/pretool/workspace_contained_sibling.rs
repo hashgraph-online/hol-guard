@@ -155,7 +155,8 @@ fn sibling_cd_root(model: &CanonicalCommandV1, context: PathContext<'_>) -> Opti
     }
     let sequenced =
         super::super::segment_proof::verified_cwd_compound_context(model, context).is_none();
-    let target = super::super::segment_proof::verified_cwd_list_context(model, context, true)?;
+    let target = super::super::segment_proof::verified_cwd_list_context(model, context, true)
+        .or_else(|| super::super::segment_proof::sequenced_list_cwd_context(model, context))?;
     let target = PathBuf::from(target);
     let workspace = std::fs::canonicalize(context.cwd?).ok()?;
     if target.starts_with(&workspace) {
@@ -163,7 +164,10 @@ fn sibling_cd_root(model: &CanonicalCommandV1, context: PathContext<'_>) -> Opti
     }
     let root = super::super::contained_wrapper::sibling_project_root(&target, context.home_dir?)?;
     let core = if sequenced {
-        sequenced_core(model)?
+        match sequenced_core(model) {
+            Some(core) => core,
+            None => sequenced_list_core(model, context)?,
+        }
     } else {
         match super::super::contained_wrapper::contained_core(model, context) {
             Some(core) => core,
@@ -178,6 +182,55 @@ fn sibling_cd_root(model: &CanonicalCommandV1, context: PathContext<'_>) -> Opti
                 && (!sequenced || names_readable(segment, &root, &trees))
         })
         .then_some(root)
+}
+
+/// The list of runs after a `cd <dir>` whose steps are separated by `;` as
+/// well as `&&`.
+///
+/// `sequenced_core` reads the single command a `cd <dir>;` runs. An agent
+/// that steps into a checkout beside its own and then reads two things from
+/// it writes the second step after a `;`, so it runs whatever the first one
+/// reported -- `grep -rln <name> tests | head; grep -rn <name> tests/x.ts`.
+/// That list had no core and went to review, while the same two steps joined
+/// by `&&` ran contained.
+///
+/// The sandbox runs the issued text with the root as its directory, so the
+/// step after the `;` runs there whether or not the `cd` arrived, which is
+/// the fallback `sibling_cd_root` already reads every named path against.
+/// The grammar is the one `joined_core` reads for an `&&` list, so the shape
+/// is one the sink already knows how to put back together.
+fn sequenced_list_core(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<CanonicalCommandV1> {
+    if !sequenced_separators(model) {
+        return None;
+    }
+    list::joined_core(model, context)
+}
+
+/// Whether every separator between the steps after the `cd` is one the
+/// sandbox runs as issued: `;`, `&&` or a pipe. A `||` keeps its review,
+/// because the step it guards runs exactly when the one before it failed,
+/// which is not the list the root was proved for.
+fn sequenced_separators(model: &CanonicalCommandV1) -> bool {
+    model.segments.windows(2).enumerate().all(|(index, pair)| {
+        let Some(length) = pair[1].span.start.checked_sub(pair[0].span.end) else {
+            return false;
+        };
+        let separator: String = model
+            .normalized_text
+            .chars()
+            .skip(pair[0].span.end)
+            .take(length)
+            .collect();
+        let separator = separator.trim();
+        if index == 0 {
+            matches!(separator, "&&" | ";")
+        } else {
+            matches!(separator, "&&" | ";" | "|")
+        }
+    })
 }
 
 /// The one plain command after `cd <dir>;`, with no other list, pipe or

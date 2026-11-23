@@ -21,7 +21,20 @@ pub(in crate::pretool) fn verified_cwd_list_context(
     context: PathContext<'_>,
     sequence_after_cd: bool,
 ) -> Option<String> {
-    cwd_list_context(model, context, sequence_after_cd, false)
+    cwd_list_context(model, context, sequence_after_cd, false, false)
+}
+
+/// Like [`verified_cwd_list_context`], but a `;` between later steps counts
+/// too. Only a caller that runs the issued text with the resolved directory
+/// as the sandbox's own may pass it: a step after a `;` runs there whatever
+/// the `cd` did, so it cannot fall back to the session's directory as it
+/// would in the user's shell, and that caller reads every path the step
+/// names against the sandbox root as well as the `cd` target.
+pub(in crate::pretool) fn sequenced_list_cwd_context(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<String> {
+    cwd_list_context(model, context, true, false, true)
 }
 
 /// Like [`verified_cwd_compound_context`], but also admits a `cd` that climbs
@@ -31,7 +44,7 @@ fn verified_read_cwd_compound_context(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> Option<String> {
-    cwd_list_context(model, context, false, true)
+    cwd_list_context(model, context, false, true, false)
 }
 
 /// The directory the Git reads of a `cd <dir> && ...` list run in, for the
@@ -59,6 +72,7 @@ fn cwd_list_context(
     context: PathContext<'_>,
     sequence_after_cd: bool,
     climb: bool,
+    sequence_between_steps: bool,
 ) -> Option<String> {
     let first = model.segments.first()?;
     if model.segments.len() < 2
@@ -105,7 +119,7 @@ fn cwd_list_context(
             // whose own shape was already read above.
             matches!(separator, ";" | "&&" | "||")
         } else if separator == ";" {
-            false
+            sequence_between_steps
         } else {
             matches!(separator, "&&" | "|")
         };
