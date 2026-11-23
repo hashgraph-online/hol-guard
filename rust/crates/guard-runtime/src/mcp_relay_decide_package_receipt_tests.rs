@@ -221,6 +221,30 @@ fn a_queued_package_request_records_the_inbox_row_it_leaves() {
     assert_eq!(forwarded.get("review"), None);
 }
 
+#[test]
+fn a_queued_package_request_uses_the_relay_origin_when_no_center_is_bound() {
+    let mut queued = answer(Some(("blocked".to_owned(), json!({}))), "review");
+    queued.redaction_level = Some("partial".to_owned());
+    let center = crate::mcp_relay_decide::settlement::approval_center_origin(
+        &request().guard_home,
+        None,
+    );
+    let recorded = record(
+        &request(),
+        &json!({}),
+        &decision(),
+        &artifact(),
+        "/work",
+        &queued,
+        Some(&center),
+    )
+    .expect("the record is built");
+    assert_eq!(
+        recorded["review"],
+        json!({"redaction_level": "partial", "approval_center_url": "http://127.0.0.1:4781"})
+    );
+}
+
 /// The gate parses with no `PATH` when the request carries none, and the
 /// record says so rather than leaving the drain its own.
 #[test]
