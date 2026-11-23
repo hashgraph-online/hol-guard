@@ -1,4 +1,19 @@
-use super::writes_nothing;
+use super::writes_nothing as writes_nothing_with_context;
+
+// Existing positive controls use a verified absolute shell HOME.
+fn writes_nothing(segment: &crate::CommandSegmentV1) -> bool {
+    let directory = std::env::temp_dir();
+    let home = directory.to_str().expect("test home path is UTF-8");
+    writes_nothing_with_context(
+        segment,
+        crate::pretool::PathContext {
+            home_dir: Some(home),
+            cwd: Some(home),
+            shell_home_matches: true,
+            ..Default::default()
+        },
+    )
+}
 
 fn step(command: &str, program: &str) -> Option<crate::CommandSegmentV1> {
     let model = crate::parse_command(&crate::CommandModelRequestV1 {
@@ -138,5 +153,53 @@ fn redirection_lookalikes_never_count_as_write_free() {
         let mut segment = step("find . -type f -print", "find").expect("plain find parses");
         segment.text = text.to_owned();
         assert!(!writes_nothing(&segment), "{text}");
+    }
+}
+
+// A hostile inherited HOME is an option, not a harmless file operand:
+// HOME=-delete makes find sandbox "${HOME}" run find sandbox -delete;
+// HOME=-i makes sed -n '1p' "${HOME}" target edit target in-place.
+#[test]
+fn untrusted_home_cannot_be_a_write_free_predecessor() {
+    let mut find = step("find sandbox -print", "find").expect("find parses");
+    find.text = r#"find sandbox "${HOME}""#.to_owned();
+    find.arguments = vec!["sandbox".to_owned(), "${HOME}".to_owned()];
+    let mut sed = step("sed -n '1p' target.txt", "sed").expect("sed parses");
+    sed.text = r#"sed -n '1p' "${HOME}" target.txt"#.to_owned();
+    sed.arguments = vec!["-n".to_owned(), "1p".to_owned(), "${HOME}".to_owned(), "target.txt".to_owned()];
+
+    for segment in [&find, &sed] {
+        assert!(!writes_nothing_with_context(
+            segment,
+            crate::pretool::PathContext::default(),
+        ));
+        assert!(!writes_nothing_with_context(
+            segment,
+            crate::pretool::PathContext {
+                home_dir: Some("-delete"),
+                cwd: Some("/"),
+                shell_home_matches: true,
+                ..Default::default()
+            }
+        ));
+        assert!(!writes_nothing_with_context(
+            segment,
+            crate::pretool::PathContext {
+                home_dir: Some("/"),
+                cwd: Some("/"),
+                shell_home_matches: false,
+                ..Default::default()
+            }
+        ));
+    }
+    // Existing accepted paths still retain their proof when the HOME value
+    // is absolute and matches the shell that executes the command.
+    for command in [
+        r#"find "${HOME}/notes" -type f -print"#,
+        r#"sed -n '1p' "${HOME}/notes.md""#,
+    ] {
+        let program = if command.starts_with("find ") { "find" } else { "sed" };
+        let segment = step(command, program).expect("read parses");
+        assert!(writes_nothing(&segment), "{command}");
     }
 }
