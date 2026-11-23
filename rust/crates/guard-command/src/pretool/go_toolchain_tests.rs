@@ -204,7 +204,7 @@ fn a_go_workspace_keeps_review_even_with_inert_environment() {
     let module = repo.join("go.mod");
     std::fs::write(
         &module,
-        "module example.test/guard\\ngo 1.23.0\\ntoolchain go1.24.0\\n",
+        "module example.test/guard\ngo 1.23.0\ntoolchain go1.24.0\n",
     )
     .unwrap();
     assert!(!safe_go_probe(&words("version"), context()));
@@ -212,13 +212,13 @@ fn a_go_workspace_keeps_review_even_with_inert_environment() {
     std::fs::remove_file(&module).unwrap();
 
     let workspace = root.join("go.work");
-    std::fs::write(&workspace, "go 1.23.0\\ntoolchain go1.24.0\\n").unwrap();
+    std::fs::write(&workspace, "go 1.23.0\ntoolchain go1.24.0\n").unwrap();
     assert!(!safe_go_probe(&words("version"), context()));
     std::fs::remove_file(&workspace).unwrap();
 
     // A file whose contents cannot be trusted is treated as a potential
     // selector too; no attempt is made to infer safety from a filename.
-    std::fs::write(&module, "module example.test/guard\\n").unwrap();
+    std::fs::write(&module, "module example.test/guard\n").unwrap();
     assert!(!safe_go_probe(&words("version"), context()));
     std::fs::remove_file(&module).unwrap();
     assert!(safe_go_probe(&words("version"), context()));
