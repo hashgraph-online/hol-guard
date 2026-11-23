@@ -131,14 +131,14 @@ pub struct ResidentPolicyAuthority {
 /// (client.py:185-:189): base URL + bearer token. Serialized into the
 /// `authority` `Value` so `claim_package_policy` can rebuild it.
 #[derive(Debug, Clone)]
-struct DaemonAuthority {
+pub(crate) struct DaemonAuthority {
     base_url: String,
     auth_token: String,
 }
 
 /// Verified identity record carried through `daemon-state.json` +
 /// `daemon-auth-token` + discovery key.
-struct DaemonIdentity {
+pub(crate) struct DaemonIdentity {
     port: u16,
     auth_token: String,
 }
