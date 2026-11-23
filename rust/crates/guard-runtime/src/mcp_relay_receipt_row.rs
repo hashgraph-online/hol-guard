@@ -17,7 +17,7 @@ pub(super) fn silent_review(
     evidence: &[Value],
     stamp: &Stamp,
 ) -> Option<Map<String, Value>> {
-    let (redaction_level, center) = plain.silent_review()?;
+    let (redaction_level, center, queue_group_id) = plain.silent_review()?;
     let projection = projection(projected)?;
     let artifact: McpToolCallArtifactV1 =
         serde_json::from_value(Value::Object(plain.artifact.clone())).ok()?;
@@ -35,7 +35,7 @@ pub(super) fn silent_review(
         .into_iter()
         .map(str::to_owned)
         .collect();
-    Some(silent_review_args(
+    let mut args = silent_review_args(
         &queue,
         &artifact,
         plain.artifact_hash,
@@ -43,5 +43,9 @@ pub(super) fn silent_review(
         &projection,
         plain.policy_action,
         evidence.to_vec(),
-    ))
+    );
+    if let Some(group) = queue_group_id {
+        args["items"][0]["queue_group_id"] = json!(group);
+    }
+    Some(args)
 }

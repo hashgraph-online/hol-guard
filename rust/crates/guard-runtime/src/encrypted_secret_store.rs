@@ -118,7 +118,7 @@ impl EncryptedFileSecretStore {
     }
 
     /// `_path_for` — `/` and `:` → `_`, suffix `.enc`.
-    fn path_for(&self, secret_id: &str) -> PathBuf {
+    pub(crate) fn path_for(&self, secret_id: &str) -> PathBuf {
         let normalized: String = secret_id
             .chars()
             .map(|c| if c == '/' || c == ':' { '_' } else { c })

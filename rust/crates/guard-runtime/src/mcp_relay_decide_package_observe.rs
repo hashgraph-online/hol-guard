@@ -56,8 +56,8 @@ use super::{Admitted, McpRelayDecideRequestV1, Resolved};
 /// names the mode rather than the action the call was forwarded with.
 pub(super) const OBSERVE_SOURCE: &str = "policy-observe";
 
-/// The observe answer named a leg this port cannot write, which hands the
-/// server to the proxy rather than forwarding without the row.
+/// The observe answer named a leg this port cannot write, which refuses the
+/// call rather than forwarding without the row.
 const PACKAGE_OBSERVE_UNSUPPORTED: &str = "mcp_relay_package_observe_unsupported";
 /// A row could not be written, read back or shaped.
 const PACKAGE_OBSERVE_FAILED: &str = "mcp_relay_package_observe_failed";

@@ -17,6 +17,11 @@ pub struct PathContext<'a> {
     /// No inherited `RUSTUP_TOOLCHAIN` or `RUSTUP_HOME` can change which
     /// toolchain the rustup proxy runs. Literal contexts leave this false.
     pub rustup_override_absent: bool,
+    /// No inherited `GOTOOLCHAIN`, `GOROOT`, proxy, checksum-database or
+    /// module-cache variable can choose which Go toolchain answers a query,
+    /// where it is fetched from or whether it is verified. Literal contexts
+    /// leave this false.
+    pub go_toolchain_inert: bool,
     /// No inherited Cargo registry, transport, credential or alias variable
     /// can move the registry a Cargo query contacts, the index it reads or
     /// the credential provider it starts. Literal contexts leave this false.
@@ -105,6 +110,7 @@ mod http_reads;
 mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
+mod omp_tool_commands;
 pub(crate) mod port_probes;
 pub(crate) mod rsync_local;
 mod workspace_contained;
@@ -179,10 +185,12 @@ mod git_remote_config;
 mod git_remote_ops;
 mod git_routes;
 mod git_session_probe;
+pub(crate) mod git_shortlog_reads;
 mod git_step_preserves;
 mod git_worktree;
 pub(crate) mod github_conversation;
 mod glob_words;
+mod go_toolchain;
 mod guard_diagnostics;
 mod guard_home_option;
 pub use guard_home_option::{guard_approval_inspection_command, guard_safety_guide_read_command};
@@ -213,6 +221,7 @@ mod postgres_reads;
 mod preference_reads;
 mod printf_words;
 mod process_stops;
+mod property_list_reads;
 mod pytest_contained;
 mod sqlite_reads;
 mod status_facts;
@@ -276,10 +285,12 @@ mod segment_proof;
 mod shell_arithmetic;
 mod shell_flow;
 pub(crate) mod shell_literal;
+mod shell_names;
 mod shell_script;
 mod sink_peel;
 mod stderr_merge;
 mod stdin_filter_options;
+mod stdin_filter_sort;
 mod stdin_filters;
 mod symlink_writes;
 mod tool_inventory_reads;
@@ -288,11 +299,17 @@ mod tree_writers;
 pub(crate) mod version_probes;
 pub(crate) mod wget_reads;
 #[cfg(test)]
+#[path = "workspace_contained_credential_names_tests.rs"]
+mod workspace_contained_credential_names_tests;
+#[cfg(test)]
 #[path = "workspace_contained_effects_tests.rs"]
 mod workspace_contained_effects_tests;
 #[cfg(test)]
 #[path = "workspace_contained_git_tests.rs"]
 mod workspace_contained_git_tests;
+#[cfg(test)]
+#[path = "workspace_contained_lookups_tests.rs"]
+mod workspace_contained_lookups_tests;
 #[cfg(test)]
 #[path = "workspace_contained_name_pattern_tests.rs"]
 mod workspace_contained_name_pattern_tests;
@@ -303,6 +320,9 @@ mod workspace_contained_package_tests;
 #[path = "workspace_contained_runner_tests.rs"]
 mod workspace_contained_runner_tests;
 #[cfg(test)]
+#[path = "workspace_contained_search_widening_tests.rs"]
+mod workspace_contained_search_widening_tests;
+#[cfg(test)]
 #[path = "workspace_contained_sibling_tests.rs"]
 mod workspace_contained_sibling_tests;
 #[cfg(test)]
@@ -312,6 +332,7 @@ mod worktree_add;
 mod worktree_maintenance;
 mod worktree_writes;
 mod wrangler_reads;
+mod yaml_query_reads;
 
 pub mod generic;
 mod package_scripts_disabled;

@@ -92,6 +92,11 @@ WORKSPACE_TSC_CASE = "omp-native-workspace-npx-tsc"
 # the no-emit mode in the file, so the command line carries no option at all and
 # the run is proven read-only from the project it names.
 WORKSPACE_TSC_GENERATED_PROJECT_CASE = "omp-native-workspace-tsc-generated-project"
+# The same checker started in the subdirectory the command named rather than in
+# the directory the call was made from. Bun takes that directory as an option of
+# its own, so the run only reaches the named subdirectory when the option
+# travels with it.
+WORKSPACE_TSC_NAMED_DIRECTORY_CASE = "omp-native-workspace-runner-named-directory"
 # The same checker closed the way an agent closes a filtered run: the output is
 # bounded and the line after it prints the checker's own status, which `$?`
 # cannot reach past the filter and `${PIPESTATUS[0]}` can.
@@ -100,6 +105,10 @@ WORKSPACE_TSC_STATUS_REPORT_CASE = "omp-native-workspace-typecheck-status-report
 # in YAML rather than JSON, so the pin the verdict reads is the same fact
 # written in another dialect.
 WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
+# The same checker in a workspace whose packages read their type-check settings
+# from a base at the checkout root. The run starts inside the package, so the
+# base the project extends sits one directory above it.
+WORKSPACE_SHARED_BASE_TSC_CASE = "omp-native-workspace-shared-base-tsc"
 # The other runner a Node project installs for itself, named the way a developer
 # narrows a run: the file to run beside the option that stops Vitest watching.
 # A filter is not a Vitest command, so the run is the same single pass the bare
@@ -111,6 +120,9 @@ WORKSPACE_VITEST_SUMMARY_CASE = "omp-native-workspace-runner-summary-line"
 # agent sees, so the runner prints a different number of lines when the
 # single-pass invocation and its quiet reporter flags reach it.
 WORKSPACE_VITEST_LINE_COUNT_CASE = "omp-native-workspace-runner-line-count"
+# A bare run through the link npm writes, its tail followed by the word that
+# says how it went. Only the installed runner prints the line the case checks.
+WORKSPACE_VITEST_OUTCOME_REPORT_CASE = "omp-native-workspace-runner-outcome-report"
 # The same installed Vitest launched by a file its install wrote: Node given the
 # link npm puts in `node_modules/.bin`, and Bun given the package's own launcher.
 # Both name the workspace's runner, so the run means something only when that
@@ -159,12 +171,15 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_TSC_CASE,
         WORKSPACE_TSC_GENERATED_PROJECT_CASE,
         WORKSPACE_TSC_STATUS_REPORT_CASE,
+        WORKSPACE_TSC_NAMED_DIRECTORY_CASE,
         WORKSPACE_PNPM_TSC_CASE,
+        WORKSPACE_SHARED_BASE_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
         WORKSPACE_VITEST_SUMMARY_CASE,
         WORKSPACE_VITEST_LINE_COUNT_CASE,
+        WORKSPACE_VITEST_OUTCOME_REPORT_CASE,
         WORKSPACE_VITEST_BIN_LINK_CASE,
         WORKSPACE_VITEST_BUN_ENTRY_CASE,
         WORKSPACE_RUN_ALL_CASE,
@@ -531,6 +546,29 @@ _TYPESCRIPT_FILES = {
 }
 
 
+# The subdirectory the named-directory case asks the checker to start in.
+TSC_NAMED_DIRECTORY = "app"
+# The one line that checker prints. It names the directory the run started in,
+# so a launch that lost the named directory prints the project root instead.
+TSC_DIRECTORY_MARKER = f"tsc {_TYPESCRIPT_VERSION} checked the project in {TSC_NAMED_DIRECTORY}"
+_TSC_DIRECTORY_FILES = {
+    **_TYPESCRIPT_FILES,
+    # The named directory has to exist before the run can start in it, and it
+    # carries its own project so the directory is a real place to check from.
+    f"{TSC_NAMED_DIRECTORY}/tsconfig.json": (
+        '{\n  "extends": "../tsconfig.json",\n  "include": ["src"]\n}\n'
+    ),
+    f"{TSC_NAMED_DIRECTORY}/src/panel.ts": "export const panel = { rows: 2 };\n",
+    # `path.basename(process.cwd())` is the whole oracle: only a run that
+    # carried the named directory reports it.
+    "node_modules/typescript/bin/tsc": (
+        "#!/usr/bin/env node\n"
+        "const path = require('path');\n"
+        f"console.log(`tsc {_TYPESCRIPT_VERSION} checked the project in ${{path.basename(process.cwd())}}`);\n"
+    ),
+}
+
+
 # The project a type-check script generates: it names the same sources and keeps
 # the no-emit mode in the file, which is the whole reason the run carries no
 # `--noEmit` of its own.
@@ -540,6 +578,29 @@ _GENERATED_PROJECT_FILES = {
         '{\n  "compilerOptions": {\n    "strict": true,\n    "noEmit": true\n  },\n'
         '  "include": ["src"]\n}\n'
     ),
+}
+
+
+# The same checker in a workspace that keeps its type-check settings in one
+# place: a base at the checkout root, and a package that extends it and
+# declares the no-emit mode beside its own sources. The run starts inside the
+# package, so the base it reads sits above the run directory.
+_WORKSPACE_BASE_TYPESCRIPT_FILES = {
+    **_TYPESCRIPT_FILES,
+    "package.json": (
+        '{\n  "name": "synthetic-workspace",\n  "private": true,\n  "version": "0.0.0",\n'
+        '  "workspaces": [\n    "packages/*"\n  ],\n'
+        f'  "devDependencies": {{\n    "typescript": "{_TYPESCRIPT_VERSION}"\n  }}\n}}\n'
+    ),
+    "tsconfig.base.json": (
+        '{\n  "compilerOptions": {\n    "strict": true,\n    "skipLibCheck": true\n  }\n}\n'
+    ),
+    "packages/app/tsconfig.json": (
+        '{\n  "extends": "../../tsconfig.base.json",\n'
+        '  "compilerOptions": {\n    "noEmit": true\n  },\n'
+        '  "include": ["src"]\n}\n'
+    ),
+    "packages/app/src/settings.ts": "export const settings = { retries: 3 };\n",
 }
 
 
@@ -813,11 +874,25 @@ _INSTALLS = {
         package="typescript",
         entry="bin/tsc",
     ),
+    WORKSPACE_TSC_NAMED_DIRECTORY_CASE: _Install(
+        "tsc",
+        _TSC_DIRECTORY_FILES,
+        TSC_DIRECTORY_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
     WORKSPACE_LINT_STAGED_CASE: _Install("lint-staged", _LINT_STAGED_FILES, LINT_STAGED_MARKER),
     WORKSPACE_RUN_ALL_CASE: _Install("npm-run-all", _RUN_ALL_FILES, RUN_ALL_MARKER),
     WORKSPACE_PNPM_TSC_CASE: _Install(
         "tsc",
         _PNPM_TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_SHARED_BASE_TSC_CASE: _Install(
+        "tsc",
+        _WORKSPACE_BASE_TYPESCRIPT_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",
@@ -833,6 +908,12 @@ _INSTALLS = {
         "vitest",
         _VITEST_LINE_COUNT_FILES,
         VITEST_LINE_COUNT_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_OUTCOME_REPORT_CASE: _Install(
+        "vitest",
+        _VITEST_RUN_FILES,
+        VITEST_RUN_MARKER,
         entry="vitest.mjs",
     ),
     WORKSPACE_VITEST_FILTER_CASE: _Install(

@@ -153,6 +153,7 @@ pub(super) fn tested_glob_operand(value: &str, context: super::PathContext<'_>) 
         && expanded_path(value, context)
             .is_some_and(|path| std::fs::symlink_metadata(path).is_err_and(|error| absent(&error)))
         && (safe_reads::glob_file_matches(value, context).is_some()
+            || safe_reads::directory_glob_file_matches(value, context).is_some()
             || search::safe_unmatched_glob_operand(value, context, false))
 }
 

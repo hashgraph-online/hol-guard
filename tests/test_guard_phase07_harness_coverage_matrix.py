@@ -50,8 +50,8 @@ _HARNESS_COVERAGE_MATRIX = (
         "tool_name": "run_terminal_command",
         "command": "npm install minimist@1.2.8",
         "proof_test": (
-            "tests/test_guard_mcp_package_proxy_phase14.py::"
-            "test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[cursor]"
+            "rust/crates/guard-runtime/src/mcp_relay_decide_package_route_tests.rs::"
+            "the_composition_queues_a_package_request_the_tool_policy_permitted"
         ),
     },
     {
@@ -59,8 +59,8 @@ _HARNESS_COVERAGE_MATRIX = (
         "tool_name": "run_terminal_command",
         "command": "npm install minimist@1.2.8",
         "proof_test": (
-            "tests/test_guard_mcp_package_proxy_phase14.py::"
-            "test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[opencode]"
+            "rust/crates/guard-runtime/src/mcp_relay_decide_package_route_tests.rs::"
+            "the_composition_queues_a_package_request_the_tool_policy_permitted"
         ),
     },
     {
@@ -68,8 +68,8 @@ _HARNESS_COVERAGE_MATRIX = (
         "tool_name": "run_terminal_command",
         "command": "npm install minimist@1.2.8",
         "proof_test": (
-            "tests/test_guard_mcp_package_proxy_phase14.py::"
-            "test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[hermes]"
+            "rust/crates/guard-runtime/src/mcp_relay_decide_package_route_tests.rs::"
+            "the_composition_queues_a_package_request_the_tool_policy_permitted"
         ),
     },
     {
@@ -77,8 +77,8 @@ _HARNESS_COVERAGE_MATRIX = (
         "tool_name": "run_terminal_command",
         "command": "npm install minimist@1.2.8",
         "proof_test": (
-            "tests/test_guard_mcp_package_proxy_phase14.py::"
-            "test_phase14_runtime_mcp_proxy_queues_package_request_not_generic_tool_call[openclaw]"
+            "rust/crates/guard-runtime/src/mcp_relay_decide_package_route_tests.rs::"
+            "the_composition_queues_a_package_request_the_tool_policy_permitted"
         ),
     },
 )
@@ -108,4 +108,4 @@ def test_phase07_harness_coverage_matrix_extracts_package_intent(
     assert intent.intent_kind == "install"
     assert intent.package_manager == "npm"
     assert Path(entry["proof_test"].split("::")[0]).exists()
-    assert entry["proof_test"].startswith("tests/test_guard_")
+    assert entry["proof_test"].startswith(("tests/test_guard_", "rust/crates/guard-runtime/src/mcp_relay_"))

@@ -31,7 +31,6 @@ except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 _LANE_READY = "hol-guard mcp-relay: lane ready: "
-_HAND_OFF = "hol-guard mcp-relay: python proxy: "
 _NOT_READY = "hol-guard mcp-relay: lane not ready: "
 _SERVER_UNKNOWN = _NOT_READY + "mcp_relay_session_server_unknown"
 _SERVER = """
@@ -206,7 +205,7 @@ class _Install:
 
 def _start_line(stderr: str) -> str:
     for line in stderr.splitlines():
-        if line.startswith((_LANE_READY, _HAND_OFF, _NOT_READY)):
+        if line.startswith((_LANE_READY, _NOT_READY)):
             return line
     raise AssertionError(f"the relay wrote no start line: {stderr[-2000:]}")
 

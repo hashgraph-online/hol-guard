@@ -121,10 +121,6 @@
         "surface": "package_shims_protect_launch"
       },
       {
-        "module": "codex_plugin_scanner.guard.proxy.runtime_mcp",
-        "surface": "mcp_proxy_surface_tool_calls"
-      },
-      {
         "module": "codex_plugin_scanner.guard.proxy.stdio",
         "surface": "mcp_proxy_surface_tool_calls"
       },
@@ -233,6 +229,7 @@
         "path": [
           "src/codex_plugin_scanner/guard/runtime/command_queue*.py",
           "src/codex_plugin_scanner/guard/runtime/command_capability.py",
+          "src/codex_plugin_scanner/guard/runtime/command_capability_keys.py",
           "src/codex_plugin_scanner/guard/runtime/command_executors.py",
           "src/codex_plugin_scanner/guard/cloud_control/command_queue_worker.py"
         ]
@@ -724,9 +721,15 @@
       },
       {
         "path": [
+          "src/codex_plugin_scanner/guard/policy_bundle_trusted_keys.py"
+        ],
+        "reason": "Reviewed: policy bundle trusted keys. synced_policy.py validates the cached signed policy bundle through it when a runtime decision builds the synced policy payload, so it is runtime policy-bundle verification and stays counted."
+      },
+      {
+        "path": [
           "src/codex_plugin_scanner/guard/synced_policy.py"
         ],
-        "reason": "Reviewed: synced policy payload. commands_support_runtime_resolution.py builds the synced policy payload from it while resolving a runtime decision, so it is runtime policy resolution and stays counted. approvals.py used to pull it in eagerly; it is now reached only through that lazy runtime path."
+        "reason": "Reviewed: synced policy payload. The supply-chain posture and package policy resolution build the synced policy payload from it while resolving a runtime decision, so it is runtime policy resolution and stays counted. approvals.py used to pull it in eagerly; it is now reached only through that lazy runtime path."
       },
       {
         "path": [

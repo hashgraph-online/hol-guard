@@ -367,3 +367,44 @@ fn a_package_test_with_a_linked_manifest_or_lifecycle_is_refused() {
     assert!(reply.get("value").is_none());
     assert!(reply["reason_code"].is_string());
 }
+
+#[test]
+fn a_run_starts_in_the_directory_the_command_named() {
+    let (_directory, workspace) = project("{}");
+    let app = workspace.join("packages/app");
+    fs::create_dir_all(&app).unwrap();
+    fs::write(app.join("package.json"), r#"{"name":"app"}"#).unwrap();
+    fs::write(
+        app.join("tsconfig.json"),
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    )
+    .unwrap();
+    // The hoisted copy is the one a run in the workspace root would start;
+    // the project the command named installs its own.
+    install(&workspace.join("node_modules"), "typescript/bin/tsc");
+    let entry = install(&app.join("node_modules"), "typescript/bin/tsc");
+    let plan = &plan(
+        &["bunx", "--cwd", "packages/app", "tsc"],
+        &workspace,
+        &workspace,
+    )["value"];
+    assert_eq!(plan["cwd"], json!(app));
+    assert_eq!(plan["command"][1], json!(entry));
+    // The project declared the no-emit mode, so the run carries it.
+    assert_eq!(plan["command"][2], "--noEmit");
+}
+
+#[test]
+fn a_named_directory_outside_the_workspace_never_runs() {
+    let (directory, workspace) = project("{}");
+    let outside = directory.path().join("elsewhere");
+    fs::create_dir_all(&outside).unwrap();
+    install(&outside.join("node_modules"), "eslint/bin/eslint.js");
+    std::os::unix::fs::symlink(&outside, workspace.join("linked")).unwrap();
+    let reply = plan(
+        &["bunx", "--cwd", "linked", "eslint", "src"],
+        &workspace,
+        &workspace,
+    );
+    assert!(reply.get("value").is_none());
+}

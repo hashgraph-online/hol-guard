@@ -201,9 +201,12 @@ fn top_arguments(arguments: &[String]) -> bool {
     logging || (background && iterations)
 }
 
-/// A count that bounds a sampling run: decimal and not zero.
+/// A count that bounds a sampling run: decimal and within the tool's `int` range.
 fn positive(word: &str) -> bool {
-    number(word) && word.chars().any(|character| character != '0')
+    number(word)
+        && word
+            .parse::<u64>()
+            .is_ok_and(|value| (1..=i32::MAX as u64).contains(&value))
 }
 
 /// A login name or terminal: no separator, so no path and no option.

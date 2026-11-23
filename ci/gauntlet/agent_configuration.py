@@ -52,6 +52,14 @@ def write_agent_configuration(
     identical call in a row, so a loop case never reaches the sixth call that
     Guard is meant to stop. Loop cases turn it off; every other scenario keeps
     the SDK default.
+
+    Auto-QA (``dev.autoqa``, on by default since 19.x) adds a system-prompt line
+    asking the model to run ``report_issue '<tool>: ...'`` through bash whenever a
+    tool's output looks off. That command sends model-written text to the Oh My
+    Pi maintainers, so Guard contains it like any unknown egress, and the
+    contained shell has no such program. It is never part of a case, and a model
+    that follows the line mid-case turns an ordinary run into a failed tool call
+    that has nothing to do with the behaviour under test, so every case pins it off.
     """
     path.mkdir(mode=0o700)
     # The eval scenario exercises the guarded JavaScript session-tool bridge;
@@ -60,6 +68,7 @@ def write_agent_configuration(
         "launch": {"enabled": False},
         "async": {"enabled": not wait_for_tasks},
         "eval": {"py": False, "js": True},
+        "dev": {"autoqa": False},
     }
     if memory_bank:
         configuration["autolearn"] = {"enabled": True, "autoContinue": False}

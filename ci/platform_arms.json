@@ -1613,16 +1613,16 @@
   {
    "verdict": "other-platform",
    "note": "Windows probes liveness in its own arm; elsewhere `false` reads the daemon as gone, which withdraws a claim rather than granting one.",
-   "file": "rust/crates/guard-runtime/src/daemon_policy_authority.rs",
-   "item": "fn daemon_pid_is_running(_pid: i64) -> bool",
+   "file": "rust/crates/guard-runtime/src/daemon_policy_authority_process.rs",
+   "item": "pub(crate) fn daemon_pid_is_running(_pid: i64) -> bool",
    "cfg": "not(any(unix, windows))",
-   "body": "3ad5ce266ca9"
+   "body": "bfc096db4e9e"
   },
   {
-   "file": "rust/crates/guard-runtime/src/daemon_policy_authority.rs",
-   "item": "fn daemon_command_for_pid(_pid: i64) -> Option<String>",
    "verdict": "windows-unsupported",
    "note": "The daemon's command line is not read off Unix, so the pid is not matched against a trusted `ps` path.",
+   "file": "rust/crates/guard-runtime/src/daemon_policy_authority_process.rs",
+   "item": "fn daemon_command_for_pid(_pid: i64) -> Option<String>",
    "cfg": "not(unix)",
    "body": "97ce013503e9"
   },

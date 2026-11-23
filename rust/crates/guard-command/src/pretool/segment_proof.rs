@@ -20,7 +20,8 @@ mod github_metadata_text;
 mod jq_filter_text;
 pub(super) use cwd::{
     after_read_prefix, cwd_read_executable, exact_safe_absolute_cd_chain, exact_safe_cwd_compound,
-    git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
+    git_read_cwd_compound_context, sequenced_list_cwd_context, verified_cwd_compound_context,
+    verified_cwd_list_context,
 };
 
 /// The leading `cd <dir>` of a list whose separators leave the steps after it
@@ -112,6 +113,7 @@ fn segment_proofs(
         home_dir: context.home_dir,
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
+        go_toolchain_inert: context.go_toolchain_inert,
         cargo_config_inert: context.cargo_config_inert,
         npm_config_inert: context.npm_config_inert,
         pip_config_inert: context.pip_config_inert,
@@ -234,6 +236,7 @@ fn segment_proofs(
                         | "file"
                         | "npm"
                         | "jq"
+                        | "yq"
                         | "pkill"
                         // A filter given a file operand opens that file, so
                         // its coverage takes the same session proof `cat`
@@ -259,6 +262,10 @@ fn segment_proofs(
                         | "pr"
                         | "shuf"
                         | "iconv"
+                        // A property-list question names the document it reads,
+                        // so its coverage takes the same session proof `cat`
+                        // takes.
+                        | "plutil"
                 ))
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.
@@ -439,9 +446,13 @@ pub(super) fn exact_safe_segment_with_context(
             );
     };
     let basename = executable_basename(executable);
-    let jq_filter = (basename == "jq")
-        .then(|| safe_reads::jq_filter_position(&segment.arguments, segment.pipeline_index > 0))
-        .flatten();
+    // `jq` and `yq` both take an expression that selects fields inside the
+    // document they read, so the words in it are not names on this machine.
+    let filter_expression = match basename {
+        "jq" => safe_reads::jq_filter_position(&segment.arguments, segment.pipeline_index > 0),
+        "yq" => super::yaml_query_reads::expression_position(&segment.arguments),
+        _ => None,
+    };
     // The same proof the admission arm runs below, so a search segment that
     // arm refuses cannot shed its sensitive-text screen here.
     let inert_search = match basename {
@@ -468,7 +479,9 @@ pub(super) fn exact_safe_segment_with_context(
     let sensitive_text = secret_namespace
         .map(|index| github_metadata_text::without_namespace(segment, index))
         .or_else(|| super::kubectl_reads::without_templates(segment, &output_templates))
-        .or_else(|| jq_filter.and_then(|index| jq_filter_text::without_jq_filter(segment, index)));
+        .or_else(|| {
+            filter_expression.and_then(|index| jq_filter_text::without_jq_filter(segment, index))
+        });
     if (!inert_search
         && !super::source_file_read_segment(segment)
         && super::git_search_text::segment_sensitive(model, segment, sensitive_text, context.cwd))
@@ -478,7 +491,7 @@ pub(super) fn exact_safe_segment_with_context(
                 .iter()
                 .enumerate()
                 .any(|(index, argument)| {
-                    Some(index) != jq_filter
+                    Some(index) != filter_expression
                         && Some(index) != secret_namespace
                         && !output_templates.contains(&index)
                         && !search_text.contains(&index)
@@ -508,6 +521,11 @@ pub(super) fn exact_safe_segment_with_context(
         || super::status_facts::safe_status_fact(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
         || super::liveness_probes::safe_liveness_probe(basename, &segment.arguments)
+        || super::property_list_reads::safe_property_list_read(
+            basename,
+            &segment.arguments,
+            context,
+        )
         || super::preference_reads::safe_preference_read(basename, &segment.arguments)
         || super::manager_usage::safe_manager_segment(basename, model, segment, context)
     {
@@ -534,6 +552,15 @@ pub(super) fn exact_safe_segment_with_context(
         // Neither is eligible for the generic harmless-command fast path.
         "type" | "command" | "whence" | "which" => {
             super::lookup_reads::safe_path_lookup(basename, &segment.arguments)
+        }
+        // `go version` and a read-only `go env` print and exit, but which
+        // toolchain prints them is decided first; `go_toolchain` reads that
+        // choice.
+        "go" => {
+            // A peer step may create go.mod/go.work after the filesystem
+            // proof and before Go selects a toolchain from PATH.
+            no_peer_creates(model, segment)
+                && super::go_toolchain::safe_go_probe(&segment.arguments, context)
         }
         "cargo" => super::rust_toolchain::safe_cargo_probe(&segment.arguments, context),
         "rustc" => super::rust_toolchain::safe_version_probe(&segment.arguments, context),
@@ -719,6 +746,19 @@ pub(super) fn exact_safe_segment_with_context(
                     || (segment.pipeline_index == 0
                         && safe_reads::safe_jq_file_arguments(&segment.arguments, context)))
         }
+        "yq" => {
+            jq_dollars_literal(segment)
+                && ((segment.pipeline_index > 0
+                    && super::yaml_query_reads::safe_yaml_query_piped_arguments(
+                        &segment.arguments,
+                        context,
+                    ))
+                    || (segment.pipeline_index == 0
+                        && super::yaml_query_reads::safe_yaml_query_file_arguments(
+                            &segment.arguments,
+                            context,
+                        )))
+        }
         "wc" => safe_reads::safe_word_count_arguments(
             &segment.arguments,
             segment.pipeline_index > 0,
@@ -752,10 +792,7 @@ pub(super) fn exact_safe_segment_with_context(
         // the operands as files would claim a read that never happens and
         // would leave the ordinary `numfmt --to=iec 1048576` under review.
         "numfmt" => super::stdin_filters::safe_number_arguments(&segment.arguments),
-        "sort" | "uniq" | "cut" | "tr" | "paste" | "join" | "column" | "nl" | "tac" | "rev"
-        | "fold" | "expand" | "unexpand" | "fmt" | "comm" | "strings" | "hexdump" | "xxd"
-        | "pr" | "shuf" | "iconv" | "ul" | "tsort" | "zcat" | "gzcat" | "bzcat" | "xzcat"
-        | "lzcat" | "zstdcat" => {
+        name if super::stdin_filters::text_filter_program(name) => {
             (segment.pipeline_index > 0
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments))
                 || super::stdin_filters::safe_file_arguments(basename, &segment.arguments, context)

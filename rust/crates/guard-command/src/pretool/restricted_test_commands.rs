@@ -231,15 +231,10 @@ fn executable_is_bunx(executable: &str) -> bool {
     super::executable_basename(executable) == "bunx"
 }
 
-/// A lexical subdirectory; the sink resolves it and rejects escapes.
+/// A lexical subdirectory; the sink resolves it and rejects escapes. The
+/// sink reads the same answer, so the two cannot drift apart.
 fn workspace_relative(directory: &str) -> bool {
-    !directory.is_empty()
-        && !directory.starts_with(['-', '/', '~', '$'])
-        && !directory.contains(['\\', '$', '`'])
-        && directory
-            .trim_end_matches('/')
-            .split('/')
-            .all(|part| !part.is_empty() && part != "..")
+    crate::contained_node_tool::workspace_relative(directory)
 }
 
 fn bun_eval_flag(flag: &str) -> bool {
@@ -548,20 +543,30 @@ fn node_tool_mode(
     arguments: &[String],
     directory: Option<&Path>,
 ) -> Option<ToolMode> {
+    // The runner's own options are peeled where the route peels them, so the
+    // tool this reading admits is the tool the sink starts: `--no-install`
+    // only refuses to fetch what is missing, and Bun's `--cwd` names the
+    // directory the run stands in. That directory is where a `tsc` run reads
+    // its no-emit mode from, so it is read here as well.
+    let mut run_directory = directory.map(Path::to_path_buf);
     let (name, rest) = match (executable, arguments) {
-        // A local-bin runner names the tool, and `node` names the entrypoint
-        // file the tool published, so each is read back to the tool's own name.
-        // `--no-install` only refuses to fetch what is missing, so the route
-        // steps over it and this reading does too.
-        ("bunx" | "npx", [flag, tool, rest @ ..]) if flag == "--no-install" => {
+        ("bunx" | "npx", []) => return None,
+        ("bunx" | "npx", arguments) => {
+            let (named, rest) =
+                crate::contained_node_tool::runner_options_peeled(executable, arguments, directory);
+            if let Some(named) = named {
+                run_directory = run_directory.map(|base| base.join(named));
+            }
+            let (tool, rest) = rest.split_first()?;
             (tool.as_str(), rest)
         }
-        ("bunx" | "npx", [tool, rest @ ..]) => (tool.as_str(), rest),
+        // `node` names the entrypoint file the tool published, which is read
+        // back to the tool's own name.
         ("node" | "nodejs", [entry, rest @ ..]) => (entry_tool(entry), rest),
-        ("bunx" | "npx" | "node" | "nodejs", []) => return None,
+        ("node" | "nodejs", []) => return None,
         _ => (executable, arguments),
     };
-    supported_tool_in(name, rest, directory).map(|(_, _, mode)| mode)
+    supported_tool_in(name, rest, run_directory.as_deref()).map(|(_, _, mode)| mode)
 }
 
 pub(super) fn readonly_test_reason(

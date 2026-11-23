@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from .case_retry import WORKER_DEATH_FIELDS, worker_death_assessment
 from .case_retry import retryable as retry_eligible
 from .catalog import Scenario, load_catalog, load_catalog_data, retain_trusted_cases
 from .contained_core import contained_wrapper_argv as _contained_wrapper_argv
@@ -302,6 +303,30 @@ def verify_contained_report(
     }
 
 
+def _worker_death_result(case: dict[str, Any]) -> dict[str, Any]:
+    """Judge an attempt whose case worker died before it recorded any evidence.
+
+    Such a record has no events, inference or filesystem proof for ``assess_case`` to
+    read, so it is accepted only in its exact shape: the runner's death fields and
+    nothing else, no hook observations, and an exit record from which the one result
+    a dead worker may claim, a tool-less harness error, is recomputed here. Anything
+    more is evidence the verifier cannot judge and is refused.
+    """
+    death = case.get("worker_exit")
+    returncode = death.get("returncode") if isinstance(death, dict) else None
+    if (
+        set(case) != WORKER_DEATH_FIELDS
+        or case.get("scenario_id") != case.get("id")
+        or case.get("guard_observations") != []
+        or not isinstance(death, dict)
+        or set(death) != {"returncode", "stderr_tail"}
+        or not (returncode is None or (isinstance(returncode, int) and not isinstance(returncode, bool)))
+        or not isinstance(death.get("stderr_tail"), str)
+    ):
+        raise ValueError("a superseded worker-death attempt carries evidence the verifier cannot judge")
+    return worker_death_assessment(returncode)
+
+
 def _reconcile_case_retries(
     report: dict[str, Any], directory: Path, expected: Sequence[Scenario]
 ) -> list[dict[str, Any]]:
@@ -337,7 +362,7 @@ def _reconcile_case_retries(
         scenario = by_id[entry["id"]]
         if case.get("id") != scenario.id or case.get("expectation") != scenario.expectation:
             raise ValueError("a superseded attempt holds another case's evidence")
-        result = assess_case(scenario, case)
+        result = _worker_death_result(case) if "worker_exit" in case else assess_case(scenario, case)
         if result != case.get("assessment"):
             raise ValueError("a superseded attempt's claimed result does not match observed evidence")
         if (entry.get("outcome"), entry.get("reason")) != (result["outcome"], result["reason"]):

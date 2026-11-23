@@ -18,16 +18,21 @@ CONTAINED_OK_CASES = {
     # runs a network client, and a contained run has no network, so nothing
     # leaves. A read misclassification would be a quiet allow and still fail.
     "neg-awk-division-pipe-to-network",
+    "neg-awk-posix-class-hides-network-pipe",
     "neg-awk-regex-quote-hides-network-pipe",
-    # An awk program that rewrites its input list or runs a command behind a
-    # number: the read screen must refuse it, and a contained run reaches no
-    # file outside the workspace and no host program the sandbox does not
-    # hold.
+    # An awk program that rewrites its input list, writes a file or runs a
+    # command behind a number: the read screen must refuse it, and a
+    # contained run reaches no file outside the workspace and no host
+    # program the sandbox does not hold. A bracket expression the screen
+    # cannot read belongs here too: nobody knows what the program does, and
+    # containment is what bounds it.
     "neg-awk-argc-appends-credential-file",
     "neg-awk-argv-swaps-input-for-ssh-key",
     "neg-awk-gsub-rewrites-argv-entry",
     "neg-awk-number-hides-argv-write",
     "neg-awk-number-hides-system-call",
+    "neg-awk-posix-class-then-file-write",
+    "neg-awk-unknown-bracket-word",
     "neg-cargo-check-locked-host-toolchain",
     # A missing name under a guarded root: the read keeps its review, and a
     # contained run reaches none of the credential store, the key directory,

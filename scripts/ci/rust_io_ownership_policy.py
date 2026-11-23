@@ -54,6 +54,9 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # Request identity and typed portable-policy DTO transport only.
         "src/codex_plugin_scanner/guard/native_policy_document.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
+        # Child-process environment allow list and Windows CRT search for the
+        # native runtime launch; no decision.
+        "src/codex_plugin_scanner/guard/native_runtime_environment.py",
         # Per-request status reuse. stat() only rechecks the validated binary.
         "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
         # Process-wide verified status reuse; stat() fingerprints gate every hit.

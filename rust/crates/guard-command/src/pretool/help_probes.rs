@@ -46,6 +46,10 @@
 //!   for the same reason the version probe refuses them.
 //! - `cargo` and `go`: a `rust-toolchain.toml` `path` or a `go.mod`
 //!   `toolchain` line makes the launcher fetch and run a different toolchain.
+//!   `rust_toolchain` and `go_toolchain` read that choice for the version and
+//!   environment queries; usage text for a verb is a separate question,
+//!   because each verb would have to be read against the launcher that owns
+//!   it, so neither launcher's help is admitted here.
 //! - `git`: `git <verb> --help` opens the manual page through the configured
 //!   pager, which runs a program the command never names.
 //! - `npm help <verb>`: the `help` verb opens npm's configured viewer, which

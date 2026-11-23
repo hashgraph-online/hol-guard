@@ -101,7 +101,11 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         .unwrap_or(arguments.len());
                     let active_options = &arguments[1..option_end];
                     match arguments[0].as_str() {
-                        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" => {
+                        // A comparison between two trees starts an
+                        // external driver and a textconv filter and nothing
+                        // else, so turning both off leaves it no helper to
+                        // run.
+                        "diff" | "diff-files" | "diff-index" | "diff-tree" => {
                             !(active_options
                                 .iter()
                                 .any(|argument| argument == "--no-ext-diff")
@@ -109,6 +113,15 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                                     .iter()
                                     .any(|argument| argument == "--no-textconv"))
                         }
+                        // A commit walk reads past that pair.
+                        // `log.showSignature`, a `%G` placeholder and a
+                        // `pretty.*` alias carrying one each start the
+                        // configured verification program, which neither
+                        // switch touches, and `range-diff` assembles an inner
+                        // `git log -p` that is never given the switches at
+                        // all. The probe screens all of it, so the walks ask
+                        // for it however they are spelled.
+                        "log" | "whatchanged" | "show" | "range-diff" => true,
                         // A clean filter is the only helper hash-object runs.
                         "hash-object" => {
                             !super::git_hash_object::filters_disabled(&arguments[1..])

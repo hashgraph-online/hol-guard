@@ -275,6 +275,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             cwd,
             cdpath_unset: false,
             rustup_override_absent: false,
+            go_toolchain_inert: false,
             cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
@@ -1399,6 +1400,16 @@ fn evaluate_envelope(
             ..context
         },
         deadline,
+        execution_environment,
+    );
+    // An Oh My Pi built-in mounted as a bash command runs in its own shell as a
+    // tool call Guard reviews; the sandbox shell has no such command.
+    super::omp_tool_commands::settle(
+        &mut result,
+        command_model,
+        harness,
+        event,
+        payload,
         execution_environment,
     );
     super::workspace_contained::convert(

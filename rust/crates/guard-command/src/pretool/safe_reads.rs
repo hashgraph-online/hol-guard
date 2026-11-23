@@ -5,7 +5,7 @@ mod head_tail;
 #[path = "safe_reads_jq.rs"]
 mod jq_arguments;
 #[path = "jq_filter.rs"]
-mod jq_filter;
+pub(super) mod jq_filter;
 #[path = "read_globs.rs"]
 mod read_globs;
 #[path = "safe_reads_sed.rs"]
@@ -32,7 +32,9 @@ pub(super) use jq_arguments::{
 };
 pub(crate) use jq_filter::rendering_format as jq_rendering_format;
 pub(crate) use jq_filter::variables_bound as jq_variables_bound;
-pub(super) use read_globs::{glob_file_matches, wildcard_matches, wildcard_may_match};
+pub(super) use read_globs::{
+    directory_glob_file_matches, glob_file_matches, wildcard_matches, wildcard_may_match,
+};
 pub(super) use sed_reads::{safe_sed_arguments, safe_sed_stdin_arguments};
 
 pub(super) fn safe_file_predicate_arguments(

@@ -17,6 +17,9 @@ use sha2::{Digest, Sha256};
 
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
 
+#[path = "policy_integrity_key_mint.rs"]
+pub(crate) mod key_mint;
+
 /// `_POLICY_INTEGRITY_KEY_REF` (`store_base.py:227`).
 pub const POLICY_INTEGRITY_KEY_REF: &str = "guard-policy-integrity-key";
 /// `_POLICY_INTEGRITY_CONTROL_REF` (`store_base.py:228`).

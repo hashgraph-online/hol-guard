@@ -21,8 +21,10 @@
 //! - `cargo` and `rustc`: a workspace `rust-toolchain.toml` with a `path`
 //!   makes the rustup proxy run that directory's binary. `rust_toolchain`
 //!   admits their version queries only after checking the toolchain file.
-//! - `go version`: a `go.mod` `toolchain` line makes `go` fetch and run a
-//!   different toolchain.
+//! - `go version` and `go env`: a `go.mod` or `go.work` `toolchain` line
+//!   makes `go` fetch and run a different release. `go_toolchain` admits
+//!   both queries after checking the settings that decide which release
+//!   that is and whether it is verified.
 //! - `-v` for tools where it means "verbose" rather than "version".
 //! - `terraform version`: it asks HashiCorp's release endpoint whether a newer
 //!   version exists, so the probe reaches the network.

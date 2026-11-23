@@ -1,9 +1,10 @@
 //! Read-only `git` invocations proven without a review.
 //!
-//! Status, diff, log, show, grep, rev-parse, merge-base, ls-files, `remote -v`, `worktree list`,
-//! branch listings, `show-ref`, `for-each-ref`, `rev-list` commit walks, `hash-object`, `config`,
-//! `ls-tree`, `cat-file` and `sparse-checkout list` reads. Diff-style reads that can run a configured helper need the
-//! helper-context probe or both `--no-ext-diff` and `--no-textconv`.
+//! Status, diff, log, `whatchanged`, `range-diff`, show, grep, rev-parse, merge-base, ls-files,
+//! `remote -v`, `worktree list`, branch listings, `show-ref`, `for-each-ref`, `rev-list` commit
+//! walks, `hash-object`, `config`, `ls-tree`, `cat-file` and `sparse-checkout list` reads.
+//! Diff-style reads that can run a configured helper need the helper-context probe or both
+//! `--no-ext-diff` and `--no-textconv`.
 
 #[path = "git_log_names.rs"]
 mod log_names;
@@ -302,6 +303,8 @@ pub(super) fn safe_git_arguments(
             | "diff-index"
             | "diff-tree"
             | "log"
+            | "whatchanged"
+            | "range-diff"
             | "show"
             | "rev-parse"
             | "ls-files"
@@ -351,24 +354,43 @@ pub(super) fn safe_git_arguments(
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
     }
-    // These read through the diff machinery, so without the
-    // configuration probe only the spelling that turns the external driver
-    // and the textconv filter off is proven. A `-C` route that discovers no
+    // These read through the diff machinery, so without the configuration
+    // probe only the spelling that turns the external driver and the
+    // textconv filter off is proven. That pair is the whole helper surface
+    // of a comparison between two trees, and nothing more.
+    //
+    // A commit walk reads past it. `log.showSignature`, a `%G` placeholder
+    // and a `pretty.*` alias carrying one each start the configured
+    // verification program, and neither switch touches that setting;
+    // `range-diff` also assembles an inner `git log -p` and passes neither
+    // switch down to it, so a configured `diff.<driver>.textconv` still runs
+    // with both of them on the command line. The walks are therefore proven
+    // by the probe, which screens all of it, and never by the pair alone.
+    //
+    // A `-C` route that discovers no
     // repository needs neither: Git dies in its own setup before it reads a
     // diff, textconv, pager or filter setting, so there is no configured
     // helper for the options to turn off. `git cherry` runs no helper of its
     // own, but it still prints under `pager.cherry`, so it asks for the same
     // clearance and has no spelling of its own that answers instead: the two
     // diff switches are not options it defines.
-    let helpers_off = active_options
-        .iter()
-        .any(|argument| argument == "--no-ext-diff")
+    let helpers_off = !super::git_history_reads::verifies_signatures(subcommand)
+        && active_options
+            .iter()
+            .any(|argument| argument == "--no-ext-diff")
         && active_options
             .iter()
             .any(|argument| argument == "--no-textconv");
     let diff_family = matches!(
         subcommand,
-        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show"
+        "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
+            | "log"
+            | "whatchanged"
+            | "range-diff"
+            | "show"
     );
     if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
@@ -409,6 +431,8 @@ pub(super) fn inspection_writes_nothing(
             | "diff-index"
             | "diff-tree"
             | "log"
+            | "whatchanged"
+            | "range-diff"
             | "show"
             | "grep"
             | "merge-base"
@@ -437,49 +461,13 @@ pub(super) fn inspection_writes_nothing(
 }
 
 #[cfg(test)]
+#[path = "git_reads_change_listing_tests.rs"]
+mod change_listing_tests;
+
+#[cfg(test)]
 #[path = "git_reads_config_pattern_tests.rs"]
 mod config_pattern_tests;
 
 #[cfg(test)]
-mod tests {
-    use super::names_refused_option;
-
-    /// Git takes any unambiguous prefix of a long option, so a read that
-    /// disables both helpers in full can turn one back on in an abbreviation
-    /// the screen never compared against.
-    #[test]
-    fn an_abbreviated_helper_names_the_option_it_resolves_to() {
-        for word in [
-            "--textconv",
-            "--textcon",
-            "--textc",
-            "--ext-diff",
-            "--ext-d",
-            "--output",
-            "--outp",
-            "--output=/tmp/changed.patch",
-            "-o",
-        ] {
-            assert!(names_refused_option(word), "{word}");
-        }
-    }
-
-    /// `--text` is the comparison verbs' own "treat the file as text", and
-    /// Git answers an exact spelling with the option that owns it, so reading
-    /// it as a prefix of `--textconv` would refuse an ordinary read.
-    #[test]
-    fn a_word_a_verb_spells_in_full_is_not_an_abbreviation() {
-        for word in [
-            "--text",
-            "--no-textconv",
-            "--no-ext-diff",
-            "--oneline",
-            "--topo-order",
-            "--",
-            "-O",
-            "HEAD",
-        ] {
-            assert!(!names_refused_option(word), "{word}");
-        }
-    }
-}
+#[path = "git_reads_option_name_tests.rs"]
+mod option_name_tests;

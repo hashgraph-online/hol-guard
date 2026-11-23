@@ -28,11 +28,53 @@
 /// Enough operands for an ordinary command line, not a fan-out.
 const MAX_INPUTS: usize = 16;
 
+/// The text filters this module screens.
+///
+/// The names live here, beside the proof that reads their arguments, so the
+/// two places that decide a filter is read-only cannot drift apart: the
+/// segment proof dispatches on this set, and the `cd` compound screen admits
+/// the same set by name before running that proof.
+pub(super) fn text_filter_program(name: &str) -> bool {
+    matches!(
+        name,
+        "sort"
+            | "uniq"
+            | "cut"
+            | "tr"
+            | "paste"
+            | "join"
+            | "column"
+            | "nl"
+            | "tac"
+            | "rev"
+            | "fold"
+            | "expand"
+            | "unexpand"
+            | "fmt"
+            | "comm"
+            | "strings"
+            | "hexdump"
+            | "xxd"
+            | "pr"
+            | "shuf"
+            | "iconv"
+            | "ul"
+            | "tsort"
+            | "zcat"
+            | "gzcat"
+            | "bzcat"
+            | "xzcat"
+            | "lzcat"
+            | "zstdcat"
+    )
+}
+
 pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
     match tool {
         "sort" => {
             let mut operands: Vec<&str> = Vec::new();
-            safe_sort_arguments(arguments, &mut operands) && operands.is_empty()
+            super::stdin_filter_sort::safe_sort_arguments(arguments, &mut operands)
+                && operands.is_empty()
         }
         "uniq" => arguments
             .iter()
@@ -319,7 +361,7 @@ pub(super) fn safe_file_arguments(
 ) -> bool {
     let mut operands: Vec<&str> = Vec::new();
     let options_proven = match tool {
-        "sort" => safe_sort_arguments(arguments, &mut operands),
+        "sort" => super::stdin_filter_sort::safe_sort_arguments(arguments, &mut operands),
         "uniq" => partition_short_flags(arguments, "cdui", &mut operands),
         "cut" => cut_arguments(arguments, &mut operands),
         "paste" => super::stdin_filter_options::safe_paste_arguments(arguments, &mut operands),
@@ -364,96 +406,6 @@ fn single_delimiter(value: &str) -> bool {
         return false;
     };
     characters.next().is_none() && (character == '\t' || !character.is_control())
-}
-
-/// The `sort` options that carry no value. Its one writing option is
-/// `-o`/`--output`; `-T`/`--temporary-directory` names a directory Guard has
-/// not read and `--compress-program` hands the run to another program, so the
-/// screen names the reading options instead of allowing every leading dash.
-const SORT_READING_FLAGS: &str = "bCcdfghiMmnrsuVz";
-
-/// `sort` reshapes what it reads and writes only to standard output. `-k`,
-/// `-t`, `-S` and the long `--key`, `--field-separator`, `--buffer-size` and
-/// `--parallel` take a value, attached or as the next word, so a key
-/// definition or a field separator is not mistaken for a file to read.
-fn safe_sort_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
-    let mut after_options = false;
-    let mut expecting_value = false;
-    for argument in arguments {
-        let value = argument.as_str();
-        if expecting_value {
-            if !super::stdin_filter_options::safe_filter_value(value) {
-                return false;
-            }
-            expecting_value = false;
-            continue;
-        }
-        if after_options || !value.starts_with('-') || value == "-" {
-            operands.push(value);
-            continue;
-        }
-        if value == "--" {
-            after_options = true;
-            continue;
-        }
-        if let Some(long) = value.strip_prefix("--") {
-            if !safe_sort_long_option(long, &mut expecting_value) {
-                return false;
-            }
-            continue;
-        }
-        if !safe_sort_short_flags(&value[1..], &mut expecting_value) {
-            return false;
-        }
-    }
-    !expecting_value
-}
-
-/// One long `sort` option, with its value attached by `=` or still to come.
-fn safe_sort_long_option(long: &str, expecting_value: &mut bool) -> bool {
-    let (name, attached) = match long.split_once('=') {
-        Some((name, attached)) => (name, Some(attached)),
-        None => (long, None),
-    };
-    match name {
-        "key" | "field-separator" | "buffer-size" | "parallel" => match attached {
-            Some(attached) => super::stdin_filter_options::safe_filter_value(attached),
-            None => {
-                *expecting_value = true;
-                true
-            }
-        },
-        // `--check` reports on its own; `--sort` always carries its word.
-        "check" => true,
-        "sort" => attached.is_some_and(super::stdin_filter_options::safe_filter_value),
-        "ignore-leading-blanks"
-        | "dictionary-order"
-        | "ignore-case"
-        | "general-numeric-sort"
-        | "ignore-nonprinting"
-        | "month-sort"
-        | "human-numeric-sort"
-        | "numeric-sort"
-        | "reverse"
-        | "stable"
-        | "unique"
-        | "version-sort"
-        | "zero-terminated"
-        | "merge"
-        | "debug" => attached.is_none(),
-        _ => false,
-    }
-}
-
-/// One short `sort` cluster, with `-k`, `-t` and `-S` as its value-taking
-/// flags.
-fn safe_sort_short_flags(cluster: &str, expecting_value: &mut bool) -> bool {
-    super::stdin_filter_options::screen_short_flags(
-        cluster,
-        SORT_READING_FLAGS,
-        "ktS",
-        expecting_value,
-    )
 }
 
 /// Split a short-flag command line into its flags and its file operands.

@@ -10,7 +10,10 @@ pub(super) fn may_run(operation: &str, options: &[&str]) -> bool {
     match operation {
         // Verbose status prints the staged diff.
         "status" => options.iter().any(|option| status_verbose(option)),
-        "log" => !options.iter().all(known),
+        // `git whatchanged` is the same walk with each commit's raw diff
+        // attached, and the raw format converts nothing, so it answers the
+        // same way `log` does.
+        "log" | "whatchanged" => !options.iter().all(known),
         // Both print a patch unless a summary format replaces it.
         "diff" | "show" => {
             !(options.iter().any(|option| summary_format(option)) && options.iter().all(known))

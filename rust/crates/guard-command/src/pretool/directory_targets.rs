@@ -499,6 +499,24 @@ impl<'a> super::PathContext<'a> {
             None => !std::env::vars_os()
                 .any(|(name, value)| !value.is_empty() && rustup_selector(&name.to_string_lossy())),
         };
+        // The go command reads these before it decides which toolchain
+        // answers a query: one of them names the toolchain outright, and the
+        // rest move where a release it would download comes from, whether it
+        // is checked on arrival, and which module cache an already-fetched
+        // one is taken from.
+        let go_toolchain_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| super::go_toolchain::go_toolchain_selector(name))
+            }
+            None => !std::env::vars_os().any(|(name, value)| {
+                !value.is_empty()
+                    && super::go_toolchain::go_toolchain_selector(&name.to_string_lossy())
+            }),
+        };
         // Cargo reads its configuration from the environment too, including
         // the default registry, a named registry's index and the credential
         // provider it starts for an index that asks for a token, and
@@ -662,6 +680,7 @@ impl<'a> super::PathContext<'a> {
             cwd,
             cdpath_unset,
             rustup_override_absent,
+            go_toolchain_inert,
             cargo_config_inert,
             npm_config_inert,
             pip_config_inert,

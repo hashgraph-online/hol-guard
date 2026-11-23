@@ -1,4 +1,5 @@
 use super::*;
+use crate::policy_integrity_resolver::key_mint;
 
 #[path = "claude_question_save_command.rs"]
 pub(crate) mod claude_question_save_command;
@@ -131,6 +132,10 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag] if exact_cloud_review::is_command(command) && flag == "--stdin" => {
             let response = exact_cloud_review::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag] if key_mint::is_command(command) && flag == "--stdin" => {
+            let response = key_mint::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if trust_attestation_key::is_command(command) && flag == "--stdin" => {

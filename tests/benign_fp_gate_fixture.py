@@ -73,6 +73,7 @@ from tests.benign_fp_gate_projects import (
     _bun_lockfile,
     _node_package,
     _node_toolchain,
+    _pnpm_store_package,
     _python_toolchain,
     _vendored_toolchain,
     _write,
@@ -186,6 +187,15 @@ class BenignFixture:
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
             "feature_app": feature_app_path(self.home),
             "pnpm_monorepo": self.home / "Code" / "acme-platform",
+            # A package inside a workspace whose shared type-check base sits at
+            # the checkout root, one directory above the run.
+            "workspace_package": self.home / "Code" / "atlas-tools" / "packages" / "app",
+            # The same workspace's checkout root, where an agent starts before
+            # it steps into the package it wants to check.
+            "workspace_monorepo": self.home / "Code" / "atlas-tools",
+            # The package in that workspace whose base turns on `incremental`,
+            # so the same type check writes a build-info file.
+            "workspace_incremental_package": self.home / "Code" / "atlas-tools" / "packages" / "tool",
             "stale_lockfile_app": stale_lockfile_app_path(self.home),
             "linked_worktree": self.linked_worktree,
             "linked_sources": linked_sources_path(self.home),
@@ -260,6 +270,11 @@ def build_fixture(root: Path) -> BenignFixture:
     _application_database(worktree / ".tmp" / "app.db")
     # Worktree package borrowing the canonical checkout's installed node_modules through a symlink.
     _node_toolchain(parent / "dashboard")
+    # A second checkout beside the session whose dependencies pnpm installed.
+    # Resolving the launcher the package manager linked is how an agent finds
+    # which binary that project runs, and the shim is a link into the hidden
+    # content store below its `node_modules`.
+    _pnpm_store_package(home / "codegen-app", "codegen-kit", "2.1.0")
     _write(worktree / "dashboard" / "package.json", (parent / "dashboard" / "package.json").read_text())
     # pnpm's workspace root: `pnpm -w run build` runs the root package's script
     # from anywhere in the checkout. Only `packages` is set, so the install

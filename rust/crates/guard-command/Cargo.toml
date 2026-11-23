@@ -120,6 +120,10 @@ name = "pretool_windows_sibling_project_root"
 path = "tests/pretool_windows_sibling_project_root.rs"
 
 [[test]]
+name = "pretool_omp_tool_commands"
+path = "tests/pretool_omp_tool_commands.rs"
+
+[[test]]
 name = "shim_admin_vectors"
 path = "tests/shim_admin_vectors.rs"
 

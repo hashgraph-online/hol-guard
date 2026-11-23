@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     policy_bundle_acceptance_checkpoint,
     policy_bundle_cloud_exceptions_hash,
@@ -774,7 +775,23 @@ def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
         ),
     ]
 
-    verdict = guard_runner._shadow.policy_shadow_verdict
+    keys = ("harness", "scope", "artifact_id", "artifact_hash", "workspace", "publisher", "action", "expires_at")
+
+    def verdict(
+        old: list[PolicyDecision], new: list[PolicyDecision], *, evaluating: bool, canonical_enforcement: bool
+    ) -> tuple[tuple[str, ...], str | None]:
+        # The Rust kind the resident's ``bundle_candidate`` query compares with.
+        payload = native_runner_authority(
+            "policy_shadow_verdict",
+            {
+                "legacy": [{key: getattr(row, key) for key in keys} for row in old],
+                "canonical": [{key: getattr(row, key) for key in keys} for row in new],
+                "evaluating": evaluating,
+                "canonical_enforcement": canonical_enforcement,
+            },
+        )
+        return tuple(payload["reason_codes"]), payload["rejection"]
+
     assert verdict([], equivalent, evaluating=False, canonical_enforcement=True) == (("legacy_unavailable",), None)
     assert verdict(legacy, equivalent, evaluating=False, canonical_enforcement=True) == ((), None)
     assert verdict(legacy, changed, evaluating=False, canonical_enforcement=True) == (

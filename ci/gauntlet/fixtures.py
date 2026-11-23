@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .branch_return_fixtures import branch_return_checks
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
+from .cargo_package_fixtures import add_cargo_package
 from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .design_token_fixtures import add_design_token_documents
 from .edge_clone_fixtures import write_edge_clone
@@ -53,6 +54,7 @@ from .review_fixtures import (
 from .runtime_cases import runtime_case_checks
 from .script_cases import script_case_checks
 from .session_folder import session_folder_checks
+from .package_store_fixtures import add_package_store_checkout
 from .sibling_runner_fixtures import add_sibling_test_runner
 from .supply_chain import supply_chain_checks
 from .workspace_runner_fixtures import (
@@ -373,6 +375,7 @@ def create_fixture(
     add_workspace_node_runtime(home, scenario_id)
     add_home_bun_runtime(home, scenario_id)
     add_design_token_documents(workspace, scenario_id)
+    add_cargo_package(workspace, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)
@@ -776,6 +779,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         _git(args, sibling, environment)
     add_home_tools(home)
     add_sibling_test_runner(home, scenario_id)
+    add_package_store_checkout(home, scenario_id)
     # A clone with ignored local configuration files beside its code.
     write_edge_clone(home, environment)
     add_checkout_origin(main, environment, scenario_id)

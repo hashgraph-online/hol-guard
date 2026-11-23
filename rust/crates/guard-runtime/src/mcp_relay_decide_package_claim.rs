@@ -212,6 +212,7 @@ pub(super) fn settled(
         artifact,
         workspace: workspace.to_owned(),
         outcome,
+        saved_policy_blocks: false,
     })))
 }
 
