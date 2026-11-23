@@ -233,6 +233,7 @@
         "path": [
           "src/codex_plugin_scanner/guard/runtime/command_queue*.py",
           "src/codex_plugin_scanner/guard/runtime/command_capability.py",
+          "src/codex_plugin_scanner/guard/runtime/command_capability_keys.py",
           "src/codex_plugin_scanner/guard/runtime/command_executors.py",
           "src/codex_plugin_scanner/guard/cloud_control/command_queue_worker.py"
         ]

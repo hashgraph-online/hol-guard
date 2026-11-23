@@ -9,11 +9,14 @@
 //! evaluator on the approval boundary: a caller reaching the helper could mint
 //! a grant, or accept one, without the runtime ever seeing it.
 //!
-//! The op takes the payload and the caller's copy of the signing key and
-//! answers one of three questions: sign this payload, verify this stored
-//! envelope, or digest this identity for the replay rows. Reading the key out
-//! of the secret store, deciding when to mint one, and persisting what comes
-//! back stay with the caller, because none of those is a verdict.
+//! The op takes the payload and either the caller's copy of the signing key
+//! or `resident_key`, which has the resident read the key from its own
+//! encrypted-file secret store, and answers one of three questions: sign this payload, verify this stored
+//! envelope, or digest this identity for the replay rows. With
+//! `resident_key` the resident reads the key itself; otherwise the caller
+//! reads it out of its secret store and sends it. Deciding when to mint a key
+//! and persisting what comes back stay with the caller, because neither is a
+//! verdict.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -24,6 +27,9 @@ pub const COMMAND_ENVELOPE_REQUEST_SCHEMA: &str = "guard-command-envelope-reques
 pub const COMMAND_ENVELOPE_RESULT_SCHEMA: &str = "guard-command-envelope-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const COMMAND_ENVELOPE_FEATURE: &str = "command-envelope-v1";
+/// Capability advertised when the op can read the signing key from the
+/// resident's own encrypted-file secret store (`resident_key`).
+pub const COMMAND_ENVELOPE_RESIDENT_KEY_FEATURE: &str = "command-envelope-resident-key-v1";
 /// Largest canonical request serialization the op will accept.
 pub const COMMAND_ENVELOPE_MAX_BYTES: usize = 4 * 1024 * 1024;
 
@@ -63,6 +69,11 @@ pub struct CommandEnvelopeRequestV1 {
     /// The key id that envelope's `keyId` must name.
     #[serde(default)]
     pub integrity_key_id: Option<String>,
+    /// Sign or verify with the key the resident reads from its own
+    /// encrypted-file secret store, so the caller puts no secret on the wire.
+    /// A request that sets this must not also carry a key.
+    #[serde(default, skip_serializing_if = "core::ops::Not::not")]
+    pub resident_key: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
