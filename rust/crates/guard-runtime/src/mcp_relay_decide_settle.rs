@@ -8,7 +8,7 @@ use std::time::Instant;
 
 const DEFAULT_APPROVAL_CENTER_ORIGIN: &str = "http://127.0.0.1:4781";
 
-fn approval_center_origin(guard_home: &str, bound: Option<&str>) -> String {
+pub(super) fn approval_center_origin(guard_home: &str, bound: Option<&str>) -> String {
     if let Some(bound) = bound.filter(|origin| !origin.trim().is_empty()) {
         return bound.to_owned();
     }
@@ -304,6 +304,10 @@ pub(super) fn settle_package(
         }
     };
     let identity = serde_json::to_value(&resolved.identity).map_err(|_| IDENTITY_FAILED)?;
+    let center = approval_center_origin(
+        &request.guard_home,
+        admitted.binding.review.approval_center_origin.as_deref(),
+    );
     let evidence = package_receipt::record(
         request,
         &identity,
@@ -311,7 +315,7 @@ pub(super) fn settle_package(
         &packaged.artifact,
         &packaged.workspace,
         answer,
-        admitted.binding.review.approval_center_origin.as_deref(),
+        Some(&center),
     )?;
     let mut evidence = evidence;
     // The forward an inline approval led to, as `_record_package_forward`
