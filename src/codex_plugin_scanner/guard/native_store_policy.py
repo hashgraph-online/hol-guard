@@ -62,6 +62,21 @@ def encode_key(key: bytes | None) -> str | None:
     return base64.urlsafe_b64encode(key).rstrip(b"=").decode("ascii") if key is not None else None
 
 
+def integrity_key_fields(secret_store: object, key: bytes | None, key_id: str | None) -> dict[str, object]:
+    """Arguments that let the resident sign with the install key.
+
+    A key kept in the plain home vault is one the resident reads itself, so
+    only the ``vault_key`` flag crosses the socket. Keyring and mirrored stores
+    have no copy the resident can read, so they still send the key.
+    """
+
+    from .store_base import EncryptedFileSecretStore
+
+    if type(secret_store) is EncryptedFileSecretStore:
+        return {"vault_key": True}
+    return {"integrity_key_b64": encode_key(key), "integrity_key_id": key_id}
+
+
 def _state_digest(connection: sqlite3.Connection, state_key: str) -> str | None:
     row = connection.execute("select payload_json from sync_state where state_key = ?", (state_key,)).fetchone()
     if row is None or row[0] is None:

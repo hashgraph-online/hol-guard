@@ -8,8 +8,7 @@ from contextlib import AbstractContextManager
 from typing import Any, Protocol
 
 from .dpop_key_binding import verified_dpop_jwk_thumbprint
-from .native_store_policy import encode_key
-from .store_base import EncryptedFileSecretStore
+from .native_store_policy import integrity_key_fields
 
 _OAUTH_KEY = "oauth_local_credentials"
 
@@ -125,12 +124,9 @@ class StoreExactCloudReviewMixin:
         key_fields: dict[str, object] = {"integrity_key_b64": None, "integrity_key_id": None}
         if resolution_action == "allow":
             integrity_key, integrity_key_id = self._policy_integrity_secret_material(create=True)
-            # A key kept in the plain vault is one the resident reads itself,
-            # so only the flag crosses the socket; other stores send a copy.
-            if type(getattr(self, "_policy_integrity_secret_store", None)) is EncryptedFileSecretStore:
-                key_fields = {"vault_key": True}
-            else:
-                key_fields = {"integrity_key_b64": encode_key(integrity_key), "integrity_key_id": integrity_key_id}
+            key_fields = integrity_key_fields(
+                getattr(self, "_policy_integrity_secret_store", None), integrity_key, integrity_key_id
+            )
         with self.hold_oauth_credential_lock():
             # The resident holds one transaction across the consent recheck, the
             # receipt claim, the resolution and the local authority it writes, so

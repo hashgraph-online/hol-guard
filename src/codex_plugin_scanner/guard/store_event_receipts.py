@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 # ruff: noqa: F403,F405
-from .native_store_policy import encode_key
+from .native_store_policy import integrity_key_fields
 from .store_base import *
 
 LOCAL_ONCE_LEGACY_AUTHORITY_KIND = "legacy"
@@ -82,7 +82,8 @@ class StoreEventReceiptsMixin:
         The row written here is the authority a later native review reads to
         allow an execution without asking again, so the resident signs it where
         the verdict is decided. This side reads the install key out of the
-        keyring and ships it; it signs nothing and decides nothing. An install
+        keyring and ships it, or, for a key in the plain home vault, sends only
+        a flag so the resident reads the key itself; it signs nothing and decides nothing. An install
         with no key material has no authority to mint, which is why that case
         answers ``None`` rather than calling.
         """
@@ -103,8 +104,7 @@ class StoreEventReceiptsMixin:
                 "created_at": created_at,
                 "expires_at": expires_at,
                 "authority_kind": authority_kind,
-                "integrity_key_b64": encode_key(key),
-                "integrity_key_id": key_id,
+                **integrity_key_fields(getattr(self, "_policy_integrity_secret_store", None), key, key_id),
             },
         )
         return None if approval_id is None else str(approval_id)
