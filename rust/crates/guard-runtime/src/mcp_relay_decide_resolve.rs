@@ -97,8 +97,16 @@ fn resolve_saved(
     )
     .or_else(|| crate::mcp_tool_policy_connector::unrecognized_allow_setup(&subject, &decision));
     if connector_setup.is_some()
-        && decision.action == guard_command::effect_decision::GuardAction::Allow
-        && decision.policy_action() == guard_command::effect_decision::GuardAction::Allow
+        && matches!(
+            decision.action,
+            guard_command::effect_decision::GuardAction::Allow
+                | guard_command::effect_decision::GuardAction::Warn
+        )
+        && matches!(
+            decision.policy_action(),
+            guard_command::effect_decision::GuardAction::Allow
+                | guard_command::effect_decision::GuardAction::Warn
+        )
     {
         decision.action = guard_command::effect_decision::GuardAction::Review;
         decision.source = "heuristic".to_owned();
