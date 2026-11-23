@@ -185,7 +185,10 @@ fn the_probe_reads_the_queries_only_where_nothing_selects_a_toolchain() {
     // Even with a fixed official Go toolchain, the full env dump and
     // compiler-related keys can execute CC. They are not inert reads.
     for arguments in ["env", "env -json", "env CGO_CFLAGS", "env -json PKG_CONFIG"] {
-        assert!(!safe_go_probe(&words(arguments), context(true)), "go {arguments}");
+        assert!(
+            !safe_go_probe(&words(arguments), context(true)),
+            "go {arguments}"
+        );
     }
     // An inherited selector is read before anything stored, so it settles
     // the question on its own.
