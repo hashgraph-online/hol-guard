@@ -76,6 +76,9 @@ jobs:
       # time while keeping the runtime optimized enough for release checks.
       # Dependencies keep the release profile either way.
       ALPHA_WORKSPACE_OPT_LEVEL: ${{ inputs.fast_codegen == true && '1' || '' }}
+      # Keep the binary identity bound to the exact stable compiler profile.
+      CARGO_PROFILE_RELEASE_LTO: ${{ inputs.fast_codegen == true && 'false' || 'thin' }}
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
       RUST_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.rustflags }}
       CROSS_COMPILED: ${{ matrix.cross == true }}

@@ -49,6 +49,8 @@ jobs:
       VERSION: ${{ inputs.version }}
       RUST_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.rustflags }}
+      CARGO_PROFILE_RELEASE_LTO: thin
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
       SUFFIX: ${{ matrix.suffix }}
       HOL_GUARD_BUILD_SHA: ${{ inputs.source_sha || github.sha }}
       HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
