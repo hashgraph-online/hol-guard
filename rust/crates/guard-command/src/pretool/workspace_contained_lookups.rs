@@ -53,17 +53,9 @@ fn on_path(name: &str, path: Option<&str>) -> bool {
     std::env::split_paths(path).any(|dir| executable(&dir.join(name)))
 }
 
-#[cfg(unix)]
-fn executable(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(path)
-        .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
-}
-
-#[cfg(not(unix))]
+/// A file of that name in a PATH directory. The sandbox resolves the name the
+/// same way, so its answer matches the session's; the execute bit does not
+/// change which answer the lookup gives.
 fn executable(path: &Path) -> bool {
     path.is_file()
-        || ["exe", "cmd", "bat"]
-            .iter()
-            .any(|ext| path.with_extension(ext).is_file())
 }
