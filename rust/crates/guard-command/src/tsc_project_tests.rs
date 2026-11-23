@@ -506,3 +506,125 @@ fn a_directory_a_symlink_moved_outside_gives_no_verdict() {
     assert!(!reads_no_emit(&["-p", "config/tsconfig.json"], &directory));
     assert!(!reads_no_emit(&["-p", "config"], &directory));
 }
+
+/// A repository holding a package directory, the layout a monorepo keeps: a
+/// shared base at the root and the package that extends it two levels down.
+fn repository() -> (TempDir, std::path::PathBuf) {
+    let root = tempfile::tempdir().expect("temp root");
+    let checkout = root.path().join("checkout");
+    fs::create_dir_all(checkout.join(".git")).expect("repository marker");
+    let package = checkout.join("packages/app");
+    fs::create_dir_all(&package).expect("package directory");
+    (root, package)
+}
+
+#[test]
+fn a_shared_base_above_the_package_emits_nothing() {
+    let (root, package) = repository();
+    plant(
+        &root.path().join("checkout"),
+        "tsconfig.base.json",
+        r#"{"compilerOptions":{"strict":true}}"#,
+    );
+    plant(
+        &package,
+        "tsconfig.json",
+        r#"{"extends":"../../tsconfig.base.json","compilerOptions":{"noEmit":true}}"#,
+    );
+
+    assert!(reads_no_emit(&[], &package));
+    assert!(reads_no_emit(&["-p", "tsconfig.json"], &package));
+}
+
+#[test]
+fn a_shared_base_above_the_package_still_answers_for_the_whole_chain() {
+    let (root, package) = repository();
+    plant(
+        &root.path().join("checkout"),
+        "tsconfig.base.json",
+        r#"{"compilerOptions":{"incremental":true}}"#,
+    );
+    plant(
+        &package,
+        "tsconfig.json",
+        r#"{"extends":"../../tsconfig.base.json","compilerOptions":{"noEmit":true}}"#,
+    );
+
+    // The base writes a build-info file beside the project, so the chain
+    // gives no verdict even though the package declares `noEmit`.
+    assert!(!reads_no_emit(&[], &package));
+}
+
+#[test]
+fn a_base_above_the_repository_gives_no_verdict() {
+    let (root, package) = repository();
+    plant(
+        root.path(),
+        "tsconfig.base.json",
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    );
+    plant(
+        &package,
+        "tsconfig.json",
+        r#"{"extends":"../../../tsconfig.base.json","compilerOptions":{"noEmit":true}}"#,
+    );
+
+    assert!(!reads_no_emit(&[], &package));
+}
+
+#[test]
+fn a_base_above_a_run_directory_in_no_repository_gives_no_verdict() {
+    let (root, directory) = project();
+    plant(
+        root.path(),
+        "tsconfig.base.json",
+        r#"{"compilerOptions":{"strict":true}}"#,
+    );
+    plant(
+        &directory,
+        "tsconfig.json",
+        r#"{"extends":"../tsconfig.base.json","compilerOptions":{"noEmit":true}}"#,
+    );
+
+    assert!(!reads_no_emit(&[], &directory));
+}
+
+#[test]
+fn a_linked_worktree_marker_bounds_the_chain_too() {
+    let root = tempfile::tempdir().expect("temp root");
+    let checkout = root.path().join("checkout");
+    let package = checkout.join("packages/app");
+    fs::create_dir_all(&package).expect("package directory");
+    // A linked worktree keeps a `.git` file naming its real directory.
+    fs::write(
+        checkout.join(".git"),
+        "gitdir: /elsewhere/.git/worktrees/app\n",
+    )
+    .expect("worktree marker");
+    plant(
+        &checkout,
+        "tsconfig.base.json",
+        r#"{"compilerOptions":{"strict":true}}"#,
+    );
+    plant(
+        &package,
+        "tsconfig.json",
+        r#"{"extends":"../../tsconfig.base.json","compilerOptions":{"noEmit":true}}"#,
+    );
+
+    assert!(reads_no_emit(&[], &package));
+}
+
+#[test]
+fn a_project_named_above_the_run_directory_is_still_refused() {
+    let (_root, package) = repository();
+    plant(
+        package.parent().expect("packages directory"),
+        "tsconfig.json",
+        r#"{"compilerOptions":{"noEmit":true}}"#,
+    );
+
+    // Widening the `extends` bound to the repository does not widen the
+    // project the command itself may name.
+    assert!(!reads_no_emit(&["-p", "../tsconfig.json"], &package));
+}

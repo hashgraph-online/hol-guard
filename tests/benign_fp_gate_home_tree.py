@@ -19,7 +19,12 @@ from tests.benign_fp_gate_configs import (
 )
 from tests.benign_fp_gate_connectors import write_connectors
 from tests.benign_fp_gate_git import _git
-from tests.benign_fp_gate_projects import _sibling_test_runner, _write, pnpm_monorepo
+from tests.benign_fp_gate_projects import (
+    _sibling_test_runner,
+    _write,
+    pnpm_monorepo,
+    workspace_base_monorepo,
+)
 from tests.benign_fp_gate_stale_lockfile import stale_lockfile_app, stale_lockfile_app_path
 
 
@@ -112,6 +117,14 @@ def write_home_tree(home: Path) -> None:
     _git(home / "Code" / "acme-platform", "add", "-A", home=home)
     _git(home / "Code" / "acme-platform", "commit", "--quiet", "-m", "platform base", home=home)
     # An npm project that still commits the pnpm lockfile from before its last upgrade.
+    # A workspace whose packages read their type-check settings from a base at
+    # the checkout root, the layout almost every monorepo keeps.
+    workspace_root = home / "Code" / "atlas-tools"
+    workspace_base_monorepo(workspace_root)
+    _git(workspace_root, "init", "--quiet", "--initial-branch=main", home=home)
+    _write(workspace_root / ".gitignore", "node_modules/\n")
+    _git(workspace_root, "add", "-A", home=home)
+    _git(workspace_root, "commit", "--quiet", "-m", "workspace base", home=home)
     stale_app = stale_lockfile_app_path(home)
     stale_lockfile_app(stale_app)
     _git(stale_app, "init", "--quiet", "--initial-branch=main", home=home)
