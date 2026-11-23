@@ -40,9 +40,10 @@ const GIT_READS: &[&str] = &[
 /// Git also takes any unambiguous abbreviation of them (`--out=`).
 const GIT_STARTS_OR_WRITES: &[&str] = &["--output", "--ext-diff"];
 
-/// Options that make ripgrep start a preprocessor or a decompressor, also
-/// as `-z` in a cluster of short options (`-nz`).
-const RG_STARTS: &[&str] = &["--pre", "--search-zip"];
+/// Options that make ripgrep start a preprocessor, a decompressor (also as
+/// `-z` in a cluster of short options, `-nz`) or the hostname helper it runs
+/// while setting up hyperlinks, whether or not hyperlinks are on.
+const RG_STARTS: &[&str] = &["--pre", "--search-zip", "--hostname-bin"];
 
 /// Whether the program in `projected` is Python alone after a `cd` into the
 /// hook's directory or after plain readers, the two chains the projection
@@ -71,12 +72,14 @@ pub(super) fn lead_admitted(
 }
 
 /// Whether a reader in `lead` is ripgrep reading its configuration file,
-/// which can name a preprocessor (`--pre`) the words never show.
+/// which can name a preprocessor (`--pre`) the words never show. Only a
+/// `--no-config` right after `rg` is surely a flag: later it can be the value
+/// of `-e` or `-g`, or a pattern after `--`, and ripgrep reads the file then.
 fn runs_configured_ripgrep(lead: &str) -> bool {
     lead.split([';', '\n', '&', '|']).any(|segment| {
         let words = shell_words(segment);
         words.first().is_some_and(|program| program == "rg")
-            && !words.iter().any(|word| word == "--no-config")
+            && words.get(1).is_none_or(|word| word != "--no-config")
     })
 }
 
@@ -261,7 +264,13 @@ mod tests {
 
     #[test]
     fn ripgrep_that_reads_its_configuration_file_is_seen() {
-        for lead in ["ls; rg -n x pkg | head;", "git diff && 'rg' x;"] {
+        for lead in [
+            "ls; rg -n x pkg | head;",
+            "git diff && 'rg' x;",
+            "rg x -- --no-config;",
+            "rg -e --no-config x;",
+            "rg -g --no-config x;",
+        ] {
             assert!(runs_configured_ripgrep(lead), "{lead}");
         }
         for lead in ["rg --no-config -n x;", "git diff && ls pkg;"] {

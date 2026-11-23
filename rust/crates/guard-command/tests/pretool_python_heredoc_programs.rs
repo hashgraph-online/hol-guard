@@ -235,6 +235,9 @@ fn a_probe_after_a_writer_or_before_anything_keeps_its_review() {
         format!("git diff --o'utput'=pkg/__init__.py && python3 - {body}"),
         format!("git diff --out=pkg/__init__.py && python3 - {body}"),
         format!("rg -nz X pkg; python3 - {body}"),
+        // ripgrep runs its hostname helper even with hyperlinks off.
+        format!("rg --hostname-bin=./run X pkg; python3 - {body}"),
+        format!("rg --hostname=./run X pkg; python3 - {body}"),
         format!("ls > pkg/__init__.py; python3 - {body}"),
         format!("cat pkg/remote.py > pkg/__init__.py; python3 - {body}"),
         // A `cd` moves where its imports resolve.

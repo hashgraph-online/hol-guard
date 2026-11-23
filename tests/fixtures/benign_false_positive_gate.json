@@ -26712,6 +26712,23 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-python-heredoc-import-after-ripgrep-hostname-helper",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --hostname-bin=./hostname-helper -n TODO .; python3 - <<'EOF'\nimport json\nprint(json.dumps({}))\nEOF"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-python-heredoc-import-after-reader-redirect",
       "fix_area": "shell",
       "harnesses": [
