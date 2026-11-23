@@ -87,15 +87,25 @@ fn read(service_name: &str, secret_id: &str) -> Result<Option<String>, ()> {
 }
 
 /// Read one item, telling a session bus with no Secret Service apart from a
-/// service that could not give the item.
+/// service that could not give the item. Only the crate's confirmed-absent
+/// answer counts as no service: a timeout, a failed session negotiation or a
+/// busy bus may hide a keyring copy, so it reads as unreadable.
 fn lookup(service_name: &str, secret_id: &str) -> Existing {
-    let Ok(service) = SecretService::connect(EncryptionType::Dh) else {
-        return Existing::NoService;
+    let service = match SecretService::connect(EncryptionType::Dh) {
+        Ok(service) => service,
+        Err(error) => return connect_failure(&error),
     };
     match read_from(&service, service_name, secret_id) {
         Ok(Some(_)) => Existing::Present,
         Ok(None) => Existing::Absent,
         Err(()) => Existing::Unreadable,
+    }
+}
+
+fn connect_failure(error: &secret_service::Error) -> Existing {
+    match error {
+        secret_service::Error::Unavailable => Existing::NoService,
+        _ => Existing::Unreadable,
     }
 }
 
@@ -185,5 +195,25 @@ impl Primary for SecretServiceKeyring {
             None => None,
         };
         self.bounded(keep, move || write(&service_name, &secret_id, &value))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{connect_failure, Existing};
+
+    #[test]
+    fn only_a_confirmed_absent_service_counts_as_no_keyring() {
+        assert!(matches!(
+            connect_failure(&secret_service::Error::Unavailable),
+            Existing::NoService
+        ));
+        for error in [
+            secret_service::Error::Crypto("negotiation failed"),
+            secret_service::Error::Locked,
+            secret_service::Error::PromptDisconnected,
+        ] {
+            assert!(matches!(connect_failure(&error), Existing::Unreadable));
+        }
     }
 }
