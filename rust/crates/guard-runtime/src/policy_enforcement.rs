@@ -211,6 +211,10 @@ pub(crate) fn apply_pre_tool_policy_with_inspection(
         payload,
         &harness,
         result.action.action_type,
+        // The classified operation is what says this call only reads the file
+        // it names; an action type alone cannot, because the types that cover
+        // tool calls and MCP calls cover their writes too.
+        result.action.operation == guard_contracts::PreToolOperationV1::Read,
         &result.reason_code,
     )?;
     facts.sensitive_target |= result.action.sensitive_target;

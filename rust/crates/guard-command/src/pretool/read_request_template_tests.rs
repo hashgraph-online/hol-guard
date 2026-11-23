@@ -119,3 +119,83 @@ fn a_template_holding_a_real_value_stays_unproved() {
         "a template that holds a real value keeps its review"
     );
 }
+
+/// A checkout, a linked worktree of it, and an unrelated repository nested
+/// inside that worktree. Each tracks a template of its own, so only the path
+/// proof distinguishes them.
+fn checkout_with_linked_worktree_and_nested_repository() -> std::path::PathBuf {
+    let nonce = FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target")
+        .join(format!(
+            "guard-read-template-worktree-{}-{nonce}",
+            std::process::id()
+        ));
+    let _ = std::fs::remove_dir_all(&root);
+    let admin = root.join("checkout/.git/worktrees/linked");
+    std::fs::create_dir_all(&admin).unwrap();
+    std::fs::create_dir_all(root.join("linked/vendor/portal/.git")).unwrap();
+    let root = std::fs::canonicalize(&root).unwrap();
+    let admin = root.join("checkout/.git/worktrees/linked");
+
+    std::fs::write(root.join("checkout/.git/commondir"), ".\n").unwrap();
+    write_index(&root.join("checkout/.git"), &["src/main.rs"]);
+    std::fs::create_dir_all(root.join("checkout/src")).unwrap();
+    std::fs::write(root.join("checkout/src/main.rs"), "fn main() {}\n").unwrap();
+
+    std::fs::write(admin.join("commondir"), "../..\n").unwrap();
+    std::fs::write(
+        admin.join("gitdir"),
+        format!("{}\n", root.join("linked/.git").display()),
+    )
+    .unwrap();
+    write_index(&admin, &[".env.example"]);
+    std::fs::write(
+        root.join("linked/.git"),
+        format!("gitdir: {}\n", admin.display()),
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("linked/.env.example"),
+        "API_BASE_URL=\nFEATURE_FLAGS=\n",
+    )
+    .unwrap();
+
+    // The nested repository keeps its own `.git` directory and its own index,
+    // exactly as a checkout cloned inside a worktree does.
+    write_index(&root.join("linked/vendor/portal/.git"), &[".env.example"]);
+    std::fs::write(
+        root.join("linked/vendor/portal/.env.example"),
+        "API_BASE_URL=\n",
+    )
+    .unwrap();
+    root
+}
+
+#[test]
+fn a_template_in_a_linked_worktree_of_the_session_repository_is_admitted() {
+    let root = checkout_with_linked_worktree_and_nested_repository();
+    let cwd = root.join("checkout").to_string_lossy().into_owned();
+    let target = root
+        .join("linked/.env.example")
+        .to_string_lossy()
+        .into_owned();
+    assert!(
+        bounded_structured_file_read_target(&target, None, Some(&cwd)),
+        "a worktree of the session's own repository is the same repository"
+    );
+}
+
+#[test]
+fn a_template_in_a_repository_nested_inside_a_worktree_stays_unproved() {
+    let root = checkout_with_linked_worktree_and_nested_repository();
+    let cwd = root.join("checkout").to_string_lossy().into_owned();
+    let target = root
+        .join("linked/vendor/portal/.env.example")
+        .to_string_lossy()
+        .into_owned();
+    assert!(
+        !bounded_structured_file_read_target(&target, None, Some(&cwd)),
+        "the nested repository owns the file, not the worktree above it"
+    );
+}

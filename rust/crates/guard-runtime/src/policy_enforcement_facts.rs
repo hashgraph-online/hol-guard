@@ -532,10 +532,15 @@ pub(super) fn payload_changed_hash(maps: &[&Map<String, Value>]) -> Result<bool,
     Ok(explicit || previous.is_some() && current.is_some() && previous != current)
 }
 
+/// `read_request` says the call this payload describes only reads what it
+/// names. The template relief the read gate grants belongs to that request
+/// alone, so every caller states it rather than letting an action type that
+/// can also write borrow it.
 pub(super) fn payload_facts(
     payload: &Value,
     harness: &str,
     action_type: PreToolActionTypeV1,
+    read_request: bool,
     reason_code: &str,
 ) -> Result<PolicyFacts, String> {
     let mut maps = Vec::new();
@@ -573,12 +578,11 @@ pub(super) fn payload_facts(
         wait_process,
         goal_input,
         payload.get("cwd").and_then(Value::as_str),
-        // A write or a configuration change is never the template read the
-        // read gate allowed, so it cannot borrow that read's relief.
-        !matches!(
-            action_type,
-            PreToolActionTypeV1::FileWrite | PreToolActionTypeV1::Config
-        ),
+        // Only a read is the request the read gate proved the template for.
+        // A write, a configuration change, an MCP call that writes and every
+        // other action keep the family screen, because what they put in the
+        // file is not what the gate scanned.
+        read_request,
     )? || reason_code.contains("secret")
         || reason_code.contains("credential")
         || reason_code.contains("exfiltration");

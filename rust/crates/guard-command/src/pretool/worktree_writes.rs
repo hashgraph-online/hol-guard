@@ -37,12 +37,25 @@ pub(super) fn same_repository_worktree(workspace: &Path, target: &Path) -> bool 
     let Some((source_root, source)) = repository_common_directory(workspace) else {
         return false;
     };
-    let Some((root, admin)) = target.ancestors().find_map(|root| {
-        let text = bounded_git_metadata(&root.join(".git"))?;
-        let path = text.trim().strip_prefix("gitdir: ")?;
-        let admin = std::fs::canonicalize(root.join(path)).ok()?;
-        Some((root, admin))
-    }) else {
+    // The nearest ancestor holding a `.git` entry owns the target, exactly as
+    // it does in `primary_checkout_of_worktree`. A nested checkout keeps its
+    // own identity: its `.git` is a directory, so it is not a worktree of this
+    // repository, and the enclosing worktree's gitfile further up the path
+    // does not answer for it.
+    let Some(root) = target
+        .ancestors()
+        .find(|root| root.join(".git").symlink_metadata().is_ok())
+    else {
+        return false;
+    };
+    let Some(admin) = bounded_git_metadata(&root.join(".git"))
+        .and_then(|text| {
+            text.trim()
+                .strip_prefix("gitdir: ")
+                .map(|path| root.join(path))
+        })
+        .and_then(|path| std::fs::canonicalize(path).ok())
+    else {
         return false;
     };
     let Some(common) = bounded_git_metadata(&admin.join("commondir"))

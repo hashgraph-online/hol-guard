@@ -175,16 +175,34 @@ pub(in crate::pretool) fn committed_image(path: &Path) -> bool {
 
 /// Whether `value`, a path as a request spelled it, resolves to a committed
 /// dotenv template [`tracked_dotenv_template`] proves.
+///
+/// The name the request wrote is screened as well as the file it resolves to.
+/// A link named `.env`, or one parked in a credential store, reads as the
+/// secret it is named after whatever it points at, so the relief covers only
+/// a request that both spells a template and lands on one.
 pub(in crate::pretool) fn resolves_to_tracked_dotenv_template(
     value: &str,
     cwd: Option<&str>,
 ) -> bool {
     let supplied = Path::new(value);
+    if !supplied
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(guard_secure_fs::dotenv_template_basename)
+    {
+        return false;
+    }
     let target = match cwd {
         _ if supplied.is_absolute() => supplied.to_path_buf(),
         Some(cwd) => Path::new(cwd).join(supplied),
         None => return false,
     };
+    if target
+        .parent()
+        .is_some_and(|parent| guard_secure_fs::sensitive_path_family(parent).is_some())
+    {
+        return false;
+    }
     std::fs::canonicalize(target).is_ok_and(|canonical| tracked_dotenv_template(&canonical, cwd))
 }
 

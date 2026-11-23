@@ -13,9 +13,15 @@ fn report() -> Value {
 }
 
 fn facts(payload: &Value, harness: &str, reason_code: &str) -> bool {
-    payload_facts(payload, harness, PreToolActionTypeV1::Harness, reason_code)
-        .expect("yield payload")
-        .sensitive_target
+    payload_facts(
+        payload,
+        harness,
+        PreToolActionTypeV1::Harness,
+        true,
+        reason_code,
+    )
+    .expect("yield payload")
+    .sensitive_target
 }
 
 fn decision(payload: &Value) -> String {

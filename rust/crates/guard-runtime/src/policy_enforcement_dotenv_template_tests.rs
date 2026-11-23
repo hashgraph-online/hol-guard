@@ -68,13 +68,18 @@ impl Repo {
 
     /// Whether the policy floor still calls a read of `relative` sensitive.
     fn sensitive(&self, relative: &str) -> bool {
-        self.sensitive_action(relative, "Read", PreToolActionTypeV1::Harness)
+        self.sensitive_action(relative, "Read", PreToolActionTypeV1::Harness, true)
     }
 
     /// Whether the floor calls this repository's `relative` sensitive to a
     /// session whose working directory is `cwd`.
     fn sensitive_from(&self, cwd: &Path, relative: &str) -> bool {
-        let named = self.path().join(relative);
+        self.sensitive_named(cwd, &self.path().join(relative))
+    }
+
+    /// Whether the floor calls a read of `named`, an absolute path that need
+    /// not lie in this repository, sensitive to a session in `cwd`.
+    fn sensitive_named(&self, cwd: &Path, named: &Path) -> bool {
         let payload = json!({
             "tool_name": "Read",
             "tool_input": {"file_path": named.to_str().expect("a printable path")},
@@ -84,6 +89,7 @@ impl Repo {
             &payload,
             "claude-code",
             PreToolActionTypeV1::Harness,
+            true,
             "native_policy_reapproval_required",
         )
         .expect("a read payload")
@@ -91,7 +97,15 @@ impl Repo {
     }
 
     /// Whether the floor calls `relative` sensitive for `tool` and `action`.
-    fn sensitive_action(&self, relative: &str, tool: &str, action: PreToolActionTypeV1) -> bool {
+    /// `read_request` is what the classified call says about itself: a read
+    /// names the file it reads and nothing else.
+    fn sensitive_action(
+        &self,
+        relative: &str,
+        tool: &str,
+        action: PreToolActionTypeV1,
+        read_request: bool,
+    ) -> bool {
         let named = self.path().join(relative);
         let payload = json!({
             "tool_name": tool,
@@ -102,6 +116,7 @@ impl Repo {
             &payload,
             "claude-code",
             action,
+            read_request,
             "native_policy_reapproval_required",
         )
         .expect("a payload")
@@ -175,8 +190,32 @@ fn a_write_of_a_committed_template_keeps_its_floor() {
     repo.write(".env.example", TEMPLATE);
     repo.commit("document the variables");
     assert!(!repo.sensitive(".env.example"));
-    assert!(repo.sensitive_action(".env.example", "Write", PreToolActionTypeV1::FileWrite));
-    assert!(repo.sensitive_action(".env.example", "Edit", PreToolActionTypeV1::FileWrite));
+    assert!(repo.sensitive_action(
+        ".env.example",
+        "Write",
+        PreToolActionTypeV1::FileWrite,
+        false
+    ));
+    assert!(repo.sensitive_action(
+        ".env.example",
+        "Edit",
+        PreToolActionTypeV1::FileWrite,
+        false
+    ));
+    // A call that writes keeps the floor whatever its action type is. The
+    // types that carry MCP calls and the harness's own editing tools carry
+    // their reads too, so the operation is what tells them apart.
+    for action in [
+        PreToolActionTypeV1::McpTool,
+        PreToolActionTypeV1::Unknown,
+        PreToolActionTypeV1::Harness,
+        PreToolActionTypeV1::Command,
+    ] {
+        assert!(
+            repo.sensitive_action(".env.example", "write_file", action, false),
+            "a write classified {action:?} keeps the floor"
+        );
+    }
 }
 
 /// Agent work runs from linked worktrees, and a worktree session reading the
@@ -202,4 +241,54 @@ fn a_worktree_session_reads_the_template_of_the_checkout_it_was_cut_from() {
     repo.write(".env", TEMPLATE);
     repo.commit("add the environment file");
     assert!(repo.sensitive_from(&linked, ".env"));
+}
+
+/// A link reaches a file under a name of its own. The relief belongs to the
+/// name the request wrote as much as to the file behind it, so a link that
+/// spells the local dotenv file keeps that family.
+#[cfg(unix)]
+#[test]
+fn a_link_named_after_the_local_dotenv_file_keeps_its_floor() {
+    let repo = Repo::new();
+    repo.write(".env.example", TEMPLATE);
+    repo.commit("document the variables");
+    fs::create_dir_all(repo.path().join("config")).expect("a configuration directory");
+    std::os::unix::fs::symlink("../.env.example", repo.path().join("config/.env"))
+        .expect("a link to the template");
+    assert!(!repo.sensitive(".env.example"));
+    assert!(repo.sensitive("config/.env"));
+}
+
+/// A repository cloned inside a worktree is its own repository. The worktree
+/// above it shares the session's git directory, but the nested checkout does
+/// not, so its files answer for themselves.
+#[cfg(unix)]
+#[test]
+fn a_template_in_a_repository_nested_inside_a_worktree_keeps_its_floor() {
+    let repo = Repo::new();
+    repo.write(".env.example", TEMPLATE);
+    repo.commit("document the variables");
+    let elsewhere = tempfile::tempdir().expect("a root for the worktree");
+    let linked = elsewhere.path().join("review");
+    repo.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "review",
+        linked.to_str().expect("a printable worktree path"),
+    ]);
+    // The worktree's own copy is the session's repository seen from the side.
+    assert!(!repo.sensitive_named(repo.path(), &linked.join(".env.example")));
+
+    let nested = linked.join("vendor/storefront");
+    fs::create_dir_all(&nested).expect("a directory for the nested checkout");
+    fs::write(nested.join(".env.example"), TEMPLATE).expect("the nested template");
+    let nested_path = nested.to_str().expect("a printable nested path");
+    repo.git(&["init", "-q", "-b", "main", nested_path]);
+    repo.git(&["-C", nested_path, "add", "-A", "-f"]);
+    assert!(
+        repo.sensitive_named(repo.path(), &nested.join(".env.example")),
+        "the nested checkout owns the file, not the worktree above it"
+    );
 }
