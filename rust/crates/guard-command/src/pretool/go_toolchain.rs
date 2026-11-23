@@ -128,6 +128,19 @@ fn env_setting_runs_compiler(name: &str) -> bool {
     )
 }
 
+/// Go environment reads that can execute the configured compiler must ask
+/// for consent even when general workspace containment would otherwise run
+/// the command silently. A full dump can calculate compiler-dependent values.
+/// Named inert settings remain eligible for the narrower direct-read proof.
+pub(super) fn env_requires_approval_even_when_contained(arguments: &[String]) -> bool {
+    if arguments.first().map(String::as_str) != Some("env") {
+        return false;
+    }
+    let operands = &arguments[1..];
+    operands.iter().all(|argument| argument == "-json")
+        || operands.iter().any(|argument| env_setting_runs_compiler(argument))
+}
+
 /// Whether the toolchain that answers the query can only be the one on
 /// `PATH` or a release the go command downloads and verifies itself.
 ///
