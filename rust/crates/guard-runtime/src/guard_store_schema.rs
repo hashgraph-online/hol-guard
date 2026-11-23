@@ -43,6 +43,8 @@ mod local_cli_regroup;
 mod local_cli_sql;
 #[path = "guard_store_schema_objects.rs"]
 mod objects;
+#[path = "guard_store_schema_requests.rs"]
+mod requests;
 #[path = "guard_store_schema_shadow.rs"]
 mod shadow;
 #[path = "guard_store_schema_shadow_sql.rs"]
@@ -217,7 +219,8 @@ pub(crate) fn ensure_families(connection: &Connection, now: &str) -> StoreResult
     workspace::ensure_assessment(connection, now)?;
     workspace::ensure_fix_proposal(connection, now)?;
     families::ensure_workflow_capabilities(connection, now)?;
-    shadow::ensure_shadow(connection, now)
+    shadow::ensure_shadow(connection, now)?;
+    requests::ensure_requests_through_approvals(connection, now)
 }
 
 #[cfg(test)]
@@ -251,6 +254,10 @@ mod indexes_tests;
 #[cfg(test)]
 #[path = "guard_store_schema_columns_tests.rs"]
 mod columns_tests;
+
+#[cfg(test)]
+#[path = "guard_store_schema_requests_tests.rs"]
+mod requests_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_tests.rs"]
