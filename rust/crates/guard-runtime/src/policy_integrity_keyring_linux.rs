@@ -87,9 +87,10 @@ fn read(service_name: &str, secret_id: &str) -> Result<Option<String>, ()> {
 }
 
 /// Read one item, telling a session bus with no Secret Service apart from a
-/// service that could not give the item. Only the crate's confirmed-absent
-/// answer counts as no service: a timeout, a failed session negotiation or a
-/// busy bus may hide a keyring copy, so it reads as unreadable.
+/// service that could not give the item. Only a confirmed absence counts as
+/// no service: no session bus, or a bus that says no one owns the Secret
+/// Service name. A timeout, a failed session negotiation or a busy bus may
+/// hide a keyring copy, so it reads as unreadable.
 fn lookup(service_name: &str, secret_id: &str) -> Existing {
     let service = match SecretService::connect(EncryptionType::Dh) {
         Ok(service) => service,
@@ -102,10 +103,31 @@ fn lookup(service_name: &str, secret_id: &str) -> Existing {
     }
 }
 
+/// The bus's own answers for a name nobody owns: the session bus is up but
+/// no Secret Service is registered on it.
+const ABSENT_SERVICE_ERRORS: [&str; 2] = [
+    "org.freedesktop.DBus.Error.ServiceUnknown",
+    "org.freedesktop.DBus.Error.NameHasNoOwner",
+];
+
 fn connect_failure(error: &secret_service::Error) -> Existing {
-    match error {
-        secret_service::Error::Unavailable => Existing::NoService,
-        _ => Existing::Unreadable,
+    use secret_service::Error as Service;
+    use zbus::fdo::Error as Fdo;
+    let absent = match error {
+        Service::Unavailable => true,
+        Service::ZbusFdo(Fdo::ServiceUnknown(_) | Fdo::NameHasNoOwner(_)) => true,
+        Service::Zbus(zbus::Error::FDO(fdo)) => {
+            matches!(**fdo, Fdo::ServiceUnknown(_) | Fdo::NameHasNoOwner(_))
+        }
+        Service::Zbus(zbus::Error::MethodError(name, _, _)) => {
+            ABSENT_SERVICE_ERRORS.contains(&name.as_str())
+        }
+        _ => false,
+    };
+    if absent {
+        Existing::NoService
+    } else {
+        Existing::Unreadable
     }
 }
 
@@ -207,6 +229,27 @@ mod tests {
         assert!(matches!(
             connect_failure(&secret_service::Error::Unavailable),
             Existing::NoService
+        ));
+        for error in [
+            zbus::fdo::Error::ServiceUnknown("org.freedesktop.secrets".to_owned()),
+            zbus::fdo::Error::NameHasNoOwner("org.freedesktop.secrets".to_owned()),
+        ] {
+            assert!(matches!(
+                connect_failure(&secret_service::Error::ZbusFdo(error.clone())),
+                Existing::NoService
+            ));
+            assert!(matches!(
+                connect_failure(&secret_service::Error::Zbus(zbus::Error::FDO(Box::new(
+                    error
+                )))),
+                Existing::NoService
+            ));
+        }
+        assert!(matches!(
+            connect_failure(&secret_service::Error::ZbusFdo(zbus::fdo::Error::TimedOut(
+                "bus busy".to_owned()
+            ))),
+            Existing::Unreadable
         ));
         for error in [
             secret_service::Error::Crypto("negotiation failed"),
