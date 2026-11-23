@@ -101,3 +101,60 @@ fn a_state_without_a_payload_object_is_refused() {
         .unwrap();
     assert!(run(&connection, "record_policy_integrity_state", &Args(&args)).is_err());
 }
+
+#[test]
+fn a_missing_state_reads_as_no_marker_and_no_state() {
+    let connection = request_store();
+    connection
+        .execute(
+            "delete from sync_state where state_key = 'policy_integrity'",
+            [],
+        )
+        .unwrap();
+    let reply = call(&connection, "read_policy_integrity_state", json!({}));
+    assert_eq!(reply, json!({"payload_json": null, "state": null}));
+}
+
+#[test]
+fn a_recorded_state_reads_back_as_its_text_and_its_object() {
+    let connection = request_store();
+    call(
+        &connection,
+        "record_policy_integrity_state",
+        json!({"payload": state(), "now": NOW}),
+    );
+    let reply = call(&connection, "read_policy_integrity_state", json!({}));
+    assert_eq!(reply["payload_json"], json!(stored(&connection).0));
+    assert_eq!(reply["state"], state());
+}
+
+#[test]
+fn stored_text_that_is_not_an_object_keeps_its_marker_but_is_no_state() {
+    let connection = request_store();
+    connection
+        .execute(
+            "insert into sync_state (state_key, payload_json, updated_at) \
+             values ('policy_integrity', '[1]', 'x') on conflict(state_key) do update \
+             set payload_json = excluded.payload_json",
+            [],
+        )
+        .unwrap();
+    let reply = call(&connection, "read_policy_integrity_state", json!({}));
+    assert_eq!(reply, json!({"payload_json": "[1]", "state": null}));
+}
+
+#[test]
+fn only_rows_from_a_local_source_count_as_local() {
+    let connection = request_store();
+    let reply = call(&connection, "has_local_policy_rows", json!({}));
+    assert_eq!(reply, json!({"present": true}));
+    connection
+        .execute_batch(
+            "delete from policy_decisions; \
+             insert into policy_decisions (harness, scope, action, source, updated_at) \
+             values ('codex', 'global', 'allow', 'cloud-sync', 'x');",
+        )
+        .unwrap();
+    let reply = call(&connection, "has_local_policy_rows", json!({}));
+    assert_eq!(reply, json!({"present": false}));
+}

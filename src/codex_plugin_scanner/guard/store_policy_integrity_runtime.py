@@ -290,9 +290,7 @@ class StorePolicyIntegrityAdminMixin:
         return TrustStatus.from_policy_integrity_state(state).to_dict()
 
     def get_cached_policy_integrity_state(self) -> dict[str, object]:
-        with self._connect() as connection:
-            state = self._load_policy_integrity_state(connection) or {}
-        return state
+        return self._load_policy_integrity_state() or {}
 
     def verify_policy_integrity(self, harness: str | None = None) -> dict[str, object]:
         now = _now()
@@ -394,7 +392,7 @@ class StorePolicyIntegrityAdminMixin:
             require_policy_clear(self.guard_home, approval_gate_grant=approval_gate_grant, now=current_time)
         with self._connect() as connection:
             state = self._refresh_policy_integrity_state(connection, now=current_time, create_key=True)
-            state = self._load_policy_integrity_state(connection) or state
+            state = self._load_policy_integrity_state() or state
             key, key_id = self._policy_integrity_secret_material(create=True)
             invalid_ids: list[int] = []
             rows = self._load_local_policy_rows(connection, harness=harness)
