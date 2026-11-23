@@ -166,7 +166,12 @@ fn untrusted_home_cannot_be_a_write_free_predecessor() {
     find.arguments = vec!["sandbox".to_owned(), "${HOME}".to_owned()];
     let mut sed = step("sed -n '1p' target.txt", "sed").expect("sed parses");
     sed.text = r#"sed -n '1p' "${HOME}" target.txt"#.to_owned();
-    sed.arguments = vec!["-n".to_owned(), "1p".to_owned(), "${HOME}".to_owned(), "target.txt".to_owned()];
+    sed.arguments = vec![
+        "-n".to_owned(),
+        "1p".to_owned(),
+        "${HOME}".to_owned(),
+        "target.txt".to_owned(),
+    ];
 
     for segment in [&find, &sed] {
         assert!(!writes_nothing_with_context(
@@ -198,7 +203,11 @@ fn untrusted_home_cannot_be_a_write_free_predecessor() {
         r#"find "${HOME}/notes" -type f -print"#,
         r#"sed -n '1p' "${HOME}/notes.md""#,
     ] {
-        let program = if command.starts_with("find ") { "find" } else { "sed" };
+        let program = if command.starts_with("find ") {
+            "find"
+        } else {
+            "sed"
+        };
         let segment = step(command, program).expect("read parses");
         assert!(writes_nothing(&segment), "{command}");
     }
