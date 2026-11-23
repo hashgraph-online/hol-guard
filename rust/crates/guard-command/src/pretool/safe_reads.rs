@@ -5,7 +5,7 @@ mod head_tail;
 #[path = "safe_reads_jq.rs"]
 mod jq_arguments;
 #[path = "jq_filter.rs"]
-mod jq_filter;
+pub(super) mod jq_filter;
 #[path = "read_globs.rs"]
 mod read_globs;
 #[path = "safe_reads_sed.rs"]

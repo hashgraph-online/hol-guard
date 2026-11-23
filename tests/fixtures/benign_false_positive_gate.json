@@ -34276,6 +34276,125 @@
       "expect": "allow"
     },
     {
+      "id": "yq-document-field-read",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yq '.services.app.image' ${WORKTREE}/compose.yaml"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "yq-service-environment-field",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yq '.services.app.environment' ${WORKTREE}/compose.yaml"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "yq-document-keys",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yq -r '.services | keys' ${WORKTREE}/compose.yaml"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "yq-eval-subcommand",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yq eval '.services.app' ${WORKTREE}/compose.yaml"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "yq-output-format",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yq -o json '.services' ${WORKTREE}/compose.yaml"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "yq-json-input-format",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yq -p json '.name' ${HOME}/other-project/package.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "yq-piped-document",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${WORKTREE}/compose.yaml | yq '.services.app.image'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "read-below-a-route-group-directory",
       "fix_area": "read",
       "harnesses": [

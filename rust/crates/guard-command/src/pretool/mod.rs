@@ -331,6 +331,7 @@ mod worktree_add;
 mod worktree_maintenance;
 mod worktree_writes;
 mod wrangler_reads;
+mod yaml_query_reads;
 
 pub mod generic;
 mod package_scripts_disabled;
