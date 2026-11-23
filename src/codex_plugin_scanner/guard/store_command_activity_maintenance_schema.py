@@ -12,6 +12,17 @@ from .store_command_activity_schema import _validate_schema_object_sql
 COMMAND_ACTIVITY_MAINTENANCE_SCHEMA_MIGRATION_VERSION: Final = 12
 COMMAND_ACTIVITY_MAINTENANCE_SCHEMA_VERSION: Final = "guard.command-activity-maintenance.v1"
 
+MAINTENANCE_SEED_SQL: Final = """
+insert or ignore into command_activity_maintenance (
+  singleton, last_completed_day, last_run_at, detail_compaction_started_at,
+  rollup_backfill_cursor_occurred_at, rollup_backfill_cursor_activity_id,
+  rollup_backfill_complete,
+  last_backfilled_rows,
+  last_detail_rows_deleted, last_correlation_rows_deleted,
+  last_aggregate_rows_deleted, schema_version
+) values (1, null, null, null, null, null, 0, 0, 0, 0, 0, ?)
+"""
+
 
 def command_activity_maintenance_schema_statements() -> tuple[str, ...]:
     return (
@@ -105,19 +116,7 @@ def ensure_command_activity_maintenance_schema(connection: sqlite3.Connection, *
     try:
         for statement in statements:
             connection.execute(statement)
-        connection.execute(
-            """
-            insert or ignore into command_activity_maintenance (
-              singleton, last_completed_day, last_run_at, detail_compaction_started_at,
-              rollup_backfill_cursor_occurred_at, rollup_backfill_cursor_activity_id,
-              rollup_backfill_complete,
-              last_backfilled_rows,
-              last_detail_rows_deleted, last_correlation_rows_deleted,
-              last_aggregate_rows_deleted, schema_version
-            ) values (1, null, null, null, null, null, 0, 0, 0, 0, 0, ?)
-            """,
-            (COMMAND_ACTIVITY_MAINTENANCE_SCHEMA_VERSION,),
-        )
+        connection.execute(MAINTENANCE_SEED_SQL, (COMMAND_ACTIVITY_MAINTENANCE_SCHEMA_VERSION,))
         _validate_command_activity_maintenance_schema(connection, statements)
         connection.execute(
             "insert or ignore into schema_migrations (version, applied_at) values (?, ?)",
@@ -181,6 +180,7 @@ def _validate_command_activity_maintenance_schema(
 __all__ = [
     "COMMAND_ACTIVITY_MAINTENANCE_SCHEMA_MIGRATION_VERSION",
     "COMMAND_ACTIVITY_MAINTENANCE_SCHEMA_VERSION",
+    "MAINTENANCE_SEED_SQL",
     "command_activity_maintenance_schema_statements",
     "ensure_command_activity_maintenance_schema",
 ]
