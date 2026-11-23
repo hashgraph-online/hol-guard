@@ -306,6 +306,28 @@ pub(crate) fn find_exec(arguments: &[String]) -> Option<FindExec<'_>> {
     child_listed(child).then_some(FindExec { shape, child })
 }
 
+/// Whether the parser can treat `find ... -exec CHILD {}` as a read-only
+/// fanout.
+///
+/// A `basename` child joins the fanout only when every root that names a
+/// shell parameter is written as a path segment inside double quotes, which
+/// is what `text` (the segment as written) shows and the parsed words no
+/// longer do. Written bare, the value is split on IFS and a word of it could
+/// become a find action, so that walk keeps the unmodeled reading it had
+/// before `basename` was a fanout child. Without the text the parameter roots
+/// stay unmodeled too.
+pub(crate) fn find_exec_modeled(arguments: &[String], text: Option<&str>) -> bool {
+    find_exec(arguments).is_some_and(|exec| {
+        let basename = exec
+            .child
+            .first()
+            .is_some_and(|name| executable_basename(name) == "basename");
+        !basename
+            || !exec.shape.roots.iter().any(|root| root.contains('$'))
+            || text.is_some_and(crate::native_command_controls::parameters_only_root_paths)
+    })
+}
+
 fn bounded_count(value: &str) -> bool {
     !value.is_empty() && value.len() <= 3 && value.bytes().all(|byte| byte.is_ascii_digit())
 }

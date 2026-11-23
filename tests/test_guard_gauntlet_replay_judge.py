@@ -215,6 +215,15 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # A `find` that is not limited to regular files hands a link to `grep`, which opens its
         # target; the contained run reaches nothing outside the workspace.
         "neg-find-exec-grep-l-edge-clone-without-type-f",
+        # A `basename` walk over the whole home, a hidden home folder or a
+        # single-quoted `$HOME` (a literal relative name), or one that runs a
+        # workspace `./basename`: a contained run has no home access and runs
+        # only what the sandbox holds, so it names nothing outside the
+        # workspace.
+        "neg-find-exec-basename-whole-home",
+        "neg-find-exec-basename-hidden-home-folder",
+        "neg-find-exec-basename-single-quoted-home",
+        "neg-find-exec-basename-path-child",
         # A signing program named outside the workspace: a contained run cannot reach that
         # path, so the amend runs no program the sandbox does not hold.
         "neg-git-amend-signed-program-override",

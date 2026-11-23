@@ -143,11 +143,13 @@ fn metadata_roots<R: AsRef<str>>(
         // `$HOME` and `${HOME}` name the directory `~` names, and
         // `home_targets_unquoted` has already turned back a segment that
         // keeps either spelling literal. Unlike `~`, the variable is split on
-        // the shell's IFS, so a home holding whitespace or a glob character
-        // keeps its review.
+        // the shell's IFS: it has to stand inside double quotes as a path
+        // segment, and a home holding whitespace or a glob character keeps
+        // its review all the same.
         let tilde = super::directory_targets::home_variable::tilde_spelling(root.as_ref());
         if tilde.is_some()
-            && !super::directory_targets::home_variable::home_expands_to_one_word(Some(home))
+            && (!crate::native_command_controls::parameters_only_root_paths(&producer.text)
+                || !super::directory_targets::home_variable::home_expands_to_one_word(Some(home)))
         {
             return false;
         }

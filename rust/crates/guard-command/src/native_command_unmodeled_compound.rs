@@ -361,7 +361,7 @@ fn sets_a_variable(word: &str) -> bool {
 /// `artifact_path="$HOME/Downloads/w/$file"` inside a `for` body blocked with
 /// no approval left to give, while the same path with a literal last segment
 /// reviewed.
-pub(super) fn parameters_only_root_paths(text: &str) -> bool {
+pub(crate) fn parameters_only_root_paths(text: &str) -> bool {
     let chars: Vec<char> = text.chars().collect();
     let (mut single, mut double, mut escaped) = (false, false, false);
     let mut index = 0;
