@@ -147,10 +147,16 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                 if inner.trim() != substitution.body {
                     return None;
                 }
-                (
-                    stand_in(&substitution.body)?.to_owned(),
-                    substitution.body.clone(),
-                )
+                let value = match stand_in(&substitution.body) {
+                    Some(value) => value,
+                    // A value that is only printed needs no stand-in of its
+                    // own shape (`display`).
+                    None if display::display_slot(&masked, &substitutions, substitution) => {
+                        display::DISPLAY_VALUE
+                    }
+                    None => return None,
+                };
+                (value.to_owned(), substitution.body.clone())
             }
         };
         // A lookup can print nothing; only a Git command reads a missing
@@ -488,6 +494,9 @@ fn date_arguments(arguments: &[&str]) -> bool {
 
 #[path = "chain_literals_commit_message.rs"]
 mod commit_message;
+
+#[path = "chain_literals_display.rs"]
+mod display;
 
 #[path = "chain_literals_git_value.rs"]
 mod git_value;

@@ -1,0 +1,209 @@
+//! A substitution whose value is only printed: `echo "version: $(grep -m1
+//! version package.json)"`.
+//!
+//! An agent labels what it reads by wrapping the read in `echo` or `printf`.
+//! The value lands inside a double-quoted argument of a command that does
+//! nothing but print it, so it is never split, matched as a pattern, run, or
+//! used as a path, an option or a format. What the shell does is then the
+//! inner command plus a print of its output, and the inner command is judged
+//! as a command of its own by the caller before the projection is used. The
+//! value is written as a plain stand-in, and the rest of the chain, pipes and
+//! redirections included, is judged on that text: `echo "$(cat f)" | sh`
+//! still reviews for the `sh`.
+//!
+//! The slot is refused when:
+//!
+//! - the substitution is not inside double quotes, where the shell would
+//!   split and glob the value into words of its own;
+//! - the command holding it is not `echo` or `printf`, so the value could be
+//!   a path, an option or a program another command acts on;
+//! - a `printf` has no format ahead of the substitution, or takes `-v`, so
+//!   the value would be the format or a variable name;
+//! - a redirection operator stands ahead of it in the same command, so the
+//!   value could name the file a redirection opens;
+//! - anything earlier in the chain could change what the inner command
+//!   reads (`cd`, an assignment, `alias`, a function definition), since the
+//!   inner command is judged where the chain starts;
+//! - the inner command expands a variable or a substitution of its own,
+//!   which judging it alone would not resolve as the shell does.
+
+use crate::shell_structure::ShellCommandSubstitution;
+
+/// Stand-in for a printed value: a plain word with no path, glob or option
+/// meaning.
+pub(super) const DISPLAY_VALUE: &str = "hol-guard-substituted-output";
+
+const MAX_BODY_CHARS: usize = 256;
+
+/// Words that change, for the rest of the chain, the directory, the
+/// variables or the meaning of a command name.
+const STEERING_WORDS: &str = ". alias builtin cd command declare enable eval exec export \
+    function hash local popd pushd readonly set setopt shopt source typeset unalias unset";
+
+/// Whether `substitution` sits where its value is only printed.
+///
+/// `chars` is the heredoc-masked command, which keeps every index.
+pub(super) fn display_slot(
+    chars: &[char],
+    spans: &[ShellCommandSubstitution],
+    substitution: &ShellCommandSubstitution,
+) -> bool {
+    let body = &substitution.body;
+    if substitution.kind != "dollar"
+        || body.len() > MAX_BODY_CHARS
+        || body.contains('$')
+        || body.contains('`')
+        || body.contains("<<")
+        || body.contains('\n')
+    {
+        return false;
+    }
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut begins = 0usize;
+    for (at, &character) in chars.iter().enumerate().take(substitution.start) {
+        if spans.iter().any(|span| span.start <= at && at < span.end) {
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match character {
+            '\\' if !single => escaped = true,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            ';' | '&' | '|' | '\n' | '(' | ')' | '{' | '}' if !single && !double => begins = at + 1,
+            _ => {}
+        }
+    }
+    if single || !double || steered(chars, spans, substitution.start) {
+        return false;
+    }
+    let segment: Vec<char> = chars[begins..substitution.start].to_vec();
+    let words = unquoted_words(&segment, begins, spans);
+    let Some(words) = words else {
+        return false;
+    };
+    // Keywords that open a body leave the command after them.
+    let mut words = words.as_slice();
+    while let Some((first, rest)) = words.split_first() {
+        if matches!(first.as_str(), "do" | "then" | "else" | "!") {
+            words = rest;
+        } else {
+            break;
+        }
+    }
+    match words.split_first() {
+        Some((program, _)) if program == "echo" => true,
+        Some((program, arguments)) if program == "printf" => arguments
+            .first()
+            .is_some_and(|format| !format.starts_with('-')),
+        _ => false,
+    }
+}
+
+/// The complete words of `segment` that end before the substitution, with
+/// quotes left in place. `None` when an unquoted redirection operator
+/// appears, so the value could name a file a redirection opens.
+fn unquoted_words(
+    segment: &[char],
+    offset: usize,
+    spans: &[ShellCommandSubstitution],
+) -> Option<Vec<String>> {
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut words = Vec::new();
+    let mut word = String::new();
+    for (index, &character) in segment.iter().enumerate() {
+        let at = offset + index;
+        if spans.iter().any(|span| span.start <= at && at < span.end) {
+            word.push('x');
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            word.push(character);
+            continue;
+        }
+        match character {
+            '\\' if !single => {
+                escaped = true;
+                word.push(character);
+            }
+            '\'' if !double => {
+                single = !single;
+                word.push(character);
+            }
+            '"' if !single => {
+                double = !double;
+                word.push(character);
+            }
+            '<' | '>' if !single && !double => return None,
+            c if c.is_ascii_whitespace() && !single && !double => {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+            }
+            c => word.push(c),
+        }
+    }
+    // The word still open holds the substitution, so it is not a complete
+    // word before it.
+    Some(words)
+}
+
+/// Whether the text ahead of `end` could change what the inner command reads
+/// once it runs: a directory change, an assignment, a function definition or
+/// a builtin that rebinds names. The inner command is judged where the chain
+/// starts, so any of these leaves that judgement about a different command.
+fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bool {
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut word = String::new();
+    let mut previous = ' ';
+    let mut words: Vec<String> = Vec::new();
+    for (at, &character) in chars.iter().enumerate().take(end) {
+        if spans.iter().any(|span| span.start <= at && at < span.end) {
+            word.push('x');
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            word.push(character);
+            continue;
+        }
+        let quoted = single || double;
+        match character {
+            '\\' if !single => escaped = true,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            // `name()` opens a function definition.
+            ')' if !quoted && previous == '(' => return true,
+            c if !quoted && (c.is_ascii_whitespace() || ";&|(){}".contains(c)) => {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+            }
+            c => word.push(c),
+        }
+        if !quoted && character == '=' && assignment_head(&word) {
+            return true;
+        }
+        previous = character;
+    }
+    words.iter().any(|word| {
+        STEERING_WORDS
+            .split_ascii_whitespace()
+            .any(|entry| entry == word)
+    })
+}
+
+/// Whether `word` so far is `NAME=`, the start of an assignment.
+fn assignment_head(word: &str) -> bool {
+    let Some(name) = word.strip_suffix('=') else {
+        return false;
+    };
+    let mut characters = name.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}

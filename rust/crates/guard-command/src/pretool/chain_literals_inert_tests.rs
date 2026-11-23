@@ -374,3 +374,81 @@ fn a_heredoc_message_longer_than_the_bound_stays_opaque() {
     assert!(command.len() < super::MAX_COMMAND_CHARS);
     assert_eq!(projected(&command), None);
 }
+
+#[test]
+fn printed_values_take_the_display_stand_in() {
+    let v = super::display::DISPLAY_VALUE;
+    for (command, expected) in [
+        (
+            "echo \"version: $(grep -m1 version package.json)\"".to_owned(),
+            format!("echo \"version: {v}\""),
+        ),
+        (
+            "printf '%s\\n' \"$(cat VERSION)\"".to_owned(),
+            format!("printf '%s\\n' \"{v}\""),
+        ),
+        (
+            "ls && echo \"lines: $(wc -l < package.json)\" | head -1".to_owned(),
+            format!("ls && echo \"lines: {v}\" | head -1"),
+        ),
+        (
+            "for d in a b; do echo \"d: $(cat d/package.json)\"; done".to_owned(),
+            format!("for d in a b; do echo \"d: {v}\"; done"),
+        ),
+        (
+            "echo \"$(cat package.json)\" | sh".to_owned(),
+            format!("echo \"{v}\" | sh"),
+        ),
+    ] {
+        assert_eq!(
+            projected(&command).as_deref(),
+            Some(expected.as_str()),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn printed_values_judge_the_inner_command_on_its_own() {
+    let seen = RefCell::new(Vec::new());
+    let refused = project("echo \"key: $(cat ~/.ssh/id_rsa)\"", |body| {
+        seen.borrow_mut().push(body.to_owned());
+        false
+    });
+    assert_eq!(refused, None);
+    assert_eq!(seen.into_inner(), vec!["cat ~/.ssh/id_rsa".to_owned()]);
+}
+
+#[test]
+fn values_used_as_more_than_output_stay_opaque() {
+    for command in [
+        // The inner command would run somewhere other than where it is judged.
+        "cd ~/.ssh && echo \"$(cat id_rsa)\"",
+        "pushd ~/.ssh; echo \"$(cat id_rsa)\"",
+        "HOME=/etc; echo \"$(cat ~/passwd)\"",
+        "export F=x && echo \"$(cat x)\"",
+        "echo \"$(cat \"$F\")\"",
+        "echo \"$(cat ${F})\"",
+        // `echo` might not be the echo builtin.
+        "alias echo=rm; echo \"$(cat x)\"",
+        "echo() { rm \"$1\"; }; echo \"$(cat x)\"",
+        // The value is a format, a variable name, a path or a program.
+        "printf \"$(cat x)\"",
+        "printf -v out '%s' \"$(cat x)\"",
+        "cat \"$(cat x)\"",
+        "echo > \"$(cat x)\"",
+        "echo 2>/dev/null \"$(cat x)\"",
+        "eval \"$(cat x)\"",
+        "sh -c \"echo $(cat x)\"",
+        "xargs echo \"$(cat x)\"",
+        "command echo \"$(cat x)\"",
+        // Split and matched by the shell.
+        "echo $(cat x)",
+        "echo '$(cat x)' \"$(cat x)\"x$(cat y)",
+        // Nested or heredoc-fed substitutions.
+        "echo \"$(cat $(ls))\"",
+        "echo \"$(cat `ls`)\"",
+    ] {
+        assert_eq!(projected(command), None, "{command}");
+    }
+}
