@@ -1,4 +1,7 @@
-use super::{env_requires_approval_even_when_contained, go_env_inert, go_toolchain_selector, read_only_query, safe_go_probe};
+use super::{
+    env_requires_approval_even_when_contained, go_env_inert, go_toolchain_selector,
+    read_only_query, safe_go_probe,
+};
 use std::path::{Path, PathBuf};
 
 fn words(command: &str) -> Vec<String> {
