@@ -27,6 +27,7 @@ from .native_execution import _resident_request
 from .native_store_policy import _payload
 
 COMMAND_CAPABILITY_FEATURE = "command-capability-v1"
+COMMAND_CAPABILITY_RESIDENT_KEY_FEATURE = "command-capability-resident-key-v1"
 _REQUEST_SCHEMA = "guard-command-capability-request.v1"
 _RESULT_SCHEMA = "guard-command-capability-result.v1"
 _TIMEOUT_SECONDS = 10.0
@@ -53,6 +54,7 @@ def native_command_capability(
     replay_items: Sequence[object],
     replay_identity: Mapping[str, object] | None = None,
     guard_home: Path | None = None,
+    resident_key: bool = False,
 ) -> dict[str, object]:
     """Verify the stored capability, and authorize ``job`` when one is given.
 
@@ -61,7 +63,9 @@ def native_command_capability(
     is not ``None`` - an ``authorization`` naming the job's identity and
     whether it still needs a local confirmation. A ``replay_identity`` asks the
     separate question a caller with its own authorization needs: ``replayed``
-    says whether the replay rows already hold that identity.
+    says whether the replay rows already hold that identity. ``resident_key``
+    has the resident verify with the key in its own vault instead of the one
+    sent.
     """
 
     home = Path(_resolve_digest_home(guard_home))
@@ -82,13 +86,16 @@ def native_command_capability(
         "replay_items": list(replay_items),
         "replay_identity": dict(replay_identity) if replay_identity is not None else None,
     }
+    if resident_key:
+        # The resident reads the key from its own vault; none goes on the wire.
+        wire.update(integrity_key_b64=None, integrity_key_id=None, resident_key=True)
     try:
         response = _resident_request(
             operation="command_capability",
             request=wire,
             guard_home=home,
             timeout_seconds=_TIMEOUT_SECONDS,
-            required_feature=COMMAND_CAPABILITY_FEATURE,
+            required_feature=COMMAND_CAPABILITY_RESIDENT_KEY_FEATURE if resident_key else COMMAND_CAPABILITY_FEATURE,
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
             record_success=False,

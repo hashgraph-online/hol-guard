@@ -8,8 +8,10 @@
 //! immediate SQLite transaction. That makes each change atomic across processes,
 //! where the Python ledger only serialized the threads of one process.
 //!
-//! The caller reads the policy integrity key out of its secret store and passes
-//! it for the two operations that sign or verify a grant. It still writes the
+//! The two operations that sign or verify a grant use the policy integrity
+//! key. A home kept in the plain encrypted-file vault asks for `vault_key`, and
+//! the ledger reads the key from that vault itself, so it never crosses the
+//! request; any other caller passes its own copy. The caller still writes the
 //! audit events itself. Error codes are the Python ones where one existed,
 //! because `hol-guard commands approve` and the job results surface them.
 
@@ -26,9 +28,10 @@ use crate::command_queue_repair::queue_repair;
 use crate::sync_state_ledger::{
     delete_payload, read_payload, write_payload, LedgerCodes, SyncStateLedger,
 };
+use key::SigningKey;
 
 pub(crate) const COMMAND: &str = "command-state";
-pub(crate) const FEATURE: &str = "native-command-state-v3";
+pub(crate) const FEATURE: &str = "native-command-state-v4";
 const SCHEMA: &str = "command-state.v1";
 const MAX_REQUEST_BYTES: u64 = 1024 * 1024;
 
@@ -92,6 +95,10 @@ pub(crate) struct Request {
     integrity_key_b64: Option<String>,
     #[serde(default)]
     integrity_key_id: Option<String>,
+    /// Read the key from `guard_home`'s own vault instead. A request that
+    /// also names a key or a key id is refused.
+    #[serde(default)]
+    vault_key: bool,
     /// `consume` also records the job's replay row, in the same transaction
     /// that spends the grant, so a spent grant never lacks its replay row.
     #[serde(default)]
@@ -135,6 +142,7 @@ pub(crate) fn handle(request: &Request) -> Result<Value, String> {
         return Err(INVALID.to_owned());
     }
     let now = utc_timestamp_micros(request.now.trim()).ok_or("invalid_current_time")?;
+    let key = key::signing_key(request)?;
     let ledger = SyncStateLedger::new(
         &request.guard_home,
         LedgerCodes {
@@ -148,8 +156,8 @@ pub(crate) fn handle(request: &Request) -> Result<Value, String> {
         "pending" if !ledger.store_exists() => Ok(Value::Array(Vec::new())),
         "pending" => ledger.transact(|tx| Ok(Value::Array(pending(tx, now)?))),
         "register_pending" => ledger.transact(|tx| register_pending(tx, request)),
-        "approve" => ledger.transact(|tx| approve(tx, request, now)),
-        "consume" => ledger.transact(|tx| consume(tx, request, now).map(Value::Bool)),
+        "approve" => ledger.transact(|tx| approve(tx, request, &key, now)),
+        "consume" => ledger.transact(|tx| consume(tx, request, &key, now).map(Value::Bool)),
         "mark_consumed" => ledger.transact(|tx| mark_consumed(tx, request, now)),
         "replay_rows" if !ledger.store_exists() => Ok(Value::Array(Vec::new())),
         "replay_rows" => ledger.transact(|tx| replay_rows(tx, request.subject.as_ref())),
@@ -259,7 +267,12 @@ fn register_pending(conn: &Connection, request: &Request) -> Result<Value, Strin
 }
 
 /// `approve_pending_command`: signs a grant for one unexpired waiting job.
-fn approve(conn: &Connection, request: &Request, now: i64) -> Result<Value, String> {
+fn approve(
+    conn: &Connection,
+    request: &Request,
+    key: &SigningKey,
+    now: i64,
+) -> Result<Value, String> {
     let job_id = request.job_id.as_deref().ok_or(INVALID)?;
     let issuer = request.issuer.as_deref().ok_or(INVALID)?;
     let pending = pending(conn, now)?
@@ -280,8 +293,8 @@ fn approve(conn: &Connection, request: &Request, now: i64) -> Result<Value, Stri
             "issuer": issuer,
             "approvedAt": request.now,
         }),
-        request.integrity_key_b64.as_deref(),
-        request.integrity_key_id.as_deref(),
+        key.b64(),
+        key.id(),
     )
     .map_err(str::to_owned)?;
     let mut items = state_items(conn, LOCAL_APPROVALS_KEY)?;
@@ -305,12 +318,16 @@ fn approve(conn: &Connection, request: &Request, now: i64) -> Result<Value, Stri
 
 /// `consume_local_command_approval`: spends the grant that is genuine and
 /// names exactly this identity, and drops the job's waiting row with it.
-fn consume(conn: &Connection, request: &Request, now: i64) -> Result<bool, String> {
+fn consume(
+    conn: &Connection,
+    request: &Request,
+    key: &SigningKey,
+    now: i64,
+) -> Result<bool, String> {
     let identity = identity(request)?;
     let digest = identity_digest(request, identity)?;
     let mut items = state_items(conn, LOCAL_APPROVALS_KEY)?;
-    let key = request.integrity_key_b64.as_deref();
-    let key_id = request.integrity_key_id.as_deref();
+    let (key, key_id) = (key.b64(), key.id());
     let matched = items.iter().position(|item| {
         item.get("identityDigest").and_then(Value::as_str) == Some(digest.as_str())
             && verify_signed_envelope(&Value::Object(item.clone()), key, key_id).is_ok_and(
@@ -450,9 +467,16 @@ fn py_equal(left: &Value, right: &Value) -> bool {
     }
 }
 
+#[path = "command_state_key.rs"]
+mod key;
+
 #[cfg(test)]
 #[path = "command_state_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "command_state_key_tests.rs"]
+mod key_tests;
 
 #[cfg(test)]
 #[path = "command_state_replay_tests.rs"]

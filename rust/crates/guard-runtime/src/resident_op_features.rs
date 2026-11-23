@@ -48,6 +48,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::APPROVAL_SCOPE_SELECT_FEATURE,
     guard_contracts::APPROVAL_SCOPE_SELECT_PERSIST_FEATURE,
     guard_contracts::COMMAND_CAPABILITY_FEATURE,
+    guard_contracts::COMMAND_CAPABILITY_RESIDENT_KEY_FEATURE,
     guard_contracts::COMMAND_CAPABILITY_ISSUE_FEATURE,
     guard_contracts::COMMAND_ENVELOPE_FEATURE,
     guard_contracts::COMMAND_ENVELOPE_RESIDENT_KEY_FEATURE,
@@ -230,7 +231,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::EDGE_CURSOR_NATIVE_SINK_FEATURE,
     guard_contracts::RESIDENT_HEALTH_FEATURE,
     guard_contracts::CONTENT_DECODE_FEATURE,
-    "native-exact-cloud-review-resident-v1",
+    "native-exact-cloud-review-resident-v2",
 ];
 
 /// Feature flags for the one-shot `--stdin` helper commands that replaced
@@ -355,6 +356,6 @@ pub(crate) const NATIVE_HELPER_FEATURES: &[&str] = &[
     "native-agent-safety-guidance-v1",
     "native-guard-shim-profile-v1",
     "native-durable-runtime-collapse-v1",
-    "native-exact-cloud-review-v1",
+    "native-exact-cloud-review-v2",
     "native-verified-github-read-v2",
 ];

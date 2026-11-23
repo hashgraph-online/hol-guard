@@ -425,7 +425,10 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 )
             }
             ResidentOperationV1::CommandCapability(request) => {
-                crate::command_capability_op::evaluate_command_capability_request(&request)
+                crate::command_capability_op::resident_key::evaluate_command_capability_request(
+                    &request,
+                    policy_store.map(PolicySnapshotStore::guard_home),
+                )
             }
             ResidentOperationV1::CommandCapabilityIssue(request) => {
                 crate::command_capability_issue_op::evaluate_command_capability_issue_request(
@@ -571,7 +574,7 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 crate::shell_helpers_op::evaluate(&request)
             }
             ResidentOperationV1::ExactCloudReview(request) => {
-                crate::exact_cloud_review::evaluate_resident_request(request)
+                crate::exact_cloud_review::evaluate_resident_request(request, policy_store)
             }
             ResidentOperationV1::ApprovalProofDecide(request) => {
                 crate::approval_proof_op::evaluate_approval_proof_request(&request)

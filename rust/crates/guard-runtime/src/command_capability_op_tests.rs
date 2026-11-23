@@ -51,6 +51,7 @@ fn request() -> CommandCapabilityRequestV1 {
         schema_versions: BTreeMap::new(),
         replay_items: Vec::new(),
         replay_identity: Value::Null,
+        resident_key: false,
     }
 }
 
@@ -498,36 +499,6 @@ fn the_binding_digest_never_covers_the_signing_key() {
         request_digest(&request()).expect("digest"),
         request_digest(&other).expect("digest")
     );
-}
-
-#[test]
-fn the_response_carries_the_request_identity() {
-    let encoded = evaluate_command_capability_request(&request()).expect("response");
-    let response: Value = serde_json::from_slice(&encoded).expect("json");
-    assert_eq!(
-        response["schema"],
-        Value::from(COMMAND_CAPABILITY_RESULT_SCHEMA)
-    );
-    assert_eq!(response["request_id"], Value::from("request-1"));
-    assert_eq!(response["status"], Value::from("ok"));
-    assert_eq!(response["code"], Value::from("ok"));
-    assert!(response["request_sha256"]
-        .as_str()
-        .is_some_and(|digest| digest.starts_with("sha256:")));
-}
-
-#[test]
-fn a_refused_request_carries_no_payload() {
-    let mut request = request();
-    request.schema = "other".to_owned();
-    let encoded = evaluate_command_capability_request(&request).expect("response");
-    let response: Value = serde_json::from_slice(&encoded).expect("json");
-    assert_eq!(response["status"], Value::from("error"));
-    assert_eq!(
-        response["code"],
-        Value::from("native_command_capability_schema_mismatch")
-    );
-    assert_eq!(response.get("payload"), None);
 }
 
 fn replay_identity() -> Value {

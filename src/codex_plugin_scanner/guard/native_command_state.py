@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 COMMAND_STATE_COMMAND = "command-state"
-COMMAND_STATE_FEATURE = "native-command-state-v3"
+COMMAND_STATE_FEATURE = "native-command-state-v4"
 COMMAND_STATE_SCHEMA = "command-state.v1"
 COMMAND_STATE_TIMEOUT_SECONDS = 10.0
 # The largest answer is the pending list: at most 64 rows of job identity.

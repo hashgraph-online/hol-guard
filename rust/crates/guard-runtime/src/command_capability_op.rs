@@ -14,10 +14,9 @@
 
 use guard_contracts::{
     command_operation_is_classified, command_operation_requires_local_approval,
-    utc_timestamp_micros, CommandCapabilityRequestV1, CommandCapabilityResultV1,
-    COMMAND_CAPABILITY_ISSUE_SKEW_SECONDS, COMMAND_CAPABILITY_MAX_BYTES,
-    COMMAND_CAPABILITY_MAX_REPLAY_ITEMS, COMMAND_CAPABILITY_MAX_TTL_SECONDS,
-    COMMAND_CAPABILITY_REQUEST_SCHEMA, COMMAND_CAPABILITY_RESULT_SCHEMA,
+    utc_timestamp_micros, CommandCapabilityRequestV1, COMMAND_CAPABILITY_ISSUE_SKEW_SECONDS,
+    COMMAND_CAPABILITY_MAX_BYTES, COMMAND_CAPABILITY_MAX_REPLAY_ITEMS,
+    COMMAND_CAPABILITY_MAX_TTL_SECONDS, COMMAND_CAPABILITY_REQUEST_SCHEMA,
     COMMAND_CAPABILITY_VERSION, COMMAND_JOB_MAX_LIFETIME_SECONDS,
 };
 use hmac::{Hmac, Mac};
@@ -28,25 +27,6 @@ use crate::guard_store_json::dumps_sorted;
 use crate::package_authority_op::request_digest_with_limit;
 
 const MICROS_PER_SECOND: i64 = 1_000_000;
-
-pub(crate) fn evaluate_command_capability_request(
-    request: &CommandCapabilityRequestV1,
-) -> Result<Vec<u8>, String> {
-    let request_sha256 =
-        request_digest(request).map_err(|_| "native_command_capability_too_large".to_owned())?;
-    let (status, code, payload) = match refusal(request) {
-        Some(code) => ("error", code, None),
-        None => ("ok", "ok", Some(evaluate(request))),
-    };
-    crate::encode_response(&CommandCapabilityResultV1 {
-        schema: COMMAND_CAPABILITY_RESULT_SCHEMA.to_owned(),
-        request_id: request.request_id.clone(),
-        request_sha256,
-        status: status.to_owned(),
-        code: code.to_owned(),
-        payload,
-    })
-}
 
 /// The reply's binding digest never covers the signing key, so a caller that
 /// sees the digest learns nothing about the secret it sent.
@@ -498,6 +478,9 @@ fn canonical_bytes(value: &Value) -> Result<Vec<u8>, &'static str> {
 fn content_digest(payload: &[u8]) -> String {
     guard_policy_snapshot::digest_bytes(payload)
 }
+
+#[path = "command_capability_resident_key.rs"]
+pub(crate) mod resident_key;
 
 #[cfg(test)]
 #[path = "command_capability_op_tests.rs"]

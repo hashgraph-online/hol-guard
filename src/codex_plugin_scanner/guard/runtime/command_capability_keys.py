@@ -89,6 +89,20 @@ def _resident_home(store: GuardStore) -> Path:
     return guard_home
 
 
+def _verify_key(store: GuardStore) -> tuple[bool, str | None, str | None]:
+    """How the capability verdict hands the resident its key.
+
+    ``(True, None, None)`` when the resident reads the key from its own vault,
+    so the key stays off the socket; otherwise ``(False, key, key_id)`` with
+    the caller's copy, or a missing pair the resident refuses itself.
+    """
+
+    if _resident_reads_key(store):
+        return True, None, None
+    key_b64, key_id = _signing_material_for_resident(store)
+    return False, key_b64, key_id
+
+
 def _resident_reads_key(store: GuardStore) -> bool:
     """Whether the resident reads the policy-integrity key for this store.
 
@@ -99,6 +113,19 @@ def _resident_reads_key(store: GuardStore) -> bool:
     """
 
     return type(getattr(store, "_policy_integrity_secret_store", None)) is EncryptedFileSecretStore
+
+
+def _ledger_key(store: GuardStore) -> dict[str, object]:
+    """The key fields the command ledger signs or verifies a grant with.
+
+    The ledger reads a plain encrypted-file vault itself, so only
+    ``vault_key`` crosses the request; any other store sends its own copy.
+    """
+
+    if _resident_reads_key(store):
+        return {"vault_key": True}
+    key_b64, key_id = _signing_material_for_resident(store, create=False)
+    return {"integrity_key_b64": key_b64, "integrity_key_id": key_id}
 
 
 def _signing_material_for_resident(store: GuardStore, *, create: bool = False) -> tuple[str | None, str | None]:
