@@ -94,7 +94,47 @@ pub(crate) fn connector_setup_with_catalog(
         return None;
     }
     let identity_hash = unset_connector(subject.extension.as_ref()?, catalog)?;
-    Some(json!({
+    Some(setup_value(subject, identity_hash))
+}
+
+/// Fallback for a clean allow with no local decision. The relay still promotes
+/// this to a setup review before it can forward the call.
+pub(crate) fn unrecognized_allow_setup(
+    subject: &McpToolPolicySubjectV1,
+    decision: &Decision,
+) -> Option<Value> {
+    if decision.action != GuardAction::Allow
+        || decision.policy_action() != GuardAction::Allow
+        || !decision.signals.is_empty()
+        || matches!(
+            decision.source.as_str(),
+            "local-mcp-extension"
+                | "catalog-mcp-extension"
+                | "temporary-mcp-grant"
+                | "composio-action-review"
+        )
+        || explicit_choice(
+            &subject.config,
+            "artifact_actions",
+            Some(&subject.artifact_id),
+        )
+        || explicit_choice(
+            &subject.config,
+            "publisher_actions",
+            subject.publisher.as_deref(),
+        )
+    {
+        return None;
+    }
+    let extension = subject.extension.as_ref()?;
+    let identity_hash = crate::local_mcp_grant_identity::normalized_hash(
+        extension.server.identity_hash.as_deref(),
+    )?;
+    Some(setup_value(subject, identity_hash))
+}
+
+fn setup_value(subject: &McpToolPolicySubjectV1, identity_hash: String) -> Value {
+    json!({
         "reason_code": CONNECTOR_SETUP_REQUIRED,
         "identity_hash": identity_hash,
         "surface": "mcp",
@@ -102,7 +142,7 @@ pub(crate) fn connector_setup_with_catalog(
         // The queue appends the row's own action digest, so identical calls
         // merge and distinct calls keep their own rows.
         "queue_group_id": format!("connector:{identity_hash}"),
-    }))
+    })
 }
 
 #[cfg(test)]

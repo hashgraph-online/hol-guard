@@ -15,7 +15,7 @@ use guard_contracts::{
 use rusqlite::{params, Connection};
 use serde_json::{json, Map, Value};
 
-use super::connector_setup;
+use super::{connector_setup, unrecognized_allow_setup};
 use crate::local_mcp_grant_identity::observed_mcp_tool;
 use crate::mcp_tool_policy_decision::{Current, Decision};
 
@@ -168,18 +168,17 @@ fn unrecognised_stdio_server_names_its_launch_identity() {
 #[test]
 fn an_unrecognised_stdio_server_is_setup_even_when_the_risk_policy_allows_it() {
     let home = home();
-    let found = connector_setup(
-        &subject(stdio(&home)),
-        &Decision::plain(Current {
-            action: GuardAction::Allow,
-            source: "heuristic".to_owned(),
-            signals: Vec::new(),
-            summary: "No risk was found.".to_owned(),
-            risk_categories: Vec::new(),
-        }),
-    )
-    .unwrap();
+    let subject = subject(stdio(&home));
+    let decision = Decision::plain(Current {
+        action: GuardAction::Allow,
+        source: "heuristic".to_owned(),
+        signals: Vec::new(),
+        summary: "No risk was found.".to_owned(),
+        risk_categories: Vec::new(),
+    });
+    let found = connector_setup(&subject, &decision).unwrap();
     assert_eq!(found["reason_code"], "connector_setup_required");
+    assert_eq!(unrecognized_allow_setup(&subject, &decision), Some(found));
 }
 
 #[test]
