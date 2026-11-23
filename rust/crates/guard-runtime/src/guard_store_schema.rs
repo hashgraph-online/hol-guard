@@ -11,6 +11,10 @@ use rusqlite::Connection;
 
 use crate::guard_store_db::StoreResult;
 
+#[path = "guard_store_schema_activity.rs"]
+mod activity;
+#[path = "guard_store_schema_activity_sql.rs"]
+mod activity_sql;
 #[path = "guard_store_schema_base_a.rs"]
 mod base_a;
 #[path = "guard_store_schema_base_b.rs"]
@@ -23,6 +27,8 @@ mod families;
 mod indexes;
 #[path = "guard_store_schema_objects.rs"]
 mod objects;
+#[path = "guard_store_schema_tables.rs"]
+mod tables;
 #[path = "guard_store_schema_versions.rs"]
 mod versions;
 
@@ -176,9 +182,15 @@ pub(crate) fn create_storage_maintenance(connection: &Connection) -> rusqlite::R
 pub(crate) fn ensure_families(connection: &Connection, now: &str) -> StoreResult<()> {
     families::ensure_receipt_binding(connection, now)?;
     families::ensure_resume(connection)?;
+    activity::ensure_activity(connection, now)?;
+    activity::ensure_health(connection, now)?;
     families::ensure_bash_operations(connection, now)?;
     families::ensure_workflow_capabilities(connection, now)
 }
+
+#[cfg(test)]
+#[path = "guard_store_schema_activity_tests.rs"]
+mod activity_tests;
 
 #[cfg(test)]
 #[path = "guard_store_schema_families_tests.rs"]
