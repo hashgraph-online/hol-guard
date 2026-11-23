@@ -57,7 +57,6 @@ from ..policy_bundle_delivery import (
     reportable_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
-    CANONICAL_COMPILE_REJECTION_PREFIX,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_admission_rejection,
     policy_bundle_downgrade_verdict,
@@ -74,7 +73,7 @@ from ..policy_bundle_trusted_keys import (
 from ..policy_bundle_v2 import (
     POLICY_BUNDLE_V2_CONTRACT,
 )
-from ..policy_document_io import PolicyCompilationError, compile_policy_bundle_document
+from ..policy_document_io import compile_policy_bundle_document
 from ..redaction import redact_sensitive_text
 from ..review_signature_verification import sync_review_verification_keys
 from ..store import GuardStore
@@ -359,97 +358,27 @@ def policy_bundle_candidate_decisions(
     cannot prove the two agree keeps the policy it already has. A bundle that
     fails to compile is reported here rather than raised at the caller, which
     on the daemon route would otherwise drop the request without a response.
+    The resident answers the whole question in one query; when it cannot, the
+    candidate is refused as ``native_policy_bundle_unavailable``. A legacy
+    shadow that changes while the resident answers voids the verdict, which
+    was reached against the copy it was sent.
     """
 
-    try:
-        if not is_v2:
-            return (
-                _build_policy_bundle_decisions(
-                    policy_bundle,
-                    device_id=device_id,
-                    device_name=device_name,
-                ),
-                None,
-                None,
-            )
-        canonical_decisions = _build_canonical_policy_bundle_decisions(
-            policy_bundle,
-            device_id=device_id,
-            device_name=device_name,
-        )
-    except PolicyCompilationError as error:
-        # The stored record drops the rule id for a code about the whole document.
-        return [], f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}", error.rule_id
-    except PolicyBundleNativeError as error:
-        return [], native_rejection_code(error), None
-
-    stored_legacy = store.get_sync_payload("policy_bundle_legacy_last_good")
-    try:
-        shadow_source, evaluating = _shadow.policy_shadow_source(
-            policy_bundle,
-            stored_legacy=stored_legacy,
-            existing=existing_policy_bundle,
-        )
-    except NativeRunnerAuthorityError:
-        # Rust picks the shadow. Without that choice the candidate cannot be
-        # proven equivalent, so it is held like a missing comparison below.
-        shadow_source, evaluating, native_shadow_unavailable = None, False, True
-    else:
-        native_shadow_unavailable = False
-    legacy_payload = {"stored": stored_legacy, "existing": existing_policy_bundle}.get(shadow_source or "")
-    try:
-        legacy_decisions = (
-            _build_policy_bundle_decisions(
-                legacy_payload,
-                device_id=device_id,
-                device_name=device_name,
-            )
-            if isinstance(legacy_payload, dict)
-            else []
-        )
-    except PolicyCompilationError:
-        # The stored legacy bundle is the shadow, not the candidate. One that no
-        # longer compiles cannot show agreement, so it stands in as unavailable
-        # rather than refusing a candidate that is itself well formed.
-        legacy_decisions = []
-    except PolicyBundleNativeError as error:
-        return [], native_rejection_code(error), None
-
-    mismatch_reasons: tuple[str, ...] = ("native_shadow_unavailable",)
-    rejection: str | None = "native_shadow_unavailable"
-    if not native_shadow_unavailable and evaluating:
-        # An Evaluate bundle keeps its canonical rows empty on purpose, so it
-        # has nothing to drift from and needs no verdict from the resident.
-        # This is the answer the Rust policy_shadow_verdict kind gives for an
-        # evaluating candidate; test_policy_bundle_v2 pins that answer, so the
-        # two stay in step. Asking anyway would refuse the bundle whenever the
-        # resident is unreachable, which the Evaluate rollout must not do.
-        mismatch_reasons, rejection = (), None
-    elif not native_shadow_unavailable:
-        try:
-            mismatch_reasons, rejection = _shadow.policy_shadow_verdict(
-                legacy_decisions,
-                canonical_decisions,
-                evaluating=evaluating,
-                canonical_enforcement=canonical_enforcement,
-            )
-        except NativeRunnerAuthorityError:
-            # Rust owns the shadow comparison. Without its verdict the candidate
-            # cannot be proven equivalent, so treat it as a blocking mismatch:
-            # keep the existing policy and never activate the new bundle.
-            mismatch_reasons, rejection = ("native_shadow_unavailable",), "native_shadow_unavailable"
-    if mismatch_reasons:
-        store.add_event(
-            "policy_bundle/shadow_mismatch",
-            {
-                "canonicalRows": len(canonical_decisions),
-                "legacyRows": len(legacy_decisions),
-                "reasonCodes": list(mismatch_reasons),
-                "status": "mismatch",
-            },
-            now,
-        )
-    return canonical_decisions, rejection, None
+    stored_legacy = store.get_sync_payload("policy_bundle_legacy_last_good") if is_v2 else None
+    answer = _shadow.policy_bundle_candidate(
+        policy_bundle,
+        is_v2=is_v2,
+        device_id=device_id,
+        device_name=device_name,
+        canonical_enforcement=canonical_enforcement,
+        stored_legacy=stored_legacy,
+        existing=existing_policy_bundle if is_v2 else None,
+    )
+    if is_v2 and store.get_sync_payload("policy_bundle_legacy_last_good") != stored_legacy:
+        return [], NATIVE_UNAVAILABLE_REJECTION, None
+    if answer.mismatch is not None:
+        store.add_event("policy_bundle/shadow_mismatch", answer.mismatch, now)
+    return answer.decisions, answer.rejection, answer.rule_id
 
 
 def sync_receipts(
