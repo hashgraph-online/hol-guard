@@ -277,7 +277,7 @@ fn signed(
         "pending_generation": next,
         "version": 1,
     });
-    if !put(&mut secrets, &control_ref, &pending) {
+    if !put(home, &mut secrets, &control_ref, &pending) {
         return None;
     }
     args.insert(
@@ -291,12 +291,12 @@ fn signed(
         .and_then(|reply| reply.get("next_control_state").cloned())
         .and_then(|proposed| finalization_state(Some(&pending), &proposed));
     if let Some(finalized) =
-        finalized.filter(|finalized| put(&mut secrets, &control_ref, finalized))
+        finalized.filter(|finalized| put(home, &mut secrets, &control_ref, finalized))
     {
         return finalized.get("generation").and_then(Value::as_u64);
     }
     if !committed {
-        put(&mut secrets, &control_ref, &current);
+        put(home, &mut secrets, &control_ref, &current);
     }
     // A committed write re-signed every local row at the next generation, so
     // the earlier state would reject them all as a rollback. The pending
@@ -329,13 +329,27 @@ fn control_state(
         "pending_generation": null,
         "version": 1,
     });
-    put(secrets, control_ref, &initial).then_some(initial)
+    put(home, secrets, control_ref, &initial).then_some(initial)
 }
 
-fn put(secrets: &mut EncryptedFileSecretStore, control_ref: &str, state: &Value) -> bool {
-    serde_json::to_string(state)
-        .ok()
-        .is_some_and(|serialized| secrets.set_secret(control_ref, &serialized).is_ok())
+fn put(
+    home: &Path,
+    secrets: &mut EncryptedFileSecretStore,
+    control_ref: &str,
+    state: &Value,
+) -> bool {
+    let Some(serialized) = serde_json::to_string(state).ok() else {
+        return false;
+    };
+    if secrets.set_secret(control_ref, &serialized).is_err() {
+        return false;
+    }
+    crate::policy_integrity_resolver::key_mint::mirror_existing_control_state(
+        home,
+        control_ref,
+        &serialized,
+    );
+    true
 }
 
 #[cfg(test)]

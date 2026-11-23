@@ -301,6 +301,25 @@ fn locked_mint(home: &Path, deadline: Instant) -> Minted {
     }
 }
 
+/// Keep an existing Secret Service copy of the integrity control state in
+/// step with the encrypted vault. Python's mirrored backend prefers that
+/// primary copy on the next read, so a vault-only generation advance would be
+/// rolled back when the Python store refreshes it.
+#[cfg(target_os = "linux")]
+pub(crate) fn mirror_existing_control_state(_home: &Path, control_ref: &str, state: &str) {
+    let primary = keyring_linux::SecretServiceKeyring {
+        service_name: KEYRING_SERVICE_NAME.to_owned(),
+        deadline: Instant::now() + KEYRING_BUDGET,
+        mint_lock: None,
+    };
+    if matches!(mirrored::Primary::get(&primary, control_ref), Ok(Some(_))) {
+        let _ = mirrored::Primary::set(&primary, control_ref, state);
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn mirror_existing_control_state(_home: &Path, _control_ref: &str, _state: &str) {}
+
 #[cfg(test)]
 #[path = "policy_integrity_key_mint_tests.rs"]
 mod tests;
