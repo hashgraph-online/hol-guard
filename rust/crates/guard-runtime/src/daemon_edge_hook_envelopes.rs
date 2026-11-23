@@ -6,7 +6,9 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::hook_scheduler;
-pub(super) use crate::hook_fail_closed_envelopes::{envelope, event_kind, fill, ENVELOPES};
+#[cfg(test)]
+pub(super) use crate::hook_fail_closed_envelopes::fill;
+pub(super) use crate::hook_fail_closed_envelopes::{envelope, event_kind, ENVELOPES};
 
 /// The reason and code a library step's `fail_safe` carries.
 pub(super) fn refusal(refused: &Value) -> Option<(&str, &str)> {
