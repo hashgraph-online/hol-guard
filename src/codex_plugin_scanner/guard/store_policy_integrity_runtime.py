@@ -191,26 +191,18 @@ class StorePolicyIntegrityAdminMixin:
             payload["signed_at"] = str(row["signed_at"])
         return payload
 
-    @staticmethod
-    def _load_local_policy_rows(
-        connection: sqlite3.Connection,
-        *,
-        harness: str | None = None,
-    ) -> list[sqlite3.Row]:
-        query = f"""
-            select decision_id, harness, scope, artifact_id, artifact_hash, workspace, publisher,
-                   action, reason, owner, source, expires_at, updated_at, integrity_version,
-                   integrity_generation,
-                   payload_hash, payload_mac, integrity_key_id, signed_at
-            from policy_decisions
-            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
+    def _load_local_policy_rows(self, *, harness: str | None = None) -> list[dict[str, object]]:
+        """Every row this home owns, newest first, read by the native store.
+
+        Only the native store writes policy rows, so no open Python transaction
+        can hold a row this read would miss.
         """
-        params: tuple[object, ...] = _REMOTE_POLICY_SOURCE_PARAMS
-        if harness is not None:
-            query += " and harness = ?"
-            params = (*params, harness)
-        query += " order by updated_at desc"
-        return connection.execute(query, params).fetchall()
+        args: dict[str, object] = {} if harness is None else {"harness": harness}
+        reply = self._native_store_call("list_local_policy_rows", args)
+        rows = reply.get("rows") if isinstance(reply, dict) else None
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise RuntimeError("Guard could not read the local policy rows.")
+        return rows
 
     def _policy_integrity_scan(
         self,
@@ -225,7 +217,7 @@ class StorePolicyIntegrityAdminMixin:
         key, key_id = self._policy_integrity_secret_material(create=create_key)
         counts = {status: 0 for status in _POLICY_INTEGRITY_STATUSES}
         items: list[dict[str, object]] = []
-        rows = self._load_local_policy_rows(connection, harness=harness)
+        rows = self._load_local_policy_rows(harness=harness)
         results = self._policy_integrity_results_for_rows(
             rows,
             mode=str(state.get("mode") or "degraded"),
@@ -384,7 +376,7 @@ class StorePolicyIntegrityAdminMixin:
             state = self._load_policy_integrity_state() or state
             key, key_id = self._policy_integrity_secret_material(create=True)
             invalid_ids: list[int] = []
-            rows = self._load_local_policy_rows(connection, harness=harness)
+            rows = self._load_local_policy_rows(harness=harness)
             results = self._policy_integrity_results_for_rows(
                 rows,
                 mode=str(state.get("mode") or "degraded"),
@@ -452,7 +444,7 @@ class StorePolicyIntegrityAdminMixin:
             trusted_state = self._load_policy_integrity_control_state(create=True)
             if trusted_state is None:
                 raise RuntimeError("Guard could not access the policy integrity control state.")
-            rows = self._load_local_policy_rows(connection, harness=harness)
+            rows = self._load_local_policy_rows(harness=harness)
             preserved = 0
             clear_ids: set[int] = set()
             legacy_ids: list[int] = []
@@ -470,7 +462,7 @@ class StorePolicyIntegrityAdminMixin:
                 key_id=key_id,
             )
             for row, integrity_result in zip(rows, results, strict=True):
-                decision_id = int(row["decision_id"])
+                decision_id = _decision_id(row)
                 if integrity_result.status not in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES:
                     if integrity_result.status == "rollback_detected":
                         rollback_row_ids.append(decision_id)
@@ -544,7 +536,7 @@ class StorePolicyIntegrityAdminMixin:
             if state.get("mode") != "protected" or key is None or key_id is None or trusted_state is None:
                 connection.rollback()
             else:
-                rows = self._load_local_policy_rows(connection)
+                rows = self._load_local_policy_rows()
                 results = self._policy_integrity_results_for_rows(
                     rows,
                     mode=str(state.get("mode") or "degraded"),
@@ -553,7 +545,7 @@ class StorePolicyIntegrityAdminMixin:
                     trusted_generation=_mapping_int(state, "generation"),
                 )
                 force_sign_ids = {
-                    int(row["decision_id"])
+                    _decision_id(row)
                     for row, result in zip(rows, results, strict=True)
                     if result.status in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES
                 }
@@ -718,3 +710,10 @@ def _valid_policy_source_contexts(payload: object, *, count: int) -> list[dict[s
             return None
         contexts.append(context)
     return contexts
+
+
+def _decision_id(row: Mapping[str, object]) -> int:
+    decision_id = _int_value(row.get("decision_id"))
+    if decision_id is None:
+        raise RuntimeError("Guard read a local policy row without a decision id.")
+    return decision_id

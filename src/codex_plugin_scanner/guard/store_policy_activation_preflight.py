@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Mapping, Sequence
 
 from .policy_bundle_activation import PrecomputedVerdicts
@@ -60,24 +59,20 @@ def continuity_activation_rejection(
 
 
 def policy_checkpoint_rejection(
-    connection: sqlite3.Connection,
+    stored_checkpoint: str | None,
     policy_bundle: Mapping[str, object],
     verdicts: PrecomputedVerdicts | None = None,
 ) -> str | None:
-    """Validate the persisted anti-downgrade checkpoint under the write lock.
+    """Validate the stored anti-downgrade checkpoint the activation observed.
 
     With ``verdicts`` the downgrade verdict is never requested from the resident
     while the lock is held; see ``PrecomputedVerdicts``.
     """
 
-    row = connection.execute(
-        "select payload_json from sync_state where state_key = ?",
-        ("policy_bundle_acceptance_checkpoint",),
-    ).fetchone()
-    if row is None:
+    if stored_checkpoint is None:
         return None
     try:
-        existing = json.loads(str(row["payload_json"]))
+        existing = json.loads(stored_checkpoint)
     except json.JSONDecodeError:
         return "policy_bundle_checkpoint_invalid"
     if not isinstance(existing, dict) or not existing:
@@ -88,7 +83,7 @@ def policy_checkpoint_rejection(
     else:
         downgrade = bool(
             verdicts.resolve(
-                ("downgrade", str(row["payload_json"])),
+                ("downgrade", stored_checkpoint),
                 lambda: policy_bundle_is_version_downgrade(existing, bundle),
                 "policy_bundle_checkpoint_invalid",
             )

@@ -11,7 +11,6 @@ hook in twenty-five on a long-lived install.
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -81,17 +80,9 @@ def test_a_changed_bundle_closes_the_fence_once(tmp_path: Path, fence_closures: 
     assert _stored(store, "policy_bundle")["bundleVersion"] == "policy-2026-07-19.enforcing"
 
 
-def _state(rows: list[tuple[object, ...]], payloads: dict[str, str]) -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.execute("create table sync_state (state_key text primary key, payload_json text, updated_at text)")
-    connection.execute(
-        "create table policy_decisions (harness, scope, artifact_id, artifact_hash, workspace, publisher, action, "
-        "reason, owner, source, expires_at, updated_at, integrity_version, integrity_generation, payload_hash, "
-        "payload_mac, integrity_key_id, signed_at)"
-    )
-    connection.executemany("insert into sync_state values (?, ?, 'then')", payloads.items())
-    connection.executemany(f"insert into policy_decisions values ({', '.join('?' * 18)})", rows)
-    return connection
+def _view(stored: dict[str, str]) -> dict[str, str | None]:
+    keys = ("policy_bundle", "policy_bundle_ack", "cloud_exceptions", "policy_bundle_keyring")
+    return {key: stored.get(key) for key in keys}
 
 
 def _row(*, action: str = "block", updated_at: str = "then", source: str = "policy-bundle") -> tuple[object, ...]:
@@ -104,10 +95,10 @@ def _bundle(signature: str, *, version: str = "v1") -> str:
 
 def test_only_the_signature_ack_and_write_time_are_ignored() -> None:
     stored = {"policy_bundle": _bundle("old"), "policy_bundle_ack": "{}", "cloud_exceptions": "[]"}
-    connection = _state([_row(), _row(source="local")], stored)
+    view, stored_rows = _view(stored), [_row()]
 
     same = {**stored, "policy_bundle": _bundle("new"), "policy_bundle_ack": '{"seq": 2}'}
-    assert not activation_changes_enforcement(connection, payloads=same, rows=[_row(updated_at="now")])
+    assert not activation_changes_enforcement(view, stored_rows, payloads=same, rows=[_row(updated_at="now")])
 
     for payloads, rows in (
         ({**same, "policy_bundle": _bundle("new", version="v2")}, [_row()]),
@@ -117,4 +108,4 @@ def test_only_the_signature_ack_and_write_time_are_ignored() -> None:
         (same, [_row(), _row()]),
         (same, []),
     ):
-        assert activation_changes_enforcement(connection, payloads=payloads, rows=rows)
+        assert activation_changes_enforcement(view, stored_rows, payloads=payloads, rows=rows)

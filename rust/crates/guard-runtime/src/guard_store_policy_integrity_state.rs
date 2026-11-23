@@ -22,6 +22,8 @@ use guard_policy_snapshot::policy_integrity::{POLICY_INTEGRITY_VERSION, REMOTE_P
 
 use super::INTEGRITY_STATE_KEY;
 
+#[path = "guard_store_policy_activation_view.rs"]
+mod activation_view;
 #[path = "guard_store_policy_decision_list.rs"]
 mod decision_list;
 use crate::guard_store_args::Args;
@@ -40,6 +42,8 @@ pub(super) fn handles(method: &str) -> bool {
             | "record_policy_integrity_state"
             | "list_policy_decision_rows"
             | "read_policy_decision_row"
+            | "list_local_policy_rows"
+            | "policy_activation_view"
     )
 }
 
@@ -51,6 +55,8 @@ pub(super) fn run(connection: &Connection, method: &str, args: &Args) -> StoreRe
         "record_policy_integrity_state" => record_policy_integrity_state(connection, args),
         "list_policy_decision_rows" => decision_list::list_policy_decision_rows(connection, args),
         "read_policy_decision_row" => decision_list::read_policy_decision_row(connection, args),
+        "list_local_policy_rows" => decision_list::list_local_policy_rows(connection, args),
+        "policy_activation_view" => activation_view::policy_activation_view(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_args_invalid")),
     }
 }

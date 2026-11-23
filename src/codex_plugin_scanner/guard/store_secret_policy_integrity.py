@@ -798,14 +798,14 @@ class StoreSecretPolicyIntegrityMixin:
             # Nothing is pending, so there is no decision to put to the runtime,
             # which refuses such a state rather than handing it back unchanged.
             return trusted_state
-        # The rows travel with the request: this runs inside the caller's open
-        # transaction, which the runtime's own read-only connection cannot see.
+        # The rows travel with the request so the decision and the rows it
+        # weighs come from one read.
         next_state = native_reconcile_policy_integrity_generation(
             guard_home=self.guard_home,
             key=key,
             key_id=key_id,
             trusted_state=trusted_state,
-            rows=[_row_mapping(row) for row in self._load_local_policy_rows(connection)],
+            rows=self._load_local_policy_rows(),
         )
         if next_state == trusted_state:
             return trusted_state

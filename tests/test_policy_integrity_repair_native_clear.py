@@ -60,7 +60,7 @@ class _Store(StorePolicyIntegrityAdminMixin):
         return True
 
 
-def _rows(connection: object, *, harness: str | None = None) -> list[dict[str, int]]:
+def _rows(*, harness: str | None = None) -> list[dict[str, int]]:
     return [{"decision_id": 9}, {"decision_id": 4}, {"decision_id": 7}]
 
 
