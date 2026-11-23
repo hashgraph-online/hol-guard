@@ -11,7 +11,10 @@
 ///
 /// Every word must reach the program as written (`words_as_written`), and a
 /// redirect that names a file keeps review.
-pub(super) fn writes_nothing(segment: &crate::CommandSegmentV1, context: super::PathContext<'_>) -> bool {
+pub(super) fn writes_nothing(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
     // A redirection must be the entire shell word. String replacement
     // would silently erase the prefix of `2>/dev/nullx`, even though that
     // opens a real output file rather than the harmless null device.
