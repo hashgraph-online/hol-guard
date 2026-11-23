@@ -249,3 +249,66 @@ fn a_missing_name_in_a_project_build_folder_reads_nothing() {
     }
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// Agents inventory a toolchain by listing where its global packages would
+/// be, `ls ~/.nvm/versions/node/v24.9.0/lib/node_modules`, and a version that
+/// never had a global install has no `lib`. A listing of the existing version
+/// directory is allowed, so a missing plain name below it says no more than
+/// that listing. Stores and the shared roots keep their review whether or not
+/// the rest of the path is there.
+#[test]
+fn a_probe_below_an_existing_tool_directory_reads_nothing() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/absent-listing-fixtures")
+        .join(format!("tooldir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join(".nvm/versions/node/v24.9.0/bin")).unwrap();
+    std::fs::create_dir_all(root.join(".nvm/versions/node/v25.2.1/lib/node_modules")).unwrap();
+    std::fs::create_dir_all(root.join(".config/toolcfg")).unwrap();
+    std::fs::create_dir_all(root.join(".config/gh")).unwrap();
+    std::fs::create_dir_all(root.join(".aws")).unwrap();
+    std::fs::create_dir_all(root.join(".ssh")).unwrap();
+    std::fs::create_dir_all(root.join("work")).unwrap();
+    let root = std::fs::canonicalize(&root).unwrap();
+    // A link in the existing prefix is judged where it leads.
+    std::os::unix::fs::symlink(root.join(".aws"), root.join(".awslink")).unwrap();
+    let home = root.to_str().unwrap();
+    let cwd = root.join("work");
+    let cwd = cwd.to_str().unwrap();
+    let missing = format!("{home}/.nvm/versions/node/v24.9.0/lib/node_modules");
+    let missing_find = format!("find {missing} -mindepth 1 -maxdepth 1 -type d -print");
+    let missing_ls = format!("ls -la {missing}");
+    for harness in ["omp", "codex"] {
+        for (command, allowed) in [
+            ("ls -la ~/.nvm/versions/node/v24.9.0/lib/node_modules", true),
+            ("ls ~/.nvm/versions/node/v24.9.0/lib", true),
+            (missing_ls.as_str(), true),
+            (missing_find.as_str(), true),
+            ("ls -la ~/.config/toolcfg/plugins/extra", true),
+            ("ls -la ~/.aws/sso/cache", false),
+            ("ls -la ~/.awslink/sso/cache", false),
+            ("ls -la ~/.ssh/keys/extra", false),
+            ("ls -la ~/.config/gh/extra", false),
+            ("ls -la ~/.config/newtool", false),
+            ("ls -la ~/.nvm/versions/node/v24.9.0/.secrets/extra", false),
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                None,
+                None,
+                Some(home),
+                Some(cwd),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                allowed,
+                "{harness}: {command} => {} / {}",
+                result.minimum_action,
+                result.reason_code
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
