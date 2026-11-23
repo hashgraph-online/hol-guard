@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, cast
 
 from .approval_gate import ApprovalGateGrant, require_high_risk
-from .native_store_policy import encode_key
+from .native_store_policy import encode_key, integrity_key_fields
 from .policy_authority import validate_policy_write_authority
 from .policy_document import GuardPolicyDocument, policy_document_digest
 from .policy_document_authority import policy_import_approval_binding
@@ -174,10 +174,10 @@ class StorePolicyDocumentMixin:
         from .native_command_control_authority_io import hold_command_control_authority_lock
 
         # The resident owns the row writes and the generation advance; the
-        # integrity key and control state stay here.
+        # control state stays here, and a key in the plain vault stays home.
         with hold_command_control_authority_lock(self.guard_home):
             refuse_legacy_import_over_business_source(cast("GuardStore", self))
-            args = self.policy_import_args(document, normalized_rows, mode=mode, now=now, digest=digest)
+            args = self.policy_import_args(document, normalized_rows, mode=mode, now=now, digest=digest, vault_key=True)
             payload = self._native_store_call("import_policy_rows", args)
             if not isinstance(payload, dict):
                 raise RuntimeError("Guard policy document was not imported.")
@@ -192,11 +192,15 @@ class StorePolicyDocumentMixin:
         mode: PolicyImportMode,
         now: str,
         digest: str,
+        vault_key: bool = False,
     ) -> dict[str, object]:
         """The native ``import_policy_rows`` arguments, with the signing material.
 
         When the store is protected the pending generation is persisted first,
         so an interrupted write leaves a generation the next start reconciles.
+        ``vault_key`` lets a top-level store call name a key kept in the plain
+        home vault instead of sending it; arguments nested inside another
+        call still carry the key itself.
         """
 
         rows: list[dict[str, object]] = []
@@ -239,8 +243,13 @@ class StorePolicyDocumentMixin:
             trusted_state = self._load_policy_integrity_control_state(create=True)
             if trusted_state is not None:
                 args["current_generation"] = self._begin_policy_integrity_generation(trusted_state)
-                args["integrity_key_b64"] = encode_key(key)
-                args["integrity_key_id"] = key_id
+                if vault_key:
+                    args.update(
+                        integrity_key_fields(getattr(self, "_policy_integrity_secret_store", None), key, key_id)
+                    )
+                else:
+                    args["integrity_key_b64"] = encode_key(key)
+                    args["integrity_key_id"] = key_id
         return args
 
     def finalize_policy_import(self, next_control_state: object) -> None:
