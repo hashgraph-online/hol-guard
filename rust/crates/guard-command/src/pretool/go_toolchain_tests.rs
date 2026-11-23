@@ -74,6 +74,19 @@ fn compiler_derived_go_environment_reads_keep_approval_even_in_a_sandbox() {
     for arguments in [
         "env",
         "env -json",
+        // Flags that still compute every Go setting must not bypass the
+        // explicit approval gate through generic workspace containment.
+        "env -changed",
+        "env --json",
+        "env -json=true",
+        "env -json=false",
+        "env GOPATH -changed",
+        // Global -C can select a workspace toolchain from an alternate cwd.
+        "-C . env",
+        "-C . env GOPATH",
+        "-C=workspace env GOPATH",
+        "env -w GOPATH=/tmp",
+        "env -u GOPATH",
         "env CGO_CFLAGS",
         "env CGO_CPPFLAGS",
         "env CGO_CXXFLAGS",
@@ -88,7 +101,13 @@ fn compiler_derived_go_environment_reads_keep_approval_even_in_a_sandbox() {
             "go {arguments}"
         );
     }
-    for arguments in ["version", "env GOPATH", "env GOROOT", "env -json GOVERSION"] {
+    for arguments in [
+        "version",
+        "env GOPATH",
+        "env GOROOT",
+        "env -json GOVERSION",
+        "env -json GOPATH GOROOT",
+    ] {
         assert!(
             !env_requires_approval_even_when_contained(&words(arguments)),
             "go {arguments}"
