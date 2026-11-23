@@ -95,16 +95,6 @@ fn resolve_saved(
         &decision,
         Some(&catalog),
     );
-    // A readable store with no saved row still resolves the package policy,
-    // every lookup missing; only an unreadable store has none.
-    let empty;
-    let saved = match (saved, connection, leg.is_some()) {
-        (None, Some(connection), true) => {
-            empty = store::empty(connection, &request.guard_home)?;
-            Some(&empty)
-        }
-        (saved, _, _) => saved,
-    };
     let packaged = match leg {
         Some(PackageLeg::Decide(intent)) => {
             let inputs = package_leg::package_inputs(
