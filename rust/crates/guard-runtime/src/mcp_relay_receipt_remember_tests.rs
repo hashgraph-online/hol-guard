@@ -99,6 +99,33 @@ fn a_remembered_forward_saves_a_signed_allow_then_its_receipt() {
 }
 
 #[test]
+fn a_later_saved_block_prevents_the_drain_allow_without_losing_the_receipt() {
+    let home = store_home("relay-remember-block-wins", true);
+    Connection::open(home.join("guard.db"))
+        .unwrap()
+        .execute(
+            "insert into policy_decisions
+             (harness, scope, artifact_id, artifact_hash, action, source, updated_at)
+             values (?1, 'artifact', ?2, ?3, 'block', 'runtime-test', ?4)",
+            [
+                "codex",
+                "codex:project:shell:run_command",
+                "guard-approval-context:v1:0123456789abcdef",
+                "2026-01-01T00:00:00Z",
+            ],
+        )
+        .unwrap();
+    let before = count(&home, "runtime_receipts");
+    let unwritten = write(home.to_str().unwrap(), vec![remembered()]);
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    assert_eq!(count(&home, "runtime_receipts"), before + 1);
+    let allows = saved_allows(&home);
+    assert_eq!(allows.len(), 1, "{allows:?}");
+    assert_eq!(allows[0].1, "block");
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
 fn without_a_key_the_receipt_is_still_written() {
     let home = store_home("relay-remember-unkeyed", false);
     let before = count(&home, "runtime_receipts");

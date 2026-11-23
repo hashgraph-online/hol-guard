@@ -17,6 +17,7 @@ use std::sync::PoisonError;
 use std::time::Duration;
 
 use base64ct::{Base64UrlUnpadded, Encoding};
+use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
@@ -191,6 +192,9 @@ fn save_allow(
         return None;
     }
     let home = Path::new(guard_home).canonicalize().ok()?;
+    if saved_block_exists(&home, allow)? {
+        return None;
+    }
     if crate::approval_gate_consumers::require_policy_write(
         &home,
         crate::approval_gate_op::grants(),
@@ -224,6 +228,32 @@ fn save_allow(
         args.insert(key.to_owned(), value);
     }
     signed(&home, args, store)
+}
+
+/// A block committed after the inline approval wins over the remembered allow.
+/// The receipt still records because this check only skips the policy write.
+fn saved_block_exists(home: &Path, allow: &Allow<'_>) -> Option<bool> {
+    let connection = Connection::open(home.join(STORE_FILE_NAME)).ok()?;
+    connection
+        .query_row(
+            "select exists(
+                select 1 from policy_decisions
+                where harness = ?1 and scope = 'artifact'
+                  and coalesce(artifact_id, '') = coalesce(?2, '')
+                  and coalesce(artifact_hash, '') = coalesce(?3, '')
+                  and coalesce(workspace, '') = coalesce(?4, '')
+                  and coalesce(publisher, '') = ''
+                  and action = 'block'
+            )",
+            rusqlite::params![
+                allow.harness,
+                allow.artifact_id,
+                allow.artifact_hash,
+                allow.workspace,
+            ],
+            |row| row.get(0),
+        )
+        .ok()
 }
 
 /// `upsert_policy` under a protected integrity state, with the generation
