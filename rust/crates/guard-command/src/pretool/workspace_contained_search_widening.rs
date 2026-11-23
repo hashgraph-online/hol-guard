@@ -12,11 +12,24 @@
 //! a glob keeps the review only when the search roots hold a hidden entry the
 //! glob actually brings back. Every other way of widening keeps it outright.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+
+#[cfg(test)]
+#[path = "workspace_contained_search_widening_walk_tests.rs"]
+mod walk_tests;
 
 /// How many directory entries the hidden-entry walk may read. A tree larger
 /// than this cannot be answered before the command runs, so it keeps review.
 const MAX_INSPECTED: usize = 20_000;
+
+/// Lines read from one ignore file, and parent directories searched for them.
+const MAX_IGNORE_LINES: usize = 1_024;
+const MAX_ANCESTORS: usize = 32;
+
+/// A name no real entry has, standing for "anything inside this directory".
+const INSIDE: &str = "\u{1}";
 
 /// Dotfiles a repository commits for its tools; none of them holds a secret.
 const TOOL_DOTFILES: &[&str] = &[
@@ -118,14 +131,32 @@ fn segment_widens(arguments: &[String], cwd: &Path) -> bool {
 /// reaches a hidden file, or a file inside a hidden directory.
 fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusion]) -> bool {
     let mut inspected = 0_usize;
-    // (directory, inside a hidden directory, inside a matched directory)
-    let mut pending: Vec<(PathBuf, bool, bool)> = roots
+    let mut pending: Vec<Pending> = roots
         .iter()
-        .map(|root| (root.clone(), false, false))
+        .map(|root| Pending {
+            directory: root.clone(),
+            hidden: false,
+            matched: false,
+            in_repository: in_repository(root),
+            ignored_names: Rc::new(ancestor_ignored_names(root)),
+        })
         .collect();
-    while let Some((directory, hidden_parent, matched_parent)) = pending.pop() {
-        let Ok(entries) = std::fs::read_dir(&directory) else {
+    while let Some(current) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&current.directory) else {
             continue;
+        };
+        // ripgrep reads `.gitignore` only inside a git repository.
+        let local = if current.in_repository {
+            IgnoredNames::read(&current.directory)
+        } else {
+            IgnoredNames::default()
+        };
+        let below = if local.anywhere.is_empty() {
+            Rc::clone(&current.ignored_names)
+        } else {
+            let mut names = (*current.ignored_names).clone();
+            names.extend(local.anywhere.iter().cloned());
+            Rc::new(names)
         };
         for entry in entries {
             inspected += 1;
@@ -145,20 +176,115 @@ fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusi
             let path = entry.path();
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            let hidden = hidden_parent || name.starts_with('.');
-            let matched = matched_parent || included(&path, &name, cwd, inclusions);
+            let hidden = current.hidden || name.starts_with('.');
+            let matched = current.matched || included(&path, &name, cwd, inclusions);
             if kind.is_dir() {
-                // A hidden directory is entered only when a glob names it.
-                if name.starts_with('.') && !matched {
+                // A hidden or ignored directory is entered only when a glob
+                // names it or could name something inside it.
+                let ignored = !local.kept.contains(name.as_ref())
+                    && (local.here.contains(name.as_ref()) || below.contains(name.as_ref()));
+                if (name.starts_with('.') || ignored)
+                    && !matched
+                    && !included(&path.join(INSIDE), INSIDE, cwd, inclusions)
+                {
                     continue;
                 }
-                pending.push((path, hidden, matched));
+                pending.push(Pending {
+                    directory: path,
+                    hidden,
+                    matched,
+                    in_repository: current.in_repository,
+                    ignored_names: Rc::clone(&below),
+                });
             } else if hidden && matched && !TOOL_DOTFILES.contains(&name.as_ref()) {
                 return true;
             }
         }
     }
     false
+}
+
+struct Pending {
+    directory: PathBuf,
+    /// Inside a hidden directory.
+    hidden: bool,
+    /// Inside a directory an inclusion glob names.
+    matched: bool,
+    /// Inside a git repository, where ripgrep honours `.gitignore`.
+    in_repository: bool,
+    /// Directory names an ignore file above this one excludes at any depth.
+    ignored_names: Rc<HashSet<String>>,
+}
+
+/// The plain directory names one `.gitignore` excludes. Only literal names
+/// are read: a rule with a wildcard or an inner `/` is left out, which only
+/// makes the walk read more, never less.
+#[derive(Default)]
+struct IgnoredNames {
+    /// Unanchored names, excluded at any depth below this directory.
+    anywhere: HashSet<String>,
+    /// `/name` rules, excluded only directly inside this directory.
+    here: HashSet<String>,
+    /// Names a `!` rule here puts back; never pruned.
+    kept: HashSet<String>,
+}
+
+impl IgnoredNames {
+    fn read(directory: &Path) -> Self {
+        let mut names = Self::default();
+        let Ok(text) = std::fs::read_to_string(directory.join(".gitignore")) else {
+            return names;
+        };
+        for line in text.lines().take(MAX_IGNORE_LINES) {
+            let line = line.trim();
+            let (negated, rule) = match line.strip_prefix('!') {
+                Some(rule) => (true, rule),
+                None => (false, line),
+            };
+            if rule.is_empty() || rule.starts_with('#') {
+                continue;
+            }
+            let anchored = rule.starts_with('/');
+            let name = rule.trim_start_matches('/').trim_end_matches('/');
+            if name.is_empty() || name.contains(['/', '*', '?', '[', '\\']) {
+                continue;
+            }
+            if negated {
+                names.kept.insert(name.to_owned());
+            } else if anchored {
+                names.here.insert(name.to_owned());
+            } else {
+                names.anywhere.insert(name.to_owned());
+            }
+        }
+        names.anywhere.retain(|name| !names.kept.contains(name));
+        names
+    }
+}
+
+fn in_repository(root: &Path) -> bool {
+    root.ancestors()
+        .take(MAX_ANCESTORS)
+        .any(|ancestor| ancestor.join(".git").exists())
+}
+
+/// Unanchored names the `.gitignore` files between `root` and its repository
+/// top exclude. ripgrep reads those ancestors too.
+fn ancestor_ignored_names(root: &Path) -> HashSet<String> {
+    let mut names = HashSet::new();
+    if !in_repository(root) {
+        return names;
+    }
+    for ancestor in root.ancestors().skip(1).take(MAX_ANCESTORS) {
+        names.extend(IgnoredNames::read(ancestor).anywhere);
+        if ancestor.join(".git").exists() {
+            break;
+        }
+    }
+    if root.join(".git").exists() {
+        names.clear();
+    }
+    names
 }
 
 /// Whether one inclusion glob names this entry, read the way ripgrep reads an
