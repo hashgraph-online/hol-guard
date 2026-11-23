@@ -12,7 +12,8 @@
 //! bracket, holding prose (some whitespace), so a docstring that is only a
 //! path still counts. When the program or any module it loads can read a
 //! docstring back (`__doc__`, `getdoc`, a code object's constants, an
-//! attribute named at run time), every string stays in the scan.
+//! attribute named at run time, the `inspect`/`ast`/`pydoc` helpers, a
+//! class namespace hook), every string stays in the scan.
 
 use std::sync::LazyLock;
 
@@ -26,12 +27,20 @@ static DOC_COPY: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// Code that hands back a docstring's value: by name, through a code
-/// object's constants, or through an attribute or namespace lookup whose
-/// name the scan cannot read as plain text. `getattr` is checked apart.
+/// object's constants, through an attribute or namespace lookup whose name
+/// the scan cannot read as plain text, through the introspection helpers
+/// that return docstrings or source text (`inspect`, `ast`, `pydoc`, `help`,
+/// a loader's `get_source`), or through a class namespace hook
+/// (`__prepare__`, `__setitem__`, a metaclass) that receives a class body's
+/// docstring as a value. `getattr` is checked apart.
 static READS_DOCSTRING: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r"__doc__|\bgetdoc\b|\bfunc_doc\b|\bco_consts\b|\b__code__\b|\bfunc_code\b",
         r"|\b__getattribute__\b|\battrgetter\b|\b__dict__\b|\b(?:vars|globals|locals)\s*\(",
+        r"|\bget_docstring\b|\bgetmembers(?:_static)?\b|\bgetsource(?:lines|file)?\b",
+        r"|\bgetcomments\b|\bfindsource\b|\bgetblock\b|\bpydoc\b|\brender_doc\b|\bhelp\s*\(",
+        r"|\bast\s*\.|\bimport\s+ast\b|\blinecache\b|\btokenize\b|\bget_source\b|\b__loader__\b",
+        r"|\b__prepare__\b|\b__setitem__\b|\bmetaclass\b|\b__build_class__\b|\bnew_class\b",
     ))
     .unwrap()
 });
@@ -226,6 +235,13 @@ mod tests {
             "a = (f, '__d' 'oc__')\nprint(open(getattr(*a)).read())\n",
             "g = getattr\nprint(open(g(f, n)).read())\n",
             "print(open(getattr(list((f,))[0], n)).read())\n",
+            "import ast, inspect, m\nprint(open(ast.get_docstring(ast.parse(inspect.getsource(m)))).read())\n",
+            "from inspect import getmembers\nfor _, v in getmembers(m): open(str(v))\n",
+            "import pydoc, m\nprint(open(pydoc.render_doc(m).split()[3]).read())\n",
+            "with redirect_stdout(b):\n    help(m)\n",
+            "print(open(m.__loader__.get_source('m').split()[1]).read())\n",
+            "class N(dict):\n    def __setitem__(self, k, v):\n        open(v)\nclass M(type):\n    @classmethod\n    def __prepare__(c, n, b):\n        return N()\n",
+            "class C(metaclass=M):\n    \"\"\"../secret.txt documentation\"\"\"\n",
         ] {
             assert!(read(code), "{code}");
         }

@@ -21,13 +21,14 @@ use std::sync::LazyLock;
 use regex::{Captures, Regex};
 
 /// A call of `__import__` or `import_module` whose only argument is a
-/// constant module name. A method of some other object
+/// constant ASCII module name. A non-ASCII name stays dynamic: the local
+/// module lookup only resolves ASCII names. A method of some other object
 /// (`loader.import_module("x")`) is not the import function.
 static CONSTANT_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
         r#"(?m)(?:^|[^.\w])(?P<call>(?:(?:builtins|__builtins__|importlib)\s*\.\s*)?"#,
         r#"(?:__import__|import_module)\s*\(\s*"#,
-        r#"(?:"(?P<double>\w[\w.]*)"|'(?P<single>\w[\w.]*)')\s*\))"#,
+        r#"(?:"(?P<double>[A-Za-z0-9_][A-Za-z0-9_.]*)"|'(?P<single>[A-Za-z0-9_][A-Za-z0-9_.]*)')\s*\))"#,
     ))
     .unwrap()
 });
@@ -180,6 +181,17 @@ mod tests {
         ] {
             assert_eq!(as_statements(code), "", "{code}");
             assert!(without_constant_imports(code).contains("import"), "{code}");
+        }
+    }
+
+    #[test]
+    fn a_non_ascii_module_name_stays_dynamic() {
+        for code in [
+            "m = __import__('caf\u{e9}')",
+            "m = importlib.import_module(\"caf\u{e9}\")",
+        ] {
+            assert_eq!(without_constant_imports(code), code);
+            assert_eq!(names(code).count(), 0, "{code}");
         }
     }
 

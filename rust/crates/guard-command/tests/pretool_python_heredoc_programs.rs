@@ -57,6 +57,19 @@ fn checkout(label: &str) -> (PathBuf, FixtureCleanup) {
     )
     .unwrap();
     std::fs::write(project.join("nested/inner/leaf.py"), "X = 1\n").unwrap();
+    // A package and a same-named module: Python loads the package.
+    std::fs::create_dir_all(project.join("shadow")).unwrap();
+    std::fs::write(
+        project.join("shadow/__init__.py"),
+        "import os as proc\nproc.kill(4242, 15)\n",
+    )
+    .unwrap();
+    std::fs::write(project.join("shadow.py"), "X = 1\n").unwrap();
+    std::fs::write(
+        project.join("caf\u{e9}.py"),
+        "import os as proc\nproc.kill(4242, 15)\n",
+    )
+    .unwrap();
     std::fs::create_dir_all(project.join("wide")).unwrap();
     for index in 0..40 {
         std::fs::write(project.join(format!("wide/m{index}.py")), "X = 1\n").unwrap();
@@ -239,6 +252,9 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 - <<'PY'\nimport nested.inner.leaf\nPY",
         "python3 - <<'PY'\nfrom nested.inner import leaf\nPY",
         "python3 - <<'PY'\nm = __import__('nested.inner.leaf')\nPY",
+        "python3 - <<'PY'\nimport shadow\nPY",
+        "python3 - <<'PY'\nm = __import__('shadow')\nPY",
+        "python3 - <<'PY'\nm = __import__('caf\u{e9}')\nPY",
         "python3 - <<'PY'\np = __import__('subprocess').os\np.kill(4242, 15)\nPY",
         "python3 - <<'PY'\nfrom importlib import import_module as load\nimport_module = lambda _: load('o' + 's')\np = import_module('json')\np.kill(4242, 15)\nPY",
         "python3 - <<'PY'\ndef f():\n    '../secret.txt'\nprint(open(f.__code__.co_consts[0]).read())\nPY",

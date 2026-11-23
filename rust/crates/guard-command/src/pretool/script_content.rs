@@ -1159,7 +1159,9 @@ fn python_imports(source: &str, root: &Path, directory: &Path) -> Vec<PathBuf> {
 /// The files Python runs to import the dotted `module` from `base`: each
 /// enclosing package's `__init__.py`, outermost first, then the module
 /// itself. A package without `__init__.py` is a namespace package, which
-/// runs nothing.
+/// runs nothing. When both `pkg/__init__.py` and `pkg.py` exist, Python
+/// loads the package; both are returned so the scan never misses the one
+/// that runs.
 fn python_module_files(base: &Path, module: &str) -> Vec<PathBuf> {
     let parts: Vec<&str> = module.split('.').collect();
     let mut files: Vec<PathBuf> = (1..parts.len())
@@ -1169,11 +1171,11 @@ fn python_module_files(base: &Path, module: &str) -> Vec<PathBuf> {
     let relative = parts.join("/");
     files.extend(
         [
-            base.join(format!("{relative}.py")),
             base.join(&relative).join("__init__.py"),
+            base.join(format!("{relative}.py")),
         ]
         .into_iter()
-        .find(|candidate| candidate.is_file()),
+        .filter(|candidate| candidate.is_file()),
     );
     files
 }
