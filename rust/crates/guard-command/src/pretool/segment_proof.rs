@@ -519,6 +519,7 @@ pub(super) fn exact_safe_segment_with_context(
         || super::version_probes::safe_version_probe(basename, &segment.arguments)
         || super::network_facts::safe_network_fact(basename, &segment.arguments)
         || super::status_facts::safe_status_fact(basename, &segment.arguments)
+        || super::shell_limits::safe_shell_limit(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
         || super::liveness_probes::safe_liveness_probe(basename, &segment.arguments)
         || super::property_list_reads::safe_property_list_read(
