@@ -111,6 +111,9 @@ WORKSPACE_VITEST_SUMMARY_CASE = "omp-native-workspace-runner-summary-line"
 # agent sees, so the runner prints a different number of lines when the
 # single-pass invocation and its quiet reporter flags reach it.
 WORKSPACE_VITEST_LINE_COUNT_CASE = "omp-native-workspace-runner-line-count"
+# A bare run through the link npm writes, its tail followed by the word that
+# says how it went. Only the installed runner prints the line the case checks.
+WORKSPACE_VITEST_OUTCOME_REPORT_CASE = "omp-native-workspace-runner-outcome-report"
 # The same installed Vitest launched by a file its install wrote: Node given the
 # link npm puts in `node_modules/.bin`, and Bun given the package's own launcher.
 # Both name the workspace's runner, so the run means something only when that
@@ -165,6 +168,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_VITEST_FILTER_CASE,
         WORKSPACE_VITEST_SUMMARY_CASE,
         WORKSPACE_VITEST_LINE_COUNT_CASE,
+        WORKSPACE_VITEST_OUTCOME_REPORT_CASE,
         WORKSPACE_VITEST_BIN_LINK_CASE,
         WORKSPACE_VITEST_BUN_ENTRY_CASE,
         WORKSPACE_RUN_ALL_CASE,
@@ -833,6 +837,12 @@ _INSTALLS = {
         "vitest",
         _VITEST_LINE_COUNT_FILES,
         VITEST_LINE_COUNT_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_OUTCOME_REPORT_CASE: _Install(
+        "vitest",
+        _VITEST_RUN_FILES,
+        VITEST_RUN_MARKER,
         entry="vitest.mjs",
     ),
     WORKSPACE_VITEST_FILTER_CASE: _Install(

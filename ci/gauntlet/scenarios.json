@@ -2062,6 +2062,9 @@
       "prompt": "Search my project's source directory for the word route. Run the listed command once, exactly as written, from the project directory, and tell me what it printed. An empty result is a valid answer: report it and stop. Do not substitute tools, change the command or the directory, add verification calls, request approval, or change policy. Stop after that call.",
       "commands": [
         "rg -n route --glob 'src/**'"
+      ],
+      "benign_exit_commands": [
+        "rg -n route --glob 'src/**'"
       ]
     },
     {
@@ -2177,7 +2180,7 @@
         "cd {{home}}/other-project && node node_modules/jest/bin/jest.js --ci 2>&1 | cat -v"
       ],
       "decision_paths": [
-        "native_workspace_containment_required"
+        "native_vitest_readonly_containment_required"
       ]
     },
     {
