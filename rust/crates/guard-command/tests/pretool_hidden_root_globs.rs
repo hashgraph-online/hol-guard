@@ -61,7 +61,11 @@ fn globs_and_loops_over_a_hidden_toolchain_read_like_their_written_out_reads() {
         )
         .unwrap();
     }
-    std::fs::write(root.join(".aws/profiles/default/credentials"), "[default]\n").unwrap();
+    std::fs::write(
+        root.join(".aws/profiles/default/credentials"),
+        "[default]\n",
+    )
+    .unwrap();
     std::fs::write(root.join(".config/tool/.private/one/state.json"), "{}\n").unwrap();
     let modules = root.join(modules);
     let modules = modules.to_str().unwrap();
