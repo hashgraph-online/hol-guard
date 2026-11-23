@@ -62,3 +62,32 @@ fn a_failed_base_run_leaves_no_partial_schema() {
     let names: Vec<(String, String, String)> = objects(&connection);
     assert_eq!(names.len(), 1, "{names:?}");
 }
+
+#[test]
+fn a_busy_final_release_is_rolled_back() {
+    let directory = tempfile::tempdir().expect("directory");
+    let path = directory.path().join("guard.db");
+    let connection = Connection::open(&path).expect("open");
+    connection
+        .busy_timeout(std::time::Duration::ZERO)
+        .expect("no wait");
+    connection
+        .execute_batch("pragma journal_mode = delete; create table keep (id integer)")
+        .expect("setup");
+    let reader = Connection::open(&path).expect("reader");
+    reader
+        .execute_batch("begin; select count(*) from keep;")
+        .expect("read lock");
+    // The reader's shared lock makes the outermost release unable to commit.
+    assert!(create_base(&connection).is_err());
+    assert!(connection.is_autocommit(), "no transaction is left open");
+    reader.execute_batch("commit").expect("reader done");
+    let tables: i64 = connection
+        .query_row(
+            "select count(*) from sqlite_master where type = 'table'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count");
+    assert_eq!(tables, 1, "only the table created before the run remains");
+}
