@@ -169,10 +169,12 @@ class ResidentEvidenceDrain:
         if batch is None:
             self.failures += 1
             return False
-        try:
-            decoded = json.loads(output)
-        except (TypeError, ValueError):
-            decoded = None
+        decoded: object = None
+        if output is not None:
+            try:
+                decoded = json.loads(output)
+            except (TypeError, ValueError):
+                decoded = None
         self.last_failure = (
             decoded.get("failure") if isinstance(decoded, dict) and isinstance(decoded.get("failure"), str) else None
         )
