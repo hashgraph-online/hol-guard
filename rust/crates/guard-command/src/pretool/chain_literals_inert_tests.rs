@@ -438,6 +438,8 @@ fn values_used_as_more_than_output_stay_opaque() {
         // The inner command would run somewhere other than where it is judged.
         // Shell builtins can also rebind HOME/PATH before the read.
         "printf -v HOME '%s' /tmp/inert; echo \"label: $(cat ~/marker)\"",
+        // Bash accepts redirection before -v, which still changes HOME.
+        "printf >/dev/null -v HOME '%s' /tmp/inert; echo \"label: $(cat ~/marker)\"",
         "printf -vPATH '%s' /tmp/inert; echo \"label: $(cat marker)\"",
         "read HOME; echo \"label: $(cat ~/marker)\"",
         "mapfile HOME; echo \"label: $(cat marker)\"",
