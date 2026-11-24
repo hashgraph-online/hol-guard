@@ -1,6 +1,6 @@
 use serde_json::{json, Map, Value};
 
-use super::{prepare, FACTS_KEY, NOT_LIVE_KEY};
+use super::{prepare, FACTS_KEY, NOT_LIVE_KEY, PAYLOAD_KEY};
 use crate::codex_hook_identity::current_process_identity;
 use crate::guard_store_cmd_vectors_tests::temp_home;
 use crate::guard_store_outbox_identity::correlation_id;
@@ -26,6 +26,17 @@ fn args(harness: &str, facts: Value) -> Map<String, Value> {
     );
     args.insert("now".to_owned(), Value::from(NOW));
     args.insert(FACTS_KEY.to_owned(), facts);
+    args
+}
+
+fn payload_args(harness: &str, payload: Value, workspace: Value) -> Map<String, Value> {
+    let mut args = Map::new();
+    args.insert(
+        "request".to_owned(),
+        json!({"request_id": "r-raw", "harness": harness, "workspace": workspace}),
+    );
+    args.insert("now".to_owned(), Value::from(NOW));
+    args.insert(PAYLOAD_KEY.to_owned(), payload);
     args
 }
 
@@ -149,4 +160,48 @@ fn only_a_queue_write_with_facts_is_prepared() {
         &guard_home
     )
     .is_some());
+}
+
+#[test]
+fn raw_codex_payload_facts_are_extracted_before_the_queue_write() {
+    let guard_home = home(
+        "live-wait-raw-payload",
+        "approval_wait_timeout_seconds = 30\n",
+    );
+    let prepared = prepare(
+        "add_native_review_approval_request",
+        &payload_args(
+            "codex",
+            json!({
+                "guard_codex_browser_wait_process": live_process(),
+                "guard_codex_browser_wait_timeout_seconds": 90,
+            }),
+            json!("/work/project"),
+        ),
+        &guard_home,
+    )
+    .unwrap();
+    assert!(!prepared.contains_key(PAYLOAD_KEY));
+    assert_eq!(
+        prepared["codex_live_wait"]["workspace"],
+        json!("/work/project")
+    );
+    assert_eq!(
+        built(&prepared).unwrap().0["codex_browser_wait_timeout_seconds"],
+        30
+    );
+}
+
+#[test]
+fn non_codex_raw_payloads_are_left_for_the_daemon() {
+    let guard_home = home(
+        "live-wait-raw-non-codex",
+        "approval_wait_timeout_seconds = 30\n",
+    );
+    let args = payload_args(
+        "claude-code",
+        json!({"guard_codex_browser_wait_timeout_seconds": 90}),
+        Value::Null,
+    );
+    assert!(prepare("add_native_review_approval_request", &args, &guard_home).is_none());
 }
