@@ -131,10 +131,12 @@ fn message_positions(arguments: &[String]) -> Option<Vec<usize>> {
     // word read alike. A bare brace list or glob is rewritten by the shell
     // into more words, which Git then reads as pathspecs to commit; a value
     // that could expand stays under the screen with the rest of the segment.
-    if positions
-        .iter()
-        .any(|position| arguments[*position].contains(['$', '`', '{', '}', '*', '?', '[']))
-    {
+    // The tokenizer keeps a redirect it does not drop as a word, so an
+    // attached `<~/.ssh/id_rsa` after `-m` is a file the shell opens, not a
+    // message; a value holding `<` or `>` stays under the screen too.
+    if positions.iter().any(|position| {
+        arguments[*position].contains(['$', '`', '{', '}', '*', '?', '[', '<', '>'])
+    }) {
         return None;
     }
     Some(positions)

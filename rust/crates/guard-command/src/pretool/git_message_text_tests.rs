@@ -84,6 +84,14 @@ fn merge_reads_s_as_a_strategy_that_takes_the_next_token() {
 
 #[test]
 fn a_message_that_can_expand_is_not_set_aside() {
+    // An attached redirect is a file the shell opens before Git runs.
+    assert_eq!(positions("commit -m <~/.ssh/id_rsa note -F -"), None);
+    assert_eq!(positions("commit -m 0<~/.ssh/id_rsa note -F -"), None);
+    assert_eq!(positions("commit -m >~/.ssh/authorized_keys note"), None);
+    assert_eq!(
+        positions("--no-literal-pathspecs commit -m note"),
+        Some(vec![3])
+    );
     assert_eq!(positions("commit -m $(cat)"), None);
     assert_eq!(positions("commit -m `cat`"), None);
     assert_eq!(positions("commit --message=$NOTE"), None);
@@ -119,6 +127,11 @@ fn everything_outside_the_message_keeps_its_screen() {
         "git commit -C -m ~/.ssh/id_rsa",
         "git commit -m {note,.env}",
         "git commit -m .env*",
+        "git commit -m <~/.ssh/id_rsa note -F -",
+        "git commit -m 0<~/.ssh/id_rsa note -F -",
+        "git commit -m >~/.ssh/authorized_keys note",
+        "git --attr-source commit show -m HEAD:.env",
+        "git stash push -u -m -m .env",
         "echo 'commit -m secret'",
     ] {
         assert!(sensitive_command_input(command), "{command}");

@@ -137,6 +137,7 @@ const GLOBAL_FLAGS: &[&str] = &[
     "--literal-pathspecs",
     "--no-advice",
     "--no-lazy-fetch",
+    "--no-literal-pathspecs",
     "--no-optional-locks",
     "--no-pager",
     "--no-replace-objects",
