@@ -271,6 +271,7 @@ mod decompress_reads;
 mod dump_filter_options;
 mod name_pattern_text;
 mod search;
+pub(crate) use search::search_pattern_words;
 mod search_pattern_clearance;
 mod search_pattern_text;
 mod search_scope;

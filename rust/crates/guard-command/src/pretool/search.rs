@@ -12,6 +12,8 @@ mod hint;
 mod names_only;
 mod options;
 mod packaged_file;
+mod pattern_operands;
+pub(crate) use pattern_operands::search_pattern_words;
 #[cfg(test)]
 mod repeat_walk_tests;
 mod rg;

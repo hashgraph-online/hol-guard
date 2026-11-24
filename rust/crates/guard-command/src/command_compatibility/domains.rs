@@ -449,14 +449,34 @@ pub(super) fn observe(
         // agent was asked to make, also beside a stderr redirect: `vitest run
         // src/token.test.ts 2>&1` reads the test file it was asked to run.
         let text = crate::pretool::search_scope_tracked::screen(command, segment, context.cwd);
+        // A `grep` or `rg` pattern is text the search looks for, not a file it
+        // opens: `grep -rn scan_secret_text src 2>/dev/null` reads `src`. The
+        // words here have lost their quotes, so one the shell could still expand
+        // into file names or command output stays in the screen.
+        let patterns = crate::pretool::search_pattern_words(&executable, arguments)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|pattern| {
+                !pattern.contains(['/', '~', '*', '?', '[', '{', '$', '`', '(', '\\'])
+                    && arguments
+                        .iter()
+                        .filter(|argument| *argument == pattern)
+                        .count()
+                        == 1
+            })
+            .collect::<Vec<_>>();
         let stderr_names_credential = redirect == Redirect::Stderr
-            && segment.tokens.iter().any(|token| {
-                if token.contains(char::is_whitespace) {
-                    sensitive_path(token)
-                } else {
-                    sensitive(token)
-                }
-            });
+            && segment
+                .tokens
+                .iter()
+                .filter(|token| !patterns.contains(token))
+                .any(|token| {
+                    if token.contains(char::is_whitespace) {
+                        sensitive_path(token)
+                    } else {
+                        sensitive(token)
+                    }
+                });
         if ((output_write && sensitive(&text)) || stderr_names_credential)
             && !source_names::only_source_file_names(&text, &segment.tokens, &executable)
         {
