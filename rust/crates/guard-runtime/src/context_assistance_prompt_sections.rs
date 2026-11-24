@@ -161,9 +161,22 @@ pub(super) fn written_name(line: &str) -> Option<String> {
                 | "abstract"
         )
     });
-    words.next()?;
-    let name: String = words
-        .next()?
+    let definer = words.next()?;
+    let mut word = words.next()?;
+    // A Go method's name follows its receiver: `func (r *Route) Name()`.
+    if definer == "func" && word.starts_with('(') {
+        while !word.contains(')') {
+            word = words.next()?;
+        }
+        word = word
+            .split_once(')')
+            .map(|(_, after)| after)
+            .unwrap_or_default();
+        if word.is_empty() {
+            word = words.next()?;
+        }
+    }
+    let name: String = word
         .chars()
         .take_while(|c| c.is_alphanumeric() || *c == '_')
         .collect();

@@ -33,7 +33,7 @@ mod imports;
 mod more;
 #[path = "context_assistance_prompt_map_pick.rs"]
 mod pick;
-use pick::{named_definitions, Pick};
+use pick::{named_definitions, outlined, Pick};
 #[path = "context_assistance_prompt_map_rename.rs"]
 pub(super) mod rename;
 #[path = "context_assistance_prompt_map_render.rs"]
@@ -324,7 +324,7 @@ pub(super) fn map(
     // A named file stands for its outline only when the prompt's words are placed nowhere:
     // "utils.py where the timeout is ignored" means the lines using `timeout`.
     if chosen.is_empty() && uses.is_empty() {
-        chosen = named_definitions(&files, &names, asked, true);
+        chosen = outlined(&files, &names, sought, asked);
     }
     let mut mentioned: Vec<String> = (chosen.iter())
         .filter(|pick| !pick.base)
