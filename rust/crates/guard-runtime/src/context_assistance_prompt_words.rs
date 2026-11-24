@@ -8,6 +8,8 @@ use paths::without_paths;
 mod no_change;
 #[path = "context_assistance_prompt_paths.rs"]
 mod paths;
+#[path = "context_assistance_prompt_product_names.rs"]
+mod product_names;
 
 pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
@@ -187,7 +189,7 @@ fn words(prompt: &str) -> Vec<(String, bool)> {
                 || called
                 || (written.starts_with('.') && !token.contains('/'))
                 || token.contains(['.', '_'])
-                || camel(token);
+                || (camel(token) && !product_names::product_name(token));
             for piece in token.split(['.', '/']).filter(|piece| !piece.is_empty()) {
                 found.push((piece.to_owned(), shaped));
             }
