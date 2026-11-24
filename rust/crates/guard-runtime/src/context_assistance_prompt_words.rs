@@ -173,9 +173,9 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
 /// The prompt's words, each marked when it is written like code: inside
 /// backticks, dotted (`click.Choice`), qualified (`Client::new`), snake_case,
 /// camelCase or called (`URL(...).normalize()`). A product name such as
-/// `GitHub`, alone or in `GitHub-hosted`, is not camelCase code. A file name gives no words: `named` finds the
-/// file, and its folders and name (`src/app/utils.py`) would map every
-/// definition that mentions them.
+/// `GitHub`, alone or in `GitHub-hosted` or `macOS/iOS`, is not camelCase
+/// code. A file name gives no words: `named` finds the file, and its folders
+/// and name (`src/app/utils.py`) would map every definition that mentions them.
 fn words(prompt: &str) -> Vec<(String, bool)> {
     let mut found = Vec::new();
     for (span, ticked) in spans(prompt) {
@@ -193,7 +193,8 @@ fn words(prompt: &str) -> Vec<(String, bool)> {
                 || qualified
                 || (written.starts_with('.') && !token.contains('/'))
                 || token.contains(['.', '_'])
-                || (token.split('-')).any(|part| camel(part) && !product_names::product_name(part));
+                || (token.split(['-', '/']))
+                    .any(|part| camel(part) && !product_names::product_name(part));
             for piece in token.split(['.', '/']).filter(|piece| !piece.is_empty()) {
                 found.push((piece.to_owned(), shaped));
             }

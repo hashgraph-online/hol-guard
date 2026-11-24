@@ -121,6 +121,7 @@ fn a_product_name_alone_does_not_point_at_code() {
         "Does the CLI work on macOS and iOS?",
         "Run lint on GitHub-hosted runners",
         "Make the build TypeScript-only",
+        "Does it work on macOS/iOS?",
     ] {
         assert!(!anchored(prompt), "{prompt}");
     }
@@ -129,6 +130,7 @@ fn a_product_name_alone_does_not_point_at_code() {
         "GitHubClient.fetch drops redirects",
         "GitHub() should accept a base URL",
         "GitHub::new drops the token",
+        "api/GitHubClient drops redirects",
     ] {
         assert!(anchored(prompt), "{prompt}");
     }
