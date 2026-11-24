@@ -234,9 +234,15 @@ pub(super) fn path_values_sensitive(
                 // template is not the read the gate allowed, and a write can
                 // put a live value into the file the next read would then be
                 // relieved of, so `template_relief` withholds it there.
+                // A committed page named for the key it documents
+                // (`private-key-jwt-client-auth.md`) is read past the
+                // key-name rule on the same terms.
                 sensitive_path_family(Path::new(value)).is_some()
                     && !(template_relief
-                        && guard_command::pretool::proven_tracked_dotenv_template(value, cwd))
+                        && (guard_command::pretool::proven_tracked_dotenv_template(value, cwd)
+                            || guard_command::pretool::proven_tracked_key_named_document(
+                                value, cwd,
+                            )))
             });
         }
     }

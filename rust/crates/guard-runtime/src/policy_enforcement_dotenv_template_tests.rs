@@ -327,3 +327,54 @@ fn a_relative_template_resolves_against_the_hook_working_directory() {
         "without a working directory nothing proves the template"
     );
 }
+
+/// A page named for the client authentication method it documents.
+#[cfg(unix)]
+const CLIENT_AUTH_PAGE: &str =
+    "# private_key_jwt\n\nThe client signs a JWT assertion with its own key.\n";
+
+/// A committed page named for the key it describes holds no key. The read
+/// gate already admits it, so the floor must not ask again for the same read.
+#[cfg(unix)]
+#[test]
+fn a_committed_key_named_document_clears_the_floor() {
+    let repo = Repo::new();
+    repo.write("docs/auth-evidence/private-key-jwt-client-auth.md", CLIENT_AUTH_PAGE);
+    repo.write("docs/wallet-key-rotation.yaml", "steps:\n  - rotate\n");
+    repo.commit("document the client authentication method");
+    assert!(!repo.sensitive("docs/auth-evidence/private-key-jwt-client-auth.md"));
+    assert!(!repo.sensitive("docs/wallet-key-rotation.yaml"));
+}
+
+/// Nothing proves an untracked page, a page holding a live value, a key-named
+/// file that is not a document, or a page parked inside a key container.
+#[cfg(unix)]
+#[test]
+fn an_unproven_key_named_document_keeps_its_floor() {
+    let repo = Repo::new();
+    repo.write("docs/private-key-notes.md", "MODEL_GATEWAY=gsk_u8jzPde0IgxLd6GncfBAepfJBd0Kh8oOOL8dKLzdocJ2isAjIh\n");
+    repo.write("deploy/private-key.txt", CLIENT_AUTH_PAGE);
+    repo.write(".ssh/private-key-guide.md", CLIENT_AUTH_PAGE);
+    repo.commit("add the files");
+    repo.write("docs/private-key-draft.md", CLIENT_AUTH_PAGE);
+    assert!(repo.sensitive("docs/private-key-draft.md"));
+    assert!(repo.sensitive("docs/private-key-notes.md"));
+    assert!(repo.sensitive("deploy/private-key.txt"));
+    assert!(repo.sensitive(".ssh/private-key-guide.md"));
+}
+
+/// The relief answers a read alone, as the template's does.
+#[cfg(unix)]
+#[test]
+fn a_write_of_a_committed_key_named_document_keeps_its_floor() {
+    let repo = Repo::new();
+    repo.write("docs/private-key-jwt.md", CLIENT_AUTH_PAGE);
+    repo.commit("document the method");
+    assert!(!repo.sensitive("docs/private-key-jwt.md"));
+    assert!(repo.sensitive_action(
+        "docs/private-key-jwt.md",
+        "Write",
+        PreToolActionTypeV1::FileWrite,
+        false
+    ));
+}
