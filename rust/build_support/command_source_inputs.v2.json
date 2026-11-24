@@ -743,6 +743,7 @@
       "src/pretool/tool_bin_listing.rs",
       "src/pretool/tool_inventory_reads.rs",
       "src/pretool/tracked_credential_names.rs",
+      "src/pretool/tracked_listing_names.rs",
       "src/pretool/trailing_group.rs",
       "src/pretool/tree_reads.rs",
       "src/pretool/tree_writers.rs",

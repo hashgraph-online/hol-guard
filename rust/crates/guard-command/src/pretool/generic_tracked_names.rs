@@ -72,8 +72,17 @@ impl GenericSignals {
                 cwd.map(std::path::Path::new),
                 None,
             );
-            without_tracked_words(command, command_words(model), cwd, moves, &refs, templates)
-                .is_some_and(|rest| !sensitive_command_input(&rest))
+            let listing = crate::pretool::search_scope_tracked::listing::listing_only(model);
+            without_tracked_words(
+                command,
+                command_words(model),
+                cwd,
+                moves,
+                &refs,
+                templates,
+                listing,
+            )
+            .is_some_and(|rest| !sensitive_command_input(&rest))
         }
     }
 }
