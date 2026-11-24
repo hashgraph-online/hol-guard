@@ -93,7 +93,7 @@ def native_stderr_hook_failure(
         and not isinstance(exit_code, bool)
     ):
         return document, stderr, exit_code
-        return outage_stderr_failure(event_name)
+    return outage_stderr_failure(event_name)
 
 
 def native_hook_failure_document(
