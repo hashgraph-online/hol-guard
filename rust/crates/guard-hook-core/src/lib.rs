@@ -322,7 +322,9 @@ fn committed_dotenv_template_read(
             guard_command::pretool::proven_tracked_dotenv_template(spelled, request.cwd.as_deref())
         })
     };
-    (proven(candidate) && proven(target)).then_some(file)
+    // Prove the resolved file too: a link can be retargeted between resolving
+    // it above and the spelling proofs, and the review reads `file`.
+    (proven(candidate) && proven(target) && file.to_str().is_some_and(proven)).then_some(file)
 }
 
 fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {
