@@ -360,6 +360,76 @@ fn private_directory(path: &Path, uid: u32) -> bool {
     })
 }
 
+/// The version-manager releases a command starts by their own path.
+///
+/// A session's PATH names one Node or Python release, but a command can start
+/// another release the same manager installed by spelling its path, such as
+/// `~/.nvm/versions/node/v22.1.0/bin/node ./node_modules/typescript/bin/tsc`.
+/// Discovery that reads only the PATH never sees that release, so the sandbox
+/// could not start it and the run was reviewed instead of contained. The
+/// release is admitted exactly as a PATH entry naming the same `bin` would be:
+/// one of the manager prefixes that grant a whole release directory, with the
+/// same ownership, sealing and credential-folder checks. A program anywhere
+/// else is left to the PATH.
+pub(in crate::restricted_pytest) fn named_release_roots<'a>(
+    programs: impl IntoIterator<Item = &'a str>,
+    home: Option<&Path>,
+    workspace: &Path,
+) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for program in programs.into_iter().take(16) {
+        let program = Path::new(program);
+        let Some(bin) = program.parent().filter(|_| program.is_absolute()) else {
+            continue;
+        };
+        if bin.file_name() != Some(OsStr::new("bin")) {
+            continue;
+        }
+        let Ok(canonical) = bin.canonicalize() else {
+            continue;
+        };
+        let Some(release) = canonical.parent() else {
+            continue;
+        };
+        let managed = homes(home).iter().any(|home| {
+            MANAGED_HOME_PREFIXES
+                .iter()
+                .filter(|(_, release_grant)| *release_grant)
+                .map(|(prefix, _)| home.join(prefix))
+                .any(|base| release != base && path_is_within(release, &base))
+        });
+        if !managed {
+            continue;
+        }
+        // Only the manager's own grant, which leads with the release
+        // directory. Any other acceptance of this `bin` belongs to the PATH.
+        let Some(accepted) = accept_entry(bin, home, workspace) else {
+            continue;
+        };
+        if accepted.first().map(PathBuf::as_path) != Some(release) {
+            continue;
+        }
+        for root in accepted {
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+    }
+    roots
+}
+
+/// The absolute paths `text` holds, unquoted: the candidates
+/// [`named_release_roots`] reads when a plan has only the command text.
+pub(in crate::restricted_pytest) fn absolute_words(text: &str) -> Vec<&str> {
+    text.split(|character: char| {
+        character.is_whitespace() || matches!(character, ';' | '&' | '|' | '(' | ')')
+    })
+    .map(|word| word.trim_matches(|character| matches!(character, '\'' | '"')))
+    .filter(|word| word.starts_with('/') && word.contains("/bin/"))
+    .take(16)
+    .collect()
+}
+
 #[cfg(test)]
 #[path = "user_tools_tests.rs"]
 mod tests;
