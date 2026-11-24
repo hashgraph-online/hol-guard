@@ -79,6 +79,7 @@ def test_lane_owned_infrastructure_codes_cover_product_availability_failures():
             "native_policy_update_in_progress",
             "native_hook_event_unavailable",
             "native_pre_tool_unavailable",
+            "native_prompt_unavailable",
             "native_post_tool_unavailable",
             "native_overloaded",
             "native_hook_worker_unavailable",
