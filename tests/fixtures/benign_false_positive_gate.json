@@ -68792,6 +68792,38 @@
       "expect": "allow"
     },
     {
+      "id": "queue-cd-cousin-repo-grep-config-then-ls-hidden-glob",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && grep -n \"name\\|version\" package.json | head -30; ls package*.json .eslintrc* 2>&1 | head"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-grep-rl-cousin-repo-dirs-with-includes",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rl \"reportWindow\" ${HOME}/other-project/src ${HOME}/other-project/app --include=\"*.ts\" --include=\"*.tsx\" --include=\"*.mjs\""
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "queue-cd-sibling-ls-lockfile-globs",
       "fix_area": "queue",
       "harnesses": [
