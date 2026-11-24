@@ -141,4 +141,7 @@ base: string): string {\n  return encodePath(base + input);\n}\n";
     // A word no file is named for still places nothing.
     let other = prompt_map(home.path(), &root, "Decoding a path with spaces is wrong");
     assert!(other.is_none_or(|text| !text.contains("src/encoding.ts")));
+    // A grab-bag file is never the topic, even when the report names it.
+    let generic = prompt_map(home.path(), &root, "Utils behaves incorrectly on Windows");
+    assert!(generic.is_none_or(|text| !text.contains("src/utils.ts:")));
 }

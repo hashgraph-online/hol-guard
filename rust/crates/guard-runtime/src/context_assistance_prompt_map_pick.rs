@@ -13,7 +13,9 @@ const MAX_HELPERS: usize = 3;
 /// Section names, as `term_form` gives them, of a class's constructor.
 const CONSTRUCTORS: [&str; 3] = ["init", "constructor", "new"];
 /// File stems, as `term_form` gives them, that name no one subject.
-const GENERIC_STEMS: [&str; 6] = ["index", "mod", "main", "lib", "init", "setup"];
+const GENERIC_STEMS: [&str; 11] = [
+    "index", "mod", "main", "lib", "init", "setup", "util", "helper", "common", "shared", "type",
+];
 
 pub(super) struct Pick {
     pub(super) file: usize,
