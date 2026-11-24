@@ -44,14 +44,15 @@ pub(crate) fn prepare(
     ) {
         return None;
     }
-    let facts = args
-        .get(FACTS_KEY)
-        .cloned()
-        .or_else(|| payload_facts(args))?;
     let mut prepared = args.clone();
     prepared.remove(FACTS_KEY);
     prepared.remove(PAYLOAD_KEY);
     prepared.remove("codex_live_wait");
+    let facts = match args.get(FACTS_KEY).cloned().or_else(|| payload_facts(args)) {
+        Some(facts) => facts,
+        None if args.contains_key(PAYLOAD_KEY) => return Some(prepared),
+        None => return None,
+    };
     let built = build(&facts, args, guard_home);
     match (built, prepared.get_mut("request")) {
         (Some((link, snapshot)), Some(Value::Object(request))) => {

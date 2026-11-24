@@ -205,3 +205,43 @@ fn non_codex_raw_payloads_are_left_for_the_daemon() {
     );
     assert!(prepare("add_native_review_approval_request", &args, &guard_home).is_none());
 }
+
+#[test]
+fn an_unusable_raw_payload_is_removed_before_the_manual_retry_write() {
+    let guard_home = home("live-wait-raw-unusable", "");
+    let args = payload_args("codex", json!({"event": "PreToolUse"}), Value::Null);
+    let prepared = prepare(
+        "add_silent_native_review_approval_request",
+        &args,
+        &guard_home,
+    )
+    .expect("the queue write still proceeds");
+    assert!(!prepared.contains_key(PAYLOAD_KEY));
+    assert!(!prepared.contains_key(NOT_LIVE_KEY));
+}
+
+#[test]
+fn a_non_live_raw_payload_cannot_keep_a_suspended_response() {
+    let guard_home = home(
+        "live-wait-raw-not-live",
+        "approval_wait_timeout_seconds = 30\n",
+    );
+    let mut args = payload_args(
+        "codex",
+        json!({"guard_codex_browser_wait_timeout_seconds": 0}),
+        Value::Null,
+    );
+    args.get_mut("request").unwrap()["continuation_snapshot"] = json!({
+        "capability": "suspended-response",
+        "hookAttached": true,
+    });
+    let prepared = prepare(
+        "add_silent_native_review_approval_request",
+        &args,
+        &guard_home,
+    )
+    .expect("the queue write still proceeds");
+    assert!(!prepared.contains_key(PAYLOAD_KEY));
+    assert_eq!(prepared[NOT_LIVE_KEY], true);
+    assert!(prepared["request"].get("continuation_snapshot").is_none());
+}
