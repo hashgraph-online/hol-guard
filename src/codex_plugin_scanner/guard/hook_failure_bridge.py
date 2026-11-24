@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 RUNTIME_MISSING = "HOL Guard's native runtime is missing, so Guard blocked this hook. Run `hol-guard repair`."
 # The events that decide whether something runs, taken from the fail-closed
-# envelope contract (`guard/contracts/hook-fail-closed-envelopes.v1.json`): every
-# spelling the contract files under `pre_tool`, `permission` or `prompt`. The
-# runtime reads the same contract (`hook_failure_op::dispatch`), and
-# `tests/test_native_hook_failure_detail.py` holds this table to it. A harness
-# spelling its pre-tool event `PreToolCall` or its permission event
-# `PermissionRequestV2` decides as much as the canonical spelling does, so an
-# outage has to refuse it too.
+# envelope contract (`guard/contracts/hook-fail-closed-envelopes.v1.json`).
 _DECIDING_EVENTS = frozenset(
     {
         "pretool",
@@ -36,10 +31,6 @@ def outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
     agent from stopping.
     """
 
-    # The runtime trims the event name before it classifies it, so a harness
-    # that writes `" PreToolUse"` is refused there. Classifying the untrimmed
-    # name here would let the same spelling pass this table silently, which is
-    # the one divergence that decides differently.
     compact = event_name.strip().replace("_", "").replace("-", "").lower()
     if compact in _DECIDING_EVENTS or compact.startswith(_DECIDING_EVENT_PREFIXES):
         return "", RUNTIME_MISSING, 2
@@ -103,3 +94,29 @@ def native_stderr_hook_failure(
     ):
         return document, stderr, exit_code
     return outage_stderr_failure(event_name)
+
+
+def native_hook_failure_document(
+    harness: str,
+    event_name: str,
+    reason: str,
+    *,
+    reason_code: str | None = None,
+    deadline: float | None = None,
+) -> dict[str, object] | None:
+    """Decode the Rust-owned fail-closed document at the transport boundary."""
+
+    native = native_hook_failure(
+        harness,
+        event_name,
+        reason,
+        reason_code=reason_code,
+        deadline=deadline,
+    )
+    if native is None:
+        return None
+    try:
+        decoded = json.loads(native[0])
+    except (TypeError, ValueError):
+        return None
+    return dict(decoded) if isinstance(decoded, dict) else None

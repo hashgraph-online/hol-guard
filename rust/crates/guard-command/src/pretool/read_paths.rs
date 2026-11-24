@@ -612,9 +612,17 @@ fn location_allowed(
         || foreign_user_home(canonical, home_dir, cwd)
         // A committed dotenv template is read past the dotenv family screen
         // only where the index and the secret scan prove it is the template
-        // its name claims. Every other family, and every path a command acts
-        // on rather than names, answers unchanged.
-        || (guard_secure_fs::sensitive_path_family(canonical).is_some()
+        // its name claims. A key-named document is read past the key family
+        // only where the name screen below runs, which still matches it and
+        // clears it only through the committed-document proof. Every other
+        // family, and every path a command acts on rather than names, answers
+        // unchanged.
+        || ((if credential_names {
+            guard_secure_fs::sensitive_path_family_beside_name_proof(canonical)
+        } else {
+            guard_secure_fs::sensitive_path_family(canonical)
+        })
+        .is_some()
             && !(request_profile
                 && super::search_scope_tracked::names::tracked_dotenv_template(canonical, cwd)))
         || (credential_names

@@ -24,7 +24,6 @@ from ..blocked_request_mode import BLOCKED_REASON, safe_alternative_reason
 from ..native_hook_decision import NativeHookDecisionError, native_review_response
 from ..native_hook_render import (
     native_render_accepted_allow,
-    native_render_fail_closed_response,
     native_render_fail_closed_verdict,
     native_render_pre_tool,
     native_render_recording_only_pre_tool,
@@ -345,17 +344,17 @@ def fail_closed_response(
     """
 
     if guard_home is not None:
-        rendered = native_render_fail_closed_response(
-            harness,
+        from ..hook_failure_bridge import native_hook_failure_document
+
+        decoded = native_hook_failure_document(
+            canonical_harness(harness),
             event_name,
-            reason=reason,
+            (prompt_reason or PROMPT_UNAVAILABLE_REASON if _event_kind(event_name) == "prompt" else reason),
             reason_code=reason_code,
-            prompt_reason=prompt_reason,
-            guard_home=guard_home,
             deadline=deadline,
         )
-        if rendered is not None:
-            return rendered
+        if decoded is not None:
+            return decoded
     kind = _event_kind(event_name)
     if kind == "prompt":
         reason = prompt_reason or PROMPT_UNAVAILABLE_REASON

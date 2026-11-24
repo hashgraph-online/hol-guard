@@ -23,9 +23,9 @@ pub use source_path::{
     credential_path_markers, dotenv_template_basename, hidden_empty_work_tree_file,
     hidden_project_document, hidden_read_parts_allowed, hidden_request_parts_allowed,
     hidden_write_parts_allowed, is_source_code_extension, project_config_file_name,
-    sensitive_external_filename, sensitive_path_family, source_document_extension, source_like,
-    tool_login_file_name, tool_login_name, win32_name, DOTENV_TEMPLATE_SUFFIXES,
-    EXTERNAL_SENSITIVE_PARTS,
+    sensitive_external_filename, sensitive_path_family, sensitive_path_family_beside_name_proof,
+    source_document_extension, source_like, tool_login_file_name, tool_login_name,
+    wallet_key_named, win32_name, DOTENV_TEMPLATE_SUFFIXES, EXTERNAL_SENSITIVE_PARTS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

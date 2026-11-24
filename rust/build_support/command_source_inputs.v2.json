@@ -328,6 +328,7 @@
       "src/pretool/chain_literals_inert.rs",
       "src/pretool/chain_literals_launch.rs",
       "src/pretool/chain_literals_lex.rs",
+      "src/pretool/chain_literals_line_number.rs",
       "src/pretool/chain_literals_pwd.rs",
       "src/pretool/chain_literals_temp_cd.rs",
       "src/pretool/chain_temporary.rs",

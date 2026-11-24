@@ -130,34 +130,44 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         if substitution.start < cursor || patterned_word(&patterned, substitution) {
             return None;
         }
-        let (value, judged_text) = match heredoc_value(&chars, &masked, substitution, message) {
-            // The heredoc is the whole of what the `cat` reads, so judging
-            // the bare `cat` is judging the command the shell runs.
-            Some(value) => (value, "cat".to_owned()),
-            // A message the heredoc form does not read is never a stand-in.
-            None if !substitution.body.is_ascii() => return None,
-            None => {
-                let text: String = chars
-                    .get(substitution.start..substitution.end)?
-                    .iter()
-                    .collect();
-                let inner = text
-                    .strip_prefix(open)
-                    .and_then(|rest| rest.strip_suffix(close))?;
-                if inner.trim() != substitution.body {
-                    return None;
+        let (value, judged_text, heredoc) =
+            match heredoc_value(&chars, &masked, substitution, message) {
+                // The heredoc is the whole of what the `cat` reads, so judging
+                // the bare `cat` is judging the command the shell runs.
+                Some(value) => (value, "cat".to_owned(), true),
+                // A message the heredoc form does not read is never a stand-in.
+                None if !substitution.body.is_ascii() => return None,
+                None => {
+                    let text: String = chars
+                        .get(substitution.start..substitution.end)?
+                        .iter()
+                        .collect();
+                    let inner = text
+                        .strip_prefix(open)
+                        .and_then(|rest| rest.strip_suffix(close))?;
+                    if inner.trim() != substitution.body {
+                        return None;
+                    }
+                    (
+                        stand_in(&substitution.body)?.to_owned(),
+                        substitution.body.clone(),
+                        false,
+                    )
                 }
-                (
-                    stand_in(&substitution.body)?.to_owned(),
-                    substitution.body.clone(),
-                )
-            }
-        };
+            };
         // A lookup can print nothing; only a Git command reads a missing
         // revision as the same kind of operation.
         if value == git_value::COMMIT_VALUE
             && !(git_value::in_git_command(&masked, &substitutions, substitution.start)
                 && git_value::standalone(&masked, substitution))
+        {
+            return None;
+        }
+        // A heredoc that holds `1` prints exactly that; only the lookup's
+        // stand-in depends on the place it fills.
+        if !heredoc
+            && value == line_number::LINE_VALUE
+            && !line_number::opens_sed_range(&masked, &substitutions, substitution)
         {
             return None;
         }
@@ -413,7 +423,7 @@ fn patterned_word(chars: &[char], substitution: &ShellCommandSubstitution) -> bo
 /// The stand-in for a substitution body that is one simple value-producing
 /// command with literal arguments.
 fn stand_in(body: &str) -> Option<&'static str> {
-    if let Some(value) = git_value::stand_in(body) {
+    if let Some(value) = git_value::stand_in(body).or_else(|| line_number::stand_in(body)) {
         return Some(value);
     }
     if body.len() > MAX_BODY_CHARS
@@ -491,6 +501,9 @@ mod commit_message;
 
 #[path = "chain_literals_git_value.rs"]
 mod git_value;
+
+#[path = "chain_literals_line_number.rs"]
+mod line_number;
 
 #[path = "chain_literals_temp_cd.rs"]
 pub(crate) mod temp_cd;
