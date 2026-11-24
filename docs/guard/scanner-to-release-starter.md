@@ -22,6 +22,7 @@ jobs:
       id-token: write
       attestations: write
       artifact-metadata: write
+      security-events: write
     uses: hashgraph-online/hol-guard/.github/workflows/plugin-release.yml@1a0f5b01b431218aaea87bc469e47f0ddffda650
     with:
       plugin_dir: "."
@@ -40,7 +41,7 @@ The pinned commit is the reviewed baseline for this starter. A release maintaine
 - GitHub artifact attestation bound to the evidence
 - A 90-day workflow artifact containing the evidence and SBOM when the release declares packages
 
-`register_release: false` keeps HOL registration disabled in the starter. A trusted workflow owner can enable registration after reviewing the listing, OIDC, visibility, retention, and duplicate-registration behavior. `upload_sarif: true` requires the caller to add `security-events: write`.
+`register_release: false` keeps HOL registration disabled in the starter. A trusted workflow owner can enable registration after reviewing the listing, OIDC, visibility, retention, and duplicate-registration behavior. The pinned reusable workflow requests `security-events: write` even when SARIF upload is disabled, so the caller grants that scope.
 
 ## Claim language
 

@@ -28,5 +28,5 @@ surface is present. Its schema is `guard-coverage-bridge.v1` and includes
 The object contains no source content, findings text, secrets, environment
 values, or local paths.
 
-For a release workflow that turns this context into attested evidence, see
+For a release workflow that attests scanner and Plugin Kit results, see
 [Scanner to release evidence starter](scanner-to-release-starter.md).
