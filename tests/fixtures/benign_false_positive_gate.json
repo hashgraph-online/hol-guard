@@ -1602,6 +1602,57 @@
       "expect": "allow"
     },
     {
+      "id": "grep-credential-word-pattern-quiet-errors",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn token_budget src 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-credential-word-pattern-quiet-errors",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n secret_value src 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-quiet-errors-env-operand",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n token_budget .env 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "grep-regex-with-an-unbalanced-brace",
       "fix_area": "shell",
       "harnesses": [

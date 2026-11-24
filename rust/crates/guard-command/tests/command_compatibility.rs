@@ -438,3 +438,38 @@ fn a_stderr_redirect_beside_a_project_file_names_no_credential() {
         assert!(writes_sensitive(command), "{command}");
     }
 }
+
+#[test]
+fn a_search_pattern_beside_a_stderr_redirect_names_no_credential() {
+    let writes_sensitive = |command: &str| {
+        compatibility_observations(&model(command), None)
+            .unwrap()
+            .rule_matches
+            .iter()
+            .any(|matched| matched.rule_id == "command.shell-mutations.sensitive-file-write")
+    };
+    // The pattern is text the search looks for, not a file it opens, so a
+    // function name holding a credential word reads only the named tree.
+    for command in [
+        "grep -rln \"scan_secret_text\" src 2>/dev/null",
+        "grep -rln scan_secret_text src 2>&1",
+        "rg -n secret_value src 2>/dev/null",
+        "grep -n token_budget README.md 2>/dev/null",
+        "grep -rn -e api_token -e x src 2>/dev/null",
+        "grep -rn password_hash src 2>/dev/null | head",
+    ] {
+        assert!(!writes_sensitive(command), "{command}");
+    }
+    // A credential path operand keeps the review, also when it repeats the
+    // pattern or follows an option this reading does not know.
+    for command in [
+        "grep -n x .env 2>/dev/null",
+        "grep -rn -e x ~/.aws/credentials 2>/dev/null",
+        "rg -n token secrets/api_token 2>/dev/null",
+        "grep -n api_token api_token 2>/dev/null",
+        "grep --frobnicate api_token src 2>/dev/null",
+        "cat .env 2>/dev/null",
+    ] {
+        assert!(writes_sensitive(command), "{command}");
+    }
+}

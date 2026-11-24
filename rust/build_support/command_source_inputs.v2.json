@@ -686,6 +686,7 @@
       "src/pretool/search/names_only.rs",
       "src/pretool/search/options.rs",
       "src/pretool/search/packaged_file.rs",
+      "src/pretool/search/pattern_operands.rs",
       "src/pretool/search/packaged_file_tests.rs",
       "src/pretool/search/options_link_tests.rs",
       "src/pretool/search/operand.rs",
