@@ -6,11 +6,24 @@ import json
 from typing import Any
 
 RUNTIME_MISSING = "HOL Guard's native runtime is missing, so Guard blocked this hook. Run `hol-guard repair`."
-# The runtime's table (`hook_failure_op::DECIDING_EVENTS`): the events that decide whether something runs.
-_DECIDING_EVENTS = frozenset({"pretooluse", "permissionrequest", "userpromptsubmit"})
+# The events that decide whether something runs, taken from the fail-closed
+# envelope contract (`guard/contracts/hook-fail-closed-envelopes.v1.json`).
+_DECIDING_EVENTS = frozenset(
+    {
+        "pretool",
+        "pretoolcall",
+        "pretooluse",
+        "copilotpermissionrequest",
+        "permissionrequest",
+        "permissionrequestv2",
+        "userpromptsubmit",
+        "userpromptsubmitted",
+    }
+)
+_DECIDING_EVENT_PREFIXES = ("before",)
 
 
-def _outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
+def outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
     """The runtime's stderr table for the moment it cannot be asked.
 
     A deciding event is refused with exit 2. An event that only reports on
@@ -18,8 +31,8 @@ def _outage_stderr_failure(event_name: str) -> tuple[str, str, int]:
     agent from stopping.
     """
 
-    compact = event_name.replace("_", "").replace("-", "").lower()
-    if compact in _DECIDING_EVENTS:
+    compact = event_name.strip().replace("_", "").replace("-", "").lower()
+    if compact in _DECIDING_EVENTS or compact.startswith(_DECIDING_EVENT_PREFIXES):
         return "", RUNTIME_MISSING, 2
     return "", "", 0
 
@@ -71,7 +84,7 @@ def native_stderr_hook_failure(
             deadline_monotonic=deadline,
         )
     except Exception:
-        return _outage_stderr_failure(event_name)
+        return outage_stderr_failure(event_name)
     document, stderr, exit_code = answer.get("document"), answer.get("stderr"), answer.get("exit_code")
     if (
         isinstance(document, str)
@@ -80,7 +93,7 @@ def native_stderr_hook_failure(
         and not isinstance(exit_code, bool)
     ):
         return document, stderr, exit_code
-    return _outage_stderr_failure(event_name)
+        return outage_stderr_failure(event_name)
 
 
 def native_hook_failure_document(
