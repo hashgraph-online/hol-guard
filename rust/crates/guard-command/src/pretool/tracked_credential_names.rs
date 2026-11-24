@@ -261,13 +261,17 @@ pub(in crate::pretool) fn without_tracked_words<'a>(
     cwd: Option<&str>,
     moves: bool,
     refs: &BTreeSet<String>,
+    templates: bool,
 ) -> Option<String> {
     let mut rest = text.to_owned();
     for word in words.into_iter().filter(|word| sensitive_command(word)) {
         if !refs.contains(word.as_str()) {
             operand(word)
                 .filter(|value| !moves || Path::new(value).is_absolute())
-                .filter(|value| resolves_to_tracked(value, cwd))?;
+                .filter(|value| {
+                    resolves_to_tracked(value, cwd)
+                        || (templates && resolves_to_tracked_dotenv_template(value, cwd))
+                })?;
         }
         if let Some(at) = standalone(&rest, word) {
             rest.replace_range(at..at + word.len(), " ");
@@ -286,7 +290,9 @@ pub(in crate::pretool) fn screened<'a>(
 ) -> String {
     let moves = moves_directory(model);
     let refs = crate::pretool::ref_name_words::ref_names(model, cwd, moves);
-    without_tracked_words(&text, words, cwd, moves, &refs).unwrap_or(text)
+    let words: Vec<&String> = words.into_iter().collect();
+    let templates = crate::shell_template_reads::names_template_reads(model, &words, cwd);
+    without_tracked_words(&text, words, cwd, moves, &refs, templates).unwrap_or(text)
 }
 
 /// The text a credential-word screen reads for `segment`: `text`, or the

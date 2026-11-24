@@ -614,6 +614,29 @@ fn evaluate_envelope(
             }
         }
     }
+    // A chain of plain reads of a committed dotenv template is judged as the
+    // same reads of a plain file; only an allow replaces the verdict.
+    if let Some(projected) = signals
+        .command
+        .as_deref()
+        .and_then(|command| crate::shell_template_reads::project(command, context.cwd))
+    {
+        let command = signals.command.as_deref().unwrap_or_default();
+        let projected_payload = payload_with_command(payload, command, &projected);
+        let projected = evaluate_envelope(
+            harness,
+            event,
+            &projected_payload,
+            controls,
+            deadline,
+            context,
+            execution_environment,
+            project_redirects,
+        );
+        if projected.minimum_action == "allow" {
+            return projected;
+        }
+    }
     // An inert environment prefix cannot change how the rest of the command
     // runs, so the command without it carries the whole verdict.
     if let Some(projected) = signals
