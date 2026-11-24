@@ -61,6 +61,79 @@ pub(in crate::pretool) fn scratch_output_target(
         )
 }
 
+/// Makes curl create every missing directory above an `-o` or `-D` file
+/// before writing it. Kept out of `PLAIN_FLAGS` so the bound delivery route,
+/// which admits no file effects, still refuses it.
+pub(super) const CREATE_DIRS: &str = "--create-dirs";
+
+/// Whether the command asks curl to create missing output directories. A
+/// stray copy that is really another option's value only makes the output
+/// check stricter than curl needs, never looser.
+pub(super) fn creates_dirs(arguments: &[String]) -> bool {
+    arguments.iter().any(|argument| argument == CREATE_DIRS)
+}
+
+/// A file `-o` or `-D` may name: a scratch file, or with `--create-dirs` one
+/// whose missing directories curl makes inside a private temporary root.
+pub(super) fn output_target(
+    value: &str,
+    context: crate::pretool::PathContext<'_>,
+    create_dirs: bool,
+) -> bool {
+    if create_dirs {
+        scratch_output_target_creating_dirs(value, context)
+    } else {
+        scratch_output_target(value, context)
+    }
+}
+
+/// A scratch file `curl --create-dirs` may write, making any missing
+/// directory above it first.
+///
+/// A workspace target is already judged without its directories existing, so
+/// it reads the same as without the option. An absolute target is judged at
+/// the first directory curl would make: that name must pass as a fresh
+/// private temporary file, so its parent is the user's own temporary root and
+/// nothing sits at it yet. Every name below it is then a directory curl
+/// creates itself, and each must be a plain name that is not hidden.
+pub(in crate::pretool) fn scratch_output_target_creating_dirs(
+    target: &str,
+    context: crate::pretool::PathContext<'_>,
+) -> bool {
+    if scratch_output_target(target, context) {
+        return true;
+    }
+    let path = Path::new(target);
+    if !path.is_absolute()
+        || target.len() > 4096
+        || !target
+            .chars()
+            .all(|value| value.is_ascii_alphanumeric() || "._-/+@%,=".contains(value))
+        || crate::pretool::sensitive_command(target)
+        || crate::pretool::sensitive_read_path_argument(target)
+        || !path.components().all(|component| match component {
+            Component::RootDir => true,
+            Component::Normal(name) => !name.to_string_lossy().starts_with('.'),
+            _ => false,
+        })
+    {
+        return false;
+    }
+    let mut first_missing = None;
+    for ancestor in path.ancestors().skip(1) {
+        match std::fs::symlink_metadata(ancestor) {
+            Ok(_) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                first_missing = Some(ancestor);
+            }
+            Err(_) => return false,
+        }
+    }
+    first_missing
+        .and_then(Path::to_str)
+        .is_some_and(|directory| scratch_output_target(directory, context))
+}
+
 /// Extensions Windows runs a file by. A fixed list, not the caller's PATHEXT,
 /// which the agent's environment controls. `.js` and `.psm1` are left out:
 /// in a workspace they are source a tool loads, like a `.py` file, not a
