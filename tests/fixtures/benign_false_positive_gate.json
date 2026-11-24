@@ -1602,6 +1602,91 @@
       "expect": "allow"
     },
     {
+      "id": "grep-credential-word-pattern-quiet-errors",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn token_budget src 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-credential-word-pattern-quiet-errors",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n secret_value src 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-quiet-errors-env-operand",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n token_budget .env 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-bare-colour-quiet-errors-env-operand",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep --color token_budget .env 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-rg-files-quiet-errors-env-operand",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --files .env 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "grep-regex-with-an-unbalanced-brace",
       "fix_area": "shell",
       "harnesses": [
@@ -15431,6 +15516,23 @@
       "expect": "allow"
     },
     {
+      "id": "cd-dir-then-file-type-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd dashboard && wc -l package.json; file package.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "cd-dir-bracket-test-then-read",
       "fix_area": "shell",
       "harnesses": [
@@ -25818,6 +25920,38 @@
         "command": "cd ${ORG}/app-portal && git status --short | head -4 && git stash list | head -3 && git worktree list | grep -c \"fix\" || echo \"no fix worktrees remain\" && gh pr list --repo example-org/app-portal --state open --json number,title --jq '.[] | \"\\(.number) \\(.title)\"' | head -4"
       },
       "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "sibling-cd-list-auth-named-source-dirs-then-grep",
+      "fix_area": "queue",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/app-portal && ls src/lib/auth src/lib/session/auth 2>/dev/null | head -40; grep -rln \"SignInButton\\|signIn(\\|useAuth(\" src | head -12"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sibling-cd-list-auth-named-source-dir",
+      "fix_area": "queue",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/app-portal && ls src/lib/auth"
+      },
+      "cwd": "worktree",
       "expect": "allow"
     },
     {

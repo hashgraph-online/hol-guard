@@ -52,7 +52,7 @@ set -eu
 echo "approve-merge: would approve and merge #${1:?pull request number}"
 """
 # Connector cases whose script the fixture allows as a custom extension before the agent starts.
-GRANTED_SCRIPT_CASES = frozenset({"connector-granted-env-script"})
+GRANTED_SCRIPT_CASES = frozenset({"connector-granted-env-script", "connector-granted-script-after-cd"})
 
 LANECTL_SCRIPT = '''#!/usr/bin/env python3
 """lanectl: synthetic loopback-only control CLI for Guard Gauntlet fixtures."""

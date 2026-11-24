@@ -501,6 +501,7 @@ pub(super) fn exact_safe_segment_with_context(
                         && !output_templates.contains(&index)
                         && !search_text.contains(&index)
                         && sensitive_path_argument(argument)
+                        && !committed_key_named_page(model, argument, context.cwd)
                 }))
         || !(segment.environment_names.is_empty()
             || super::inert_environment::inert_prefix(segment)
@@ -845,4 +846,20 @@ pub(super) fn exact_safe_segment_with_context(
         }
         _ => false,
     }
+}
+
+/// Whether `argument` names a page the repository commits whose only
+/// sensitive trait is a key word in its name, such as
+/// `docs/private-key-jwt-client-auth.md`. The path screen matches the name
+/// alone; the index and secret scan a tracked document passes are the proof
+/// that the file is the page its name describes, the same proof a structured
+/// read of it is held to. A relative path in a command that changes directory
+/// may name another file, so only an absolute one is proven there. A key
+/// file, a page in a credential store, and a page holding a key keep the
+/// screen.
+fn committed_key_named_page(model: &CanonicalCommandV1, argument: &str, cwd: Option<&str>) -> bool {
+    !argument.starts_with('-')
+        && (!super::search_scope_tracked::names::moves_directory(model)
+            || std::path::Path::new(argument).is_absolute())
+        && super::search_scope_tracked::names::resolves_to_tracked_key_named_document(argument, cwd)
 }

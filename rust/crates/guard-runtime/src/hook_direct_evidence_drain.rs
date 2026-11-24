@@ -1,5 +1,6 @@
 //! Native drain and acknowledgment of direct hook evidence.
 
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
@@ -82,13 +83,21 @@ pub(crate) fn commit_page(
         return Err("direct_hook_evidence_batch_budget_invalid".to_owned());
     }
     let deadline = Instant::now() + Duration::from_millis(batch.budget_ms);
-    commit_batch(queue, batch.shutdown, deadline, || {
+    let result = commit_batch(queue, batch.shutdown, deadline, || {
         commit_queued(
             &request.guard_home,
             queue,
             store.direct_lane_writer_source().as_deref(),
         )
-    })
+    });
+    if result.is_ok() {
+        crate::daemon_edge::note_resident_hook_counters(
+            Path::new(&request.guard_home),
+            &queue.epoch,
+            &queue.counters.snapshot(),
+        );
+    }
+    result
 }
 
 fn commit_batch(

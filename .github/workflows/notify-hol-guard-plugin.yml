@@ -345,18 +345,34 @@ jobs:
       HOL_GUARD_VERSION: ${{ needs.resolve_publication.outputs.version }}
       SOURCE_SHA: ${{ needs.resolve_publication.outputs.source_sha }}
     steps:
+      - name: Mint plugin repository token
+        id: plugin_app_token
+        if: vars.HOL_RELEASE_APP_CLIENT_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          owner: hashgraph-online
+          repositories: hol-guard-plugin
+          permission-contents: write
+
       - name: Validate dispatch credential
         env:
-          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          APP_TOKEN: ${{ steps.plugin_app_token.outputs.token }}
+          GH_TOKEN: ${{ steps.plugin_app_token.outputs.token || secrets.ACTION_REPO_TOKEN }}
         run: |
           if [ -z "$GH_TOKEN" ]; then
-            echo "ACTION_REPO_TOKEN must be configured to notify the HOL Guard plugin repository." >&2
+            echo "Configure the release App or ACTION_REPO_TOKEN to notify the HOL Guard plugin repository." >&2
             exit 1
+          fi
+          if [ -z "$APP_TOKEN" ]; then
+            echo "::warning::Release App token unavailable for ${TARGET_REPOSITORY}; using ACTION_REPO_TOKEN."
           fi
 
       - name: Dispatch exact published version
         env:
-          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          GH_TOKEN: ${{ steps.plugin_app_token.outputs.token || secrets.ACTION_REPO_TOKEN }}
         run: |
           python3 - <<'PY' > "${RUNNER_TEMP}/hol-guard-plugin-dispatch.json"
           import json

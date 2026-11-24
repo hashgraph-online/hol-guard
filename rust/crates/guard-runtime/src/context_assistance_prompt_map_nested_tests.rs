@@ -441,3 +441,53 @@ def parse_basic_str(src):
         "{text}"
     );
 }
+
+/// A new name written as code, held by no project file, is the longest
+/// defined name it starts with: adding `isRelativeURL`, the agent reads
+/// `isRelative` to reuse it or write the new one like it. A short stem, or
+/// a name some file already holds, is left alone.
+#[test]
+fn a_new_name_finds_the_definition_it_grows_from() {
+    use super::project_tests::{project, prompt_map, ON};
+    let source = "export function isRelative(input: string): boolean {
+  return [\"./\", \"../\"].some((prefix) => input.startsWith(prefix));
+}
+
+export function hasProtocol(input: string): boolean {
+  return /^[a-z]+:/.test(input);
+}
+
+export function isURL(input: string): boolean {
+  return hasProtocol(input);
+}
+";
+    let (home, _project, root) = project(ON, &[("src/utils.ts", source)]);
+    let ask = |prompt| prompt_map(home.path(), &root, prompt).unwrap_or_default();
+    let text = ask("Add a function isRelativeURL that is true for paths without a protocol");
+    assert!(
+        text.contains("src/utils.ts:1-3 export function isRelative("),
+        "{text}"
+    );
+    let text = ask("Add a function isURLList that is true for a list of URLs");
+    assert!(!text.contains("export function isURL("), "{text}");
+}
+
+/// Two names a letter away are no guess, so the stem still decides.
+#[test]
+fn a_tied_misspelling_falls_back_to_the_stem() {
+    use super::project_tests::{project, prompt_map, ON};
+    let source = "export function isRelative(input: string): boolean {
+  return input.startsWith(\"./\");
+}
+
+export const isRelativeURX = (input: string) => isRelative(input);
+export const isRelativeURY = (input: string) => !isRelative(input);
+";
+    let (home, _project, root) = project(ON, &[("src/utils.ts", source)]);
+    let text = prompt_map(home.path(), &root, "Add a function isRelativeURL for links")
+        .unwrap_or_default();
+    assert!(
+        text.contains("src/utils.ts:1-3 export function isRelative("),
+        "{text}"
+    );
+}

@@ -116,3 +116,32 @@ fn a_relative_program_after_a_cd_is_judged_from_that_directory() {
         assert_eq!(inside.minimum_action, "sandbox-required");
     }
 }
+
+#[test]
+fn a_version_manager_release_named_by_its_path_runs_in_the_sandbox() {
+    // The session PATH names no release of this manager; the command starts
+    // one by spelling its path, the way an agent pins a Node version.
+    let root = fixture();
+    let release = root.join(".nvm/versions/node/v22.1.0/bin");
+    std::fs::create_dir_all(&release).unwrap();
+    tool(&release.join("node"), "#!/bin/sh\necho up\n");
+    tool(&root.join("installed/node"), "#!/bin/sh\necho up\n");
+    std::fs::write(root.join("project/tools/check.js"), "console.log(1)\n").unwrap();
+
+    let named = decide(
+        &root,
+        "/usr/bin:/bin",
+        &format!("{} tools/check.js", release.join("node").display()),
+    );
+    let outside = decide(
+        &root,
+        "/usr/bin:/bin",
+        &format!("{} tools/check.js", root.join("installed/node").display()),
+    );
+
+    assert_ne!(outside.minimum_action, "sandbox-required");
+    if cfg!(target_os = "macos") {
+        assert_eq!(named.minimum_action, "sandbox-required", "{named:?}");
+        assert_eq!(outside.reason_code, OUTSIDE_ROOTS);
+    }
+}

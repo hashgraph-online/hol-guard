@@ -77,6 +77,30 @@ def test_a_sequence_after_cd_into_a_sibling_root_peels_like_an_and_list(tmp_path
 
 
 @pytest.mark.parametrize(
+    ("command", "core"),
+    [
+        ("cd ../project-report && npm test; ls", "npm test; ls"),
+        ("cd ../project-report; npm test; ls", "npm test; ls"),
+        (
+            "cd ../project-report && npm test 2>&1 | head -20; npm test 2>&1 | tail -5",
+            "npm test 2>&1 | head -n 20; npm test 2>&1 | tail -n 5",
+        ),
+    ],
+)
+def test_a_sequenced_sibling_list_is_rejoined_with_its_separators(tmp_path: Path, command: str, core: str) -> None:
+    # The classifier contains a sibling root's list joined by `;` as it does one
+    # joined by `&&`. The sink re-authorizes the rejoined runs in that root, with
+    # each separator as issued; refusing the `;` sent the run to the session's
+    # sandbox, which cannot follow the `cd`.
+    home, workspace, worktree = linked_home(tmp_path)
+    assert peel_contained_wrapper(command, workspace=workspace, home=home, cwd=workspace) == (
+        core,
+        worktree.resolve(),
+        None,
+    )
+
+
+@pytest.mark.parametrize(
     "command",
     [
         # Relative targets inside the workspace, below a sibling root, or outside any repository.
@@ -94,9 +118,11 @@ def test_a_sequence_after_cd_into_a_sibling_root_peels_like_an_and_list(tmp_path
         "cd ../project-report && npm test && rm -rf / &",
         "cd ../project-report && npm test && && ls",
         "cd ../project-report && npm test && echo $HOME",
-        "cd ../project-report && npm test; ls",
-        # `;` after the cd only for a sibling root, and nowhere later in the list.
-        "cd ../project-report; npm test; ls",
+        # A `;` list keeps the grammar of an `&&` one.
+        "cd ../project-report && npm test; ls > out.txt",
+        "cd ../project-report; npm test | tail -4 | head -2; ls",
+        "cd ../project-report; npm test; ls || rm -rf /",
+        # `;` after the cd only for a sibling root.
         "cd ../project-report;; npm test",
         "cd web; pytest -q",
         "cd ../loose; pytest -q",

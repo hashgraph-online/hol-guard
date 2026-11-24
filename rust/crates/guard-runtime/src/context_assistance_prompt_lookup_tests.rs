@@ -111,3 +111,29 @@ fn only_a_prompt_that_points_at_code_gets_ranked_excerpts() {
         assert!(anchored(prompt), "{prompt}");
     }
 }
+
+/// A product name with a capital inside it is not code: each of these
+/// matched the changelog, which mentions GitHub and TypeScript in every
+/// release, and sent its first 125 lines. Written as code it still counts.
+#[test]
+fn a_product_name_alone_does_not_point_at_code() {
+    for prompt in [
+        "Add a GitHub Actions job that runs lint on pull requests",
+        "Port the build script from JavaScript to TypeScript",
+        "Does the CLI work on macOS and iOS?",
+        "Run lint on GitHub-hosted runners",
+        "Make the build TypeScript-only",
+        "Does it work on macOS/iOS?",
+    ] {
+        assert!(!anchored(prompt), "{prompt}");
+    }
+    for prompt in [
+        "the `GitHub` class drops redirects",
+        "GitHubClient.fetch drops redirects",
+        "GitHub() should accept a base URL",
+        "GitHub::new drops the token",
+        "api/GitHubClient drops redirects",
+    ] {
+        assert!(anchored(prompt), "{prompt}");
+    }
+}

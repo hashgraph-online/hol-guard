@@ -8,6 +8,8 @@ use paths::without_paths;
 mod no_change;
 #[path = "context_assistance_prompt_paths.rs"]
 mod paths;
+#[path = "context_assistance_prompt_product_names.rs"]
+mod product_names;
 
 pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
@@ -172,10 +174,11 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
 }
 
 /// The prompt's words, each marked when it is written like code: inside
-/// backticks, dotted (`click.Choice`), snake_case, camelCase or called
-/// (`URL(...).normalize()`). A file name gives no words: `named` finds the
-/// file, and its folders and name (`src/app/utils.py`) would map every
-/// definition that mentions them.
+/// backticks, dotted (`click.Choice`), qualified (`Client::new`), snake_case,
+/// camelCase or called (`URL(...).normalize()`). A product name such as
+/// `GitHub`, alone or in `GitHub-hosted` or `macOS/iOS`, is not camelCase
+/// code. A file name gives no words: `named` finds the file, and its folders
+/// and name (`src/app/utils.py`) would map every definition that mentions them.
 fn words(prompt: &str) -> Vec<(String, bool)> {
     let mut found = Vec::new();
     for (span, ticked) in spans(prompt) {
@@ -186,11 +189,15 @@ fn words(prompt: &str) -> Vec<(String, bool)> {
             }
             let end = written.as_ptr() as usize - span.as_ptr() as usize + written.len();
             let called = span[end..].starts_with('(') && !span[end..].starts_with("(s)");
+            let start = end - written.len();
+            let qualified = span[end..].starts_with("::") || span[..start].ends_with("::");
             let shaped = ticked
                 || called
+                || qualified
                 || (written.starts_with('.') && !token.contains('/'))
                 || token.contains(['.', '_'])
-                || camel(token);
+                || (token.split(['-', '/']))
+                    .any(|part| camel(part) && !product_names::product_name(part));
             for piece in token.split(['.', '/']).filter(|piece| !piece.is_empty()) {
                 found.push((piece.to_owned(), shaped));
             }

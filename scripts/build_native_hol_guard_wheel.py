@@ -51,9 +51,11 @@ else:
     )
     from native_wheel_provenance import runtime_capabilities
 
-# The shipped runtime is built with fat LTO and stripped symbols, so 128 MiB is
-# generous for it and still bounds what this build reads into memory.
-_MAX_RUNTIME_BYTES = 128 * 1024 * 1024
+# Published runtimes are stripped. A stable build uses thin LTO and an alpha
+# build skips LTO at a lower workspace opt-level, which puts the static Linux
+# runtime above 128 MiB. 192 MiB admits both and still bounds what this build
+# reads into memory.
+_MAX_RUNTIME_BYTES = 192 * 1024 * 1024
 # A runtime built with the Gauntlet development profile carries every workspace
 # crate at opt-level 0 with per-crate codegen, which on macOS arm64 is several
 # times the shipped size. Those wheels are never published, so they may name a
