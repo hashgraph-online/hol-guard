@@ -130,7 +130,11 @@ return encode(text).replace(SPACE_RE, \"%20\");\n}\n";
     let utils =
         "import { encodePath } from \"./encoding\";\n\nexport function withBase(input: string, \
 base: string): string {\n  return encodePath(base + input);\n}\n";
-    let files = [("src/encoding.ts", encoding), ("src/utils.ts", utils)];
+    let files = [
+        ("src/encoding.ts", encoding),
+        ("src/utils.ts", utils),
+        ("src/utility.ts", utils),
+    ];
     let (home, _project, root) = project(ON, &files);
     let prompt = "Encoding a path with spaces gives %2520 instead of %20";
     let text = prompt_map(home.path(), &root, prompt).unwrap_or_default();
@@ -144,4 +148,10 @@ base: string): string {\n  return encodePath(base + input);\n}\n";
     // A grab-bag file is never the topic, even when the report names it.
     let generic = prompt_map(home.path(), &root, "Utils behaves incorrectly on Windows");
     assert!(generic.is_none_or(|text| !text.contains("src/utils.ts:")));
+    let generic = prompt_map(
+        home.path(),
+        &root,
+        "Utilities behave incorrectly on Windows",
+    );
+    assert!(generic.is_none_or(|text| !text.contains("src/utility.ts:")));
 }
