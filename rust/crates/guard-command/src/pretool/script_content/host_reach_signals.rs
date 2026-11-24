@@ -32,14 +32,14 @@ static SIGNAL_CALL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\b(\w+)\s*\.\s*(?:kill|killpg|pthread_kill)\b").unwrap());
 
 /// `os` or `signal` reached as an attribute of another module
-/// (`subprocess.os`, `__import__('subprocess').os`) or imported from one
+/// (`subprocess.os`, `tempfile._os`, `__import__('subprocess').os`) or imported from one
 /// under a new name (`from subprocess import os as p`). The name it is
 /// bound to is not one the signal screen knows, so any signal method call
 /// then counts.
 static SIGNAL_MODULE_HANDLE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
-        r"(?:(?:\b(?P<owner>\w+)|[)\]])\s*\.\s*(?:os|posix|nt|signal|_signal)\b",
-        r"|\bimport\b[^\n;#]*\b(?:os|posix|nt|signal|_signal)\s+as\b)",
+        r"(?:(?:\b(?P<owner>\w+)|[)\]])\s*\.\s*(?:os|_os|posix|nt|signal|_signal)\b",
+        r"|\bimport\b[^\n;#]*\b(?:os|_os|posix|nt|signal|_signal)\s+as\b)",
     ))
     .unwrap()
 });
@@ -60,7 +60,10 @@ fn signal_receivers(code: &str) -> BTreeSet<&str> {
         for item in body.split(',') {
             let parts: Vec<&str> = item.split_whitespace().collect();
             if let [module, "as", alias] = parts.as_slice() {
-                if matches!(*module, "os" | "signal" | "_signal" | "posix" | "nt") {
+                if matches!(
+                    *module,
+                    "os" | "_os" | "signal" | "_signal" | "posix" | "nt"
+                ) {
                     names.insert(alias);
                 }
             }
@@ -77,7 +80,10 @@ pub(super) fn signals_processes(code: &str) -> bool {
     }
     let handle = SIGNAL_MODULE_HANDLE.captures_iter(code).any(|found| {
         found.name("owner").is_none_or(|owner| {
-            !matches!(owner.as_str(), "os" | "posix" | "nt" | "signal" | "_signal")
+            !matches!(
+                owner.as_str(),
+                "os" | "_os" | "posix" | "nt" | "signal" | "_signal"
+            )
         })
     });
     if handle && ANY_SIGNAL_CALL.is_match(code) {
