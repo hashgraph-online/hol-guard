@@ -54,6 +54,18 @@ pub(super) fn in_git_command(
     spans: &[ShellCommandSubstitution],
     start: usize,
 ) -> bool {
+    command_before(chars, spans, start)
+        .is_some_and(|segment| segment.trim_start().starts_with("git "))
+}
+
+/// The text of the command that holds the substitution at `start`, from the
+/// operator that began it up to the substitution, or `None` inside single
+/// quotes, where the text is not a substitution at all.
+pub(super) fn command_before(
+    chars: &[char],
+    spans: &[ShellCommandSubstitution],
+    start: usize,
+) -> Option<String> {
     let (mut single, mut double, mut escaped) = (false, false, false);
     let mut begins = 0usize;
     for (at, &character) in chars.iter().enumerate().take(start) {
@@ -72,13 +84,12 @@ pub(super) fn in_git_command(
             _ => {}
         }
     }
-    // Inside double quotes the substitution is still Git's argument; inside
-    // single quotes it is not a substitution at all.
+    // Inside double quotes the substitution is still the command's argument;
+    // inside single quotes it is not a substitution at all.
     if single {
-        return false;
+        return None;
     }
-    let segment: String = chars[begins..start].iter().collect();
-    segment.trim_start().starts_with("git ")
+    Some(chars[begins..start].iter().collect())
 }
 
 /// Whether the substitution is a word of its own, so that an empty lookup

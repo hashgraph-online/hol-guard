@@ -161,6 +161,11 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         {
             return None;
         }
+        if value == line_number::LINE_VALUE
+            && !line_number::opens_sed_range(&masked, &substitutions, substitution)
+        {
+            return None;
+        }
         if !judged.contains(&judged_text) {
             judged.push(judged_text);
         }
@@ -413,7 +418,7 @@ fn patterned_word(chars: &[char], substitution: &ShellCommandSubstitution) -> bo
 /// The stand-in for a substitution body that is one simple value-producing
 /// command with literal arguments.
 fn stand_in(body: &str) -> Option<&'static str> {
-    if let Some(value) = git_value::stand_in(body) {
+    if let Some(value) = git_value::stand_in(body).or_else(|| line_number::stand_in(body)) {
         return Some(value);
     }
     if body.len() > MAX_BODY_CHARS
@@ -491,6 +496,9 @@ mod commit_message;
 
 #[path = "chain_literals_git_value.rs"]
 mod git_value;
+
+#[path = "chain_literals_line_number.rs"]
+mod line_number;
 
 #[path = "chain_literals_temp_cd.rs"]
 pub(crate) mod temp_cd;
