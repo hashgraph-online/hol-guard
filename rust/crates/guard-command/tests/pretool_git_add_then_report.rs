@@ -95,7 +95,10 @@ fn allowed_add_then_reads_keeps_its_allow_with_a_trailing_report() {
         // The same chain without the report was already allowed; both
         // spellings keep one answer.
         let bare = command.rsplit_once(';').unwrap().0.to_owned();
-        assert_eq!(evaluate(&s, "codex", &bare, &controls).minimum_action, "allow");
+        assert_eq!(
+            evaluate(&s, "codex", &bare, &controls).minimum_action,
+            "allow"
+        );
     }
 }
 
