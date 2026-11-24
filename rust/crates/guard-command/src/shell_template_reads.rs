@@ -99,7 +99,12 @@ pub(crate) fn project(command: &str, cwd: Option<&str>) -> Option<String> {
             .segments
             .iter()
             .flat_map(|segment| segment.arguments.clone())
-            .chain(model.redirects.iter().map(|redirect| redirect.target.clone()))
+            .chain(
+                model
+                    .redirects
+                    .iter()
+                    .map(|redirect| redirect.target.clone()),
+            )
             .collect()
     };
     let original = words(command);
