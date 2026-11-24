@@ -875,3 +875,21 @@ def test_a_declared_prompt_hook_the_install_never_registered_is_a_failure() -> N
     )
     assert result["cases"] == []
     assert any("no runnable UserPromptSubmit hook" in failure for failure in result["failures"])
+
+
+@pytest.mark.parametrize("first_exit,second_exit,expected", [(4, 0, False), (0, 4, False), (0, 0, True)])
+def test_aged_pass_requires_both_installations_to_succeed(tmp_path, monkeypatch, first_exit, second_exit, expected):
+    responses = iter(
+        {"harness": "zcode", "exit_code": code, "payload": {}, "stderr_tail": ""}
+        for code in (first_exit, second_exit)
+    )
+    monkeypatch.setattr(installed_lane, "install_harness", lambda *args, **kwargs: next(responses))
+    monkeypatch.setattr(installed_lane, "age_home", lambda home: {})
+    monkeypatch.setattr(installed_lane, "assess_harness", lambda *args: {})
+    monkeypatch.setattr(installed_lane, "assess_aged", lambda *args: {"failures": [], "passed": True})
+    evidence = installed_lane.aged_pass(
+        None, ["zcode"], {"harnesses": {"zcode": {"config": "config.json"}}}, root=tmp_path
+    )
+    assert evidence["first_install"] == [first_exit]
+    assert evidence["second_install"] == [second_exit]
+    assert evidence["passed"] is expected

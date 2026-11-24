@@ -201,6 +201,11 @@ def aged_pass(
     assessment["first_install"] = [entry["exit_code"] for entry in first]
     assessment["second_install"] = [entry["exit_code"] for entry in second]
     assessment["ageing"] = ageing
+    for entry in first:
+        if entry["exit_code"] != 0:
+            assessment["failures"].append(
+                f"{entry['harness']}: initial install before ageing exited {entry['exit_code']}: {entry['stderr_tail']}"
+            )
     for entry in second:
         if entry["exit_code"] != 0:
             assessment["failures"].append(
