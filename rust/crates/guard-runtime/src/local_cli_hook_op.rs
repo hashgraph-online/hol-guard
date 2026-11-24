@@ -36,6 +36,7 @@ use crate::native_exact_action_op::runner_bin::runner_split;
 
 #[path = "local_cli_hook_op_compound.rs"]
 mod compound;
+pub(crate) use compound::cd_then_launch;
 
 const IDENTIFY_BUDGET_MS: u64 = 2_000;
 const ROOT_COMMAND_ID: &str = "root";
@@ -157,7 +158,11 @@ fn refined(request: &LocalCliHookRequestV1, package: &Package) -> Refined {
             ..Refined::default()
         };
     }
-    let answer = grant(request, package);
+    let answer = match grant(request, package) {
+        Ok((None, None, _)) => compound::grant_after_cd(request)
+            .unwrap_or_else(|| Ok((None, None, Value::Null))),
+        answer => answer,
+    };
     // No single CLI launch: a compound command, or one that launches none.
     let no_single_launch = matches!(answer, Ok((None, None, _)));
     let refined = contained::refine(request, answer, || {

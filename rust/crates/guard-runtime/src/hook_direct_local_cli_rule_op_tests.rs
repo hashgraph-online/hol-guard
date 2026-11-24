@@ -284,3 +284,42 @@ fn the_launch_resolves_against_the_daemon_environment_it_was_sent() {
         RuleVerdict::Blocked(case.name.clone())
     );
 }
+
+#[test]
+fn a_cli_run_after_cd_reads_its_own_grant() {
+    let read = |case: &Case, command: &str, reason: &str| {
+        let parent = Path::new(&case.workspace).parent().unwrap().to_str().unwrap().to_owned();
+        let mut request = case.request("review", command, review(reason));
+        request.payload.insert("cwd".to_owned(), json!(parent));
+        review_verdict(&request)
+    };
+    let allowed = Case::new("after-cd", Some("allowed"));
+    let ws = allowed.workspace.clone();
+    let unrecognised = "native_command_review_required";
+    assert_eq!(
+        read(&allowed, &format!("cd {ws} && npm run build"), unrecognised),
+        RuleVerdict::Allowed
+    );
+    // Any other step, a pipe, a redirect or `;` keeps the review.
+    for command in [
+        format!("cd {ws} && npm run build | tail -5"),
+        format!("cd {ws} && npm run build && rm -rf dist"),
+        format!("cd {ws} && npm run build > build.log"),
+        format!("cd {ws} ; npm run build"),
+        // Without the cd the parent launches nothing the user allowed.
+        "npm run build".to_owned(),
+    ] {
+        assert_eq!(read(&allowed, &command, unrecognised), RuleVerdict::None, "{command}");
+    }
+    // An allow lifts only a review due to non-recognition.
+    assert_eq!(
+        read(&allowed, &format!("cd {ws} && npm run build"), "network_target"),
+        RuleVerdict::None
+    );
+    let blocked = Case::new("after-cd-block", Some("blocked"));
+    let ws = blocked.workspace.clone();
+    assert_eq!(
+        read(&blocked, &format!("cd {ws} && npm run build"), "network_target"),
+        RuleVerdict::Blocked(blocked.name.clone())
+    );
+}
