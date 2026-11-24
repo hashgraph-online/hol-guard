@@ -83,14 +83,20 @@ fn screened(path: &Path, root: &Path, is_file: bool, packaged: fn(&Path) -> bool
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
-    // A file's key-named document is screened by `credential_named_path`
-    // below, which only the committed-document proof clears.
-    let family = if is_file {
-        guard_secure_fs::sensitive_path_family_beside_name_proof
+    // A file named for a key it documents, such as
+    // `private-key-jwt-client-auth.md`, clears the family screen only through
+    // the committed-document proof. The fixture-directory relief below does
+    // not reach it: an untracked key-named file under `fixtures/` keeps its
+    // review.
+    let family_hit = if is_file
+        && guard_secure_fs::sensitive_path_family_beside_name_proof(path).is_none()
+    {
+        guard_secure_fs::sensitive_path_family(path).is_some()
+            && !crate::pretool::search_scope_tracked::names::committed_document(path)
     } else {
-        guard_secure_fs::sensitive_path_family
+        guard_secure_fs::sensitive_path_family(path).is_some()
     };
-    if family(path).is_some()
+    if family_hit
         || (name.starts_with('.')
             && !hidden_allowed(name)
             && !package_store_bin(path, name)
@@ -177,5 +183,24 @@ mod tests {
         for name in [".env", ".npmrc", ".netrc", "server.key", ".secret-notes"] {
             assert!(!screened(&root.join(name), root, true, |_| true), "{name}");
         }
+    }
+
+    /// A key-named document clears the family screen only as a committed
+    /// document. A test-data directory, which clears other credential names,
+    /// and the ownership proof do not reach it.
+    #[test]
+    fn a_key_named_document_needs_the_committed_proof_even_under_fixtures() {
+        let root = Path::new("/nonexistent-walk-root/app");
+        for relative in [
+            "tests/fixtures/private-key-jwt-client-auth.md",
+            "fixtures/wallet_key.json",
+            "__tests__/private_key.yaml",
+        ] {
+            let path = root.join(relative);
+            assert!(!screened(&path, root, true, |_| false), "{relative}");
+            assert!(!screened(&path, root, true, |_| true), "{relative}");
+        }
+        let neighbour = root.join("tests/fixtures/credentials.json");
+        assert!(screened(&neighbour, root, true, |_| false));
     }
 }
