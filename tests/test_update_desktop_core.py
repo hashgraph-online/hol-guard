@@ -584,9 +584,11 @@ def test_refine_offers_a_live_alpha_on_the_next_minor() -> None:
     assert refined["update_available"] is True
     assert refined["status"] == "stale"
 
+    # A retracted alpha drops out of the candidates; the index check reports
+    # the stable it still serves.
     retracted = refine_desktop_version_check(
         "3.61.0",
-        check,
+        {**check, "latest_version": "3.61.0", "status": "current", "update_available": False},
         candidates=["3.62.0a1", "3.61.0"],
         include_alpha=True,
         alpha_is_live=lambda _version: False,
