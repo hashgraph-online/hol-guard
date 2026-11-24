@@ -205,10 +205,47 @@ def test_every_event_kind_answers_from_the_shared_contract() -> None:
     }
 
 
+def test_guard_home_uses_the_rust_hook_failure_renderer(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen: dict[str, object] = {}
+
+    def native_failure(*_args: object, **kwargs: object) -> tuple[str, int]:
+        seen.update(kwargs)
+        return '{"decision":"deny","reason_code":"native_hook_worker_unavailable"}', 2
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_failure_bridge.native_hook_failure",
+        native_failure,
+    )
+    assert hook_fail_closed.fail_closed_response("codex", "PreToolUse", guard_home=tmp_path) == {
+        "decision": "deny",
+        "reason_code": "native_hook_worker_unavailable",
+    }
+    assert seen["reason_code"] == "native_hook_render_unavailable"
+
+
+def test_guard_home_preserves_default_prompt_guidance_for_native_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen: dict[str, object] = {}
+
+    def native_failure(*args: object, **kwargs: object) -> tuple[str, int]:
+        seen["args"] = args
+        seen.update(kwargs)
+        return '{"behavior":"deny"}', 2
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_failure_bridge.native_hook_failure",
+        native_failure,
+    )
+    assert hook_fail_closed.fail_closed_response(
+        "copilot", "userPromptSubmitted", guard_home=tmp_path
+    ) == {"behavior": "deny"}
+    assert seen["args"] == ("copilot", "userPromptSubmitted", hook_fail_closed.PROMPT_UNAVAILABLE_REASON)
+
+
 def test_fail_closed_response_uses_the_native_contract_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        hook_fail_closed,
-        "native_render_fail_closed_response",
+        "codex_plugin_scanner.guard.hook_failure_bridge.native_hook_failure_document",
         lambda *args, **kwargs: {"from": "rust", "policy_action": "block"},
     )
     assert hook_fail_closed.fail_closed_response("pi", "PreToolUse", guard_home=_HOME) == {

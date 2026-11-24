@@ -32,7 +32,6 @@ const POLL_INTERVAL: Duration = Duration::from_millis(200);
 /// Only these events decide whether something runs. The rest report on work
 /// that already happened or on the session, so an answer that cannot be
 /// read leaves them silent: exit 2 on `Stop` would keep the agent running.
-const DECIDING_EVENTS: [&str; 3] = ["pretooluse", "permissionrequest", "userpromptsubmit"];
 const UNAVAILABLE_REASON: &str = "HOL Guard blocked this action.";
 
 /// What Muse reads for the daemon's `response`: the document on stdout,
@@ -82,8 +81,7 @@ pub(crate) fn render_muse_document(
 
 /// Refuse an unreadable answer to a deciding call with Muse's exit 2 and stderr.
 fn unavailable(event_name: &str) -> Rendered {
-    let compact = muse::compact_event(event_name);
-    if !DECIDING_EVENTS.contains(&compact.as_str()) {
+    if !crate::hook_failure_op::is_deciding_event(event_name) {
         return Rendered {
             stdout: String::new(),
             stderr: String::new(),
