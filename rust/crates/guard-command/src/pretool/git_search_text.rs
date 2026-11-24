@@ -92,17 +92,57 @@ pub(super) fn segment_without_patterns(segment: &CommandSegmentV1) -> Option<Str
     )
 }
 
+/// Where the subcommand sits after Git's global options, or `None` when a
+/// global option this table does not know comes first. Git reads the value of
+/// `--attr-source` or `--config-env` from the next token, so `git
+/// --attr-source commit log` runs `log`; an option whose arity is unknown may
+/// do the same, and the subcommand after it cannot be known.
 pub(super) fn subcommand_position(arguments: &[String]) -> Option<usize> {
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
-        match argument.as_str() {
-            "-C" | "-c" | "--git-dir" | "--work-tree" | "--namespace" => index += 2,
-            value if value.starts_with('-') => index += 1,
-            _ => return Some(index),
+        let value = argument.as_str();
+        if GLOBAL_OPTIONS_WITH_VALUE.contains(&value) {
+            index += 2;
+        } else if GLOBAL_FLAGS.contains(&value) || (value.starts_with("--") && value.contains('='))
+        {
+            index += 1;
+        } else if value.starts_with('-') {
+            return None;
+        } else {
+            return Some(index);
         }
     }
     None
 }
+
+/// Git global options that read the next token as their value.
+const GLOBAL_OPTIONS_WITH_VALUE: &[&str] = &[
+    "-C",
+    "-c",
+    "--attr-source",
+    "--config-env",
+    "--git-dir",
+    "--namespace",
+    "--super-prefix",
+    "--work-tree",
+];
+
+/// Git global options that take no value.
+const GLOBAL_FLAGS: &[&str] = &[
+    "-P",
+    "-p",
+    "--bare",
+    "--glob-pathspecs",
+    "--icase-pathspecs",
+    "--literal-pathspecs",
+    "--no-advice",
+    "--no-lazy-fetch",
+    "--no-optional-locks",
+    "--no-pager",
+    "--no-replace-objects",
+    "--noglob-pathspecs",
+    "--paginate",
+];
 
 /// Everything before the revisions and pathspecs of a `git grep` inside the
 /// closed grammar: closed options, counts and patterns.

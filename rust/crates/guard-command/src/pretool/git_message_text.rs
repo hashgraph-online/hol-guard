@@ -51,10 +51,12 @@ fn message_positions(arguments: &[String]) -> Option<Vec<usize>> {
     let subcommand = arguments[start].as_str();
     // `git merge -s` is `--strategy` and reads the next token; for commit
     // and tag `-s` is a sign-off or signature flag that takes none.
-    let (flags_without_value, short_options_with_value) = if subcommand == "merge" {
-        (MERGE_FLAGS_WITHOUT_VALUE, MERGE_SHORT_OPTIONS_WITH_VALUE)
-    } else {
-        (FLAGS_WITHOUT_VALUE, SHORT_OPTIONS_WITH_VALUE)
+    // `git stash push -u` includes untracked files and takes no value, where
+    // `git tag -u` names the signing key and reads the next token.
+    let (flags_without_value, short_options_with_value) = match subcommand {
+        "merge" => (MERGE_FLAGS_WITHOUT_VALUE, MERGE_SHORT_OPTIONS_WITH_VALUE),
+        "stash" => (STASH_FLAGS_WITHOUT_VALUE, ""),
+        _ => (FLAGS_WITHOUT_VALUE, SHORT_OPTIONS_WITH_VALUE),
     };
     match subcommand {
         "commit" | "tag" | "merge" => {}
@@ -150,6 +152,10 @@ const MERGE_FLAGS_WITHOUT_VALUE: &str = "aefnqv";
 
 /// `git merge`'s short options that read the next token as their value.
 const MERGE_SHORT_OPTIONS_WITH_VALUE: &str = "CcFstuX";
+
+/// `git stash push`'s short flags. None of them takes a value, so in
+/// `-u -m -m` the second `-m` is the message.
+const STASH_FLAGS_WITHOUT_VALUE: &str = "akpqSu";
 
 /// Long options of those commands, spelled in full, that take no value. A
 /// long option missing from both tables, an abbreviation included, leaves

@@ -45,6 +45,35 @@ fn an_abbreviated_or_unknown_long_option_leaves_the_message_unknown() {
 }
 
 #[test]
+fn a_global_option_value_is_not_the_subcommand() {
+    // Git reads `commit` as the tree-ish of `--attr-source` and runs `show`.
+    assert_eq!(
+        positions("--attr-source commit show -m HEAD:.env"),
+        Some(vec![])
+    );
+    assert_eq!(
+        positions("--config-env commit log -p -m .env"),
+        Some(vec![])
+    );
+    assert_eq!(
+        positions("--attr-source HEAD commit -m note"),
+        Some(vec![4])
+    );
+    // An unknown global option may read the next token too.
+    assert_eq!(positions("--unknown commit -m .env"), None);
+    assert_eq!(positions("--no-pager commit -m note"), Some(vec![3]));
+    assert_eq!(positions("--git-dir=.git commit -m note"), Some(vec![3]));
+}
+
+#[test]
+fn stash_push_flags_take_no_value() {
+    assert_eq!(positions("stash push -u -m -m .env"), Some(vec![4]));
+    assert_eq!(positions("stash push -u -m note"), Some(vec![4]));
+    assert_eq!(positions("stash push -um note"), Some(vec![3]));
+    assert_eq!(positions("tag -u key -m note v1"), Some(vec![4]));
+}
+
+#[test]
 fn merge_reads_s_as_a_strategy_that_takes_the_next_token() {
     assert_eq!(positions("merge -s -m note"), Some(vec![]));
     assert_eq!(positions("merge -sm note"), Some(vec![]));
