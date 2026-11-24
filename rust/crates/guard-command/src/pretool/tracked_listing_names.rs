@@ -18,6 +18,18 @@ use std::path::{Component, Path};
 /// Entries one listed directory may hold for the proof to run.
 const MAX_ENTRIES: usize = 512;
 
+/// Characters the shell expands before `ls` sees its operand.
+const SHELL_EXPANDED: &[char] = &['~', '$', '`', '*', '?', '[', ']', '{', '}', '\\'];
+
+/// How much of a directory the repository must commit.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Entries {
+    /// Every entry the directory holds.
+    All,
+    /// At least one name below it, or the directory is the repository root.
+    Some,
+}
+
 /// Whether every segment of `model` is a plain `ls` that lists no tree
 /// below its operands.
 pub(in crate::pretool) fn listing_only(model: &CanonicalCommandV1) -> bool {
@@ -44,6 +56,11 @@ fn recursive(argument: &str) -> bool {
 /// directory of the session's repository family whose every entry the
 /// repository tracks, or a path under such a family that does not exist.
 pub(in crate::pretool) fn resolves_to_listed_directory(value: &str, cwd: Option<&str>) -> bool {
+    // The shell, not `ls`, expands `~`, `$NAME`, braces and globs, so an
+    // operand spelling one names something other than the literal path.
+    if value.is_empty() || value.contains(|c| SHELL_EXPANDED.contains(&c)) {
+        return false;
+    }
     let supplied = Path::new(value);
     if supplied
         .components()
@@ -60,19 +77,33 @@ pub(in crate::pretool) fn resolves_to_listed_directory(value: &str, cwd: Option<
         return false;
     };
     match std::fs::canonicalize(&target) {
-        Ok(canonical) => in_family(&workspace, &canonical) && committed_directory(&canonical, true),
+        Ok(canonical) => {
+            in_family(&workspace, &canonical) && committed_directory(&canonical, Entries::All)
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            // The nearest directory that exists must itself be a checkout
-            // directory the listing proof would accept as a place, though
-            // its entries need not all be committed: nothing under it is
-            // listed.
-            target
+            // The nearest directory that exists must be one the repository
+            // commits names in, though its entries need not all be
+            // committed: nothing under it is listed. The missing part must
+            // not spell a hidden name, which keeps its review everywhere.
+            let Some(existing) = target
                 .ancestors()
                 .skip(1)
                 .find(|ancestor| std::fs::symlink_metadata(ancestor).is_ok())
-                .and_then(|ancestor| std::fs::canonicalize(ancestor).ok())
-                .is_some_and(|ancestor| {
-                    in_family(&workspace, &ancestor) && committed_directory(&ancestor, false)
+            else {
+                return false;
+            };
+            let Ok(missing) = target.strip_prefix(existing) else {
+                return false;
+            };
+            let hidden = missing.components().any(|part| {
+                part.as_os_str()
+                    .to_str()
+                    .is_none_or(|part| part.starts_with('.'))
+            });
+            !hidden
+                && std::fs::canonicalize(existing).is_ok_and(|ancestor| {
+                    in_family(&workspace, &ancestor)
+                        && committed_directory(&ancestor, Entries::Some)
                 })
         }
         Err(_) => false,
@@ -93,9 +124,9 @@ fn in_family(workspace: &Path, path: &Path) -> bool {
 }
 
 /// Whether `directory` is a real directory below the root of the repository
-/// holding it, outside `.git` and every credential store, and, when
-/// `entries` is set, whether that repository tracks every entry it holds.
-fn committed_directory(directory: &Path, entries: bool) -> bool {
+/// holding it, outside `.git` and every credential store, whose entries the
+/// repository commits as `entries` asks.
+fn committed_directory(directory: &Path, entries: Entries) -> bool {
     let Ok(metadata) = std::fs::symlink_metadata(directory) else {
         return false;
     };
@@ -131,14 +162,14 @@ fn committed_directory(directory: &Path, entries: bool) -> bool {
     {
         return false;
     }
-    if !entries {
-        return true;
-    }
     let Some(prefix) = relative
         .components()
         .map(|part| part.as_os_str().to_str())
         .collect::<Option<Vec<_>>>()
-        .map(|parts| format!("{}/", parts.join("/")).into_bytes())
+        .map(|parts| match parts.is_empty() {
+            true => Vec::new(),
+            false => format!("{}/", parts.join("/")).into_bytes(),
+        })
     else {
         return false;
     };
@@ -151,6 +182,9 @@ fn committed_directory(directory: &Path, entries: bool) -> bool {
     else {
         return false;
     };
+    if entries == Entries::Some {
+        return index.iter().any(|name| name.starts_with(prefix.as_slice()));
+    }
     // The first component below the directory of every tracked name in it.
     let committed: HashSet<&[u8]> = index
         .iter()

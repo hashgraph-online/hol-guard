@@ -121,4 +121,20 @@ fn listing_that_could_show_more_than_committed_names_keeps_its_review() {
         let (verdict, reason) = action(&s, &s.primary, &command);
         assert_ne!(verdict, "allow", "{reason}: {command}");
     }
+    // The shell expands these before `ls` runs, so the literal spelling
+    // missing from the checkout says nothing about what is listed; a hidden
+    // name keeps its review even where it does not exist; and a folder the
+    // repository commits nothing in is not one of its own.
+    std::fs::create_dir_all(s.worktree.join("scratch")).unwrap();
+    for command in [
+        "ls ~/.ssh".to_string(),
+        "ls \"$HOME/.ssh\"".to_string(),
+        "ls app/{secrets,keys}".to_string(),
+        "ls 'app/(group)/topics/secret-*'".to_string(),
+        format!("ls \"{w}/app/(group)/topics/.secret-cache\""),
+        format!("ls \"{w}/scratch/secret-notes\""),
+    ] {
+        let (verdict, reason) = action(&s, &s.worktree, &command);
+        assert_ne!(verdict, "allow", "{reason}: {command}");
+    }
 }
