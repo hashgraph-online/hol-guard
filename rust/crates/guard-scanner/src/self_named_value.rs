@@ -4,8 +4,10 @@
 //! `refresh_token="refresh-token-1"` or `password: "password"`. The value is
 //! made of the words already in the field name plus at most a short counter,
 //! so it carries nothing an attacker could not read from the name itself.
-//! Treating those reads as secret output stopped agents opening ordinary test
-//! setup files.
+//! Usage examples in doc comments do the same with another credential word,
+//! as in `withQuery(url, { token: "secret" })`. Treating those reads as secret
+//! output stopped agents opening ordinary test setup files, and kept whole
+//! source files out of the context an agent was given.
 
 /// Words that make an assignment name a credential field.
 const CREDENTIAL_WORDS: &[&str] = &[
@@ -65,6 +67,9 @@ pub(crate) fn is_self_named(matched: &str, tail: &str) -> bool {
     let mut counters = 0_usize;
     let mut qualifiers = 0_usize;
     let mut named = false;
+    // A credential word the field name lacks (`{ token: "secret" }`) is a
+    // stand-in only bare: with a counter, `Secret123` is a chosen password.
+    let mut foreign = false;
     for word in words(value) {
         if word.chars().all(|character| character.is_ascii_digit()) {
             counters += 1;
@@ -75,7 +80,10 @@ pub(crate) fn is_self_named(matched: &str, tail: &str) -> bool {
             }
             continue;
         }
-        if !name_words.contains(&word) {
+        // A bare credential word is a stand-in even when the field names
+        // another one: `{ token: "secret" }` in a usage example says no more
+        // than `{ token: "token" }` does.
+        if !name_words.contains(&word) && !CREDENTIAL_WORDS.contains(&word.as_str()) {
             // Qualifiers lead: `correct-password` describes which stand-in a
             // test means, while `password-old` carries a word of its own.
             if named || !QUALIFIER_WORDS.contains(&word.as_str()) {
@@ -88,16 +96,21 @@ pub(crate) fn is_self_named(matched: &str, tail: &str) -> bool {
             continue;
         }
         named = true;
+        foreign |= !name_words.contains(&word);
         credential_word |= CREDENTIAL_WORDS.contains(&word.as_str());
     }
-    credential_word
+    credential_word && !(foreign && counters > 0)
 }
 
 /// Whether `tail` begins where the assigned value ends. A closing quote ends
 /// the value before `,` `}` `)` `]` or `;`. An unquoted value stops at those
 /// characters only as delimiters: `PASSWORD=password,q7Lm` in an env file
 /// assigns everything up to the space, so a delimiter followed directly by
-/// more value text does not end it.
+/// more value text does not end it. An unquoted value also ends at the quote
+/// closing the string it sits in, as in `"/foo?page=a&token=secret"`, when
+/// that quote ends the line or comes before a delimiter that ends the value
+/// too. A quote followed by anything else may open more value
+/// (`TOKEN=token"$more"`, `TOKEN=secret",more"`).
 fn ends_value(tail: &str, quoted: bool) -> bool {
     let delimiter = |character: char| matches!(character, ',' | '}' | ')' | ']' | ';');
     let mut rest = tail.chars();
@@ -110,6 +123,13 @@ fn ends_value(tail: &str, quoted: bool) -> bool {
                     .next()
                     .is_none_or(|after| after.is_whitespace() || delimiter(after))
         }
+        Some('"' | '\'') if !quoted => match rest.next() {
+            None | Some('\r' | '\n') => true,
+            Some(after) if delimiter(after) => rest
+                .next()
+                .is_none_or(|next| next.is_whitespace() || delimiter(next)),
+            Some(_) => false,
+        },
         Some(_) => false,
     }
 }
@@ -264,5 +284,39 @@ mod tests {
         assert!(credential_assignment(&format!(
             "PASSWORD=password,{visible}\n"
         )));
+    }
+
+    #[test]
+    fn a_bare_credential_word_in_a_usage_example_is_a_stand_in() {
+        for text in [
+            " * withQuery(\"/foo?page=a\", { token: \"secret\" }); // \"/foo?page=a&token=secret\"\n",
+            "api_key = \"secret-token\"\n",
+            "auth({ password: 'secret' })\n",
+            "PASSWORD=token\n",
+            "fetch(\"/api?token=secret\", options);\n",
+            "TOKEN=secret\"),\n",
+        ] {
+            assert!(!credential_assignment(text), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_credential_word_with_more_value_stays_flagged() {
+        // Built at runtime so secret scanners do not read the test source as a leak.
+        let visible = concat!("Kq7xY2mN", "9pL4vR8tW3sZ");
+        for text in [
+            format!("{{ token: \"secret-{visible}\" }}\n"),
+            format!("TOKEN=secret\"{visible}\"\n"),
+            format!("url = \"/foo?token=secret\"{visible}\n"),
+            String::from("TOKEN=secret\"$MORE\"\n"),
+            String::from("password: \"MySecret1\"\n"),
+            String::from("password: \"Secret123\"\n"),
+            String::from("PASSWORD=Token2024\n"),
+            String::from("api_key = \"secret-1\"\n"),
+            format!("TOKEN=secret\",{visible}\"\n"),
+            format!("TOKEN=secret';{visible}\n"),
+        ] {
+            assert!(credential_assignment(&text), "{text}");
+        }
     }
 }
