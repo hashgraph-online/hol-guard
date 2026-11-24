@@ -37,6 +37,17 @@ pub(super) fn expand_glob_matches_strict(
     expand(value, context, Mode::STRICT, Screen::Contents)
 }
 
+/// [`expand_glob_matches_strict`] for a command that prints matched names and
+/// never their contents. A last component led by a literal `.` then stands for
+/// hidden names `ls -a` already prints, so an empty result also proves that
+/// `ls .eslintrc*` probes for an optional file that is not there.
+pub(super) fn expand_glob_matches_strict_listing(
+    value: &str,
+    context: ReadContext<'_>,
+) -> Option<Vec<PathBuf>> {
+    expand(value, context, Mode::STRICT, Screen::Names)
+}
+
 /// [`expand_glob_matches`] with the strict model's case folding but without
 /// its refusal of a bracket class, for a caller that has already screened the
 /// class itself. An empty list then also covers `nocaseglob`, under which

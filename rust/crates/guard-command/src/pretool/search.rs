@@ -34,7 +34,8 @@ pub(super) use tree::{
     glob_matches_nothing, key_file_name, listable_spelling, safe_glob_operand,
     safe_literal_bracket_listing_target, safe_literal_bracket_read_target,
     safe_literal_bracket_tree, safe_recursive_listing_target, safe_recursive_target,
-    safe_recursive_target_through_links, safe_unmatched_glob_operand, SECRET_EXTENSIONS,
+    safe_recursive_target_through_links, safe_unmatched_glob_operand,
+    safe_unmatched_listing_glob_operand, SECRET_EXTENSIONS,
 };
 #[cfg(test)]
 pub(super) use walk_memo::{count_walk, take_walks};

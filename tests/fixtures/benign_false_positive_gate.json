@@ -32528,6 +32528,22 @@
       "expect": "allow"
     },
     {
+      "id": "ls-docs-glob-with-hidden-config-glob-that-matches-nothing",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls docs/*.md .eslintrc* 2>&1 | head"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "echo-docs-glob-names-credential-named-page",
       "fix_area": "shell",
       "harnesses": [
@@ -68789,6 +68805,38 @@
         "command": "sleep 45; cd ${ORG_WT} && gh pr view 378 --repo o/r --json reviews,comments --jq '{reviews:(.reviews|length),comments:(.comments|length)}' 2>&1 | tail -3"
       },
       "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-cd-cousin-repo-grep-config-then-ls-hidden-glob",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && grep -n \"name\\|version\" package.json | head -30; ls package*.json .eslintrc* 2>&1 | head"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-grep-rl-cousin-repo-dirs-with-includes",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rl \"reportWindow\" ${HOME}/other-project/src ${HOME}/other-project/app --include=\"*.ts\" --include=\"*.tsx\" --include=\"*.mjs\""
+      },
+      "cwd": "org_app",
       "expect": "allow"
     },
     {
