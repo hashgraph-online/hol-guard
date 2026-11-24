@@ -85,6 +85,43 @@ fn a_sequence_keeps_the_body_verdict() {
     }
 }
 
+/// A pass that changes shell state leaves the next pass somewhere else, so a
+/// body holding `cd` is written out once per word, never once for the whole
+/// header, and a header past the word bound keeps its review.
+#[test]
+fn a_body_that_carries_state_is_written_out_every_pass() {
+    for (looped, unrolled) in [
+        (
+            "for n in {1..3}; do cd ..; ls; done",
+            Some("cd ..; ls; cd ..; ls; cd ..; ls"),
+        ),
+        (
+            "for n in a b; do export SEEN=1; ls; done",
+            Some("export SEEN=1; ls; export SEEN=1; ls"),
+        ),
+        ("for n in {1..135}; do cd ..; ls; done", None),
+        (
+            "for n in {1..135}; do if ! ps -p 4242; then cd ..; fi; sleep 20; done",
+            None,
+        ),
+        ("for n in {1..135}; do if cd ..; then ls; fi; done", None),
+    ] {
+        assert_eq!(
+            super::for_loop_unroll::unroll(looped).as_deref(),
+            unrolled,
+            "{looped}"
+        );
+    }
+}
+
+#[test]
+fn a_directory_change_that_compounds_keeps_the_written_out_verdict() {
+    let looped = "cd src; for n in {1..5}; do cd ..; touch x; done";
+    let written = "cd src; for n in 1 2 3 4 5; do cd ..; touch x; done";
+    assert_eq!(decide(looped), decide(written), "{looped}");
+    assert_ne!(decide(looped).0, "allow", "{looped}");
+}
+
 #[test]
 fn other_brace_words_keep_their_review() {
     for looped in [

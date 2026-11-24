@@ -163,9 +163,15 @@ fn unrolled<'a>(
     // A body that never reads the loop variable runs the same text on every
     // pass, so one written-out pass is the work every pass does, however many
     // words the header holds. `for n in {1..60}; do sleep 5; done` is
-    // `sleep 5` sixty times. A body that does read it is written out once per
-    // word, which the word bound keeps finite.
-    if !items.iter().any(|(text, _)| body::reads_the_variable(text)) {
+    // `sleep 5` sixty times. That holds only while a pass leaves nothing the
+    // next one reads: `cd ..` run five times climbs five directories, and one
+    // written-out `cd ..` would prove the later commands in the wrong place.
+    // A body that reads the variable, or carries shell state from pass to
+    // pass, is written out once per word, which the word bound keeps finite.
+    let same_every_pass = !items
+        .iter()
+        .any(|(text, _)| body::reads_the_variable(text) || carries_state(text));
+    if same_every_pass {
         words.truncate(1);
     } else if words.len() > MAX_WORDS {
         return None;
@@ -508,4 +514,20 @@ fn sequence(text: &str) -> Option<(Vec<String>, usize)> {
 /// change shell state, so binding either changes what the body would run.
 pub(super) fn ordinary_loop_name(name: &str) -> bool {
     !name.ends_with("_proxy") && !SHELL_SPECIAL_NAMES.contains(&name)
+}
+
+/// Whether one body item can change shell state a later pass reads: a state
+/// builtin such as `cd` or `export`, read through the keyword that opens a
+/// conditional's part (`if cd ..`, `then export X=1`), or a construct this
+/// check does not look inside. A bare `then`, `else` or `fi` changes nothing.
+fn carries_state(item: &str) -> bool {
+    let text = item.trim();
+    if matches!(text, "then" | "else" | "fi") {
+        return false;
+    }
+    let command = ["if", "elif", "then", "else"]
+        .into_iter()
+        .find_map(|opener| super::control_flow_flatten::keyword(text, opener))
+        .unwrap_or(text);
+    super::control_flow_chain::changes_shell_state(command)
 }
