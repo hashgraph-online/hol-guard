@@ -2,7 +2,7 @@
 
 use crate::guard_store_connect as connect;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
     Read,
     /// Several reads inside one deferred transaction for a consistent view.

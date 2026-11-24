@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from .store_schema_columns import ensure_columns
+
 
 def resume_schema_statement() -> str:
     return """
@@ -37,26 +39,22 @@ def resume_schema_statement() -> str:
         """
 
 
-def ensure_resume_schema(connection: sqlite3.Connection) -> None:
-    """Backfill continuation columns for existing Guard installations."""
+# Continuation columns ``guard_request_resumes`` gained after it first shipped,
+# in the order the store adds them. The native runtime keeps its own copy
+# (``guard_store_schema_families.rs``), and a parity test holds the two equal.
+RESUME_CONTINUATION_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("continuation_contract_version", "text"),
+    ("continuation_capability", "text"),
+    ("continuation_status", "text"),
+    ("continuation_reason", "text"),
+    ("continuation_evidence_json", "text not null default '[]'"),
+    ("continuation_offer_hash", "text"),
+    ("continuation_action", "text"),
+    ("continuation_completed_at", "text"),
+    ("continuation_cancelled_at", "text"),
+)
 
-    columns = {str(row["name"]) for row in connection.execute("pragma table_info(guard_request_resumes)").fetchall()}
-    additions = {
-        "continuation_contract_version": "text",
-        "continuation_capability": "text",
-        "continuation_status": "text",
-        "continuation_reason": "text",
-        "continuation_evidence_json": "text not null default '[]'",
-        "continuation_offer_hash": "text",
-        "continuation_action": "text",
-        "continuation_completed_at": "text",
-        "continuation_cancelled_at": "text",
-    }
-    for name, definition in additions.items():
-        if name not in columns:
-            connection.execute(f"alter table guard_request_resumes add column {name} {definition}")
-    connection.execute(
-        """
+CONTINUATION_CLAIMS_TABLE = """
         create table if not exists guard_continuation_claims (
           request_id text not null,
           offer_hash text not null,
@@ -69,15 +67,13 @@ def ensure_resume_schema(connection: sqlite3.Connection) -> None:
           primary key (request_id, offer_hash, action)
         )
         """
-    )
-    claim_columns = {
-        str(row["name"]) for row in connection.execute("pragma table_info(guard_continuation_claims)").fetchall()
-    }
-    for name in ("lease_expires_at", "claim_id"):
-        if name not in claim_columns:
-            connection.execute(f"alter table guard_continuation_claims add column {name} text")
-    connection.execute(
-        """
+
+CONTINUATION_CLAIM_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("lease_expires_at", "text"),
+    ("claim_id", "text"),
+)
+
+CONTINUATION_EFFECTS_TABLE = """
         create table if not exists guard_continuation_effects (
           effect_key text primary key,
           request_id text not null,
@@ -86,4 +82,12 @@ def ensure_resume_schema(connection: sqlite3.Connection) -> None:
           created_at text not null
         )
         """
-    )
+
+
+def ensure_resume_schema(connection: sqlite3.Connection) -> None:
+    """Backfill continuation columns for existing Guard installations."""
+
+    ensure_columns(connection, "guard_request_resumes", RESUME_CONTINUATION_COLUMNS)
+    connection.execute(CONTINUATION_CLAIMS_TABLE)
+    ensure_columns(connection, "guard_continuation_claims", CONTINUATION_CLAIM_COLUMNS)
+    connection.execute(CONTINUATION_EFFECTS_TABLE)
