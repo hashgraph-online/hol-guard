@@ -229,7 +229,9 @@ fn custom_grant(
     }
     let user_home = review_request::expanded_home(environment);
     super::local_cli::review_grant(&super::local_cli::RuleCheck {
-        payload: Some(context.payload),
+        // The recorded payload keeps the execution environment the hook
+        // stamped, whose `PATH` the launch resolves with.
+        payload: Some(context.recorded_payload),
         harness: context.harness,
         workspace: context.workspace,
         home_dir: context.home_dir,

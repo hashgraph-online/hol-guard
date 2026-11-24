@@ -60,6 +60,42 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     Ok(json!({ "path": kept.join(separator) }))
 }
 
+/// `path` for finding the program an agent's shell runs, without Guard's
+/// package shim directory. Only an entry that resolves to the shim directory
+/// is dropped. Every other entry is kept as it was spelled, including an
+/// empty entry, which searches the working directory, and one that cannot be
+/// resolved: an unresolved spelling of the shims keeps them, so a launch
+/// through them stays unproven rather than read as another program. A `path`
+/// with no entry left, or a shim directory that cannot be resolved, is
+/// returned unchanged.
+pub(crate) fn without_package_shim_entries(
+    guard_home: &Path,
+    path: &str,
+    separator: &str,
+    launch_cwd: &Path,
+    user_home: Option<&Path>,
+) -> String {
+    let Ok(shim_dir) = resolve(&posix_root(guard_home.join("package-shims").join("bin"))) else {
+        return path.to_owned();
+    };
+    let shim_dir = long_names(shim_dir);
+    let kept: Vec<&str> = path
+        .split(separator)
+        .filter(|entry| {
+            entry.is_empty()
+                || expand_user(entry, user_home)
+                    .map(|expanded| posix_root(launch_cwd.join(expanded)))
+                    .and_then(|joined| resolve(&joined).ok())
+                    .map(long_names)
+                    .is_none_or(|resolved| !same_path(&resolved, &shim_dir))
+        })
+        .collect();
+    if kept.is_empty() {
+        return path.to_owned();
+    }
+    kept.join(separator)
+}
+
 fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'static str> {
     args.get(key).and_then(Value::as_str).ok_or(ERR_INVALID)
 }

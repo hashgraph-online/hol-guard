@@ -288,6 +288,10 @@ fn answer(
     evidence_payload
         .entry(EXECUTION_ENVIRONMENT_FIELD)
         .or_insert(Value::Null);
+    let stamped_environment = payload
+        .get(EXECUTION_ENVIRONMENT_FIELD)
+        .filter(|value| value.is_object())
+        .cloned();
     let execution_environment = match payload.remove(EXECUTION_ENVIRONMENT_FIELD) {
         None | Some(Value::Null) => None,
         Some(value @ Value::Object(_)) => Some(
@@ -427,8 +431,16 @@ fn answer(
         }
     };
 
-    // Only a `PreToolUse` under custom rules reads its payload after the edge.
-    let rule_payload = (pre_tool && custom_rules).then(|| payload.clone());
+    // Only a `PreToolUse` under custom rules reads its payload after the edge,
+    // with the execution environment the hook stamped: its launch resolves
+    // with the agent's `PATH`.
+    let rule_payload = (pre_tool && custom_rules).then(|| {
+        let mut rule_payload = payload.clone();
+        if let Some(stamp) = stamped_environment.as_ref() {
+            rule_payload.insert(EXECUTION_ENVIRONMENT_FIELD.to_owned(), stamp.clone());
+        }
+        rule_payload
+    });
     // Claude Code, ZCode and Grok apply `updatedInput`, so the daemon routes
     // their sandbox requirements to contained execution with the sink command
     // it binds.

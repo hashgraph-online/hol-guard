@@ -215,3 +215,47 @@ fn malformed_requests_are_invalid() {
     }
     assert_eq!(dispatch(&json!([])), Err(ERR_INVALID));
 }
+
+fn lookup_path(layout: &Layout, path: &str) -> String {
+    without_package_shim_entries(
+        &layout.guard_home,
+        path,
+        ":",
+        &layout.base,
+        Some(&layout.base.join("home")),
+    )
+}
+
+#[cfg(unix)]
+#[test]
+fn a_lookup_path_drops_only_the_shims() {
+    let layout = layout();
+    let shims = text(&layout.shims);
+    let tools = text(&layout.tools);
+    // Empty entries search the working directory, so they stay where they
+    // were, as does every other spelling.
+    assert_eq!(
+        lookup_path(&layout, &format!(":{shims}:{tools}::")),
+        format!(":{tools}::")
+    );
+    assert_eq!(
+        lookup_path(&layout, &format!("{tools}:{shims}:./bin:~/.local/bin")),
+        format!("{tools}:./bin:~/.local/bin")
+    );
+    // Relative and home spellings of the shims go too.
+    assert_eq!(
+        lookup_path(
+            &layout,
+            &format!("home/.hol-guard/package-shims/bin:~/.hol-guard/package-shims/bin:{tools}")
+        ),
+        tools.clone()
+    );
+    // An entry that cannot be resolved is kept rather than refusing the rest.
+    assert_eq!(
+        lookup_path(&layout, &format!("~someone/bin:{shims}:{tools}")),
+        format!("~someone/bin:{tools}")
+    );
+    // An empty `PATH`, or one with nothing past the shims, is kept as it was.
+    assert_eq!(lookup_path(&layout, ""), "");
+    assert_eq!(lookup_path(&layout, &shims), shims);
+}
