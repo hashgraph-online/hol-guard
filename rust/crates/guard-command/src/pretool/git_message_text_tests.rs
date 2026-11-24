@@ -58,6 +58,10 @@ fn a_message_that_can_expand_is_not_set_aside() {
     assert_eq!(positions("commit -m $(cat)"), None);
     assert_eq!(positions("commit -m `cat`"), None);
     assert_eq!(positions("commit --message=$NOTE"), None);
+    assert_eq!(positions("commit -m {note,.env}"), None);
+    assert_eq!(positions("commit -m .env*"), None);
+    assert_eq!(positions("commit -m note?"), None);
+    assert_eq!(positions("commit -m [n]ote"), None);
 }
 
 #[test]
@@ -84,6 +88,8 @@ fn everything_outside_the_message_keeps_its_screen() {
         "git commit -m 'rotate the secret' && cat .env",
         "git log -m 'secret'",
         "git commit -C -m ~/.ssh/id_rsa",
+        "git commit -m {note,.env}",
+        "git commit -m .env*",
         "echo 'commit -m secret'",
     ] {
         assert!(sensitive_command_input(command), "{command}");
