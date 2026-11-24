@@ -36,8 +36,8 @@ const STOP_WORDS: &[&str] = &[
 ];
 /// Words that, written plainly, say what to do or how a task came about, not
 /// which code it is about: "find the root cause after the last commit" names
-/// no function `find`, `root` or `last`, and "tests are red on main, sort it
-/// out" none named `red`, `main` or `out`. Written like code they still count.
+/// no function `find`, `root` or `last`, and "resume" or "finish it end to
+/// end" none named `resume` or `finish`. Written like code they still count.
 const TASK_WORDS: &[&str] = &[
     "actually",
     "alone",
@@ -52,6 +52,7 @@ const TASK_WORDS: &[&str] = &[
     "code",
     "commit",
     "committed",
+    "continue",
     "describe",
     "docstring",
     "doctest",
@@ -63,6 +64,7 @@ const TASK_WORDS: &[&str] = &[
     "fail",
     "failing",
     "find",
+    "finish",
     "first",
     "green",
     "implement",
@@ -79,6 +81,7 @@ const TASK_WORDS: &[&str] = &[
     "pass",
     "passes",
     "passing",
+    "proceed",
     "push",
     "pushed",
     "question",
@@ -88,6 +91,7 @@ const TASK_WORDS: &[&str] = &[
     "remove",
     "rename",
     "reply",
+    "resume",
     "review",
     "root",
     "run",
@@ -104,20 +108,19 @@ const TASK_WORDS: &[&str] = &[
     "written",
 ];
 
-/// Lowercase words from the prompt worth looking for in paths and code.
-/// Words written like code come first, so a long prompt keeps the names it
-/// is about (`case_sensitive`, `IntRange`) over the plain words around them.
 #[cfg(test)]
 pub(crate) fn terms(prompt: &str) -> Vec<String> {
-    marked_terms(prompt)
-        .into_iter()
+    (marked_terms(prompt).into_iter())
         .map(|(term, _)| term)
         .collect()
 }
 
-/// The prompt's `terms`, each marked when the prompt wrote it whole as a
-/// name (`case_sensitive`, `IntRange`), not as a plain word or a piece of a
-/// name. An absolute path such as `/tmp/run-1/out.log` gives none.
+/// Lowercase words from the prompt worth looking for in paths and code, each
+/// marked when the prompt wrote it whole as a name (`case_sensitive`,
+/// `IntRange`), not as a plain word or a piece of a name. Words written like
+/// code come first, so a long prompt keeps the names it is about over the
+/// plain words around them. An absolute path such as `/tmp/run-1/out.log`
+/// gives none.
 pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
     let prompt = &without_paths(prompt);
     let mut code: Vec<(String, bool)> = Vec::new();
@@ -234,8 +237,12 @@ fn command(span: &str) -> bool {
             .any(|word| word.starts_with('-') || word.contains('/') || file_name(word).is_some())
 }
 
+/// The prompt's words but numbers and versions (`3.60`), which name no code.
 fn tokens(span: &str) -> impl Iterator<Item = &str> {
-    span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')))
+    let split = span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')));
+    split.filter(|token| {
+        !(token.trim_start_matches('v').chars()).all(|c| c.is_ascii_digit() || c == '.')
+    })
 }
 
 fn camel(word: &str) -> bool {
