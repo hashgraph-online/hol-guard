@@ -8,7 +8,7 @@
     "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
     "Per upstream HOSTED-POLICY.md, all tools/call invocations (including memory_about, plans, and partner_kit) require a per-user Bearer key from https://aifa.works/mcp.",
     "The hosted backend at aifa.works is closed source; upstream policy, live 19-tool schema, and conformance script are published at https://github.com/MaksimGalatin/aifa-memory-mcp (HOSTED-POLICY.md and scripts/conformance.py).",
-    "Users can self-service delete hosted semantic records anytime via memory_forget and audit SHA-256 deletion proofs via memory_forget_receipts or export Markdown via memory_export; optional L3 Arweave ciphertext uploads remain permanent on-chain (cryptographically shredded by deleting per-record keys).",
+    "The hosted backend stores conversation text in plaintext without an expiry date; users can self-service delete hosted records via memory_forget (SHA-256 deletion receipts via memory_forget_receipts) and export Markdown via memory_export. Optional L3 Arweave ciphertext uploads remain permanent on-chain.",
     "A maintainer profile is not a security certification or an official upstream endorsement."
   ],
   "documentationUrl": "https://github.com/MaksimGalatin/aifa-memory-mcp/blob/main/HOSTED-POLICY.md",
