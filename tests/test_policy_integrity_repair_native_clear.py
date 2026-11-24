@@ -32,7 +32,7 @@ class _Store(StorePolicyIntegrityAdminMixin):
     def _refresh_policy_integrity_state(self, connection: object, **_: object) -> dict[str, object]:
         return {"mode": self.mode, "generation": 2}
 
-    def _load_policy_integrity_state(self, connection: object) -> dict[str, object]:
+    def _load_policy_integrity_state(self) -> dict[str, object]:
         return {"mode": self.mode, "generation": 2}
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes, str]:

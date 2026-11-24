@@ -74,6 +74,8 @@ fn rows_fingerprint(connection: &Connection) -> StoreResult<String> {
     Ok(hex::encode(Sha256::digest(encoded)))
 }
 
+#[path = "guard_store_policy_integrity_state.rs"]
+mod integrity_state;
 #[path = "guard_store_policy_recovery.rs"]
 mod recovery;
 
@@ -82,7 +84,7 @@ pub(crate) fn handles(method: &str) -> bool {
     matches!(
         method,
         "import_policy_rows" | "apply_mcp_policy_request" | "recover_business_policy_source"
-    )
+    ) || integrity_state::handles(method)
 }
 
 /// The policy import ops `handles` names.
@@ -93,6 +95,7 @@ pub(crate) fn run(connection: &Connection, method: &str, args: &Args) -> StoreRe
         "recover_business_policy_source" => {
             recovery::recover_business_policy_source(connection, args)
         }
+        _ if integrity_state::handles(method) => integrity_state::run(connection, method, args),
         _ => Err(StoreError::Invalid("native_guard_store_args_invalid")),
     }
 }

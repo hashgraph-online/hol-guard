@@ -33,7 +33,7 @@ class _Store:
     def _connect(self):
         yield object()
 
-    def _load_policy_integrity_state(self, connection: object) -> object:
+    def _load_policy_integrity_state(self) -> object:
         if self.error is not None:
             raise self.error
         return self.state

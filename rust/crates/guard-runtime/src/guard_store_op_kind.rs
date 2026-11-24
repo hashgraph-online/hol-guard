@@ -361,11 +361,15 @@ pub(crate) fn method_kind(method: &str) -> Option<Kind> {
         | "import_policy_rows"
         | "apply_mcp_policy_request"
         | "recover_business_policy_source"
+        | "record_policy_integrity_state"
         | "stage_mcp_policy_request"
         | "expire_mcp_policy_request"
         | "decline_mcp_policy_request"
         | "fail_mcp_policy_request" => Kind::Write,
         "list_pending_mcp_policy_requests" | "policy_rows_fingerprint" => Kind::Snapshot,
+        "count_legacy_policy_rows" | "read_policy_integrity_state" | "has_local_policy_rows" => {
+            Kind::Read
+        }
         "policy_row_presence" | "extension_control_authority_head" => Kind::Snapshot,
         "find_local_mcp_observation" => Kind::Read,
         "ensure_local_mcp_observation"
