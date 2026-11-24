@@ -226,9 +226,9 @@ pub(in crate::pretool) fn resolves_to_tracked_key_named_document(
         None => return false,
     };
     guard_secure_fs::sensitive_path_family_beside_name_proof(supplied).is_none()
-        && !target
+        && target
             .parent()
-            .is_some_and(|parent| guard_secure_fs::sensitive_path_family(parent).is_some())
+            .is_none_or(|parent| guard_secure_fs::sensitive_path_family(parent).is_none())
         && supplied
             .file_name()
             .and_then(|name| name.to_str())
