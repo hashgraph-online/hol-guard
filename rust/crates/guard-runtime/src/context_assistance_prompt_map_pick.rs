@@ -3,6 +3,9 @@
 use super::{more, rename, term_form, written_name, Asked, File, Kind, Sought};
 
 const MAX_NAMED_DEFINITIONS: usize = 6;
+/// The most lines of the definition a file is named for shown whole when the
+/// prompt places nothing else.
+const MAX_STEM_LINES: usize = 30;
 /// Functions left to be written that stand in for a named file's outline.
 const MAX_STUBS: usize = 2;
 /// Definitions shown beside a function left to be written.
@@ -317,14 +320,24 @@ pub(super) fn outlined(
                 && (sought.iter()).any(|item| item.common && !item.phrase && item.text == stem)
         });
     match (matching.next(), matching.next()) {
-        (Some((index, file)), None) => more::outline(file)
-            .map(|at| Pick {
-                file: index,
-                at,
-                base: false,
-                whole: false,
-            })
-            .collect(),
+        (Some((index, file)), None) => {
+            // The type the file is named for, `Route` in `route.go`, is what
+            // a request about it changes: short, it is shown whole.
+            let stem = stem(file);
+            let named_for = |at: usize| {
+                let section = &file.sections[at];
+                section.name.as_deref() == Some(stem.as_str())
+                    && section.end + 1 - section.start <= MAX_STEM_LINES
+            };
+            more::outline(file)
+                .map(|at| Pick {
+                    file: index,
+                    at,
+                    base: false,
+                    whole: named_for(at),
+                })
+                .collect()
+        }
         _ => Vec::new(),
     }
 }
