@@ -5,8 +5,10 @@
 //! name their results the same way: `"tests_pass": ok`, `both-pass: {...}`,
 //! `all_pass = True`, `first_pass: 12`. Blocking that output stopped agents
 //! from reading their own test summaries. A `pass` name is a result when the
-//! word right before `pass` counts or names tests. A name that also carries
-//! another credential word stays a credential.
+//! word right before `pass` counts or names tests and its value reads as a
+//! result: a boolean, a count, a status word or the start of a structure.
+//! `TEST_PASS` also names a test account's password, so any other value stays
+//! a credential, as does a name that carries another credential word.
 
 /// Words that make `<word>_pass` a test outcome or an algorithm pass.
 const RESULT_WORDS: [&str; 24] = [
@@ -27,8 +29,18 @@ const CREDENTIAL_WORDS: [&str; 8] = [
     "auth",
 ];
 
+/// Status words a test result is reported with.
+const RESULT_VALUES: [&str; 18] = [
+    "true", "false", "yes", "no", "ok", "pass", "passed", "fail", "failed", "error", "done",
+    "skip", "skipped", "pending", "none", "null", "nil", "n/a",
+];
+
+/// Longest number read as a count, score or ratio.
+const MAX_NUMBER_CHARS: usize = 12;
+
 /// Whether a credential assignment match names a test result: its key ends in
-/// `_pass` or `-pass` after a result word and holds no other credential word.
+/// `_pass` or `-pass` after a result word, holds no other credential word, and
+/// its value reads as a result.
 pub(crate) fn is_result_pass(matched: &str) -> bool {
     let Some(index) = matched.find([':', '=']) else {
         return false;
@@ -47,7 +59,22 @@ pub(crate) fn is_result_pass(matched: &str) -> bool {
         return false;
     }
     let word = stem.rsplit(['_', '-']).next().unwrap_or_default();
-    RESULT_WORDS.contains(&word)
+    RESULT_WORDS.contains(&word) && result_value(&matched[index + 1..])
+}
+
+/// Whether an assigned value reads as a test result rather than a password.
+fn result_value(value: &str) -> bool {
+    let value = value
+        .trim()
+        .trim_matches(['"', '\''])
+        .trim_end_matches([',', ';', ')'])
+        .to_ascii_lowercase();
+    let number = value.chars().count() <= MAX_NUMBER_CHARS
+        && value.chars().any(|character| character.is_ascii_digit())
+        && value
+            .chars()
+            .all(|character| character.is_ascii_digit() || matches!(character, '.' | '%' | '/'));
+    value.starts_with(['{', '[']) || number || RESULT_VALUES.contains(&value.as_str())
 }
 
 #[cfg(test)]
@@ -88,6 +115,12 @@ mod tests {
             format!("admin_pass = \"{SAMPLE}\"\n"),
             format!("tests_secret_pass={SAMPLE}\n"),
             format!("all_token_pass={SAMPLE}\n"),
+            format!("DB_TEST_PASS={SAMPLE}\n"),
+            format!("TEST_PASS=\"{SAMPLE}\"\n"),
+            format!("admin_test_pass: {SAMPLE}\n"),
+            String::from("LAST_PASS=hunter22\n"),
+            String::from("ONE_PASS: 'letmein'\n"),
+            String::from("TEST_PASS=12345678901234567\n"),
         ] {
             assert!(credential_assignment(&text), "{text}");
         }
@@ -100,5 +133,8 @@ mod tests {
         assert!(!is_result_pass("db_pass=x"));
         assert!(!is_result_pass("bypass=x"));
         assert!(!is_result_pass("tests_passphrase=x"));
+        assert!(!is_result_pass("test_pass=x"));
+        assert!(is_result_pass("test_pass=97.5%"));
+        assert!(is_result_pass("CHECKS_PASS=3/4"));
     }
 }

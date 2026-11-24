@@ -6,14 +6,22 @@
 //! The credential assignment rule reads the first `:` of `::` as a key-value
 //! separator, which flagged Rust source reads and every `cargo test` run that
 //! touched a credential-named module. No assignment syntax spells its
-//! separator `::`.
+//! separator `::`. A path can still be what is assigned, as in a Ruby
+//! constant `Secret::TOKEN = "..."`, so the path is read again as one name
+//! (`Secret_TOKEN`) with the rest of its line.
 
 /// Whether the first separator in a credential assignment match is a `::`
-/// path separator.
-pub(crate) fn is_path_segment(matched: &str) -> bool {
+/// path separator, and the path read as one name (`Secret_TOKEN`) with
+/// `rest_of_line` holds no credential assignment by `flagged`.
+pub(crate) fn is_path_segment(
+    matched: &str,
+    rest_of_line: &str,
+    flagged: impl Fn(&str) -> bool,
+) -> bool {
     matched
         .find([':', '='])
-        .is_some_and(|index| matched[index..].starts_with("::"))
+        .filter(|&index| matched[index..].starts_with("::"))
+        .is_some_and(|_| !flagged(&format!("{}{rest_of_line}", matched.replace("::", "_"))))
 }
 
 #[cfg(test)]
@@ -54,8 +62,21 @@ mod tests {
         ] {
             assert!(credential_assignment(&text), "{text}");
         }
-        assert!(is_path_segment("token::Claims"));
-        assert!(!is_path_segment("token: x"));
-        assert!(!is_path_segment("token=::x"));
+        let never = |_: &str| false;
+        assert!(is_path_segment("token::Claims", "", never));
+        assert!(!is_path_segment("token: x", "", never));
+        assert!(!is_path_segment("token=::x", "", never));
+        assert!(!is_path_segment("token::Claims", "", |_: &str| true));
+    }
+
+    #[test]
+    fn an_assignment_after_a_path_stays_flagged() {
+        for text in [
+            format!("Secret::TOKEN = \"{SAMPLE}\"\n"),
+            format!("secret::API_TOKEN={SAMPLE}\n"),
+            format!("Auth::Config.password = \"{SAMPLE}\"\n"),
+        ] {
+            assert!(credential_assignment(&text), "{text}");
+        }
     }
 }

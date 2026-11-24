@@ -58,7 +58,7 @@ condition = "AND"
 regexTarget = "line"
 paths = ['''(?:^|/)tests/fixtures/benign_false_positive_gate\.json$''']
 regexes = [
-  '''^[\t\r\n ]*"stdout":\ "DB_PASS=Kq7xY2mN9pL4vR8tW3sZ\\n",[\t\r\n ]*$''',
+  '''^[\t\r\n ]*"stdout":\ "DB_(?:TEST_)?PASS=Kq7xY2mN9pL4vR8tW3sZ\\n",[\t\r\n ]*$''',
 ]
 
 [[rules.allowlists]]

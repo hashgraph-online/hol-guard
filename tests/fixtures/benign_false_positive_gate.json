@@ -37532,6 +37532,27 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-post-tool-report-test-account-pass-value",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "python3 tools/report.py"
+      },
+      "tool_response": {
+        "stdout": "DB_TEST_PASS=Kq7xY2mN9pL4vR8tW3sZ\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-post-tool-test-runner-traceback-real-password",
       "fix_area": "secrets",
       "harnesses": [

@@ -311,11 +311,20 @@ fn next_line_flagged(
         return false;
     }
     let line = format!("{}{}", swallowed.trim_start(), rest_of_line);
+    assignment_flagged(&line, suppress_samples, documentation_sample_context)
+}
+
+/// Whether `line` holds a credential assignment that is not a sample.
+fn assignment_flagged(
+    line: &str,
+    suppress_samples: bool,
+    documentation_sample_context: bool,
+) -> bool {
     PATTERNS
         .iter()
         .position(|def| def.classifier == "credential-assignment")
         .is_some_and(|rule| {
-            counted_matches(rule, &line, suppress_samples, documentation_sample_context)
+            counted_matches(rule, line, suppress_samples, documentation_sample_context)
                 .next()
                 .is_some()
         })
@@ -355,7 +364,9 @@ fn is_sample(
             || code_value::is_block_header(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
             || result_pass::is_result_pass(matched)
-            || path_segment::is_path_segment(matched)
+            || path_segment::is_path_segment(matched, rest_of_line, |line| {
+                assignment_flagged(line, suppress_samples, documentation_sample_context)
+            })
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
