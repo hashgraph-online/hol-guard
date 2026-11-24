@@ -16,7 +16,7 @@ _MANIFEST_NAME = "runtime-manifest.json"
 _MANIFEST_SCHEMA = "hol-guard-native-runtime.v1"
 _PROTOCOL_VERSION = 1
 _MAX_WHEEL_BYTES = 256 * 1024 * 1024
-_MAX_RUNTIME_BYTES = 128 * 1024 * 1024
+_MAX_RUNTIME_BYTES = 192 * 1024 * 1024
 # Development wheels build the runtime at opt-level 0 and are never published.
 # The runtime's own resident-state reader refuses anything larger.
 _MAX_UNPUBLISHED_RUNTIME_BYTES = 512 * 1024 * 1024
