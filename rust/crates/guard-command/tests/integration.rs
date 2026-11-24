@@ -141,6 +141,7 @@ pub mod pretool_forged_worktree;
 pub mod pretool_generic;
 pub mod pretool_generic_powershell;
 pub mod pretool_git_absent_repository;
+pub mod pretool_git_add_then_report;
 pub mod pretool_git_branch_listing;
 pub mod pretool_git_branch_rename;
 pub mod pretool_git_cd_reads;
