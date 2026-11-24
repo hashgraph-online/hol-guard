@@ -22,6 +22,39 @@ pub fn win32_name(part: &str) -> &str {
     }
 }
 
+/// Whether a name carries the `private-key` or `wallet-key` marker anywhere
+/// in it. A key container is usually named exactly that (`private.key`,
+/// `wallet.key`) or carries a key extension, both of which are read above;
+/// this is the catch-all for a name that spells the marker out, such as
+/// `prod-private-key-backup`.
+pub fn wallet_key_named(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    ["private-key", "private_key", "wallet-key", "wallet_key"]
+        .iter()
+        .any(|marker| lower.contains(marker))
+}
+
+/// Extensions the tracked-document proof can read a file back under:
+/// `search_scope_tracked` accepts exactly these, reads the committed file and
+/// scans it for credential-shaped values.
+///
+/// A key container carries no extension, or a key or certificate extension,
+/// both of which are read above, and a hidden name is refused on the dot
+/// alone, so neither reaches this.
+///
+/// JSON is left out on purpose. A JSON Web Key stores its private parts in
+/// one-letter members (`d`, `p`, `q`), which the credential scan does not
+/// read as assignments, so a `private-key.json` holding one would pass the
+/// proof. A key-named JSON file stays a key container.
+const PROVABLE_DOCUMENT_EXTENSIONS: &[&str] = &["md", "toml", "yaml", "yml"];
+
+fn provable_document_name(basename: &str) -> bool {
+    !basename.starts_with('.')
+        && basename.rsplit_once('.').is_some_and(|(stem, extension)| {
+            !stem.is_empty() && PROVABLE_DOCUMENT_EXTENSIONS.contains(&extension)
+        })
+}
+
 /// The suffixes a repository commits beside its code to document the variables
 /// a project reads. `.env.example` and its siblings hold placeholder values and
 /// are tracked in Git, while the local `.env` holding the real ones is not.
@@ -39,6 +72,29 @@ pub fn dotenv_template_basename(basename: &str) -> bool {
 }
 
 pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)> {
+    family(path, false)
+}
+
+/// [`sensitive_path_family`] without its catch-all for a document that only
+/// spells a key marker out, such as `private-key-jwt-client-auth.md`.
+///
+/// `private_key_jwt` is an OpenID Connect client authentication method, so a
+/// committed design note named for it describes a feature rather than holding
+/// a key. The container family has no relief at all, and refused every read of
+/// such a file and every recursive search of the directory holding it.
+///
+/// Only a screen that also applies [`crate::credential_named_path`], which
+/// still matches the marker, and clears that name only through the
+/// committed-document proof may use this. Every other caller keeps the full
+/// family, so an untracked `wallet-key.yaml` is still refused wherever no
+/// proof runs.
+pub fn sensitive_path_family_beside_name_proof(
+    path: &Path,
+) -> Option<(&'static str, &'static str)> {
+    family(path, true)
+}
+
+fn family(path: &Path, document_relief: bool) -> Option<(&'static str, &'static str)> {
     let normalized = path
         .to_string_lossy()
         .replace('\\', "/")
@@ -79,11 +135,7 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
     if let Some((_, family, sensitivity)) = direct.iter().find(|(name, _, _)| *name == basename) {
         return Some((*family, *sensitivity));
     }
-    if basename.contains("private-key")
-        || basename.contains("private_key")
-        || basename.contains("wallet-key")
-        || basename.contains("wallet_key")
-    {
+    if wallet_key_named(basename) && !(document_relief && provable_document_name(basename)) {
         return Some(("wallet/private-key file", "critical"));
     }
     if parts
