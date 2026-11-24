@@ -403,6 +403,7 @@ fn evaluate_validated_envelope<Lease>(
         origin_store,
         started,
     );
+    let requires_approval = edge_result_check::requires_approval(&event_name, &result);
     let mut edge = GuardHookEdgeResultV2 {
         exact_command_block: None,
         review_evidence,
@@ -419,6 +420,7 @@ fn evaluate_validated_envelope<Lease>(
         event_name,
         payload_kind: kind,
         result,
+        requires_approval,
         harness_response,
         receipt,
     };

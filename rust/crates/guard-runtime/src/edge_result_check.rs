@@ -118,7 +118,11 @@ fn checked(edge: &GuardHookEdgeResultV2) -> Option<bool> {
         "PostToolUse" => matches!(kind, "inline" | "source_file_ref" | "encrypted_payload_ref"),
         _ => false,
     };
-    Some(shaped && receipt_agrees(edge, kind, result, &receipt))
+    Some(
+        shaped
+            && edge.requires_approval == requires_approval(event, result)
+            && receipt_agrees(edge, kind, result, &receipt),
+    )
 }
 
 fn bounded_text(value: &Value) -> bool {
@@ -194,6 +198,17 @@ pub(super) fn pre_tool_result(result: &Map<String, Value>, harness: &str, event:
             } else {
                 "deny"
             }
+}
+
+/// Whether a checked native result needs the hook adapter to pause for an
+/// approval. This is the only action classification the adapter needs after
+/// Rust has validated the result.
+pub(super) fn requires_approval(event: &str, result: &Map<String, Value>) -> bool {
+    event == "PreToolUse"
+        && result
+            .get("minimum_action")
+            .and_then(Value::as_str)
+            .is_some_and(|action| matches!(action, "review" | "require-reapproval"))
 }
 
 fn pre_tool_action(action: &Value, harness: &str, event: &str) -> bool {

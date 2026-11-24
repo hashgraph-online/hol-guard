@@ -23,6 +23,7 @@ def _edge(harness: str, *, url: str = "https://example.test", action_type: str =
         "harness": harness,
         "event_name": "PreToolUse",
         "payload_kind": "inline",
+        "requires_approval": True,
         "result": {
             "schema": "guard-pre-tool-result.v1",
             "version": 1,

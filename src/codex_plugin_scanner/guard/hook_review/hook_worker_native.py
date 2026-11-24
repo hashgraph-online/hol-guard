@@ -41,7 +41,6 @@ def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
     return {str(key): value for key, value in rendered.items()}
 
 
-_NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
 # `containment_rewrite` answers the edge gives once it rewrote a sink route.
 _EDGE_CONTAINMENT_REWRITES = frozenset({"routed", "kept"})
 _EDGE_REWRITE_UNAVAILABLE = "native_containment_rewrite_unavailable"
@@ -339,8 +338,7 @@ class HookWorkerNativeMixin:
             # The resident stamped its route on the edge answer, and the decoder
             # refuses an unstamped one; Python never picks a route.
             containment = edge.get("containment_route", "none")
-            action = str(native_result.get("minimum_action") or "")
-            if action in _NATIVE_PRE_TOOL_APPROVAL_ACTIONS:
+            if edge.get("requires_approval") is True:
                 response = pause_native_pre_tool_for_approval(
                     self.store,
                     harness=native_harness,
