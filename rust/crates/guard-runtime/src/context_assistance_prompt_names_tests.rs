@@ -134,3 +134,30 @@ fn a_read_without_the_named_code_names_the_files() {
     // The file that holds it is still shown when it can be read.
     assert!(read(&found, &names).contains("def parse_filter_block"));
 }
+
+/// A plan or guide holds a name only where it writes it as code: a loop
+/// message that sets `prompt` is not about a plan that records "a
+/// reproducible prompt". Backticks, a code-shaped word and source files
+/// still count.
+#[test]
+fn prose_holds_a_name_only_written_as_code() {
+    let words = vec!["prompt".to_owned()];
+    let names = vec!["prompt".to_owned(), "schedulewakeup".to_owned()];
+    let render = |path: &str, text: &str| {
+        let picked = [excerpt(path, text)];
+        super::super::render(&picked, &[], &words, &[], &names).is_some()
+    };
+    assert!(!render(
+        "docs/PLAN.md",
+        "Record each answer with a reproducible prompt."
+    ));
+    assert!(!render("docs/guide.rst", "Each prompt is logged."));
+    assert!(render("docs/PLAN.md", "Set `prompt` to the sentinel."));
+    assert!(render("docs/guide.rst", "Set ``prompt`` first."));
+    assert!(render("docs/PLAN.md", "```py\nprompt = ask()\n```"));
+    assert!(render(
+        "docs/PLAN.md",
+        "The prompt goes to ScheduleWakeup each tick."
+    ));
+    assert!(render("src/loop.py", "prompt = ask()"));
+}

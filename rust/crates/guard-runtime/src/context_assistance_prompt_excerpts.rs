@@ -5,6 +5,7 @@ use super::seen::Span;
 use super::{Rendered, HEADER, MAX_CONTEXT_CHARS, MAX_OTHER_FILES, REPEATED_HEADER};
 use crate::context_assistance_engine::PickedExcerpt;
 use crate::context_assistance_prompt_files::{asks_for_tests, test_file};
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -97,8 +98,9 @@ pub(super) fn render(
     for excerpt in relevant(picked, found, words) {
         let text = excerpt.text.trim_end();
         let span = Span::new(&excerpt.path, excerpt.start_line, excerpt.end_line, text);
+        let code = as_code(&excerpt.path, text);
         if earlier.contains(&span) {
-            held = held || holds(text, named);
+            held = held || holds(&code, named);
             repeated.push(span);
             continue;
         }
@@ -114,7 +116,7 @@ pub(super) fn render(
         if HEADER.len() + blocks.len() + block.len() > MAX_CONTEXT_CHARS {
             continue;
         }
-        held = held || holds(text, named);
+        held = held || holds(&code, named);
         blocks.push_str(&block);
         shown.push(span);
     }
@@ -159,6 +161,30 @@ pub(super) fn render(
     }
     out.push_str(&listed);
     Some(Rendered { text: out, shown })
+}
+
+/// What a prose file writes as code: between backticks, as Markdown and
+/// reStructuredText do, or in a word shaped like code (`parse_args`,
+/// `ScheduleWakeup`, `run()`). Other files count whole. A plan that only
+/// uses a word the prompt wrote as code, as in "with a reproducible prompt"
+/// for `prompt`, is not about that code.
+fn as_code<'a>(path: &str, text: &'a str) -> Cow<'a, str> {
+    let extension = Path::new(path).extension().and_then(|ext| ext.to_str());
+    let prose = ["md", "mdx", "markdown", "rst", "txt", "adoc"];
+    if !extension.is_some_and(|ext| prose.iter().any(|p| ext.eq_ignore_ascii_case(p))) {
+        return Cow::Borrowed(text);
+    }
+    let ticks = text
+        .replace("```", "\0")
+        .replace("``", "`")
+        .replace('\0', "`");
+    let quoted = ticks.split('`').skip(1).step_by(2);
+    let shaped = text.split_whitespace().filter(|word| {
+        let inner_capital = (word.chars().zip(word.chars().skip(1)))
+            .any(|(a, b)| a.is_lowercase() && b.is_uppercase());
+        inner_capital || word.contains(['_', '(']) || word.contains("::")
+    });
+    Cow::Owned(quoted.chain(shaped).collect::<Vec<_>>().join("\n"))
 }
 
 fn lines(span: &Span) -> String {
