@@ -51,6 +51,7 @@ pub(super) fn segment_sensitive(
 ) -> bool {
     let text = names::segment_screen_text(model, segment, text, cwd);
     let rest = segment_without_patterns(segment)
+        .or_else(|| super::git_message_text::segment_without_messages(segment))
         .or_else(|| {
             let index = model
                 .segments
@@ -91,7 +92,7 @@ pub(super) fn segment_without_patterns(segment: &CommandSegmentV1) -> Option<Str
     )
 }
 
-fn subcommand_position(arguments: &[String]) -> Option<usize> {
+pub(super) fn subcommand_position(arguments: &[String]) -> Option<usize> {
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         match argument.as_str() {

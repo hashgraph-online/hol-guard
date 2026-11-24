@@ -23,6 +23,7 @@ pub(super) fn command_without_patterns(model: &CanonicalCommandV1) -> Option<Str
         .enumerate()
         .map(|(index, segment)| {
             match super::git_search_text::segment_without_patterns(segment)
+                .or_else(|| super::git_message_text::segment_without_messages(segment))
                 .or_else(|| super::filter_pattern_text::segment_without_patterns(segment))
                 .or_else(|| super::name_pattern_text::segment_without_patterns(model, index))
             {
