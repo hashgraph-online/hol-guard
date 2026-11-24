@@ -177,6 +177,18 @@ fn a_stderr_harness_refuses_only_where_something_would_run() {
             "{event}"
         );
     }
+    for event in [
+        "PreToolCall",
+        "PermissionRequestV2",
+        "UserPromptSubmitted",
+        " beforeShellExecution ",
+    ] {
+        assert_eq!(
+            ask(event),
+            json!({"document": "", "stderr": REASON, "exit_code": 2}),
+            "{event}"
+        );
+    }
     for event in ["PostToolUse", "SessionStart", "Stop"] {
         assert_eq!(
             ask(event),

@@ -24,7 +24,17 @@ use crate::bounded_hook_bridge_render::failure_output_for;
 use crate::claude_hook_bridge_render::py_strip;
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
-const DECIDING_EVENTS: [&str; 3] = ["pretooluse", "permissionrequest", "userpromptsubmit"];
+const DECIDING_EVENTS: [&str; 8] = [
+    "pretool",
+    "pretoolcall",
+    "pretooluse",
+    "copilotpermissionrequest",
+    "permissionrequest",
+    "permissionrequestv2",
+    "userpromptsubmit",
+    "userpromptsubmitted",
+];
+const DECIDING_EVENT_PREFIXES: [&str; 1] = ["before"];
 const GROK_OBSERVE_EVENTS: [&str; 6] = [
     "sessionstart",
     "sessionend",
@@ -54,8 +64,7 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         .map(|value| value.as_str().ok_or(ERR_INVALID))
         .transpose()?;
     if on_stderr {
-        let compact = event_name.replace(['_', '-'], "").to_lowercase();
-        let (stderr, exit_code) = if DECIDING_EVENTS.contains(&compact.as_str()) {
+        let (stderr, exit_code) = if is_deciding_event(event_name) {
             (reason, 2)
         } else {
             ("", 0)
@@ -64,6 +73,14 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     }
     let (document, exit_code) = failure(harness, event_name, reason, reason_code);
     Ok(json!({ "document": document, "exit_code": exit_code }))
+}
+
+pub(crate) fn is_deciding_event(event_name: &str) -> bool {
+    let compact = event_name.trim().replace(['_', '-'], "").to_lowercase();
+    DECIDING_EVENTS.contains(&compact.as_str())
+        || DECIDING_EVENT_PREFIXES
+            .iter()
+            .any(|prefix| compact.starts_with(prefix))
 }
 
 fn text<'a>(fields: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'static str> {
