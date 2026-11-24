@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_adapter import NativeHookAdapterError, native_review_query
 from ..native_hook_authority_state import hook_authority_integrity_key
@@ -26,6 +25,7 @@ from .hook_fail_closed import (
     fail_closed_pre_tool,
     render_pre_tool,
     render_pre_tool_review,
+    render_silent_review_block,
 )
 
 if TYPE_CHECKING:
@@ -153,6 +153,13 @@ def pause_native_pre_tool_for_approval(
     # An Always allow on the queued review is saved under the install's package
     # key too, so the identical install in a linked worktree reuses it.
     package_approval = package_review.package_approval
+    from ..blocked_request_mode import asks_for_approval
+    from ..config import load_guard_config
+
+    try:
+        ask = asks_for_approval(load_guard_config(guard_home, workspace=workspace))
+    except (OSError, RuntimeError, TypeError, ValueError):
+        ask = False
     approval_center_url = native_review_approval_center_url(store)
     # The queue call looks up the connector a non-recognition review waits on
     # and answers the agent with its setup text; the row keeps the native
@@ -165,6 +172,59 @@ def pause_native_pre_tool_for_approval(
         home_dir=home_dir,
         deadline=deadline,
     )
+    if not ask or (identity is None and exact_token is None):
+        # The agent stays on the silent block. The inbox row is a separate record.
+        facts = {"ask": ask, "home_dir": str(home_dir or Path.home())}
+        # The queued row is stored with this same binding; without one a
+        # one-time approval cannot match the agent's retry. The resident
+        # derives it and the setup facts itself for the queued render.
+        bound = {"retry_reuses_approval": identity is not None, "exact_action_allowable": exact_token is not None}
+        queued = queue_native_pre_tool_review(
+            store,
+            harness=harness,
+            payload=payload,
+            native_result=native_result,
+            native_receipt=native_receipt,
+            workspace=workspace,
+            guard_home=guard_home,
+            home_dir=home_dir,
+            deadline=deadline,
+            exact_token=exact_token,
+            once_only_reason=once_only_reason,
+            approval_center_url=approval_center_url,
+            review_binding=identity,
+            connector_lookup=connector_lookup,
+            package_approval=package_approval,
+            policy_binding_verified=True,
+            # A block that links its approval holds the Codex bridge's wait;
+            # the resident links that wait only for such a block, so approving
+            # the row releases the waiting call.
+            codex_live_wait_payload=payload if canonical_harness(harness) == "codex" else None,
+            silent=True,
+            respond={"silent_review_block": facts},
+        )
+        if queued is None:
+            _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
+        block = queued.pop("hook_response", None) if queued else None
+        if isinstance(block, dict):
+            return block
+        request_id, approval_url = (queued.get("request_id"), queued.get("approval_url")) if queued else (None, None)
+        setup = _connector_setup(queued)
+        inputs = {
+            "harness": harness,
+            "result": dict(native_result),
+            "queued": queued is not None,
+            "request_id": request_id if isinstance(request_id, str) else None,
+            "approval_url": approval_url if isinstance(approval_url, str) else None,
+            "guard_home": str(guard_home),
+            # The resident drops the setup text when the review never reached the inbox.
+            "setup_reason": setup.get("setup_reason"),
+            "connector_is_local": setup.get("is_local") is True,
+            **bound,
+            **facts,
+        }
+        return render_silent_review_block(harness, inputs, guard_home=guard_home, deadline=deadline)
+
     queued = queue_native_pre_tool_review(
         store,
         harness=harness,
@@ -183,9 +243,8 @@ def pause_native_pre_tool_for_approval(
         package_approval=package_approval,
         policy_binding_verified=True,
         claude_notice=canonical_harness(harness) == "claude-code",
-        codex_live_wait=canonical_harness(harness) == "codex",
-        silent=None,
-        respond={"native_review": {}},
+        codex_live_wait_payload=payload if canonical_harness(harness) == "codex" else None,
+        respond={"paused_review": {}},
     )
     if queued is None:
         failed = dict(native_result)
@@ -207,6 +266,8 @@ def pause_native_pre_tool_for_approval(
             guard_home=guard_home,
             deadline=deadline,
         )
+    response["prompted"] = True
+    response["approval_center_url"] = approval_center_url
     return response
 
 
@@ -230,8 +291,8 @@ def queue_native_pre_tool_review(
     package_approval: Mapping[str, str] | None = None,
     claude_notice: bool = False,
     policy_binding_verified: bool = False,
-    codex_live_wait: bool = False,
-    silent: bool | None = False,
+    codex_live_wait_payload: Mapping[str, object] | None = None,
+    silent: bool = False,
     respond: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
     if not policy_binding_verified:
@@ -249,7 +310,6 @@ def queue_native_pre_tool_review(
     if not callable(queue):
         return None
     request_id = uuid.uuid4().hex
-    live_wait = _codex_live_wait(payload, workspace) if codex_live_wait else None
     review = {
         "result": dict(native_result),
         "native_receipt": dict(native_receipt) if native_receipt is not None else None,
@@ -293,7 +353,7 @@ def queue_native_pre_tool_review(
             hint={"deadline_left_ms": remaining_ms},
             silent=silent,
             claude_key=claude_key,
-            codex_live_wait=live_wait,
+            codex_live_wait_payload=codex_live_wait_payload,
             respond=respond,
             connector_lookup=connector_lookup,
             bound_bash=bound_bash is not None,
@@ -311,19 +371,6 @@ def _connector_setup(queued: object) -> Mapping[str, object]:
     """The connector the queue call found for the review, or nothing."""
     setup = queued.get("connector_setup") if isinstance(queued, dict) else None
     return cast(Mapping[str, object], setup) if isinstance(setup, dict) else {}
-
-
-def _codex_live_wait(payload: Mapping[str, object], workspace: Path | None) -> dict[str, object] | None:
-    """The waiting bridge's facts; the resident proves it live and builds the wait it links."""
-    process = payload.get(CODEX_BROWSER_WAIT_PROCESS_KEY)
-    timeout_seconds = payload.get(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY)
-    if process is None and timeout_seconds is None:
-        return None
-    return {
-        "process": process,
-        "timeout_seconds": timeout_seconds,
-        "workspace": None if workspace is None else str(workspace),
-    }
 
 
 def _native_review_artifact_id(harness: str, tool_name: str) -> str:
