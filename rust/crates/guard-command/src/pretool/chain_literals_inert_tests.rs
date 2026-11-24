@@ -466,6 +466,16 @@ fn values_used_as_more_than_output_stay_opaque() {
         "echo \"${PATH:=/tmp/inert}\"; echo \"label: $(cat marker)\"",
         ": ${HOME=/etc}; echo \"key: $(cat ~/passwd)\"",
         ": $((HOME=1)); echo \"label: $(cat marker)\"",
+        // Legacy `$[...]` arithmetic, zsh's unbraced subscript, the
+        // arithmetic operands of `[[ -eq ]]`, zsh's numeric `printf` and a
+        // zsh glob qualifier that runs code all assign as well.
+        ": $[PATH=0]; echo \"label: $(cat marker)\"",
+        "echo \"$[PATH=0]\"; echo \"label: $(cat marker)\"",
+        ": $path[PATH=0]; echo \"label: $(cat marker)\"",
+        "[[ 1 -eq PATH=0 ]]; echo \"label: $(cat marker)\"",
+        "printf '%d' PATH=0; echo \"label: $(cat marker)\"",
+        ": *(e:PATH=0:); echo \"label: $(cat marker)\"",
+        ": *(+steer); echo \"label: $(cat marker)\"",
         "trap 'HOME=/tmp/inert' DEBUG; echo \"label: $(cat ~/marker)\"",
         "cd ~/.ssh && echo \"$(cat id_rsa)\"",
         "pushd ~/.ssh; echo \"$(cat id_rsa)\"",

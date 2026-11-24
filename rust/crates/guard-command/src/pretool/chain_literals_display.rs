@@ -351,6 +351,18 @@ fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bo
             '"' if !single => double = !double,
             // `name()` opens a function definition.
             ')' if !quoted && previous == '(' => return true,
+            // A `(` joined to a word is a zsh glob qualifier, which can run
+            // code (`*(e:...:)`, `*(+name)`) while the glob expands.
+            '(' if !quoted
+                && at
+                    .checked_sub(1)
+                    .map(|before| chars[before])
+                    .is_some_and(|before| {
+                        !before.is_ascii_whitespace() && !";&|(){}$<>=".contains(before)
+                    }) =>
+            {
+                return true;
+            }
             c if !quoted && (c.is_ascii_whitespace() || ";&|(){}".contains(c)) => {
                 if !word.is_empty() {
                     words.push(std::mem::take(&mut word));
@@ -377,15 +389,21 @@ fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bo
                 .take_while(|name| !matches!(name.as_str(), "in" | "do"))
                 .any(|name| !loop_name(name))
     }) || words.iter().enumerate().any(|(at, word)| {
-        // `printf -v` and zsh's `print -v` write a variable.
+        // `printf -v` and zsh's `print -v` write a variable, and zsh's
+        // `printf` evaluates the argument of a numeric conversion, so
+        // `printf %d PATH=0` assigns.
         matches!(word.as_str(), "printf" | "print")
-            && words[at + 1..].iter().any(|word| word.starts_with("-v"))
+            && words[at + 1..]
+                .iter()
+                .any(|word| word.starts_with("-v") || word.contains('='))
     }) || expansion_assigns(&chars[..end.min(chars.len())])
 }
 
-/// Whether `chars` holds `${NAME=...}`, `${NAME:=...}` or an arithmetic
-/// `((...))`/`$((...))` with an `=`, each of which can assign a variable
-/// without a word the scan reads as an assignment.
+/// Whether `chars` holds `${NAME=...}`, `${NAME:=...}`, an arithmetic
+/// `((...))`/`$((...))` or a `[...]` with an `=`, each of which can assign a
+/// variable without a word the scan reads as an assignment. The bracket form
+/// covers the legacy `$[...]` arithmetic, zsh's unbraced subscript
+/// `$name[...]` and the arithmetic operands of `[[ ... -eq ... ]]`.
 fn expansion_assigns(chars: &[char]) -> bool {
     let text: String = chars.iter().collect();
     let assigns = |open: &str, close: char| {
@@ -394,7 +412,7 @@ fn expansion_assigns(chars: &[char]) -> bool {
             body[..body.find(close).unwrap_or(body.len())].contains('=')
         })
     };
-    assigns("${", '}') || assigns("((", ')')
+    assigns("${", '}') || assigns("((", ')') || assigns("[", ']')
 }
 
 /// Whether `name`, bound by `for` or `select`, is a plain variable the shell
