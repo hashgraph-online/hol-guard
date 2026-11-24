@@ -176,6 +176,7 @@ pub mod pretool_git_redirect_commit_chain;
 pub mod pretool_git_ref_listings;
 pub mod pretool_git_ref_reads;
 pub mod pretool_git_rev_list;
+pub mod pretool_git_add_then_report;
 pub mod pretool_git_session_ops;
 pub mod pretool_git_sibling_local_writes;
 pub mod pretool_git_sibling_worktree_cleanup;

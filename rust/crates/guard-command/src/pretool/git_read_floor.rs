@@ -80,6 +80,12 @@ pub(super) fn allowable_review(
     }
 }
 
+/// Step indexes of the model after a leading `cd`, as indexes into the
+/// model that still holds the `cd`.
+fn shifted_past_cd(steps: Vec<usize>) -> Vec<usize> {
+    steps.into_iter().map(|index| index + 1).collect()
+}
+
 /// One segment's configuration proof: what it answered, and whether a
 /// refusal was an unanswered probe rather than a helper it found.
 #[derive(Clone, Copy)]
@@ -204,10 +210,31 @@ fn verdict(
             cwd: Some(&cwd),
             ..context
         };
-        return Verdict::from_parts([
-            verdict(&rest, moved, deadline, execution_environment),
-            verdict(&tail, context, deadline, execution_environment),
-        ]);
+        let head = verdict(&rest, moved, deadline, execution_environment);
+        let after = verdict(&tail, context, deadline, execution_environment);
+        // `cd <dir> && git add <file> && git status; echo "exit $?"`: when
+        // the tail is clear and runs no Git, only the head's earlier steps
+        // keep its reads under the floor. The head holds every segment after
+        // the `cd`, so its step indexes name this model's segments one place
+        // later, and an allow is asked the same question it would be asked
+        // without the tail.
+        if matches!(after, Verdict::Clear)
+            && !tail
+                .segments
+                .iter()
+                .any(super::git_read_after_allow::git_segment)
+        {
+            match head {
+                Verdict::Unsettled(steps) => {
+                    return Verdict::Unsettled(shifted_past_cd(steps));
+                }
+                Verdict::UnansweredProbe(steps) if !steps.is_empty() => {
+                    return Verdict::UnansweredProbe(shifted_past_cd(steps));
+                }
+                _ => {}
+            }
+        }
+        return Verdict::from_parts([head, after]);
     }
     // Past this point every Git read is probed in one directory, so a later
     // `cd` moves reads somewhere this probe never looked. The exception is
