@@ -1,0 +1,109 @@
+//! A prompt whose words are placed nowhere maps by the outline of the one
+//! source file named for one of them.
+use super::super::project_tests::{project, prompt_map, ON};
+
+const ROUTE: &str =
+    "package mux\n\n// Route stores information to match a request.\ntype Route struct {\n\
+\tname string\n\tregexp routeRegexpGroup\n}\n\nfunc (r *Route) Name(name string) *Route {\n\
+\tr.name = name\n\treturn r\n}\n\nfunc (r *Route) GetName() string {\n\treturn r.name\n}\n";
+
+/// Ten more files that say `route`, so the word places nothing.
+fn routing_files() -> Vec<(String, String)> {
+    (0..10)
+        .map(|at| {
+            let text = format!(
+                "package mux\n\nfunc helper{at}(r *Route) *Route {{\n\treturn r // route\n}}\n"
+            );
+            (format!("part{at}.go"), text)
+        })
+        .collect()
+}
+
+fn map_of(extra: &[(&str, &str)], prompt: &str) -> String {
+    let files = routing_files();
+    let mut list: Vec<(&str, &str)> = (files.iter())
+        .map(|(path, text)| (path.as_str(), text.as_str()))
+        .collect();
+    list.extend_from_slice(extra);
+    let (home, _project, root) = project(ON, &list);
+    prompt_map(home.path(), &root, prompt).unwrap_or_default()
+}
+
+#[test]
+fn a_common_word_naming_one_source_file_maps_its_outline() {
+    let prompt = "Feature route metadata\n\nAdded metadata to route, as proposed in the issue.";
+    let text = map_of(
+        &[("route.go", ROUTE), ("route_test.go", "package mux\n")],
+        prompt,
+    );
+    assert!(text.contains("route.go:4-7 type Route struct {"), "{text}");
+    assert!(
+        text.contains("route.go:14-16 func (r *Route) GetName() string {"),
+        "{text}"
+    );
+    // Two files named for the word: neither is the one the prompt means.
+    let both = map_of(&[("route.go", ROUTE), ("v2/route.go", ROUTE)], prompt);
+    assert!(!both.contains("type Route struct"), "{both}");
+    // Only the last extension is dropped: `route.pb.go` is not `route.go`.
+    let generated = map_of(&[("route.go", ROUTE), ("route.pb.go", ROUTE)], prompt);
+    assert!(
+        generated.contains("route.go:4-7 type Route struct {"),
+        "{generated}"
+    );
+    // A generic file name is no subject: `main` names nothing.
+    let main = map_of(
+        &[("main.go", ROUTE)],
+        "Feature main metadata for the route.",
+    );
+    assert!(!main.contains("type Route struct"), "{main}");
+}
+
+/// A Go method is named after its receiver, so a prompt naming it maps to it.
+#[test]
+fn a_go_method_is_named_past_its_receiver() {
+    use super::super::super::sections::written_name;
+    assert_eq!(
+        written_name("func (r *Route) GetName() string {").as_deref(),
+        Some("GetName")
+    );
+    assert_eq!(
+        written_name("func (Route) Kind() int {").as_deref(),
+        Some("Kind")
+    );
+    assert_eq!(
+        written_name("func (l *List[T]) Push(v T) {").as_deref(),
+        Some("Push")
+    );
+    assert_eq!(written_name("func New() *Router {").as_deref(), Some("New"));
+    let text = map_of(
+        &[("route.go", ROUTE)],
+        "Make `GetName` return the empty name for a route built without one.",
+    );
+    assert!(
+        text.contains("route.go:14-16 func (r *Route) GetName() string {"),
+        "{text}"
+    );
+}
+
+/// A common word no file is named for still places nothing.
+#[test]
+fn a_common_word_no_file_is_named_for_places_nothing() {
+    use super::super::tests::{files, later, looking_for};
+    use super::super::{map, Asked, MAX_PLAIN_FILES};
+    let uses = "def read():\n    token = 1\n    return token\n";
+    let common = looking_for(&[("token", false, MAX_PLAIN_FILES + 1)]);
+    let named = files(&[
+        ("src/read.py", uses),
+        ("src/token.py", "class Token:\n    pass\n"),
+    ]);
+    let text = map(&named, &common, &Asked::default(), later())
+        .unwrap()
+        .text;
+    assert!(text.contains("src/token.py:1-2 class Token:"), "{text}");
+    assert!(!text.contains("src/read.py"), "{text}");
+    let unnamed = files(&[
+        ("src/read.py", uses),
+        ("src/lexer.py", "class Token:\n    pass\n"),
+    ]);
+    assert!(map(&unnamed, &common, &Asked::default(), later()).is_none());
+}
