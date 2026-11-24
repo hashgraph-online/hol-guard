@@ -4,7 +4,14 @@ use serde_json::Value;
 pub(super) fn bounded_task_list(payload: &Value, tool_name: Option<&str>) -> bool {
     if !matches!(
         tool_name,
-        Some("TodoWrite" | "TaskOutput" | "TaskStop" | "Skill" | "AskUserQuestion")
+        Some(
+            "TodoWrite"
+                | "TaskOutput"
+                | "TaskStop"
+                | "Skill"
+                | "AskUserQuestion"
+                | "ReadNotifications"
+        )
     ) {
         return false;
     }
@@ -138,6 +145,11 @@ fn bounded_task_input(input: &serde_json::Map<String, Value>, tool_name: Option<
             && input
                 .get("timeout")
                 .is_none_or(|value| value.as_u64().is_some_and(|n| n <= 600000));
+    }
+    if tool_name == Some("ReadNotifications") {
+        // Claude Code's notification inbox for the session: it takes no
+        // arguments and only returns what the host has queued for it.
+        return input.is_empty();
     }
     if input.len() != 1 {
         return false;

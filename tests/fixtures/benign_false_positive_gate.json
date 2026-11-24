@@ -39061,6 +39061,17 @@
       "expect": "allow"
     },
     {
+      "id": "claude-read-notifications-inbox",
+      "fix_area": "agent",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "read_notifications",
+      "tool_input": {},
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "subagent-brief-under-a-host-envelope",
       "fix_area": "agent",
       "harnesses": [
