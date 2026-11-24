@@ -241,7 +241,7 @@ fn command(span: &str) -> bool {
 fn tokens(span: &str) -> impl Iterator<Item = &str> {
     let split = span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')));
     split.filter(|token| {
-        !(token.trim_start_matches('v').chars()).all(|c| c.is_ascii_digit() || c == '.')
+        !(token.trim_start_matches(['v', 'V']).chars()).all(|c| c.is_ascii_digit() || c == '.')
     })
 }
 

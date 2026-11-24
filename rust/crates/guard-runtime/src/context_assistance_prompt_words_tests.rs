@@ -238,6 +238,7 @@ fn steering_words_and_versions_are_not_search_words() {
         "Okay finish it end to end",
         "continue, then proceed with the release",
         "okay just make sure we get 3.60 soon, was it there before v3.49.1?",
+        "Did V3.49 ship it?",
     ] {
         let found = terms(prompt);
         for steer in ["resume", "finish", "continue", "proceed", "3", "60", "349"] {
