@@ -122,6 +122,8 @@ fn a_chain_that_could_change_or_reroute_the_template_keeps_its_review() {
         "cat .env.example $(echo .env)",
         "rg --pre sh APP .env.example",
         "rg -z APP .env.example",
+        "rg --hostname-bin ./helper APP .env.example",
+        "rg --hostname-bin=./helper APP .env.example",
         "PATH=/tmp/bin cat .env.example",
         "env cat .env.example",
         "sh -c 'cat .env.example'",

@@ -176,6 +176,7 @@ pub(crate) fn chain_reads_only(
                 && !(segment.executable.as_deref() == Some("rg")
                     && segment.arguments.iter().any(|argument| {
                         argument.starts_with("--pre")
+                            || argument.starts_with("--hostname-bin")
                             || argument == "--search-zip"
                             || (argument.starts_with('-')
                                 && !argument.starts_with("--")
