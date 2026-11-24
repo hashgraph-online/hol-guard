@@ -1680,6 +1680,9 @@ mod control_flow_tests;
 #[cfg(test)]
 mod fixed_glob_option_boundary_tests;
 #[cfg(test)]
+#[path = "for_loop_sequence_tests.rs"]
+mod for_loop_sequence_tests;
+#[cfg(test)]
 #[path = "for_loop_tests.rs"]
 mod for_loop_tests;
 #[cfg(test)]
