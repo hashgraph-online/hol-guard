@@ -340,3 +340,93 @@ fn a_cli_run_after_cd_reads_its_own_grant() {
         RuleVerdict::Blocked(blocked.name.clone())
     );
 }
+
+#[cfg(unix)]
+fn executable(path: &Path, content: &[u8]) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, content).unwrap();
+    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+/// The agent runs `bun` from a directory the daemon's own `PATH` lacks, and
+/// its `PATH` also starts with Guard's package shim directory, whose `bun` is
+/// a shell script that re-enters Guard. The grant for the script must still
+/// match: the launch resolves against the agent's `PATH` the hook stamped,
+/// less the shim directory.
+#[cfg(unix)]
+#[test]
+fn a_script_grant_matches_the_runtime_on_the_agent_path_past_the_package_shim() {
+    let case = Case::new("agent-path", None);
+    let shim_dir = Path::new(&case.guard_home)
+        .join("package-shims")
+        .join("bin");
+    executable(&shim_dir.join("bun"), b"#!/bin/sh\nexec false\n");
+    let runtime_dir = Path::new(&case.workspace).join("runtime").join("bin");
+    executable(&runtime_dir.join("bun"), b"\x7fELF runtime\n");
+    fs::create_dir_all(Path::new(&case.workspace).join("tools")).unwrap();
+    fs::write(
+        Path::new(&case.workspace).join("tools").join("context.mjs"),
+        b"console.log('context');\n",
+    )
+    .unwrap();
+    let command = "bun ./tools/context.mjs --target app/items/page.tsx";
+    let runtime_dir = runtime_dir.to_str().unwrap();
+    let shim_dir = shim_dir.to_str().unwrap();
+    // A system directory with no `bun`, so the host's own never answers.
+    let system = Path::new(&case.workspace).join("system");
+    fs::create_dir_all(&system).unwrap();
+    let system = system.to_str().unwrap();
+
+    // The grant the user saved for the script, as the runtime on their own
+    // `PATH` identifies it.
+    let agent_env = [("PATH".to_owned(), format!("{runtime_dir}:{system}"))]
+        .into_iter()
+        .collect();
+    let granted = super::super::local_launch(
+        command,
+        &case.workspace,
+        &case.workspace,
+        Some(super::super::LaunchEnv {
+            user_home: &case.workspace,
+            env: &agent_env,
+        }),
+    )
+    .unwrap()
+    .expect("the runtime on the agent's PATH identifies the script");
+    rusqlite::Connection::open(Path::new(&case.guard_home).join("guard.db"))
+        .unwrap()
+        .execute(
+            "insert into local_cli_grant values (?1, ?2, 'allowed')",
+            [granted.cli_id.as_str(), granted.identity_hash.as_str()],
+        )
+        .unwrap();
+
+    let reviewed = |stamped: Option<String>| {
+        let mut request = case.request("review", command, review("native_command_review_required"));
+        // The daemon runs with a system `PATH` that holds no `bun`.
+        request.env = Some(
+            [("PATH".to_owned(), system.to_owned())]
+                .into_iter()
+                .collect(),
+        );
+        if let Some(path) = stamped {
+            request.payload.insert(
+                crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD.to_owned(),
+                json!({ "path": path }),
+            );
+        }
+        review_verdict(&request)
+    };
+    assert_eq!(
+        reviewed(Some(format!("{shim_dir}:{runtime_dir}:{system}"))),
+        RuleVerdict::Allowed
+    );
+    // Without the stamp the daemon's `PATH` finds no runtime to identify.
+    assert_eq!(reviewed(None), RuleVerdict::None);
+    // A `PATH` whose only `bun` is the shim identifies nothing either.
+    assert_eq!(
+        reviewed(Some(format!("{shim_dir}:{system}"))),
+        RuleVerdict::None
+    );
+}

@@ -98,12 +98,7 @@ pub(crate) fn allowed_verdict(request: &HookLocalCliRuleRequestV1) -> RuleVerdic
 /// `allowed_verdict` once the caller found a custom block rule.
 pub(crate) fn allowed_verdict_with_block_rules(request: &HookLocalCliRuleRequestV1) -> RuleVerdict {
     let check = check(request);
-    let launched = match super::launch_for(
-        &request.payload,
-        check.workspace,
-        check.home_dir,
-        check.launch_env,
-    ) {
+    let launched = match super::launch_for(&request.payload, &check) {
         Ok(Some(launched)) => launched,
         Ok(None) => return RuleVerdict::None,
         Err(()) => return RuleVerdict::Unverified,

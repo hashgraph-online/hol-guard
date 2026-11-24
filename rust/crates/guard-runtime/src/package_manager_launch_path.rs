@@ -40,24 +40,48 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
     if path.len() > MAX_PATH_BYTES {
         return Err(ERR_INVALID);
     }
+    Ok(
+        match without_package_shims(
+            &guard_home,
+            path,
+            separator,
+            &launch_cwd,
+            user_home.as_deref(),
+        ) {
+            Ok(path) => json!({ "path": path }),
+            Err(refused) => json!({ "refused": refused }),
+        },
+    )
+}
+
+/// `path` without the entries that resolve to Guard's package shim
+/// directory, or the reason it was refused: `shim_unverified` when the shim
+/// directory cannot be resolved, `path_unverified` when an entry cannot be.
+pub(crate) fn without_package_shims(
+    guard_home: &Path,
+    path: &str,
+    separator: &str,
+    launch_cwd: &Path,
+    user_home: Option<&Path>,
+) -> Result<String, &'static str> {
     let Ok(shim_dir) = resolve(&posix_root(guard_home.join("package-shims").join("bin"))) else {
-        return Ok(json!({ "refused": "shim_unverified" }));
+        return Err("shim_unverified");
     };
     let shim_dir = long_names(shim_dir);
     let mut kept = Vec::new();
     for entry in path.split(separator).filter(|entry| !entry.is_empty()) {
-        let resolved = expand_user(entry, user_home.as_deref())
+        let resolved = expand_user(entry, user_home)
             .map(|expanded| posix_root(launch_cwd.join(expanded)))
             .and_then(|joined| resolve(&joined).ok())
             .map(long_names);
         let Some(resolved) = resolved else {
-            return Ok(json!({ "refused": "path_unverified" }));
+            return Err("path_unverified");
         };
         if !same_path(&resolved, &shim_dir) {
             kept.push(entry);
         }
     }
-    Ok(json!({ "path": kept.join(separator) }))
+    Ok(kept.join(separator))
 }
 
 fn text<'a>(args: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'static str> {

@@ -191,7 +191,7 @@ fn granted(
                 store_path: rules.store_path.clone(),
                 guard_home: guard_home.clone(),
                 mode: if reviewed { "review" } else { "allowed" }.to_owned(),
-                payload,
+                payload: super::stamped_payload(envelope, payload),
                 native_result: verdict,
                 workspace: envelope.source.cwd.clone(),
                 home_dir: envelope.source.home_dir.clone(),
