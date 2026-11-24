@@ -86,31 +86,20 @@ fn ends_word(after: &str) -> bool {
     })
 }
 
-/// Whether every command in `command` takes only names, flags and paths and
-/// none of them prints its arguments. A nested substitution, a pipe or a
-/// command separator starts a new command, as does a leading `NAME=value`.
+/// Whether every word in `command` is a name, flag or path and none names a
+/// command that prints its arguments. A printer is refused wherever it
+/// stands, so a wrapper (`env echo`, `command printf`, `sudo -E echo`,
+/// `xargs echo`) cannot hide one.
 fn inert_command(command: &str) -> bool {
     if command.contains(['"', '\'', '`']) || command.contains("<<") {
         return false;
     }
-    let spaced = command.replace(['(', ')', '|', ';', '&'], " ; ");
-    let mut head = true;
-    for word in spaced.split_ascii_whitespace() {
-        if word == ";" {
-            head = true;
-            continue;
-        }
+    let spaced = command.replace(['(', ')', '|', ';', '&'], " ");
+    spaced.split_ascii_whitespace().all(|word| {
         let word = word.trim_start_matches('$');
         let name = word.rsplit('/').next().unwrap_or(word);
-        if head && PRINTERS.contains(&name) {
-            return false;
-        }
-        if !inert_word(word) {
-            return false;
-        }
-        head = head && word.contains('=');
-    }
-    true
+        !PRINTERS.contains(&name) && inert_word(word)
+    })
 }
 
 /// A name, flag, path or short number, not something that reads as key
