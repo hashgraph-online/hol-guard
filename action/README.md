@@ -133,6 +133,14 @@ Mode notes:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   ```
 
+## Scanner to release evidence
+
+Use the [Scanner to release evidence starter](../docs/guard/scanner-to-release-starter.md)
+to connect a published release to the existing HOL Plugin Release attestation
+contract. The starter keeps registration disabled until the repository owner
+reviews the matching listing, OIDC binding, visibility, retention, and retry
+behavior.
+
 ## Examples
 
 ### Basic scan with minimum score gate
