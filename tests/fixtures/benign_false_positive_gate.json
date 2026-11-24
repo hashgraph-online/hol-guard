@@ -17987,6 +17987,54 @@
       "expect": "allow"
     },
     {
+      "id": "sibling-sed-print-range-counted-from-a-line",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n '2,+10p' ${ORG}/service-api/src/index.ts"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "sibling-sed-print-range-counted-from-a-match",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n \"^mod \" ${ORG}/service-api/src/index.ts | head -3; sed -n '/^mod /,+6p' ${ORG}/service-api/src/index.ts"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sibling-sed-counted-range-writes-a-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n '2,+10w ${HOME}/notes.md' ${ORG}/service-api/src/index.ts"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-sibling-grep-glob-operand",
       "fix_area": "queue",
       "harnesses": [
