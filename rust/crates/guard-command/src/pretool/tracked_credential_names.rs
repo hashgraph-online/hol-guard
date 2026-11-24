@@ -376,6 +376,9 @@ fn plain_private_jwk(text: &str) -> bool {
 
 /// Whether `key` appears as a member name, at a word boundary and followed by
 /// `:` or `=`, whose value opens with at least `min` base64url characters.
+/// A value this plain reading cannot see counts as filled: one that starts on
+/// the next line, after a YAML block-scalar header, tag, anchor, alias or
+/// comment, or inside a TOML multiline string.
 fn keyed_value(text: &str, key: &str, min: usize) -> bool {
     text.match_indices(key).any(|(at, _)| {
         if text[..at]
@@ -391,14 +394,21 @@ fn keyed_value(text: &str, key: &str, min: usize) -> bool {
         let Some(value) = rest.strip_prefix([':', '=']) else {
             return false;
         };
-        value
-            .trim_start_matches([' ', '\t'])
-            .trim_start_matches(['"', '\''])
-            .chars()
-            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-            .count()
-            >= min
+        let value = value.trim_start_matches([' ', '\t']);
+        let quoted = value.trim_start_matches(['"', '\'']);
+        hidden_value(value)
+            || hidden_value(quoted)
+            || quoted
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .count()
+                >= min
     })
+}
+
+/// Whether a member's value does not start on its own line as plain text.
+fn hidden_value(value: &str) -> bool {
+    value.is_empty() || value.starts_with(['\n', '\r', '|', '>', '!', '&', '*', '#'])
 }
 
 /// Whether `text`, a value a tool call carries such as an edit's new text or

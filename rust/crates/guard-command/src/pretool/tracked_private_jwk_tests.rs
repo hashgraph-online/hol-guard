@@ -25,6 +25,33 @@ fn a_private_jwk_is_read_in_every_document_format() {
     }
 }
 
+/// A value the plain reading cannot see, because it starts on the next line,
+/// after a block-scalar header, or inside a TOML multiline string, still
+/// counts as filled.
+#[test]
+fn a_private_jwk_value_off_its_own_line_is_still_read() {
+    let literal = format!("kty: oct\nk: |-\n  {D}\n");
+    let folded = format!("kty: EC\nd: >-\n  {D}\n");
+    let next_line = format!("kty: EC\nd:\n  {D}\n");
+    let quoted_next_line = format!("kty: EC\nd: \"\n  {D}\"\n");
+    let anchored = format!("kty: EC\nd: &key\n  {D}\n");
+    let commented = format!("kty: EC\nd: # rotated quarterly\n  {D}\n");
+    let toml = format!("kty = \"RSA\"\nq = \"\"\"\n{D}\"\"\"\n");
+    let next_line_kty = format!("kty:\n  EC\nd: {D}\n");
+    for text in [
+        literal,
+        folded,
+        next_line,
+        quoted_next_line,
+        anchored,
+        commented,
+        toml,
+        next_line_kty,
+    ] {
+        assert!(private_jwk(&text), "{text}");
+    }
+}
+
 #[test]
 fn a_public_jwk_or_prose_about_keys_is_not_a_private_jwk() {
     let public = "{\"kty\": \"EC\", \"crv\": \"P-256\", \"x\": \"Wk3hQ8pX2mN7vR4tY9bL1cF6gJ0sD5aE8uI3oP2qZ7x\", \"y\": \"Wk3hQ8pX2mN7vR4tY9bL1cF6gJ0sD5aE8uI3oP2qZ7x\"}";
