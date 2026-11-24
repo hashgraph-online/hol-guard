@@ -25939,22 +25939,6 @@
       "expect": "allow"
     },
     {
-      "id": "sibling-cd-git-log-signature-format",
-      "fix_area": "queue",
-      "harnesses": [
-        "claude-code",
-        "codex",
-        "omp",
-        "zcode"
-      ],
-      "tool": "shell",
-      "tool_input": {
-        "command": "cd ${ORG}/app-portal && git log -1 --format=\"%an <%ae> | %cn <%ce> | %G? | %s\""
-      },
-      "cwd": "worktree",
-      "expect": "allow"
-    },
-    {
       "id": "sibling-cd-list-auth-named-source-dir",
       "fix_area": "queue",
       "harnesses": [
