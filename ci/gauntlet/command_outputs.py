@@ -316,12 +316,13 @@ def _scratch_log_label_match(calls: list[dict[str, Any]]) -> bool:
 
     Everything the checker prints lands in the log, so the call's own output is
     the label alone. Only the clean arm prints it, so a contained run that failed
-    to start or to open the log ends on the other label instead.
+    to start or to open the log ends on the other label instead, and a run that
+    leaked the report to the terminal prints more than the label.
     """
     if len(calls) != 1:
         return False
     lines = [line.strip() for line in (_text(calls[0]) or "").splitlines() if line.strip()]
-    return bool(lines) and lines[-1] == TSC_SCRATCH_LOG_LABEL
+    return lines == [TSC_SCRATCH_LOG_LABEL]
 
 
 def _workspace_runner_count_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:

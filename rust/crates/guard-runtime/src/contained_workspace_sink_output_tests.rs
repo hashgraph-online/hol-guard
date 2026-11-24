@@ -72,9 +72,9 @@ fn a_scratch_log_is_written_only_to_a_plain_file_of_this_user() {
     let directory = tempfile::tempdir().unwrap();
     let log = directory.path().join("check.log");
     // A missing log is created, and a held one is emptied before the run.
-    write_log(open_log(&log).unwrap(), b"first\n", false);
+    write_log(open_log(&log).unwrap(), b"first\n", false).unwrap();
     assert_eq!(std::fs::read(&log).unwrap(), b"first\n");
-    write_log(open_log(&log).unwrap(), b"second\n", true);
+    write_log(open_log(&log).unwrap(), b"second\n", true).unwrap();
     let written = std::fs::read_to_string(&log).unwrap();
     assert!(
         written.starts_with("second\n") && written.ends_with(TRUNCATED),
@@ -90,4 +90,15 @@ fn a_scratch_log_is_written_only_to_a_plain_file_of_this_user() {
     std::fs::hard_link(&target, &hard).unwrap();
     assert!(open_log(&hard).is_none());
     assert_eq!(std::fs::read(&target).unwrap(), b"kept\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_scratch_log_that_cannot_be_written_reports_the_failure() {
+    // `/dev/full` fails every write with ENOSPC, as a full disk does.
+    let full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+    assert!(write_log(full, b"report\n", false).is_err());
 }

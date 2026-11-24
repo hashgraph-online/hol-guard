@@ -552,6 +552,21 @@ _TYPESCRIPT_FILES = {
     ),
 }
 
+# The scratch-log case reads only the label the `&&` arm prints, so its checker
+# fails outright when the project option is lost: the run then ends on the
+# failure arm instead of printing the clean label over a diagnostic.
+_TSC_SCRATCH_LOG_FILES = {
+    **_TYPESCRIPT_FILES,
+    "node_modules/typescript/bin/tsc": (
+        "#!/usr/bin/env node\n"
+        f"if (!process.argv.slice(2).includes('{TSC_PROJECT_OPTION}')) {{\n"
+        "  console.error('tsc: the project option was not forwarded');\n"
+        "  process.exit(1);\n"
+        "}\n"
+        f"console.log('{TSC_MARKER}');\n"
+    ),
+}
+
 
 # The subdirectory the named-directory case asks the checker to start in.
 TSC_NAMED_DIRECTORY = "app"
@@ -883,7 +898,7 @@ _INSTALLS = {
     ),
     WORKSPACE_TSC_SCRATCH_LOG_CASE: _Install(
         "tsc",
-        _TYPESCRIPT_FILES,
+        _TSC_SCRATCH_LOG_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",

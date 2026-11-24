@@ -216,9 +216,21 @@ fn bounded(
     }
     let result = run();
     let (captured, cut) = signals.output.leave();
+    let mut saved = true;
     let chain = match (output, log) {
         (_, Some(file)) => {
-            output::write_log(file, &captured, cut);
+            if let Err(error) = output::write_log(file, &captured, cut) {
+                // The log holds only part of the output, so the output goes to
+                // the terminal instead, and the run counts as failed, as a
+                // program that cannot write its output fails under the shell.
+                // The finished core is never run again.
+                saved = false;
+                signals.output.err(
+                    format!("hol-guard: the output could not be saved to the log: {error}\n")
+                        .as_bytes(),
+                );
+                signals.output.err(&captured);
+            }
             None
         }
         (Some(output), None) if capture => {
@@ -226,7 +238,10 @@ fn bounded(
         }
         _ => None,
     };
-    let exit_code = result?;
+    let exit_code = match result? {
+        0 if !saved => 1,
+        code => code,
+    };
     let Some(output) = output else {
         return Ok(exit_code);
     };

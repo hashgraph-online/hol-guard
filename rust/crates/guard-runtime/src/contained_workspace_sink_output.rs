@@ -165,12 +165,15 @@ pub(super) fn open_log(_path: &std::path::Path) -> Option<File> {
 }
 
 /// Write the output held for a scratch log to it, raw, with the truncation
-/// notice when a stream was cut at `CAPTURE_LIMIT`.
-pub(super) fn write_log(mut file: File, captured: &[u8], cut: bool) {
-    write(&mut file, captured);
+/// notice when a stream was cut at `CAPTURE_LIMIT`. A failed write, such as a
+/// full disk, is returned so the caller can keep the output and the status
+/// honest rather than report a log that was only partly saved.
+pub(super) fn write_log(mut file: File, captured: &[u8], cut: bool) -> std::io::Result<()> {
+    file.write_all(captured)?;
     if cut {
-        write(&mut file, TRUNCATED.as_bytes());
+        file.write_all(TRUNCATED.as_bytes())?;
     }
+    file.flush()
 }
 
 fn write(stream: &mut impl Write, bytes: &[u8]) {
