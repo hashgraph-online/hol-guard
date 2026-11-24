@@ -128,6 +128,8 @@ fn refuses_a_cargo_configuration_that_can_move_the_registry() {
         "[credential-alias]\nevil = [\"./evil\"]\n",
         "[env]\nCARGO_REGISTRY_DEFAULT = \"mirror\"\n",
         "[unstable]\ncredential-process = true\n",
+        "include = [\"extra.toml\"]\n",
+        "include = [{ path = \"extra.toml\", optional = true }]\n",
         // Unreadable configuration is not proof of anything.
         "[registry\n",
     ] {
@@ -415,5 +417,18 @@ fn a_configured_compiler_keeps_the_manifest_query_reviewed() {
             "{contents}"
         );
     }
+    // Includes are not covered by the local table proof, even when the
+    // included file is optional or currently absent.
+    for contents in [
+        "include = [\"extra.toml\"]\n",
+        "include = [{ path = \"extra.toml\", optional = true }]\n",
+    ] {
+        std::fs::write(&path, contents).unwrap();
+        assert!(!safe_cargo_probe(&query, context()), "{contents}");
+        assert!(!safe_cargo_probe(&words("locate-project"), context()));
+        assert!(!safe_cargo_probe(&words("search serde"), context()));
+    }
+    std::fs::write(&path, "[term]\nquiet = true\n").unwrap();
+    assert!(safe_cargo_probe(&query, context()));
     std::fs::remove_dir_all(&root).ok();
 }

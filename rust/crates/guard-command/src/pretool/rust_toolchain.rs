@@ -440,6 +440,11 @@ fn directory_config_inert(directory: &Path, tables: &[&str]) -> bool {
         if table.contains_key("unstable") {
             return false;
         }
+        // Cargo can recursively load additional configuration files. Until
+        // those files are proven inert, the local table alone proves nothing.
+        if table.contains_key("include") {
+            return false;
+        }
     }
     true
 }
