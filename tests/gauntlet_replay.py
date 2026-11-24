@@ -58,6 +58,7 @@ FIXED = {
     "todo_write": "todo_write",
     "ls": "ls",
     "ask_user_question": "AskUserQuestion",
+    "read_notifications": "ReadNotifications",
     # Gate cases name these tools for Claude Code only, so one spelling is enough.
     "web_fetch": "WebFetch",
     "agent": "Agent",
