@@ -102,6 +102,15 @@ impl Shaping {
         self.out(&shown(&bytes[..bytes.len().min(OUTPUT_LIMIT)], truncated));
     }
 
+    /// Write held output to standard error as display text, cut at
+    /// `OUTPUT_LIMIT` with the truncation notice, the way [`Self::show`]
+    /// writes a filter chain's result. A scratch log that cannot be written
+    /// sends its output here, so the terminal never takes the raw capture.
+    pub(super) fn show_err(&self, bytes: &[u8], cut: bool) {
+        let truncated = cut || bytes.len() > OUTPUT_LIMIT;
+        self.err(&shown(&bytes[..bytes.len().min(OUTPUT_LIMIT)], truncated));
+    }
+
     /// Write `bytes` to standard output.
     pub(super) fn out(&self, bytes: &[u8]) {
         match self.frame().as_mut() {

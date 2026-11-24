@@ -229,7 +229,7 @@ fn bounded(
                     format!("hol-guard: the output could not be saved to the log: {error}\n")
                         .as_bytes(),
                 );
-                signals.output.err(&captured);
+                signals.output.show_err(&captured, cut);
             }
             None
         }

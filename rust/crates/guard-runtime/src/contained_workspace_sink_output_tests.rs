@@ -66,6 +66,24 @@ fn a_cut_capture_is_noted_after_the_chain_not_in_its_input() {
     assert_eq!(shaping.leave().0, TRUNCATED.as_bytes());
 }
 
+#[test]
+fn output_a_log_could_not_hold_reaches_the_terminal_as_display_text() {
+    let shaping = Shaping::default();
+    // A merged frame takes standard error, so the test can read what it got.
+    assert!(shaping.enter(true, true));
+    shaping.show_err(b"\x1b[0mend\r\n", false);
+    assert_eq!(shaping.leave().0, "\u{fffd}[0mend\n".as_bytes());
+    assert!(shaping.enter(true, true));
+    shaping.show_err(&b"y".repeat(OUTPUT_LIMIT + 1), false);
+    let (shown, _) = shaping.leave();
+    assert_eq!(shown.len(), OUTPUT_LIMIT + TRUNCATED.len());
+    assert!(shown.ends_with(TRUNCATED.as_bytes()));
+    // A capture already cut keeps its notice.
+    assert!(shaping.enter(true, true));
+    shaping.show_err(b"part\n", true);
+    assert!(shaping.leave().0.ends_with(TRUNCATED.as_bytes()));
+}
+
 #[cfg(unix)]
 #[test]
 fn a_scratch_log_is_written_only_to_a_plain_file_of_this_user() {
