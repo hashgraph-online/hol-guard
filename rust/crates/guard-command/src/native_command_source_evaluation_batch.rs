@@ -50,6 +50,11 @@ struct Case {
 /// Reuse one admitted program and synthetic control snapshot for an offline
 /// batch. Every result still comes from production parsing and evaluation.
 pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
+    // Every case inherits the same runtime environment, so the batch reads it once.
+    crate::pretool::inherited_session::scope(|| evaluate_cases(bytes))
+}
+
+fn evaluate_cases(bytes: &[u8]) -> Result<Value, &'static str> {
     if bytes.is_empty() || bytes.len() > json::MAX_SOURCE_BYTES {
         return Err("command_source_bytes_invalid");
     }
