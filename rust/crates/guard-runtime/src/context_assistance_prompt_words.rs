@@ -173,13 +173,27 @@ fn command(span: &str) -> bool {
             .any(|word| word.starts_with('-') || word.contains('/') || file_name(word).is_some())
 }
 
-/// The prompt's words but numbers and versions (`3.60`), which name no code.
+/// The prompt's words but those that name no code: numbers and versions
+/// (`3.60`), abbreviations such as "e.g." and "i.e.", and email addresses
+/// (`someone@example.com`). A decorator (`@app.route`) or an import alias
+/// (`@/lib/api.ts`) is still read.
 fn tokens(span: &str) -> impl Iterator<Item = &str> {
     let split = span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')));
-    split.filter(|token| {
+    split.filter(move |token| {
         let body = token.strip_prefix(['v', 'V']).unwrap_or(token);
         let number = body.chars().all(|c| c.is_ascii_digit() || c == '.');
-        !(number && (body.len() == token.len() || body.contains(|c: char| c.is_ascii_digit())))
+        let abbreviation = token.len() > 1
+            && token.ends_with('.')
+            && token.split('.').all(|piece| piece.chars().count() <= 1);
+        let start = token.as_ptr() as usize - span.as_ptr() as usize;
+        let (before, after) = (&span[..start], &span[start + token.len()..]);
+        let mailbox = before
+            .strip_suffix('@')
+            .and_then(|user| user.chars().last());
+        let email = after.starts_with('@') || mailbox.is_some_and(char::is_alphanumeric);
+        !((number && (body.len() == token.len() || body.contains(|c: char| c.is_ascii_digit())))
+            || abbreviation
+            || email)
     })
 }
 

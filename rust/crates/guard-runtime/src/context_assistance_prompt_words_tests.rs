@@ -262,3 +262,31 @@ fn steering_words_and_versions_are_not_search_words() {
         );
     }
 }
+
+/// "e.g." and an email address are not code: before, "e.g." read as the
+/// dotted name `e.g` and `someone@example.com` as `example.com`, and each
+/// mapped whichever file wrote them. Decorators and import aliases still count.
+#[test]
+fn abbreviations_and_email_addresses_are_not_code() {
+    for prompt in [
+        "what else can we do to improve deliverability, e.g. through an OAuth app?",
+        "keep the list short, i.e. one line per item",
+        "it shows someone@example.com as broken",
+        "send it to first.last@mail.example.org, then retry",
+    ] {
+        assert!(
+            spellings(prompt).is_empty(),
+            "{prompt}: {:?}",
+            spellings(prompt)
+        );
+        assert!(named(prompt).is_empty(), "{prompt}: {:?}", named(prompt));
+        assert!(
+            !marked_terms(prompt).iter().any(|(_, shaped)| *shaped),
+            "{prompt}: {:?}",
+            marked_terms(prompt)
+        );
+    }
+    assert!(spellings("Why does @app.route drop the slash?").contains(&"app.route".to_owned()));
+    assert_eq!(named("Fix the import in @/lib/api.ts"), ["lib/api.ts"]);
+    assert!(spellings("Call `e.g` on it").contains(&"e.g".to_owned()));
+}
