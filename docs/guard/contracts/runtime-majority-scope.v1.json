@@ -617,6 +617,14 @@
         "reason": "Reviewed: reads a saved policy record by id and adds its integrity and source metadata for Guard's policy presentation."
       },
       {
+        "path": "src/codex_plugin_scanner/guard/store_base_schema.py",
+        "reason": "Reviewed: the base tables, indexes and triggers the store creates when it opens, moved out of store_connection_schema.py unchanged. The native runtime keeps a copy that a parity test holds to this list."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/store_schema_columns.py",
+        "reason": "Reviewed: the columns and policy indexes the store adds to tables created by older releases, moved out of store_connection_schema.py unchanged. The native runtime keeps a copy that a parity test holds to these lists."
+      },
+      {
         "path": "src/codex_plugin_scanner/guard/store_policy_activation_view.py",
         "reason": "Reviewed: validates the native store's policy activation view reply (stored sync state text, the authority snapshot and the remote policy rows) that a policy bundle activation decides from; the native store runs the read."
       },

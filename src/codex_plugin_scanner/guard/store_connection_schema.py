@@ -41,9 +41,10 @@ from .sqlite_recovery import (
     sqlite_store_probe_detail,
 )
 from .sqlite_tuning import sqlite_operation_deadline_monotonic
+from .store_base import *
 
 # ruff: noqa: F403,F405
-from .store_base import *
+from .store_base_schema import base_schema_statements
 from .store_bash_operation_schema import (
     BASH_INVOCATION_MIGRATION_VERSION,
     BASH_OPERATION_MIGRATION_VERSION,
@@ -64,6 +65,16 @@ from .store_local_cli_schema import ensure_local_cli_schema, local_cli_schema_is
 from .store_receipt_rollup_schema import request_receipt_rollup_rebuild
 from .store_resume import ensure_resume_schema
 from .store_review_event_outbox_schema import ensure_review_event_outbox_schema
+from .store_schema_columns import (
+    APPROVAL_COLUMNS,
+    ATTACHMENT_COLUMNS,
+    LOCAL_ONCE_COLUMNS,
+    LOCAL_ONCE_INDEX_STATEMENT,
+    POLICY_COLUMNS,
+    POLICY_INDEX_STATEMENTS,
+    RECEIPT_COLUMNS,
+    ensure_columns,
+)
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
 from .store_storage_maintenance import (
     STORAGE_MAINTENANCE_MIGRATION_VERSION,
@@ -118,79 +129,6 @@ def _sleep_compat(seconds: float) -> None:
     sleep = getattr(time_module, "sleep", time.sleep)
     sleep(seconds)
 
-
-_POLICY_INDEX_STATEMENTS = (
-    """
-    create index if not exists idx_policy_decisions_reuse_artifact
-    on policy_decisions (action, harness, artifact_id, updated_at desc, decision_id desc)
-    """,
-    """
-    create index if not exists idx_policy_decisions_reuse_hash
-    on policy_decisions (action, harness, artifact_hash, updated_at desc, decision_id desc)
-    """,
-    """
-    create index if not exists idx_policy_decisions_reuse_publisher
-    on policy_decisions (action, harness, publisher, updated_at desc, decision_id desc)
-    """,
-    """
-    create index if not exists idx_policy_decisions_lookup_artifact
-    on policy_decisions (artifact_id, harness, artifact_hash, updated_at desc, decision_id desc)
-    where scope = 'artifact'
-    """,
-    """
-    create index if not exists idx_policy_decisions_lookup_workspace
-    on policy_decisions (workspace, harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
-    where scope = 'workspace'
-    """,
-    """
-    create index if not exists idx_policy_decisions_lookup_publisher
-    on policy_decisions (publisher, harness, artifact_hash, updated_at desc, decision_id desc)
-    where scope = 'publisher'
-    """,
-    """
-    create index if not exists idx_policy_decisions_lookup_publisher_legacy
-    on policy_decisions (publisher, harness, artifact_hash, updated_at desc, decision_id desc)
-    where scope = 'publisher' and artifact_hash is not null
-      and artifact_hash not like 'guard-approval-context:v1:%'
-    """,
-    """
-    create index if not exists idx_policy_decisions_lookup_harness
-    on policy_decisions (harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
-    where scope = 'harness'
-    """,
-    """
-    create index if not exists idx_policy_decisions_lookup_harness_legacy
-    on policy_decisions (harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
-    where scope = 'harness' and artifact_hash is not null
-      and artifact_hash not like 'guard-approval-context:v1:%'
-    """,
-    """
-    create index if not exists idx_policy_decisions_lookup_global
-    on policy_decisions (harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
-    where scope = 'global'
-    """,
-    """
-    create index if not exists idx_policy_decisions_lookup_global_legacy
-    on policy_decisions (harness, artifact_id, artifact_hash, updated_at desc, decision_id desc)
-    where scope = 'global' and artifact_hash is not null
-      and artifact_hash not like 'guard-approval-context:v1:%'
-    """,
-    """
-    create index if not exists idx_policy_decisions_diagnostic_harness_broad
-    on policy_decisions (harness, updated_at desc, decision_id desc)
-    where scope = 'harness' and action = 'allow' and artifact_id is null
-    """,
-    """
-    create index if not exists idx_policy_decisions_diagnostic_global_broad
-    on policy_decisions (harness, updated_at desc, decision_id desc)
-    where scope = 'global' and action = 'allow' and artifact_id is null
-    """,
-    """
-    create index if not exists idx_policy_decisions_diagnostic_publisher
-    on policy_decisions (harness, publisher, updated_at desc, decision_id desc)
-    where scope = 'publisher' and action = 'allow'
-    """,
-)
 
 _RECEIPT_WARN_ROLLUP_MIGRATION_VERSION = 16
 _REQUIRED_SCHEMA_MIGRATION_VERSIONS = (  # Keep retired-index databases on the path that reaps the index.
@@ -727,403 +665,7 @@ class StoreConnectionSchemaMixin:
 
     def _initialize_schema(self) -> None:
         initialize_incremental_vacuum = not self.path.exists()
-        statements = (
-            """
-            create table if not exists harness_installations (
-              harness text primary key,
-              active integer not null,
-              workspace text,
-              config_path text,
-              metadata_json text not null default '{}',
-              updated_at text not null
-            )
-            """,
-            """
-            create table if not exists artifact_snapshots (
-              artifact_id text not null,
-              harness text not null,
-              snapshot_json text not null,
-              artifact_hash text not null,
-              recorded_at text not null,
-              primary key (artifact_id, harness)
-            )
-            """,
-            """
-            create table if not exists artifact_hashes (
-              artifact_id text not null,
-              harness text not null,
-              artifact_hash text not null,
-              recorded_at text not null
-            )
-            """,
-            """
-            create table if not exists artifact_diffs (
-              diff_id integer primary key autoincrement,
-              artifact_id text not null,
-              harness text not null,
-              changed_fields_json text not null,
-              previous_hash text,
-              current_hash text not null,
-              recorded_at text not null
-            )
-            """,
-            """
-            create table if not exists artifact_capabilities (
-              artifact_id text not null,
-              harness text not null,
-              capability_json text not null,
-              updated_at text not null,
-              primary key (artifact_id, harness)
-            )
-            """,
-            """
-            create table if not exists provenance_cache (
-              artifact_hash text primary key,
-              payload_json text not null,
-              updated_at text not null
-            )
-            """,
-            """
-            create table if not exists artifact_inventory (
-              artifact_id text not null,
-              harness text not null,
-              artifact_name text not null,
-              artifact_type text not null,
-              source_scope text not null,
-              config_path text not null,
-              publisher text,
-              origin_url text,
-              launch_command text,
-              transport text,
-              first_seen_at text not null,
-              last_seen_at text not null,
-              last_changed_at text,
-              last_approved_at text,
-              removed_at text,
-              present integer not null default 1,
-              last_policy_action text not null,
-              artifact_hash text not null,
-              primary key (artifact_id, harness)
-            )
-            """,
-            """
-            create table if not exists policy_decisions (
-              decision_id integer primary key autoincrement,
-              harness text not null,
-              scope text not null,
-              artifact_id text,
-              artifact_hash text,
-              workspace text,
-              publisher text,
-              action text not null,
-              reason text,
-              owner text,
-              source text not null default 'local',
-              expires_at text,
-              policy_document_schema_version text,
-              policy_document_id text,
-              policy_document_digest text,
-              policy_rule_id text,
-              policy_provenance_json text,
-              updated_at text not null
-            )
-            """,
-            """
-            create table if not exists runtime_receipts (
-              receipt_id text primary key,
-              harness text not null,
-              artifact_id text not null,
-              artifact_hash text not null,
-              policy_decision text not null,
-              capabilities_summary text not null default '',
-              changed_capabilities_json text not null,
-              provenance_summary text not null,
-              user_override text,
-              artifact_name text,
-              source_scope text,
-              scanner_evidence_json text not null default '[]',
-              timestamp text not null,
-              raw_command_text text
-            )
-            """,
-            """
-            create table if not exists runtime_receipt_envelopes (
-              receipt_id text primary key references runtime_receipts(receipt_id) on delete cascade,
-              envelope_full_json text,
-              envelope_redacted_json text not null
-            )
-            """,
-            """
-            create table if not exists publisher_cache (
-              publisher_key text primary key,
-              payload_json text not null,
-              updated_at text not null
-            )
-            """,
-            """
-            create table if not exists sync_state (
-              state_key text primary key,
-              payload_json text not null,
-              updated_at text not null
-            )
-            """,
-            """
-            create table if not exists guard_devices (
-              device_key text primary key,
-              installation_id text not null,
-              device_label text not null,
-              created_at text not null,
-              updated_at text not null
-            )
-            """,
-            """
-            create table if not exists schema_migrations (
-              version integer primary key,
-              applied_at text not null
-            )
-            """,
-            """
-            create table if not exists guard_events (
-              event_id integer primary key autoincrement,
-              event_name text not null,
-              payload_json text not null,
-              occurred_at text not null
-            )
-            """,
-            """
-            create index if not exists idx_guard_events_recent
-            on guard_events (occurred_at desc, event_id desc)
-            """,
-            """
-            create index if not exists idx_guard_events_name_recent
-            on guard_events (event_name, occurred_at desc, event_id desc)
-            """,
-            """
-            create table if not exists guard_exact_cloud_review_receipts (
-              receipt_id text primary key,
-              request_id text not null,
-              claimed_at text not null
-            )
-            """,
-            """
-            create table if not exists guard_local_once_approvals (
-              approval_id text primary key,
-              request_id text not null,
-              harness text not null,
-              artifact_id text not null,
-              artifact_hash text not null,
-              workspace text,
-              publisher text,
-              action text not null,
-              created_at text not null,
-              expires_at text not null,
-              claimed_at text,
-              integrity_version integer,
-              payload_hash text,
-              payload_mac text,
-              integrity_key_id text,
-              signed_at text,
-              authority_kind text
-            )
-            """,
-            """
-            create index if not exists idx_guard_local_once_approvals_lookup
-            on guard_local_once_approvals (claimed_at, harness, artifact_id, artifact_hash, expires_at)
-            """,
-            """
-            create index if not exists idx_guard_local_once_reuse_artifact
-            on guard_local_once_approvals (action, harness, artifact_id, created_at desc, approval_id desc)
-            """,
-            """
-            create index if not exists idx_guard_local_once_reuse_hash
-            on guard_local_once_approvals (action, harness, artifact_hash, created_at desc, approval_id desc)
-            """,
-            """
-            create index if not exists idx_guard_local_once_diagnostic_artifact
-            on guard_local_once_approvals (harness, artifact_id, created_at desc, approval_id desc)
-            where claimed_at is null and action = 'allow'
-            """,
-            """
-            create index if not exists idx_guard_local_once_diagnostic_hash
-            on guard_local_once_approvals (harness, artifact_hash, created_at desc, approval_id desc)
-            where claimed_at is null and action = 'allow'
-            """,
-            """
-            create table if not exists guard_approval_authority_revision (
-              singleton integer primary key check (singleton = 1),
-              revision integer not null
-            )
-            """,
-            """
-            insert or ignore into guard_approval_authority_revision (singleton, revision)
-            values (1, 0)
-            """,
-            """
-            create trigger if not exists trg_policy_decisions_authority_insert
-            after insert on policy_decisions begin
-              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
-            end
-            """,
-            """
-            create trigger if not exists trg_policy_decisions_authority_update
-            after update on policy_decisions begin
-              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
-            end
-            """,
-            """
-            create trigger if not exists trg_policy_decisions_authority_delete
-            after delete on policy_decisions begin
-              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
-            end
-            """,
-            """
-            create trigger if not exists trg_local_once_authority_insert
-            after insert on guard_local_once_approvals begin
-              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
-            end
-            """,
-            """
-            create trigger if not exists trg_local_once_authority_update
-            after update on guard_local_once_approvals begin
-              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
-            end
-            """,
-            """
-            create trigger if not exists trg_local_once_authority_delete
-            after delete on guard_local_once_approvals begin
-              update guard_approval_authority_revision set revision = revision + 1 where singleton = 1;
-            end
-            """,
-            """
-            create table if not exists guard_cloud_events (
-              event_id text primary key,
-              idempotency_key text not null unique,
-              event_type text not null,
-              payload_json text not null,
-              occurred_at text not null,
-              uploaded_at text
-            )
-            """,
-            """
-            create index if not exists idx_guard_cloud_events_sync
-            on guard_cloud_events (uploaded_at, occurred_at)
-            """,
-            """
-            create table if not exists guard_runtime_state (
-              state_key text primary key,
-              session_id text not null,
-              daemon_host text not null,
-              daemon_port integer not null,
-              started_at text not null,
-              last_heartbeat_at text not null
-            )
-            """,
-            """
-            create table if not exists scanner_cache (
-              scanner_name text not null,
-              target_id text not null,
-              cache_key text not null,
-              input_content_hash text not null,
-              scanner_version text not null,
-              payload_json text not null,
-              updated_at text not null,
-              primary key (scanner_name, target_id)
-            )
-            """,
-            """
-            create index if not exists idx_scanner_cache_key
-            on scanner_cache (cache_key)
-            """,
-            """
-            create table if not exists managed_installs (
-              harness text primary key,
-              active integer not null,
-              workspace text,
-              manifest_json text not null,
-              updated_at text not null
-            )
-            """,
-            """
-            create table if not exists guard_sessions (
-              session_id text primary key,
-              harness text not null,
-              surface text not null,
-              status text not null,
-              client_name text not null,
-              client_title text,
-              client_version text,
-              workspace text,
-              capabilities_json text not null default '[]',
-              created_at text not null,
-              updated_at text not null
-            )
-            """,
-            """
-            create table if not exists guard_operations (
-              operation_id text primary key,
-              session_id text not null,
-              harness text not null,
-              operation_type text not null,
-              status text not null,
-              approval_request_ids_json text not null default '[]',
-              resume_token text,
-              metadata_json text not null default '{}',
-              created_at text not null,
-              updated_at text not null
-            )
-            """,
-            """
-            create table if not exists guard_operation_items (
-              item_id text primary key,
-              operation_id text not null,
-              item_type text not null,
-              lifecycle text not null,
-              payload_json text not null default '{}',
-              created_at text not null
-            )
-            """,
-            """
-            create table if not exists guard_client_attachments (
-              client_id text primary key,
-              surface text not null,
-              session_id text,
-              metadata_json text not null default '{}',
-              lease_id text not null default '',
-              lease_expires_at text,
-              attached_at text not null,
-              last_seen_at text not null
-            )
-            """,
-            """
-            create table if not exists guard_surface_opens (
-              surface text not null,
-              open_key text not null,
-              opened_at text not null,
-              primary key (surface, open_key)
-            )
-            """,
-            """
-            create table if not exists guard_request_read_state (
-              request_id text primary key,
-              read_at text not null
-            )
-            """,
-            """
-            create index if not exists idx_guard_request_read_state_read_at
-            on guard_request_read_state (read_at desc)
-            """,
-            resume_schema_statement(),
-            connect_state_schema_statement(),
-            connect_request_schema_statement(),
-            connect_state_schema_statement(),
-            approval_schema_statement(),
-            supply_chain_bundle_schema_statement(),
-            supply_chain_eval_cache_schema_statement(),
-            threat_intel_bundle_schema_statement(),
-            *store_native_decision_receipts.native_decision_receipt_schema_statements(
-                threat_intel_matches_schema_statement()
-            ),
-        )
+        statements = base_schema_statements()
         with self._connect() as connection:
             if initialize_incremental_vacuum:
                 connection.execute("pragma auto_vacuum=incremental")
@@ -1156,72 +698,17 @@ class StoreConnectionSchemaMixin:
                 connection.execute(idx_stmt)
             for idx_stmt in threat_intel_index_statements():
                 connection.execute(idx_stmt)
-            self._ensure_policy_column(connection, "publisher", "text")
-            self._ensure_policy_column(connection, "artifact_hash", "text")
-            self._ensure_policy_column(connection, "owner", "text")
-            self._ensure_policy_column(connection, "source", "text not null default 'local'")
-            self._ensure_policy_column(connection, "expires_at", "text")
-            self._ensure_policy_column(connection, "integrity_version", "integer")
-            self._ensure_policy_column(connection, "integrity_generation", "integer")
-            self._ensure_policy_column(connection, "payload_hash", "text")
-            self._ensure_policy_column(connection, "payload_mac", "text")
-            self._ensure_policy_column(connection, "integrity_key_id", "text")
-            self._ensure_policy_column(connection, "signed_at", "text")
-            self._ensure_policy_column(connection, "policy_document_schema_version", "text")
-            self._ensure_policy_column(connection, "policy_document_id", "text")
-            self._ensure_policy_column(connection, "policy_document_digest", "text")
-            self._ensure_policy_column(connection, "policy_rule_id", "text")
-            self._ensure_policy_column(connection, "policy_provenance_json", "text")
-            for index_statement in _POLICY_INDEX_STATEMENTS:
+            ensure_columns(connection, "policy_decisions", POLICY_COLUMNS)
+            for index_statement in POLICY_INDEX_STATEMENTS:
                 connection.execute(index_statement)
-            self._ensure_column(connection, "guard_local_once_approvals", "integrity_version", "integer")
-            self._ensure_column(connection, "guard_local_once_approvals", "payload_hash", "text")
-            self._ensure_column(connection, "guard_local_once_approvals", "payload_mac", "text")
-            self._ensure_column(connection, "guard_local_once_approvals", "integrity_key_id", "text")
-            self._ensure_column(connection, "guard_local_once_approvals", "signed_at", "text")
-            self._ensure_column(connection, "guard_local_once_approvals", "authority_kind", "text")
-            connection.execute(
-                """
-                create index if not exists idx_guard_exact_cloud_local_once_lookup
-                on guard_local_once_approvals (authority_kind, request_id, claimed_at, expires_at)
-                """
-            )
-            self._ensure_runtime_receipts_column(connection, "capabilities_summary", "text not null default ''")
-            self._ensure_runtime_receipts_column(connection, "scanner_evidence_json", "text not null default '[]'")
-            self._ensure_runtime_receipts_column(connection, "diff_summary", "text")
-            self._ensure_runtime_receipts_column(connection, "approval_source", "text")
-            self._ensure_runtime_receipts_column(connection, "approval_request_id", "text")
-            self._ensure_runtime_receipts_column(connection, "raw_command_text", "text")
+            ensure_columns(connection, "guard_local_once_approvals", LOCAL_ONCE_COLUMNS)
+            connection.execute(LOCAL_ONCE_INDEX_STATEMENT)
+            ensure_columns(connection, "runtime_receipts", RECEIPT_COLUMNS)
             self._ensure_runtime_receipt_envelopes_table(connection)
             if not self._schema_version_applied(connection, version=5):
                 self._migrate_v5_receipt_envelopes(connection)
                 self._record_schema_version(connection, version=5)
-            self._ensure_approval_column(connection, "artifact_type", "text not null default 'artifact'")
-            self._ensure_approval_column(connection, "launch_target", "text")
-            self._ensure_approval_column(connection, "transport", "text")
-            self._ensure_approval_column(connection, "risk_summary", "text")
-            self._ensure_approval_column(connection, "risk_signals_json", "text not null default '[]'")
-            self._ensure_approval_column(connection, "artifact_label", "text")
-            self._ensure_approval_column(connection, "source_label", "text")
-            self._ensure_approval_column(connection, "trigger_summary", "text")
-            self._ensure_approval_column(connection, "why_now", "text")
-            self._ensure_approval_column(connection, "launch_summary", "text")
-            self._ensure_approval_column(connection, "risk_headline", "text")
-            self._ensure_approval_column(connection, "action_envelope_json", "text")
-            self._ensure_approval_column(connection, "decision_v2_json", "text")
-            self._ensure_approval_column(connection, "workspace", "text")
-            self._ensure_approval_column(connection, "normalized_identity_key", "text")
-            self._ensure_approval_column(connection, "action_identity", "text")
-            self._ensure_approval_column(connection, "queue_group_id", "text")
-            self._ensure_approval_column(connection, "dedupe_count", "integer not null default 1")
-            self._ensure_approval_column(connection, "last_seen_at", "text")
-            self._ensure_approval_column(connection, "fallback_cli_command", "text")
-            self._ensure_approval_column(connection, "scanner_evidence_json", "text not null default '[]'")
-            self._ensure_approval_column(connection, "browser_intent_json", "text")
-            self._ensure_approval_column(connection, "desktop_notified_at", "text")
-            self._ensure_approval_column(connection, "raw_command_text", "text")
-            self._ensure_approval_column(connection, "continuation_snapshot_json", "text")
-            self._ensure_approval_column(connection, "extension_allow_hint_json", "text")
+            ensure_columns(connection, "approval_requests", APPROVAL_COLUMNS)
             ensure_watch_only_approval_schema(connection, schema=self)
             if not self._schema_version_applied(connection, version=3):
                 _backfill_approval_queue_columns_compat(connection)
@@ -1260,8 +747,7 @@ class StoreConnectionSchemaMixin:
                 self._record_schema_version(connection, version=7)
             if not self._schema_version_applied(connection, version=8):
                 self._record_schema_version(connection, version=8)
-            self._ensure_attachment_column(connection, "lease_id", "text not null default ''")
-            self._ensure_attachment_column(connection, "lease_expires_at", "text")
+            ensure_columns(connection, "guard_client_attachments", ATTACHMENT_COLUMNS)
             self._ensure_local_device(connection)
             for statement in storage_maintenance_schema_statements():
                 connection.execute(statement)
@@ -1387,22 +873,6 @@ class StoreConnectionSchemaMixin:
             connection.execute(f"pragma busy_timeout={original_busy_timeout_ms}")
 
     @staticmethod
-    def _ensure_policy_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
-        rows = connection.execute("pragma table_info(policy_decisions)").fetchall()
-        existing = {str(row["name"]) for row in rows}
-        if column_name in existing:
-            return
-        connection.execute(f"alter table policy_decisions add column {column_name} {column_type}")
-
-    @staticmethod
-    def _ensure_runtime_receipts_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
-        rows = connection.execute("pragma table_info(runtime_receipts)").fetchall()
-        existing = {str(row["name"]) for row in rows}
-        if column_name in existing:
-            return
-        connection.execute(f"alter table runtime_receipts add column {column_name} {column_type}")
-
-    @staticmethod
     def _ensure_runtime_receipt_envelopes_table(connection: sqlite3.Connection) -> None:
         connection.execute(
             """
@@ -1482,22 +952,6 @@ class StoreConnectionSchemaMixin:
         if column_name in existing:
             return
         connection.execute(f"alter table approval_requests add column {column_name} {column_type}")
-
-    @staticmethod
-    def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, column_type: str) -> None:
-        rows = connection.execute(f"pragma table_info({table_name})").fetchall()
-        existing = {str(row["name"]) for row in rows}
-        if column_name in existing:
-            return
-        connection.execute(f"alter table {table_name} add column {column_name} {column_type}")
-
-    @staticmethod
-    def _ensure_attachment_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
-        rows = connection.execute("pragma table_info(guard_client_attachments)").fetchall()
-        existing = {str(row["name"]) for row in rows}
-        if column_name in existing:
-            return
-        connection.execute(f"alter table guard_client_attachments add column {column_name} {column_type}")
 
     @staticmethod
     def _record_schema_version(connection: sqlite3.Connection, *, version: int) -> None:
