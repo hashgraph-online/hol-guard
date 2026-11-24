@@ -18,9 +18,10 @@ const RESULT_WORDS: [&str; 24] = [
 ];
 
 /// Credential words that keep a `pass` name a credential whatever precedes it.
-const CREDENTIAL_WORDS: [&str; 8] = [
+const CREDENTIAL_WORDS: [&str; 9] = [
     "password",
     "passwd",
+    "pwd",
     "passphrase",
     "secret",
     "token",
@@ -158,6 +159,8 @@ mod tests {
         assert!(!is_result_pass("db_pass=x"));
         assert!(!is_result_pass("bypass=x"));
         assert!(!is_result_pass("tests_passphrase=x"));
+        assert!(!is_result_pass("DB_PWD_TEST_PASS=true"));
+        assert!(is_result_pass("tests_pass=true"));
         assert!(!is_result_pass("test_pass=x"));
         assert!(is_result_pass("test_pass=97.5%"));
         assert!(is_result_pass("CHECKS_PASS=3/4"));

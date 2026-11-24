@@ -27,8 +27,16 @@ pub(crate) fn is_path_segment(
     rest_of_line: &str,
     flagged: impl Fn(&str) -> bool,
 ) -> bool {
-    let start = line_start(rest_of_line);
-    let cut_in_quote = start.len() < rest_of_line.len()
+    // An assignment can only follow the path after blanks, so the second
+    // read starts at the first other character, however far along it is.
+    let rest = rest_of_line.trim_start();
+    let gap = if rest.len() < rest_of_line.len() {
+        " "
+    } else {
+        ""
+    };
+    let start = line_start(rest);
+    let cut_in_quote = start.len() < rest.len()
         && ['"', '\'']
             .iter()
             .any(|quote| start.matches(*quote).count() % 2 == 1);
@@ -36,7 +44,9 @@ pub(crate) fn is_path_segment(
         .find([':', '='])
         .filter(|&index| matched[index..].starts_with("::"))
         .filter(|&index| name_segment(&matched[index + 2..]))
-        .is_some_and(|_| !cut_in_quote && !flagged(&format!("{matched}{start}").replace("::", "_")))
+        .is_some_and(|_| {
+            !cut_in_quote && !flagged(&format!("{matched}{gap}{start}").replace("::", "_"))
+        })
 }
 
 /// Whether the path segment `text` starts with reads as a name: words of
@@ -174,6 +184,10 @@ mod tests {
             format!("Secret::TOKEN = \"{SAMPLE}\"\n"),
             format!("secret::API_TOKEN={SAMPLE}\n"),
             format!("Auth::Config.password = \"{SAMPLE}\"\n"),
+            format!(
+                "Secret::TOKEN{}= \"{SAMPLE}\"\n",
+                " ".repeat(MAX_REREAD_BYTES + 1)
+            ),
         ] {
             assert!(credential_assignment(&text), "{text}");
         }
