@@ -3,7 +3,7 @@
   "id": "mcp.aifa-memory",
   "version": "2.3.0",
   "name": "AIfa Memory",
-  "description": "Encrypted long-term memory for AI agents via Streamable HTTP at https://aifa.works/api/mcp (v2.3.0, 19 tools) with per-user / memory-only Bearer keys, self-service erasure + SHA-256 receipts (memory_forget, memory_forget_receipts), and optional permanent Arweave anchoring (AES-256-GCM). Discovery (initialize, tools/list) is public; every tool call requires a Bearer key from https://aifa.works/mcp. Read-only info tools (memory_about, plans, partner_kit) inherit Guard defaults; private memory reads/writes/erasure, Family Hearth, invoices, payouts and webhooks stay gated on review. Off until you turn it on.",
+  "description": "Encrypted long-term memory for AI agents via Streamable HTTP at https://aifa.works/api/mcp. Discovery (initialize, tools/list) is public; tool calls require per-user memory-only Bearer keys from https://aifa.works/mcp. Self-service erasure includes SHA-256 receipts; optional permanent Arweave anchoring uses AES-256-GCM. Read-only info tools inherit Guard defaults; private memory reads/writes/erasure, Family Hearth, invoices, payouts and webhooks require review. Off until enabled.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
