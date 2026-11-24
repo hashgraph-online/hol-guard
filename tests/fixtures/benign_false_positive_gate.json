@@ -37973,6 +37973,27 @@
       "expect": "allow"
     },
     {
+      "id": "post-tool-workflow-read-npm-token-by-reference",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "cat .github/workflows/publish.yml"
+      },
+      "tool_response": {
+        "stdout": "name: Publish\non:\n  release:\n    types: [published]\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: 20\n          registry-url: https://registry.npmjs.org\n      - run: npm ci\n      - run: echo \"//registry.npmjs.org/:_authToken=${NPM_TOKEN}\" > ~/.npmrc\n        env:\n          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}\n      - run: npm publish --access public\n        env:\n          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-post-tool-script-read-token-from-echoed-literal",
       "fix_area": "secrets",
       "harnesses": [
@@ -37988,6 +38009,27 @@
       },
       "tool_response": {
         "stdout": "export GH_TOKEN=$(echo Zq8wV3nB7kL2pT6rY4sX)\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-post-tool-workflow-read-npm-token-joined-to-reference",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "cat .github/workflows/publish.yml"
+      },
+      "tool_response": {
+        "stdout": "      - run: echo \"//registry.npmjs.org/:_authToken=${NPM_TOKEN}Zq8wV3nB7kL2pT6rY4sX\" > ~/.npmrc\n",
         "stderr": ""
       },
       "cwd": "worktree",
