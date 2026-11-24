@@ -116,7 +116,9 @@ pub(crate) fn is_reference(matched: &str, preceding: &str, rest_of_line: &str) -
 /// braced parameter's closing brace starts `rest_of_line`. When the
 /// assignment sits inside a double-quoted string, as in
 /// `echo "TOKEN=${TOKEN}" > .env`, the next quote closes that string rather
-/// than opening a literal. `before` is the line up to the separator.
+/// than opening a literal. A literal later in the same expression, such as
+/// a `|| "..."` fallback, also counts up to a shell redirect. `before` is the line up to the
+/// separator.
 fn joins_literal(value: &str, before: &str, rest_of_line: &str) -> bool {
     let mut rest = rest_of_line;
     if value.starts_with("${") && !value.ends_with('}') {
@@ -125,7 +127,21 @@ fn joins_literal(value: &str, before: &str, rest_of_line: &str) -> bool {
     if before.matches('"').count() % 2 == 1 {
         rest = rest.strip_prefix('"').unwrap_or(rest);
     }
-    has_attached_literal(rest)
+    has_attached_literal(rest) || hides_literal("", before_redirect(rest))
+}
+
+/// The text before the first shell redirect (`>`, `>>`, `<`) that starts a
+/// word, so a quoted file name such as `>> "$GITHUB_ENV"` is not read as a
+/// literal value. `->` and `=>` do not start a word and are kept.
+fn before_redirect(rest: &str) -> &str {
+    let mut previous = None;
+    for (at, character) in rest.char_indices() {
+        if matches!(character, '>' | '<') && previous.is_none_or(char::is_whitespace) {
+            return &rest[..at];
+        }
+        previous = Some(character);
+    }
+    rest
 }
 
 /// Whether `value` is one whole Actions context read and nothing else.

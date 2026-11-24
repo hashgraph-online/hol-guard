@@ -59,6 +59,7 @@ fn an_npm_token_written_as_a_value_stays_flagged() {
         format!("//registry.npmjs.org/:_authToken=${{NPM_TOKEN}}{SAMPLE}\n"),
         format!("NPM_TOKEN=${{NPM_TOKEN:-{SAMPLE}}}\n"),
         format!("npmToken: process.env.NPM_TOKEN || \"{SAMPLE}\",\n"),
+        format!("NPM_TOKEN = $NPM_TOKEN || \"{SAMPLE}\"\n"),
     ] {
         assert!(npm_token_flagged(&line), "{line}");
     }
@@ -95,6 +96,8 @@ fn text_joined_to_a_shell_parameter_stays_flagged() {
         format!("echo \"API_TOKEN=${{API_TOKEN}}{SAMPLE}\" > .env\n"),
         format!("API_TOKEN=${{API_TOKEN:-\"{SAMPLE}\"}}\n"),
         format!("API_TOKEN=${{API_TOKEN}}\"{SAMPLE}\"\n"),
+        format!("API_TOKEN=$API_TOKEN || \"{SAMPLE}\"\n"),
+        format!("$password = $DB_PASS ?: \"{SAMPLE}\";\n"),
     ] {
         assert!(credential_assignment(&line), "{line}");
     }
