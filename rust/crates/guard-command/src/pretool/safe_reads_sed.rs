@@ -100,6 +100,31 @@ pub(in crate::pretool) fn safe_sed_arguments(
             || (targets.is_empty() && piped_input))
 }
 
+/// Whether this `sed` writes nothing: a program [`safe_sed_arguments`] reads
+/// as a print, substitution or stream edit, which holds no `w`, `W`, `e`, `r`
+/// or `R` command and no `w` flag, and no option among the files (GNU `sed`
+/// would take a trailing `-i` as an in-place edit). It asks nothing about
+/// which files are read. The caller screens redirects and shell expansion
+/// (`write_free_steps::writes_nothing`).
+pub(in crate::pretool) fn sed_writes_nothing(arguments: &[String]) -> bool {
+    let Some((_, programs, targets)) = sed_programs_and_targets(arguments) else {
+        return false;
+    };
+    !programs.iter().any(|program| program.starts_with('-'))
+        && targets
+            .iter()
+            .all(|target| target == "-" || !target.starts_with('-'))
+        && safe_sed_arguments(
+            &[
+                arguments[..arguments.len() - targets.len()].to_vec(),
+                vec!["-".to_owned()],
+            ]
+            .concat(),
+            true,
+            super::super::PathContext::default(),
+        )
+}
+
 /// One `sed -n` statement that only names lines: `5p`, `$p`, `36,39p`,
 /// `36, 39p`, and a range whose end counts on from its start (`36,+3p`,
 /// `36,~8p`). A range with no command, such as `36,37`, is a sed syntax error
