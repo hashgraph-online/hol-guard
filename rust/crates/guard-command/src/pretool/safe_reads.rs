@@ -35,7 +35,7 @@ pub(crate) use jq_filter::variables_bound as jq_variables_bound;
 pub(super) use read_globs::{
     directory_glob_file_matches, glob_file_matches, wildcard_matches, wildcard_may_match,
 };
-pub(super) use sed_reads::{safe_sed_arguments, safe_sed_stdin_arguments};
+pub(super) use sed_reads::{safe_sed_arguments, safe_sed_stdin_arguments, sed_writes_nothing};
 
 pub(super) fn safe_file_predicate_arguments(
     arguments: &[String],
@@ -145,9 +145,10 @@ pub(super) fn command_read_target(
             // A read of an absolute path with nothing at it prints the same
             // error the workspace-relative spelling already prints, as long
             // as no step of the command can put a file or a link there
-            // first.
-            || (!allow_directory
-                && context.creates_nothing
+            // first. Nothing is at the path, so it is neither a file nor a
+            // directory: a caller that would accept a directory accepts this
+            // for the same reason a caller that would not already does.
+            || (context.creates_nothing
                 && super::read_paths::bounded_missing_absolute_read_target(
                     value,
                     context.home_dir,

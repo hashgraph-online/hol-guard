@@ -53,71 +53,6 @@ pub(crate) fn safe_grep_segment(
     arguments_pass(&segment.arguments, context, false, absent, false)
 }
 
-/// A peer that cannot create a filesystem entry: no output redirect beyond
-/// `/dev/null`, and a program that only changes directory, prints, or opens
-/// paths to read them. `ln -s <dir> <repo>/cfg && grep -rn . <repo>/cfg/` is
-/// the shape this refuses, because `ln` puts a tree where the proof measured
-/// nothing. `grep -rln needle app; cat notes.md` is the shape it admits: an
-/// agent sweeps for a name it guessed at and prints a file it knows is there,
-/// and without the redirect already refused above, `cat` can no more create
-/// the missing root than `cd` or `echo` can.
-pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1) -> bool {
-    let text = ["2>&1", "2>/dev/null", ">/dev/null"]
-        .iter()
-        .fold(segment.text.clone(), |text, quiet| text.replace(quiet, ""));
-    if text.contains('>') || !segment.wrapper_chain.is_empty() || segment.path_overridden {
-        return false;
-    }
-    match segment.executable.as_deref() {
-        Some("cd") => true,
-        Some(executable) => {
-            reads_only(executable)
-                || pathless_builtin(executable)
-                || (segment.pipeline_index > 0
-                    && crate::pretool::segment_proof::stdin_filter_segment(segment))
-        }
-        None => false,
-    }
-}
-
-/// A program that opens the paths it is given only to read them, and writes
-/// what it finds to standard output. None of them takes an option that names
-/// a file to write, so the redirect screen above is the whole write surface.
-fn reads_only(executable: &str) -> bool {
-    matches!(
-        executable,
-        "cat"
-            | "cut"
-            | "diff"
-            | "echo"
-            | "egrep"
-            | "fgrep"
-            | "grep"
-            | "head"
-            | "jq"
-            | "ls"
-            | "nl"
-            | "printf"
-            | "pwd"
-            | "rg"
-            | "tail"
-            | "test"
-            | "tr"
-            | "true"
-            | "wc"
-    )
-}
-
-/// A program that writes nothing and opens no path: its operands are words it
-/// prints or compares, never names it creates. Without a redirect, which the
-/// caller has already refused, it cannot put an entry where a missing root is.
-fn pathless_builtin(executable: &str) -> bool {
-    matches!(
-        crate::pretool::executable_basename(executable),
-        "echo" | "printf" | "pwd" | "true" | "false" | ":"
-    )
-}
-
 /// `literal_words` are the segment's quoted words, as
 /// `listing_reads::literal_words` reads them.
 pub(super) fn safe_stdin_arguments(arguments: &[String], literal_words: &[String]) -> bool {
@@ -132,10 +67,13 @@ pub(super) fn safe_stdin_arguments(arguments: &[String], literal_words: &[String
     arguments_pass(arguments, context, true, absent, false)
 }
 
+pub(in crate::pretool) use writes_nothing::creates_nothing;
+
 mod exclusion;
 mod includes;
 mod missing;
 mod reach;
+mod writes_nothing;
 pub(in crate::pretool) use reach::sensitive_reach_reason;
 
 /// What a pass over `grep` arguments read besides its verdict.

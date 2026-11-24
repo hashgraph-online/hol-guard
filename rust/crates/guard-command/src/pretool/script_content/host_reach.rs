@@ -16,7 +16,7 @@
 //!   from `os` or `signal`, under any name they are imported as);
 //! - code built at run time (`eval`, `exec`, `compile`, `__import__`, also
 //!   through `builtins`, and `importlib.import_module`), which the scan
-//!   cannot read;
+//!   cannot read, unless it imports a constant name (`constant_import`);
 //! - a string that names a path outside the workspace, on its own or as a
 //!   word of a command line: an absolute path other than the shared temporary
 //!   directory and the standard streams, the root directory, a relative path
@@ -44,7 +44,6 @@
 //! hold: the program runs in the same sandbox, and the command line it is
 //! given is read here like any other string.
 
-use std::collections::BTreeSet;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -53,11 +52,14 @@ use regex::Regex;
 mod literals;
 #[path = "host_reach_shell.rs"]
 mod shell;
+#[path = "host_reach_signals.rs"]
+mod signals;
 
 use super::system_files::lexical;
 use super::{code_lines, Language};
 use literals::{format_template, literal_value, spec_fill};
-use shell::{command_reaches, git_config_reads, unquote};
+use shell::{command_reaches, git_config_list_writes, unquote};
+use signals::signals_processes;
 
 const HOST_MODULES: &str = "psutil|pyperclip|pynput|pyautogui|mss|ctypes|PIL|keyboard|mouse|Xlib|Quartz|AppKit|win32api|win32gui|win32con|winreg";
 
@@ -71,33 +73,6 @@ static HOST_MODULE: LazyLock<Regex> = LazyLock::new(|| {
     ))
     .unwrap()
 });
-
-/// `from os import kill` and its siblings, including the parenthesized form
-/// spread over several lines, which make the call bare.
-static SIGNAL_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(concat!(
-        r"\bfrom\s+(?:os|signal)\s+import\s+",
-        r"(?:\([^)]*\b(?:kill|killpg|pthread_kill)\b[^)]*\)",
-        r"|[\w, \t\\]*\b(?:kill|killpg|pthread_kill)\b)",
-    ))
-    .unwrap()
-});
-
-/// `from os import *`, after which a bare `kill(` is the signal call.
-static SIGNAL_STAR_IMPORT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\bfrom\s+(?:os|signal)\s+import\s+\*").unwrap());
-
-static BARE_SIGNAL_CALL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)(?:^|[^.\w])(?:kill|killpg|pthread_kill)\s*\(").unwrap());
-
-/// A signal call on a receiver; the receiver is checked against `os`,
-/// `signal` and the names they are imported as.
-static SIGNAL_CALL: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\b(\w+)\s*\.\s*(?:kill|killpg|pthread_kill)\s*\(").unwrap());
-
-/// The body of an `import` statement, to find `import os as proc`.
-static IMPORT_STATEMENT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)(?:^|[;:])[ \t]*import[ \t]+([^\n;#]+)").unwrap());
 
 /// A call that runs code built at run time. `eval(` and its siblings count
 /// as a bare name or through `builtins`, so a method such as
@@ -142,18 +117,6 @@ const PATH_CALLS: &[&str] = &[
     "isdir",
     "access",
 ];
-
-/// The rest of an argument list for `git ... config`.
-static GIT_CONFIG_LIST: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(concat!(
-        r#"["']git["']\s*,\s*(?:["'][^"'\n]*["']\s*,\s*)*?["']config["']"#,
-        r#"((?:\s*,\s*["'][^"'\n]*["'])*)"#,
-    ))
-    .unwrap()
-});
-
-static QUOTED_WORD: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"["']([^"'\n]*)["']"#).unwrap());
 
 /// Absolute paths a contained program may name: the shared temporary
 /// directory and the standard streams.
@@ -275,7 +238,7 @@ const FIELD_READINGS: usize = 256;
 fn field_values(field: &str, reaches: &mut bool) -> Vec<String> {
     let mut nested = false;
     let constants = literals(field, &mut nested);
-    *reaches |= nested || names_outside_path(field);
+    *reaches |= nested || names_outside_path(field, true);
     let mut known: Vec<String> = constants
         .into_iter()
         .filter_map(|constant| constant.value)
@@ -391,9 +354,22 @@ fn joins(between: &str) -> bool {
 /// with `+` or written next to each other are also read as the string they
 /// make; when that string is itself added to something before it, a leading
 /// `/` only separates it from that, so `base + '/' + 'sub'` stays relative.
-fn names_outside_path(code: &str) -> bool {
+/// Docstrings are skipped unless `keep_docstrings` (`docstrings`).
+fn names_outside_path(code: &str, keep_docstrings: bool) -> bool {
     let mut reaches = false;
-    let found = literals(code, &mut reaches);
+    let mut found = literals(code, &mut reaches);
+    if !keep_docstrings {
+        found = super::docstrings::without(
+            code,
+            found,
+            |literal| (literal.start, literal.end),
+            |literal| {
+                literal.value.as_deref().is_some_and(|value| {
+                    !literal_reaches(&super::docstrings::without_markup(value))
+                })
+            },
+        );
+    }
     if reaches {
         return true;
     }
@@ -439,55 +415,40 @@ fn names_outside_path(code: &str) -> bool {
     false
 }
 
-fn git_config_list_writes(code: &str) -> bool {
-    GIT_CONFIG_LIST.captures_iter(code).any(|captures| {
-        let words: Vec<&str> = QUOTED_WORD
-            .captures_iter(&captures[1])
-            .filter_map(|word| word.get(1).map(|word| word.as_str()))
-            .collect();
-        !git_config_reads(words)
-    })
+/// What one source's screen needs to know about every source the program
+/// loads, since one module can change how another's code behaves.
+pub(in crate::pretool) struct Graph {
+    /// Some source reads docstrings back (`docstrings::read_any`).
+    docstrings_read: bool,
+    /// No source may rebind an import function
+    /// (`constant_import::unshadowed`).
+    imports_unshadowed: bool,
 }
 
-/// Names `os` and `signal` are reachable under: themselves and their
-/// `import ... as` aliases.
-fn signal_receivers(code: &str) -> BTreeSet<&str> {
-    let mut names = BTreeSet::from(["os", "signal"]);
-    for statement in IMPORT_STATEMENT.captures_iter(code) {
-        let body = statement.get(1).map_or("", |body| body.as_str());
-        for item in body.split(',') {
-            let parts: Vec<&str> = item.split_whitespace().collect();
-            if let [module, "as", alias] = parts.as_slice() {
-                if matches!(*module, "os" | "signal") {
-                    names.insert(alias);
-                }
-            }
+impl Graph {
+    /// The facts for a program made of `sources`.
+    pub(in crate::pretool) fn of<S: AsRef<str>>(sources: &[S]) -> Self {
+        Self {
+            docstrings_read: super::docstrings::read_any(sources),
+            imports_unshadowed: super::constant_import::unshadowed(sources),
         }
     }
-    names
-}
-
-fn signals_processes(code: &str) -> bool {
-    if SIGNAL_IMPORT.is_match(code)
-        || (SIGNAL_STAR_IMPORT.is_match(code) && BARE_SIGNAL_CALL.is_match(code))
-    {
-        return true;
-    }
-    let receivers = signal_receivers(code);
-    SIGNAL_CALL
-        .captures_iter(code)
-        .any(|call| receivers.contains(&call[1]))
 }
 
 /// Whether the Python `source` reaches past the workspace in a way the
-/// sandbox does not take away.
-pub(in crate::pretool) fn python_reaches_host(source: &str) -> bool {
+/// sandbox does not take away, given what `graph` says about the sources
+/// the program loads.
+pub(in crate::pretool) fn python_reaches_host(source: &str, graph: &Graph) -> bool {
     let code = code_lines(Language::Python, source);
     HOST_MODULE.is_match(&code)
+        || super::constant_import::held(&code, |imports| HOST_MODULE.is_match(imports))
         || signals_processes(&code)
-        || DYNAMIC_CODE.is_match(&code)
+        || DYNAMIC_CODE.is_match(&super::constant_import::without_constant_imports(
+            &code,
+            graph.imports_unshadowed,
+        ))
         || git_config_list_writes(&code)
-        || names_outside_path(&code)
+        || names_outside_path(&code, graph.docstrings_read)
 }
 
 #[cfg(test)]
