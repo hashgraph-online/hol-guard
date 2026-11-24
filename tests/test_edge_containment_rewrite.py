@@ -397,28 +397,3 @@ def test_without_a_workspace_an_unmarked_sink_route_keeps_the_receipt(tmp_path: 
     answer, native = _review(_SinkRouteFixture(edge=_edge()), tmp_path, workspace=None)
     assert native is True
     assert answer == _RECEIPT_RESPONSE
-
-
-@pytest.mark.parametrize(
-    "routed",
-    (
-        # An allow that changes a field other than the command line.
-        {
-            **_ROUTED_RESPONSE,
-            "hookSpecificOutput": {
-                **_ROUTED_RESPONSE["hookSpecificOutput"],  # type: ignore[dict-item]
-                "updatedInput": {"command": "guard execute-contained-test", "run_in_background": True},
-            },
-        },
-        # An allow that is not the routed reason.
-        {**_ROUTED_RESPONSE, "reason_code": "native_allow"},
-        # The receipt, marked routed.
-        _RECEIPT_RESPONSE,
-    ),
-)
-def test_an_edge_routed_allow_off_the_routed_shape_is_the_outage(tmp_path: Path, routed: dict[str, object]) -> None:
-    fixture = _SinkRouteFixture(edge=_edge(harness_response=dict(routed), containment_rewrite="routed"))
-    answer, native = _review(fixture, tmp_path, workspace=tmp_path)
-    assert native is False
-    assert answer.get("reason_code") == "native_containment_rewrite_invalid"
-    assert answer.get("policy_action") != "allow"

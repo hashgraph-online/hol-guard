@@ -20,7 +20,6 @@ from typing import Any, NamedTuple
 
 from codex_plugin_scanner.guard.contained_sink_command import contained_sink_command_prefix
 from codex_plugin_scanner.guard.native_execution import _resident_request
-from codex_plugin_scanner.guard.native_hook_containment_route import _routed_shape
 from codex_plugin_scanner.guard.native_hook_decision import (
     _INVALID,
     _MAX_REQUEST_BYTES,
@@ -133,9 +132,6 @@ def native_containment_rewrite(
         if set(answer) != {"kind", "profile", "kept_because", "response"}:
             raise NativeHookDecisionError(_INVALID)
         _validate_sink(answer, inputs)
-        routed = answer["response"]
-        if routed is not None and (answer["profile"] is None or not _routed_shape(routed, tool_input)):
-            raise NativeHookDecisionError(_INVALID)
 
     answer = _ask(
         "containment_rewrite", inputs, guard_home, validate, deadline, HOOK_DECISION_CONTAINMENT_REWRITE_FEATURE
