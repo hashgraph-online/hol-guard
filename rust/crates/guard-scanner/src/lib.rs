@@ -10,6 +10,7 @@ mod code_cursor;
 mod code_expression;
 mod code_shapes;
 mod code_value;
+mod command_value;
 mod continuation;
 mod field_copy;
 mod guard_link;
@@ -356,6 +357,7 @@ fn is_sample(
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
             || reference_value::is_reference(matched, rest_of_line)
+            || command_value::is_command_substitution(matched, rest_of_line)
             || code_value::is_code_value(matched, rest_of_line)
             || code_expression::is_code_expression(matched, rest_of_line))
     {
