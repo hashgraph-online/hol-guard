@@ -172,7 +172,16 @@ pub(super) fn without<T>(
 pub(super) fn without_markup(value: &str) -> String {
     value
         .split('\n')
-        .filter(|line| line.split_whitespace().next() != Some(".."))
+        .filter(|line| {
+            let mut words = line.split_whitespace();
+            if words.next() != Some("..") {
+                return true;
+            }
+            match words.next() {
+                Some(directive) => !directive.ends_with("::") && !directive.starts_with('['),
+                None => true,
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -252,6 +261,11 @@ mod tests {
         assert_eq!(
             without_markup("../sample file.txt\n.. note:: x"),
             "../sample file.txt"
+        );
+        assert_eq!(
+            without_markup(".. ../sample.txt
+.. note:: x"),
+            ".. ../sample.txt"
         );
         assert_eq!(
             without_markup("See /etc/passwd ..\n"),
