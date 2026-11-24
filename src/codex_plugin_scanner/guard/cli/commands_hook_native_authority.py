@@ -14,7 +14,7 @@ from typing import Any, TextIO
 from ..harness_context import HarnessContext
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 from ..hook_failure_bridge import native_hook_failure, native_stderr_hook_failure, outage_stderr_failure
-from ..hook_review.hook_availability_policy import (
+from ..native_hook_availability import (
     availability_harness_response,
     canonical_hook_event_name,
     hook_event_pauses_when_unavailable,
