@@ -10,10 +10,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from codex_plugin_scanner.guard import native_daemon_manage as daemon_manager_module
-from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
+from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
+from codex_plugin_scanner.guard.native_hook_render import (
     availability_harness_response,
 )
-from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.version import __version__
 
