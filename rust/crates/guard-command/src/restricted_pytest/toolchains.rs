@@ -353,7 +353,11 @@ pub(super) fn workspace_exec_roots(
     // A release a version manager installed that the command starts by its
     // own path, with no PATH entry naming it.
     if let Some(text) = text {
-        for root in named_release_roots(absolute_words(text), home, workspace) {
+        for root in named_release_roots(
+            absolute_words(text).iter().map(String::as_str),
+            home,
+            workspace,
+        ) {
             if !roots.contains(&root) {
                 roots.push(root);
             }

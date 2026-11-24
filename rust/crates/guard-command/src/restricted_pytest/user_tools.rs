@@ -377,14 +377,17 @@ pub(in crate::restricted_pytest) fn named_release_roots<'a>(
     workspace: &Path,
 ) -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
-    for program in programs.into_iter().take(16) {
+    // Programs that cannot name a release are dropped before the limit, so
+    // bare names ahead of a release path never push it out of the window.
+    for program in programs
+        .into_iter()
+        .filter(|program| release_candidate(program))
+        .take(RELEASE_CANDIDATE_LIMIT)
+    {
         let program = Path::new(program);
-        let Some(bin) = program.parent().filter(|_| program.is_absolute()) else {
+        let Some(bin) = program.parent() else {
             continue;
         };
-        if bin.file_name() != Some(OsStr::new("bin")) {
-            continue;
-        }
         let Ok(canonical) = bin.canonicalize() else {
             continue;
         };
@@ -418,16 +421,53 @@ pub(in crate::restricted_pytest) fn named_release_roots<'a>(
     roots
 }
 
+/// How many release candidates one command is read for.
+const RELEASE_CANDIDATE_LIMIT: usize = 16;
+
+/// Whether `program` is an absolute path whose parent directory is a `bin`:
+/// the only shape [`named_release_roots`] can grant.
+fn release_candidate(program: &str) -> bool {
+    let path = Path::new(program);
+    path.is_absolute()
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == OsStr::new("bin"))
+}
+
 /// The absolute paths `text` holds, unquoted: the candidates
 /// [`named_release_roots`] reads when a plan has only the command text.
-pub(in crate::restricted_pytest) fn absolute_words(text: &str) -> Vec<&str> {
-    text.split(|character: char| {
-        character.is_whitespace() || matches!(character, ';' | '&' | '|' | '(' | ')')
-    })
-    .map(|word| word.trim_matches(|character| matches!(character, '\'' | '"')))
-    .filter(|word| word.starts_with('/') && word.contains("/bin/"))
-    .take(16)
-    .collect()
+///
+/// Words split on whitespace and `;`, `&`, `|`, `(` and `)` outside quotes;
+/// a quoted path keeps its spaces and delimiters. Only release candidates are
+/// kept, under the same limit [`named_release_roots`] applies.
+pub(in crate::restricted_pytest) fn absolute_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut quote: Option<char> = None;
+    for character in text.chars() {
+        match quote {
+            Some(open) if character == open => quote = None,
+            Some(_) => word.push(character),
+            None if matches!(character, '\'' | '"') => quote = Some(character),
+            None if character.is_whitespace()
+                || matches!(character, ';' | '&' | '|' | '(' | ')') =>
+            {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+            }
+            None => word.push(character),
+        }
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words
+        .into_iter()
+        .filter(|word| release_candidate(word))
+        .take(RELEASE_CANDIDATE_LIMIT)
+        .collect()
 }
 
 #[cfg(test)]
