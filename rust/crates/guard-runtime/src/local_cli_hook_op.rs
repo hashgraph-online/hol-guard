@@ -159,8 +159,9 @@ fn refined(request: &LocalCliHookRequestV1, package: &Package) -> Refined {
         };
     }
     let answer = match grant(request, package) {
-        Ok((None, None, _)) => compound::grant_after_cd(request)
-            .unwrap_or_else(|| Ok((None, None, Value::Null))),
+        Ok((None, None, _)) => {
+            compound::grant_after_cd(request).unwrap_or_else(|| Ok((None, None, Value::Null)))
+        }
         answer => answer,
     };
     // No single CLI launch: a compound command, or one that launches none.

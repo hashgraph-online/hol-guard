@@ -162,9 +162,7 @@ pub(crate) fn cd_then_launch(
     }
     let searched = !operand.starts_with('/') && operand.split('/').next() != Some(".");
     // Without the caller's environment, CDPATH cannot be ruled out.
-    if searched
-        && (env.is_empty() || env.keys().any(|name| name.eq_ignore_ascii_case("CDPATH")))
-    {
+    if searched && (env.is_empty() || env.keys().any(|name| name.eq_ignore_ascii_case("CDPATH"))) {
         return None;
     }
     let directory = std::fs::canonicalize(std::path::Path::new(cwd).join(operand)).ok()?;

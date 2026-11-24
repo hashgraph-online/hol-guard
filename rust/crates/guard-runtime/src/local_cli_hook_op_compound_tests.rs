@@ -99,7 +99,11 @@ fn an_allowed_script_after_cd_runs_with_any_arguments() {
         "allowed",
     );
     for arguments in ["go", "-m \"fix: first\"", "-m \"fix: second message\""] {
-        let compound = format!("cd {} && {} {arguments}", fixture.workspace, merge.display());
+        let compound = format!(
+            "cd {} && {} {arguments}",
+            fixture.workspace,
+            merge.display()
+        );
         assert_eq!(
             run_with_connector(&review(&fixture, &compound)).unwrap(),
             ("allow".to_owned(), None),
@@ -114,10 +118,22 @@ fn an_allowed_script_after_cd_runs_with_any_arguments() {
 
     // Another command beside the pair is not read as the script alone.
     for command in [
-        format!("cd {} && {} go | tail -5", fixture.workspace, merge.display()),
-        format!("cd {} && {} go && rm -rf build", fixture.workspace, merge.display()),
+        format!(
+            "cd {} && {} go | tail -5",
+            fixture.workspace,
+            merge.display()
+        ),
+        format!(
+            "cd {} && {} go && rm -rf build",
+            fixture.workspace,
+            merge.display()
+        ),
         format!("cd {} ; {} go", fixture.workspace, merge.display()),
-        format!("cd {} && {} go > out.log", fixture.workspace, merge.display()),
+        format!(
+            "cd {} && {} go > out.log",
+            fixture.workspace,
+            merge.display()
+        ),
         format!("cd {} && {} \"$(id)\"", fixture.workspace, merge.display()),
     ] {
         assert_eq!(
@@ -128,7 +144,10 @@ fn an_allowed_script_after_cd_runs_with_any_arguments() {
     }
 
     // A review that carries its own risk signal outlives the grant.
-    let mut sensitive = review(&fixture, &format!("cd {} && {} go", fixture.workspace, merge.display()));
+    let mut sensitive = review(
+        &fixture,
+        &format!("cd {} && {} go", fixture.workspace, merge.display()),
+    );
     sensitive.current_reason_code = Some("native_sensitive_access_review".to_owned());
     assert_eq!(
         run_with_connector(&sensitive).unwrap(),
@@ -140,14 +159,21 @@ fn an_allowed_script_after_cd_runs_with_any_arguments() {
     let compound = format!("cd {} && {} go", fixture.workspace, merge.display());
     let (action, connector) = run_with_connector(&review(&fixture, &compound)).unwrap();
     assert_eq!(action, "review");
-    assert_eq!(connector.expect("the changed script is named")["allowed_earlier_version"], true);
+    assert_eq!(
+        connector.expect("the changed script is named")["allowed_earlier_version"],
+        true
+    );
 }
 
 #[test]
 fn an_undecided_script_after_cd_names_its_connector() {
     let fixture = Fixture::new("compound-undecided");
     let merge = script(&fixture, "approve-merge.sh", "#!/bin/sh\necho ready\n");
-    let compound = format!("cd {} && {} -m \"fix: x\"", fixture.workspace, merge.display());
+    let compound = format!(
+        "cd {} && {} -m \"fix: x\"",
+        fixture.workspace,
+        merge.display()
+    );
     let (action, connector) = run_with_connector(&review(&fixture, &compound)).unwrap();
     assert_eq!(action, "review");
     let connector = connector.expect("the script is named");
@@ -169,7 +195,10 @@ fn a_blocked_script_after_cd_is_blocked() {
         "blocked",
     );
     let compound = format!("cd {} && {} go", fixture.workspace, merge.display());
-    assert_eq!(run_with_connector(&review(&fixture, &compound)).unwrap().0, "block");
+    assert_eq!(
+        run_with_connector(&review(&fixture, &compound)).unwrap().0,
+        "block"
+    );
     let mut allowed = review(&fixture, &compound);
     allowed.current_action = "allow".to_owned();
     allowed.current_reason_code = None;
