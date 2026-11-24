@@ -37815,6 +37815,48 @@
       "expect": "not_allow"
     },
     {
+      "id": "post-tool-script-read-token-from-command-substitution",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "cat scripts/open-release-pr.sh"
+      },
+      "tool_response": {
+        "stdout": "#!/usr/bin/env bash\n# Opens the weekly release pull request with tokens read from local tools.\nset -euo pipefail\n\nexport GH_TOKEN=$(gh auth token)\nREGISTRY_TOKEN=\"$(op read op://release/registry/token)\"\nSIGNING_KEY=$(security find-generic-password -s release-signing -w)\nexport REGISTRY_TOKEN SIGNING_KEY\n\ngit -c \"credential.helper=!f() { echo username=release-bot; echo password=\\$(gh auth token); }; f\" push origin HEAD\ngh pr create --fill --base main\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-post-tool-script-read-token-from-echoed-literal",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "cat scripts/open-release-pr.sh"
+      },
+      "tool_response": {
+        "stdout": "export GH_TOKEN=$(echo Zq8wV3nB7kL2pT6rY4sX)\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gauntlet-sed-credential-field-fallback-source",
       "fix_area": "secrets",
       "harnesses": [
