@@ -65990,6 +65990,54 @@
       "expect": "allow"
     },
     {
+      "id": "shell-wait-loop-over-a-brace-sequence",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for n in {1..135}; do if ! ps -p 4242 >/dev/null 2>&1; then break; fi; sleep 20; done; date '+%Y-%m-%d %H:%M:%S %z'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-wait-loop-breaks-on-a-finished-process",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for n in {1..40}; do if ! ps -p 99999999 >/dev/null 2>&1; then break; fi; sleep 1; done; echo waited"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-loop-echoes-a-brace-sequence",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for i in {1..5}; do echo \"pass $i\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "queue-retry-loop-breaks-on-a-named-loopback-answer",
       "fix_area": "queue",
       "harnesses": [
