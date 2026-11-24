@@ -209,3 +209,128 @@ fn a_sequenced_list_outside_that_grammar_keeps_its_review() {
     }
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
+
+/// The sink runs a contained sequenced list where the classifier proved it.
+///
+/// The classifier contains these lists against the sibling root; the sink
+/// then asks the peel for the directory and the rejoined runs. When the peel
+/// refused the `;`, the sink fell back to the session's own sandbox, which
+/// cannot follow the `cd` out of the session, and the contained run of
+/// ordinary work exited 126. The peel answers the same directory the `cd`
+/// named and keeps each separator as issued, and the core it hands back is
+/// contained again when the sink re-authorizes it from that directory.
+#[test]
+fn a_sequenced_sibling_list_reaches_the_sink_with_its_root() {
+    let (home, main, tree) = fixture();
+    worktree_packages(&main, &tree);
+    let scripts = tree.join("scripts");
+    for (command, directory, core) in [
+        (
+            format!(
+                "cd {0} && ./scripts/report.sh 2>&1 | head -20; ./scripts/report.sh --ci 2>&1 | tail -5",
+                tree.display()
+            ),
+            &tree,
+            "./scripts/report.sh 2>&1 | head -n 20; ./scripts/report.sh --ci 2>&1 | tail -n 5",
+        ),
+        (
+            format!(
+                "cd {0}; ./scripts/report.sh --ci 2>&1 | head -30; ./scripts/report.sh 2>&1 | tail -5",
+                tree.display()
+            ),
+            &tree,
+            "./scripts/report.sh --ci 2>&1 | head -n 30; ./scripts/report.sh 2>&1 | tail -n 5",
+        ),
+        (
+            format!("cd {0}; npm run build; ls dist", tree.display()),
+            &tree,
+            "npm run build; ls dist",
+        ),
+        (
+            format!("cd {0} && npm run build; ls dist", tree.display()),
+            &tree,
+            "npm run build; ls dist",
+        ),
+        (
+            format!("cd {0}/scripts && ./report.sh; ./report.sh", tree.display()),
+            &scripts,
+            "./report.sh; ./report.sh",
+        ),
+        (
+            format!(
+                "cd {0}/scripts && ./report.sh 2>&1 | head -20; ./report.sh | tail -5",
+                tree.display()
+            ),
+            &scripts,
+            "./report.sh 2>&1 | head -n 20; ./report.sh | tail -n 5",
+        ),
+        (
+            format!(
+                "cd {0}/scripts && ./report.sh; ./report.sh && ls",
+                tree.display()
+            ),
+            &scripts,
+            "./report.sh; ./report.sh && ls",
+        ),
+    ] {
+        assert_eq!(
+            contained(&reason("omp", &home, &main, &command)),
+            host(),
+            "{command}"
+        );
+        let answer = crate::pretool::contained_wrapper_plan(
+            &command,
+            main.to_str().unwrap(),
+            main.to_str(),
+            home.to_str(),
+            None,
+        );
+        let plan = answer
+            .plan
+            .unwrap_or_else(|| panic!("{command}: {:?}", answer.refusal));
+        assert_eq!(&plan.directory, directory, "{command}");
+        assert_eq!(plan.core, core, "{command}");
+        assert_eq!(
+            contained(&reason("omp", &home, &plan.directory, &plan.core)),
+            host(),
+            "{command}: {}",
+            plan.core
+        );
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
+/// The peel rejoins only the grammar the classifier contains.
+#[test]
+fn a_sequenced_sibling_list_outside_that_grammar_is_not_rejoined() {
+    let (home, main, tree) = fixture();
+    worktree_packages(&main, &tree);
+    for command in [
+        format!(
+            "cd {0}/scripts && ./report.sh; ./report.sh > out.txt",
+            tree.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh; ./report.sh | head | tail -2",
+            tree.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh; ./report.sh || ./report.sh",
+            tree.display()
+        ),
+        format!(
+            "cd {0}/scripts && ./report.sh; ./report.sh | sh",
+            tree.display()
+        ),
+    ] {
+        let answer = crate::pretool::contained_wrapper_plan(
+            &command,
+            main.to_str().unwrap(),
+            main.to_str(),
+            home.to_str(),
+            None,
+        );
+        assert!(answer.plan.is_none(), "{command}: {:?}", answer.plan);
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}

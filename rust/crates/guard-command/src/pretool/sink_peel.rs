@@ -185,7 +185,10 @@ pub(super) fn peel(
         // second command follows, and the edge roots that call's sandbox at
         // the repository anyway, so the list is rejoined there as it is after
         // a `cd` to the root itself. A lone command keeps the peel it has.
-        let listed = tokens.iter().any(|token| operator(token) == Some("&&"));
+        // The classifier contains a list joined by `;` as it does one joined
+        // by `&&`, so the sink reads both: refusing the `;` here sent the run
+        // to the session's sandbox, which cannot follow the `cd`.
+        let listed = tokens.iter().any(list_separator);
         if into_sibling_root || (root.is_some() && !within && listed) {
             // `cd <sibling root> && a && b` is re-authorized whole in that
             // root. A filter after `a && b` would apply to `b` alone, so none
@@ -672,12 +675,14 @@ fn lexical(path: &Path) -> PathBuf {
     resolved
 }
 
-/// `a && b && c` of plain words, rejoined, or `None` for any other shape.
+/// `a && b; c` of plain words, rejoined, or `None` for any other shape.
 ///
-/// Each command may send its stderr to stdout or to `/dev/null`, and may bound
-/// its output with one `head` or `tail` of a line or byte count. The filter
-/// stays in the rejoined text, where the sandbox's shell applies it to that
-/// command alone, as the issued text did.
+/// The commands may be joined by `&&` or `;`, and each separator is written
+/// back as it was issued, so a later command runs exactly when the issued
+/// text ran it. Each command may send its stderr to stdout or to `/dev/null`,
+/// and may bound its output with one `head` or `tail` of a line or byte
+/// count. The filter stays in the rejoined text, where the sandbox's shell
+/// applies it to that command alone, as the issued text did.
 ///
 /// A lone command is rejoined only when the peel refuses its pipeline, so a
 /// shape the peel already reads keeps its narrower sink. Its pipeline may run
@@ -688,15 +693,18 @@ fn lexical(path: &Path) -> PathBuf {
 /// there bounds only the command it follows while the rest of the list still
 /// runs.
 fn joined_list(tokens: &[Token]) -> Option<String> {
-    let lone = !tokens.iter().any(|token| operator(token) == Some("&&"));
-    let mut commands = Vec::new();
-    for command in tokens.split(|token| operator(token) == Some("&&")) {
-        let mut stages = command.split(|token| operator(token) == Some("|"));
+    let lone = !tokens.iter().any(list_separator);
+    let mut rejoined = String::new();
+    let mut commands = 0usize;
+    let mut rest = tokens;
+    loop {
+        let end = rest.iter().position(list_separator).unwrap_or(rest.len());
+        let mut stages = rest[..end].split(|token| operator(token) == Some("|"));
         let (words, redirect) = stderr_redirect(stages.next()?);
-        let mut text = plain_words(words)?;
+        rejoined.push_str(&plain_words(words)?);
         if let Some(redirect) = redirect {
-            text.push(' ');
-            text.push_str(redirect);
+            rejoined.push(' ');
+            rejoined.push_str(redirect);
         }
         let mut filters = 0usize;
         for stage in stages {
@@ -704,19 +712,33 @@ fn joined_list(tokens: &[Token]) -> Option<String> {
             if !lone && filters > 1 {
                 return None;
             }
-            text.push_str(" | ");
-            text.push_str(&filter_stage(stage)?);
+            rejoined.push_str(" | ");
+            rejoined.push_str(&filter_stage(stage)?);
         }
         if redirect.is_some() && filters == 0 {
             return None;
         }
-        commands.push(text);
+        commands += 1;
+        let Some(separator) = rest.get(end) else {
+            break;
+        };
+        rejoined.push_str(if operator(separator) == Some(";") {
+            "; "
+        } else {
+            " && "
+        });
+        rest = &rest[end + 1..];
     }
     let piped = tokens.iter().any(|token| operator(token) == Some("|"));
-    if commands.len() < 2 && !(piped && peel_declines(tokens)) {
+    if commands < 2 && !(piped && peel_declines(tokens)) {
         return None;
     }
-    Some(commands.join(" && "))
+    Some(rejoined)
+}
+
+/// The `&&` or `;` between two commands of a rejoined list.
+fn list_separator(token: &Token) -> bool {
+    matches!(operator(token), Some("&&" | ";"))
 }
 
 /// One filter stage's text, or `None` when it is not a reader of standard
