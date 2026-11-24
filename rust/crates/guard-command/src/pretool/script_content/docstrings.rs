@@ -40,7 +40,7 @@ static READS_DOCSTRING: LazyLock<Regex> = LazyLock::new(|| {
         r"|\b__getattribute__\b|\battrgetter\b|\b__dict__\b|\b(?:vars|globals|locals)\s*\(",
         r"|\bget_docstring\b|\bgetmembers(?:_static)?\b|\bgetsource(?:lines|file)?\b",
         r"|\bgetcomments\b|\bfindsource\b|\bgetblock\b|\bpydoc\b|\brender_doc\b|\bhelp\s*\(",
-        r"|\bclassify_class_attrs\b",
+        r"|\bclassify_class_attrs\b|\bdoctest\b|\bshortDescription\b",
         r"|\bast\s*\.|\bimport\s+ast\b|\blinecache\b|\btokenize\b|\bget_source\b|\b__loader__\b",
         r"|\b__prepare__\b|\b__setitem__\b|\bmetaclass\b|\b__build_class__\b|\bnew_class\b",
     ))
@@ -263,8 +263,7 @@ mod tests {
             "../sample file.txt"
         );
         assert_eq!(
-            without_markup(".. ../sample.txt
-.. note:: x"),
+            without_markup(".. ../sample.txt\n.. note:: x"),
             ".. ../sample.txt"
         );
         assert_eq!(
@@ -298,6 +297,8 @@ mod tests {
             "class N(dict):\n    def __setitem__(self, k, v):\n        open(v)\nclass M(type):\n    @classmethod\n    def __prepare__(c, n, b):\n        return N()\n",
             "class C(metaclass=M):\n    \"\"\"../secret.txt documentation\"\"\"\n",
             "from inspect import classify_class_attrs\nv = [a.object for a in classify_class_attrs(C)]\n",
+            "import doctest\nv = doctest.DocTestFinder().find(f)[0].docstring\n",
+            "class T(unittest.TestCase):\n    def test_a(self):\n        print(self.shortDescription())\n",
             "print(open(getattr(f if \", 'name')\" else f, name)).read())\n",
         ] {
             assert!(read(code), "{code}");

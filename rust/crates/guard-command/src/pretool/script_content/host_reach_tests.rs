@@ -120,6 +120,9 @@ fn programs_that_reach_the_host_are_held() {
         // the scan knows appears; only reStructuredText markup lines go.
         "class C:\n    \"\"\"../sample file.txt\"\"\"\n",
         "def f():\n    \"\"\"Reads /etc/passwd for the demo.\n\n    .. note:: x\n    \"\"\"\n",
+        // A reST comment line keeps its text; doctest reads docstrings back.
+        "def f():\n    \"\"\".. ../sample.txt\"\"\"\n",
+        "import doctest\ndef f():\n    \"\"\".. include:: ../sample.txt\"\"\"\nv = doctest.DocTestFinder().find(f)[0].docstring.split()[2]\nprint(open(v).read())\n",
         // A helper rebinding the import function in another source.
         "m = __import__('reboot')\nimport builtins, os\nsetattr(builtins, '__imp' + 'ort__', os.system)\n",
     ] {
