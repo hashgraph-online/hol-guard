@@ -57,26 +57,11 @@ pub(super) fn safe_host_fact(basename: &str, arguments: &[String]) -> bool {
         // nothing and answers in the exit status instead.
         "tty" => flags_only(arguments, &["-s"]),
         // `ulimit` prints a resource limit; a value operand raises or lowers
-        // it, so only the flags prove and any operand keeps the review.
+        // it, so only the flags prove and any operand keeps the review. The
+        // flags may be written apart (`-S -n`) or together (`-Sn`), the way
+        // a shell prelude usually reads back the soft limit it just set.
         "ulimit" => {
-            !arguments.is_empty()
-                && arguments.iter().all(|argument| {
-                    matches!(
-                        argument.as_str(),
-                        "-a" | "-c"
-                            | "-d"
-                            | "-f"
-                            | "-l"
-                            | "-m"
-                            | "-n"
-                            | "-s"
-                            | "-t"
-                            | "-u"
-                            | "-v"
-                            | "-H"
-                            | "-S"
-                    )
-                })
+            !arguments.is_empty() && arguments.iter().all(|argument| limit_reading(argument))
         }
         // `sysctl` prints kernel state. `sysctl -w key=value` and
         // `sysctl key=value` set it and `-p` loads settings from a file, so
@@ -228,6 +213,20 @@ fn getconf_arguments(arguments: &[String]) -> bool {
         [name] => keyword(name),
         _ => false,
     }
+}
+
+/// One `ulimit` flag group that only prints: `-` and then letters naming
+/// limits to show or the soft/hard side to show them for.
+fn limit_reading(argument: &str) -> bool {
+    argument.strip_prefix('-').is_some_and(|letters| {
+        !letters.is_empty()
+            && letters.chars().all(|letter| {
+                matches!(
+                    letter,
+                    'a' | 'c' | 'd' | 'f' | 'l' | 'm' | 'n' | 's' | 't' | 'u' | 'v' | 'H' | 'S'
+                )
+            })
+    })
 }
 
 #[cfg(test)]

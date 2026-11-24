@@ -45,6 +45,7 @@ use crate::CanonicalCommandV1;
 mod case_labels;
 #[path = "native_command_unmodeled_compound.rs"]
 mod compound;
+pub(crate) use compound::parameters_only_root_paths;
 #[path = "native_command_unmodeled_disabled_reach.rs"]
 mod disabled_reach;
 #[path = "native_command_unmodeled_expansion.rs"]

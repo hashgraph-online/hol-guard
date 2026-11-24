@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from .contributor_review import build_contributor_review, contributor_review_lines
+from .guard_coverage_bridge import build_guard_coverage_bridge, guard_coverage_markdown_lines
 from .markdown_support import escape_markdown_text
 from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, ScanResult, Severity, severity_from_value
 from .version import __version__
@@ -205,6 +206,9 @@ def build_json_payload(
             }
             for skipped in result.skipped_targets
         ]
+    guard_coverage = build_guard_coverage_bridge(result)
+    if guard_coverage is not None:
+        payload["guardCoverage"] = guard_coverage
     return payload
 
 
@@ -302,6 +306,10 @@ def format_markdown(result: ScanResult) -> str:
             f"- **{escape_markdown_text(integration.name)}**: `{escape_markdown_text(integration.status)}` - "
             f"{escape_markdown_text(integration.message)}"
         )
+
+    guard_coverage = build_guard_coverage_bridge(result)
+    if guard_coverage is not None:
+        lines += ["", *guard_coverage_markdown_lines(guard_coverage)]
 
     lines.extend(contributor_review_lines(result.findings))
     return "\n".join(lines)

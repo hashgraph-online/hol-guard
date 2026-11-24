@@ -28,6 +28,9 @@ SIBLING_CD_SED_CASE = "omp-native-sibling-cd-jest-sed"
 # A status read and the same root-anchored run, each ending in one stage of
 # plain words, so the sink has to keep a list of two commands contained.
 SIBLING_CD_LIST_GREP_CASE = "omp-native-sibling-cd-status-then-jest-grep"
+# The same root-anchored run twice, joined by `;`, each bounded by its own
+# `head` or `tail`.
+SIBLING_CD_SEQUENCED_CASE = "omp-native-sibling-cd-jest-sequenced-runs"
 # Cases that link the installed tree into the sibling's linked worktree rather
 # than install a second copy there.
 SIBLING_LINK_CASES = (
@@ -58,6 +61,7 @@ def add_sibling_test_runner(home: Path, scenario_id: str | None) -> None:
             SIBLING_CD_CAT_CASE,
             SIBLING_CD_SED_CASE,
             SIBLING_CD_LIST_GREP_CASE,
+            SIBLING_CD_SEQUENCED_CASE,
         )
         and scenario_id not in SIBLING_LINK_CASES
     ):

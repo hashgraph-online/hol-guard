@@ -22,9 +22,13 @@ use serde_json::{json, Map, Value};
 
 use crate::bounded_hook_bridge_render::failure_output_for;
 use crate::claude_hook_bridge_render::py_strip;
+use crate::hook_fail_closed_envelopes::{envelope, event_kind, ENVELOPES};
 use crate::runner_authority_op::{KindResult, ERR_INVALID};
 
-const DECIDING_EVENTS: [&str; 3] = ["pretooluse", "permissionrequest", "userpromptsubmit"];
+/// The envelope kinds the contract files a deciding event under: an event whose
+/// answer settles whether a tool call, a permission request or a prompt goes
+/// ahead. Everything else only reports on work that already finished.
+const DECIDING_KINDS: [&str; 3] = ["pre_tool", "permission", "prompt"];
 const GROK_OBSERVE_EVENTS: [&str; 6] = [
     "sessionstart",
     "sessionend",
@@ -41,22 +45,34 @@ pub(crate) fn dispatch(args: &Value) -> KindResult {
         Some(Value::Bool(on_stderr)) => *on_stderr,
         Some(_) => return Err(ERR_INVALID),
     };
-    if fields.len() != if fields.contains_key("stderr") { 4 } else { 3 } {
+    let optional_count = usize::from(fields.contains_key("stderr"))
+        + usize::from(fields.contains_key("reason_code"));
+    if fields.len() != 3 + optional_count {
         return Err(ERR_INVALID);
     }
     let harness = text(fields, "harness")?;
     let event_name = text(fields, "event_name")?;
     let reason = text(fields, "reason")?;
+    let reason_code = fields
+        .get("reason_code")
+        .map(|value| value.as_str().ok_or(ERR_INVALID))
+        .transpose()?;
     if on_stderr {
-        let compact = event_name.replace(['_', '-'], "").to_lowercase();
-        let (stderr, exit_code) = if DECIDING_EVENTS.contains(&compact.as_str()) {
+        // Every spelling the contract files under a deciding kind is refused,
+        // not just the canonical three: a harness that calls its pre-tool event
+        // `PreToolCall`, or its permission event `PermissionRequestV2`, decides
+        // whether something runs exactly as the canonical spelling does, and a
+        // silent exit 0 would read as an allow.
+        let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
+        let kind = event_kind(&contract, event_name);
+        let (stderr, exit_code) = if DECIDING_KINDS.contains(&kind.as_str()) {
             (reason, 2)
         } else {
             ("", 0)
         };
         return Ok(json!({ "document": "", "stderr": stderr, "exit_code": exit_code }));
     }
-    let (document, exit_code) = failure(harness, event_name, reason);
+    let (document, exit_code) = failure(harness, event_name, reason, reason_code);
     Ok(json!({ "document": document, "exit_code": exit_code }))
 }
 
@@ -64,8 +80,12 @@ fn text<'a>(fields: &'a Map<String, Value>, key: &str) -> Result<&'a str, &'stat
     fields.get(key).and_then(Value::as_str).ok_or(ERR_INVALID)
 }
 
-/// The document and exit status for a hook whose review could not finish.
-fn failure(harness: &str, event_name: &str, reason: &str) -> (String, i32) {
+fn failure(
+    harness: &str,
+    event_name: &str,
+    reason: &str,
+    reason_code: Option<&str>,
+) -> (String, i32) {
     if harness == "grok" {
         let compact: String = py_strip(event_name)
             .to_lowercase()
@@ -82,11 +102,63 @@ fn failure(harness: &str, event_name: &str, reason: &str) -> (String, i32) {
     } else {
         harness
     };
-    let (mut document, exit_code) = failure_output_for(shape, event_name, reason, false);
-    if document.ends_with('\n') {
-        document.pop();
+    if reason_code.is_none() {
+        let (mut document, exit_code) = failure_output_for(shape, event_name, reason, false);
+        if document.ends_with('\n') {
+            document.pop();
+        }
+        return (document, exit_code);
     }
-    (document, exit_code)
+    let contract: Value = serde_json::from_str(ENVELOPES).unwrap_or(Value::Null);
+    let kind = event_kind(&contract, event_name);
+    let effective_reason = if kind == "prompt" {
+        contract["defaults"]["prompt_reason"]
+            .as_str()
+            .unwrap_or(reason)
+    } else {
+        reason
+    };
+    let effective_code = reason_code.unwrap_or("native_hook_render_unavailable");
+    let document = envelope(
+        &kind,
+        harness,
+        &[
+            ("$reason", effective_reason),
+            ("$reason_code", effective_code),
+            ("$event_name", event_name),
+        ],
+    );
+    if document.as_object().is_some_and(|map| !map.is_empty()) {
+        let rendered = ascii_json(&document);
+        let (_, exit_code) = failure_output_for(shape, event_name, effective_reason, false);
+        return (rendered, exit_code);
+    }
+    let (mut fallback, exit_code) = failure_output_for(shape, event_name, effective_reason, false);
+    if fallback.ends_with('\n') {
+        fallback.pop();
+    }
+    (fallback, exit_code)
+}
+
+fn ascii_json(value: &Value) -> String {
+    let raw = serde_json::to_string(value).unwrap_or_default();
+    let mut output = String::with_capacity(raw.len());
+    for character in raw.chars() {
+        if character.is_ascii() {
+            output.push(character);
+        } else {
+            let code = character as u32;
+            if code <= 0xffff {
+                output.push_str(&format!("\\u{code:04x}"));
+            } else {
+                let value = code - 0x1_0000;
+                let high = 0xd800 + (value >> 10);
+                let low = 0xdc00 + (value & 0x3ff);
+                output.push_str(&format!("\\u{high:04x}\\u{low:04x}"));
+            }
+        }
+    }
+    output
 }
 
 #[cfg(test)]

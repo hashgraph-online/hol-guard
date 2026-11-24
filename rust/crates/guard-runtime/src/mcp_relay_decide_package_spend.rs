@@ -121,7 +121,8 @@ pub(super) fn spend_package(
     if let Some(generation) = own_write_generation(&context.request) {
         store::after_own_write(&mut state, generation);
     }
-    let evidence = integrity_evidence(&rows, &state, key)?;
+    let verification = store::verification_state(&state);
+    let evidence = integrity_evidence(&rows, &verification, key)?;
     // `claim_evidence_binding(connection, bundle=False)`.
     let binding = ClaimEvidenceBindingV1::default();
     let connection = open_for_claim(&request.guard_home)?;

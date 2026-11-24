@@ -198,7 +198,11 @@ fn identity_metadata_supplied(maps: &[&Map<String, Value>], keys: &[&str]) -> bo
     })
 }
 
-pub(super) fn path_values_sensitive(maps: &[&Map<String, Value>]) -> Result<bool, String> {
+pub(super) fn path_values_sensitive(
+    maps: &[&Map<String, Value>],
+    cwd: Option<&str>,
+    template_relief: bool,
+) -> Result<bool, String> {
     let mut sensitive = false;
     for record in maps {
         for key in PATH_KEYS {
@@ -218,9 +222,22 @@ pub(super) fn path_values_sensitive(maps: &[&Map<String, Value>]) -> Result<bool
                 // selector. The native source reader still validates it.
                 Value::Object(_) | Value::Null | Value::Bool(_) | Value::Number(_) => continue,
             };
-            sensitive |= values
-                .into_iter()
-                .any(|value| sensitive_path_family(Path::new(value)).is_some());
+            sensitive |= values.into_iter().any(|value| {
+                // The name screen reads a committed `.env.example` as the
+                // local dotenv file it is named after. The repository's index
+                // and the secret scan a tracked document already passes are
+                // what tell the two apart, and this screen has no working
+                // directory of its own to resolve the name against, so the
+                // request's own directory answers it. Every other family, and
+                // an untracked or value-bearing template, stays sensitive.
+                // The relief is a read's alone: a request that writes the
+                // template is not the read the gate allowed, and a write can
+                // put a live value into the file the next read would then be
+                // relieved of, so `template_relief` withholds it there.
+                sensitive_path_family(Path::new(value)).is_some()
+                    && !(template_relief
+                        && guard_command::pretool::proven_tracked_dotenv_template(value, cwd))
+            });
         }
     }
     Ok(sensitive)
@@ -307,8 +324,10 @@ pub(super) fn payload_sensitive_target(
     codex_budget_input: Option<&Map<String, Value>>,
     codex_wait_process: Option<&Map<String, Value>>,
     omp_goal_input: Option<&Map<String, Value>>,
+    cwd: Option<&str>,
+    template_relief: bool,
 ) -> Result<bool, String> {
-    let mut sensitive = path_values_sensitive(maps)?;
+    let mut sensitive = path_values_sensitive(maps, cwd, template_relief)?;
     // A native verdict is read wherever it appears, including inside a map
     // whose names are labels.
     for record in maps {
@@ -513,12 +532,23 @@ pub(super) fn payload_changed_hash(maps: &[&Map<String, Value>]) -> Result<bool,
     Ok(explicit || previous.is_some() && current.is_some() && previous != current)
 }
 
+/// `read_request` says the call this payload describes only reads what it
+/// names. The template relief the read gate grants belongs to that request
+/// alone, so every caller states it rather than letting an action type that
+/// can also write borrow it. `cwd` is the working directory the hook
+/// reports, the one the read gate resolved the request against.
 pub(super) fn payload_facts(
     payload: &Value,
     harness: &str,
     action_type: PreToolActionTypeV1,
+    read_request: bool,
     reason_code: &str,
+    cwd: Option<&str>,
 ) -> Result<PolicyFacts, String> {
+    // The read gate resolves a relative path against the hook's verified
+    // working directory, so the relief it grants is proven against the same
+    // one. The payload's own `cwd` answers only a caller that has none.
+    let cwd = cwd.or_else(|| payload.get("cwd").and_then(Value::as_str));
     let mut maps = Vec::new();
     let mut nodes = 0usize;
     collect_fact_maps(payload, 0, &mut nodes, &mut maps)?;
@@ -547,11 +577,21 @@ pub(super) fn payload_facts(
     // An Oh My Pi goal input whose every field matches the tool's published
     // shape carries a token count, not a credential.
     let goal_input = omp_goal_budget_input(payload, harness);
-    let sensitive_target =
-        payload_sensitive_target(&scanned, &named, budget_input, wait_process, goal_input)?
-            || reason_code.contains("secret")
-            || reason_code.contains("credential")
-            || reason_code.contains("exfiltration");
+    let sensitive_target = payload_sensitive_target(
+        &scanned,
+        &named,
+        budget_input,
+        wait_process,
+        goal_input,
+        cwd,
+        // Only a read is the request the read gate proved the template for.
+        // A write, a configuration change, an MCP call that writes and every
+        // other action keep the family screen, because what they put in the
+        // file is not what the gate scanned.
+        read_request,
+    )? || reason_code.contains("secret")
+        || reason_code.contains("credential")
+        || reason_code.contains("exfiltration");
     // A harness code tool proven to run only a constant has no effect a
     // publisher could make worse; a declared publisher still counts.
     let publisher_relevant = publisher.is_some()

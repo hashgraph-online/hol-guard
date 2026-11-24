@@ -108,3 +108,95 @@ fn a_metadata_child_may_walk_a_sibling_repository() {
         }
     }
 }
+
+/// `find ~/Downloads/widgets-1.4.0 -type f -exec basename {} \;` prints the
+/// last component of each name the walk already lists. `basename` opens no
+/// file, so it walks the same roots outside the working directory that `ls`
+/// and `stat` may, and `$HOME` spells the root the way `~` does.
+#[test]
+fn a_basename_child_may_walk_a_folder_below_home() {
+    let layout = layout("find-exec-basename-downloads");
+    let home = &layout.home;
+    let cwd = layout.org.join("app-portal");
+    write(
+        home.join("Downloads/widgets-1.4.0/widgets-1.4.0.js"),
+        "export {};\n",
+    );
+    write(home.join(".toolcfg/settings.json"), "{}\n");
+    let cases = [
+        (
+            r"find ~/Downloads/widgets-1.4.0 -maxdepth 1 -type f -exec basename {} \; | sort",
+            true,
+        ),
+        (
+            r#"find "$HOME/Downloads/widgets-1.4.0" -type f -exec basename {} \; | sort"#,
+            true,
+        ),
+        (
+            r#"find "${HOME}/Downloads/widgets-1.4.0" -type f -exec basename {} +"#,
+            true,
+        ),
+        (
+            r#"git status --short && find "$HOME/Downloads/widgets-1.4.0" -type f -exec basename {} \;"#,
+            true,
+        ),
+        (r#"find "$HOME/Downloads" -type f -exec stat {} \;"#, true),
+        // Home itself, a home dot-directory, a root outside home, and a
+        // walk that is not bound to regular files keep review.
+        (r#"find "$HOME" -type f -exec basename {} \;"#, false),
+        (r"find ~/.toolcfg -type f -exec basename {} \;", false),
+        (r"find /etc -type f -exec basename {} \;", false),
+        (
+            r"find ~/Downloads/widgets-1.4.0 -exec basename {} \;",
+            false,
+        ),
+        (
+            r"find ~/Downloads/widgets-1.4.0 -type f -exec basename {} \; -delete",
+            false,
+        ),
+        // A child named by path is not the `basename` this proof knows.
+        (
+            r"find ~/Downloads/widgets-1.4.0 -type f -exec ./basename {} \;",
+            false,
+        ),
+        // A literal `$HOME` names a folder below the working directory, and
+        // another variable is not home at all.
+        (
+            r"find '$HOME/Downloads/widgets-1.4.0' -type f -exec basename {} \;",
+            false,
+        ),
+        (
+            r"find \$HOME/Downloads/widgets-1.4.0 -type f -exec basename {} \;",
+            false,
+        ),
+        (
+            r#"find "$HOMEDIR/Downloads" -type f -exec basename {} \;"#,
+            false,
+        ),
+        // A child that reads contents stays bound to the working directory.
+        (
+            r#"find "$HOME/Downloads/widgets-1.4.0" -type f -exec cat {} \;"#,
+            false,
+        ),
+    ];
+    for harness in ["codex", "claude-code", "omp"] {
+        for (command, allowed) in cases {
+            let result = fixture::evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"Bash", "tool_input":{"command":command}}),
+                None,
+                None,
+                home.to_str(),
+                cwd.to_str(),
+            );
+            assert_eq!(
+                result.decision == "allow",
+                allowed,
+                "{harness}: {command} => {} / {}",
+                result.decision,
+                result.reason_code
+            );
+        }
+    }
+}

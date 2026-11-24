@@ -128,7 +128,7 @@ pub(super) struct Plain<'a> {
     pub(super) params: &'a Value,
     pub(super) artifact: &'a Map<String, Value>,
     pub(super) artifact_hash: &'a str,
-    pub(super) firewall: &'a Value,
+    pub(super) firewall: Option<&'a Value>,
     pub(super) decision: &'a Map<String, Value>,
     pub(super) append: &'a [Value],
     /// An ask or safe-alternative block's risk input: the proxy projects a
@@ -153,6 +153,7 @@ impl Plain<'_> {
         })
         .ok()
         .map(Some)
+        .or(Some(None))
     }
 
     /// The receipt's risk categories: the projected ones, else the
@@ -217,7 +218,14 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
     let firewall = artifact["metadata"]
         .as_object()?
         .get("mcpSkillFirewall")
-        .filter(|firewall| firewall.is_object())?;
+        .filter(|firewall| firewall.is_object());
+    // Forward receipts must carry the firewall evidence that authenticated
+    // the tool artifact. A blocked call remains recordable when an older
+    // catalog path did not attach that display-only evidence, so connector
+    // setup and ordinary review rows cannot disappear from the inbox.
+    if firewall.is_none() && !queued && !reviewed {
+        return None;
+    }
     let projected_risk = if queued || reviewed {
         Some(risk_input(artifact, call.params, &record["arguments"])?)
     } else {
@@ -238,6 +246,67 @@ pub(super) fn plain(record: &Value) -> Option<Plain<'_>> {
         projected_risk,
         review,
     })
+}
+
+pub(super) fn rejection_code(record: &Value) -> &'static str {
+    let Some(record) = record.as_object() else {
+        return "record_object";
+    };
+    if !keys_fit(
+        record,
+        &RECORD_KEYS,
+        &[APPEND_KEY, APPROVAL_KEY, REVIEW_KEY],
+    ) {
+        return "record_keys";
+    }
+    let queued = match record.get(APPROVAL_KEY) {
+        None => false,
+        Some(approval) if approval_fits(approval) => true,
+        Some(_) => return "approval",
+    };
+    let reviewed = match record.get(REVIEW_KEY) {
+        None => false,
+        Some(_) if queued => return "approval_and_review",
+        Some(review) if review_fields(review).is_some() => true,
+        Some(_) => return "review",
+    };
+    if !matches!(record.get(APPEND_KEY), None | Some(Value::Array(_)))
+        || record
+            .get(APPEND_KEY)
+            .and_then(Value::as_array)
+            .is_some_and(|items| !items.iter().all(Value::is_object))
+    {
+        return "append";
+    }
+    let Some(call) = relayed(record, KIND) else {
+        return "relayed";
+    };
+    let forward = match call.outcome {
+        "forward" if !queued && !reviewed && FORWARD_ACTIONS.contains(&call.policy_action) => true,
+        "block"
+            if block_taxonomy(call.policy_action).is_some()
+                && block_source_fits(queued, reviewed, call.source) =>
+        {
+            false
+        }
+        _ => return "route",
+    };
+    let firewall = call
+        .artifact
+        .get("metadata")
+        .and_then(Value::as_object)
+        .and_then(|metadata| metadata.get("mcpSkillFirewall"))
+        .filter(|value| value.is_object());
+    let firewall_required = forward || (!queued && !reviewed);
+    if firewall.is_none() && firewall_required {
+        return "firewall";
+    }
+    if (queued || reviewed)
+        && risk_input(call.artifact, call.params, &record["arguments"]).is_none()
+    {
+        return "risk_input";
+    }
+    "unknown"
 }
 
 /// The fields every relayed call's record carries, tool or package.

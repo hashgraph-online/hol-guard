@@ -381,3 +381,24 @@ fn fail_open_disclosure_must_say_the_host_continues() {
         "Prompt hook failures return a bounded response that lets the prompt continue."
     ));
 }
+
+#[test]
+fn a_policy_wait_that_spent_the_deadline_is_deadline_exhaustion() {
+    let quiet = json!({
+        "reason": "policy not ready",
+        "reason_code": "native_policy_not_ready",
+        "policy_failure": {"last_error": null, "resident_failure_streak": 0},
+    });
+    assert!(policy_wait_outlived_deadline(&quiet, 0.0));
+    assert!(!policy_wait_outlived_deadline(&quiet, 0.4));
+    let no_state = json!({"reason": "r", "reason_code": "native_policy_not_ready"});
+    assert!(policy_wait_outlived_deadline(&no_state, 0.0));
+    let failed = json!({
+        "reason": "r",
+        "reason_code": "native_policy_not_ready",
+        "policy_failure": {"last_error": "native_policy_publish_failed"},
+    });
+    assert!(!policy_wait_outlived_deadline(&failed, 0.0));
+    let other = json!({"reason": "r", "reason_code": "native_review_deadline_exceeded"});
+    assert!(!policy_wait_outlived_deadline(&other, 0.0));
+}
