@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.tracetrim",
+  "version": "1.0.0",
+  "name": "tracetrim",
+  "description": "tracetrim learns from traces which tool output fields an agent visibly reuses and trims the rest. The expand tool returns a retained original result. The tracetrim_done tool closes a run with the agent's final answer. When tracetrim fronts other MCP servers, Guard sees one server. Proxied tools keep Guard's normal handling.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.alepom",
+    "displayName": "Alessio Pomaro",
+    "url": "https://github.com/alepom"
+  },
+  "icon": { "kind": "none" },
+  "homepage": "https://github.com/alepom/tracetrim",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "tracetrim"
+  },
+  "riskClasses": ["local-file-read", "local-file-write", "package-or-source-installation"],
+  "tools": [
+    { "name": "expand", "state": "inherit" },
+    { "name": "tracetrim_done", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/alepom/tracetrim",
+    "https://pypi.org/project/tracetrim/"
+  ],
+  "saferAlternatives": [
+    "Include only the upstream servers needed for the task in the proxy configuration.",
+    "Use a private work directory for traces, which can contain tool results and final answers."
+  ]
+}
