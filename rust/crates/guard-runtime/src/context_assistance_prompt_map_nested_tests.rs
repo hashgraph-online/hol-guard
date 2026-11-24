@@ -471,3 +471,23 @@ export function isURL(input: string): boolean {
     let text = ask("Add a function isURLList that is true for a list of URLs");
     assert!(!text.contains("export function isURL("), "{text}");
 }
+
+/// Two names a letter away are no guess, so the stem still decides.
+#[test]
+fn a_tied_misspelling_falls_back_to_the_stem() {
+    use super::project_tests::{project, prompt_map, ON};
+    let source = "export function isRelative(input: string): boolean {
+  return input.startsWith(\"./\");
+}
+
+export const isRelativeURX = (input: string) => isRelative(input);
+export const isRelativeURY = (input: string) => !isRelative(input);
+";
+    let (home, _project, root) = project(ON, &[("src/utils.ts", source)]);
+    let text = prompt_map(home.path(), &root, "Add a function isRelativeURL for links")
+        .unwrap_or_default();
+    assert!(
+        text.contains("src/utils.ts:1-3 export function isRelative("),
+        "{text}"
+    );
+}

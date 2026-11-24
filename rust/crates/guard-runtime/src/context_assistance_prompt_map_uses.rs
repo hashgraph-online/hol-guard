@@ -113,8 +113,8 @@ pub(super) fn meant<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<
     }
     if item.text.chars().count() >= MIN_MISSPELLED {
         let mut near = (defined.iter()).filter(|name| one_letter_apart(&item.text, name));
-        if let Some(first) = near.next() {
-            return near.next().is_none().then_some(first.as_str());
+        if let (Some(first), None) = (near.next(), near.next()) {
+            return Some(first.as_str());
         }
     }
     (defined.iter())
