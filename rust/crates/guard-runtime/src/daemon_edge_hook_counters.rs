@@ -96,7 +96,7 @@ struct State {
     logged: Option<Counts>,
     logged_at: Option<Instant>,
     resident: Option<(String, Value)>,
-    resident_logged: Option<Value>,
+    resident_logged: Option<(String, Value)>,
     resident_logged_at: Option<Instant>,
 }
 
@@ -181,7 +181,7 @@ pub(crate) fn note_resident(guard_home: &Path, epoch: &str, counters: &Value) {
     if state
         .resident_logged_at
         .is_some_and(|logged| now.duration_since(logged) < RESIDENT_LOG_INTERVAL)
-        || state.resident_logged.as_ref() == Some(&resident)
+        || state.resident_logged.as_ref() == Some(&(epoch.to_owned(), resident.clone()))
         || resident.as_object().is_none_or(|map| map.is_empty())
     {
         return;
@@ -193,7 +193,7 @@ pub(crate) fn note_resident(guard_home: &Path, epoch: &str, counters: &Value) {
         .is_ok()
     {
         if let Ok(mut state) = self::state().lock() {
-            state.resident_logged = Some(resident);
+            state.resident_logged = Some((epoch.to_owned(), resident));
         }
     }
 }
