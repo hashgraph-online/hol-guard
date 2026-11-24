@@ -25923,6 +25923,54 @@
       "expect": "allow"
     },
     {
+      "id": "sibling-cd-list-auth-named-source-dirs-then-grep",
+      "fix_area": "queue",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/app-portal && ls src/lib/auth src/lib/session/auth 2>/dev/null | head -40; grep -rln \"SignInButton\\|signIn(\\|useAuth(\" src | head -12"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sibling-cd-git-log-signature-format",
+      "fix_area": "queue",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/app-portal && git log -1 --format=\"%an <%ae> | %cn <%ce> | %G? | %s\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sibling-cd-list-auth-named-source-dir",
+      "fix_area": "queue",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${ORG}/app-portal && ls src/lib/auth"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "queue-cd-ls-or-echo-fallback",
       "fix_area": "queue",
       "harnesses": [
