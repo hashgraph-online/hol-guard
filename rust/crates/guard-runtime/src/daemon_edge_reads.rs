@@ -1065,6 +1065,11 @@ mod identity;
 
 #[path = "daemon_edge_hook_review.rs"]
 mod hook_review;
+
+pub(super) fn note_resident_hook_counters(guard_home: &Path, epoch: &str, counters: &Value) {
+    hook_review::counters::note_resident(guard_home, epoch, counters);
+}
+
 #[path = "daemon_edge_hook_scheduler.rs"]
 mod hook_scheduler;
 pub(super) use hook_scheduler::set_warming as set_hook_worker_warming;
