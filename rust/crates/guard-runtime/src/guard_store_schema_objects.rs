@@ -4,8 +4,6 @@
 //! whitespace are normalised. A store whose object was changed by hand, or
 //! created by an incompatible release, is refused rather than used.
 
-use std::collections::BTreeMap;
-
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::guard_store_db::{StoreError, StoreResult};
@@ -50,14 +48,18 @@ pub(super) fn validate(
     family_label: &str,
     allow_unique: bool,
 ) -> StoreResult<()> {
-    let mut expected = BTreeMap::new();
+    let mut expected = Vec::new();
     for statement in statements {
         let Some((name, sql)) = declared(statement, allow_unique) else {
             return Err(StoreError::Runtime(format!(
                 "unrecognized command activity {family_label}schema statement"
             )));
         };
-        expected.insert(name, sql);
+        if let Some((_, existing)) = expected.iter_mut().find(|(existing, _)| existing == &name) {
+            *existing = sql;
+        } else {
+            expected.push((name, sql));
+        }
     }
     let mut query = connection.prepare("select sql from sqlite_schema where name = ?1")?;
     for (name, sql) in &expected {

@@ -121,3 +121,26 @@ fn a_changed_bash_table_is_refused_and_rolled_back() {
         .expect("reviews")
         .is_empty());
 }
+
+#[test]
+fn multiple_changed_bash_objects_report_statement_order() {
+    let connection = fresh();
+    super::families::ensure_bash_operations(&connection, NOW).expect("initial schema");
+    connection
+        .execute_batch(
+            "delete from schema_migrations where version in (30, 31, 32); \
+             drop table guard_bash_reviews; \
+             drop table guard_bash_invocations; \
+             create table guard_bash_reviews (id integer); \
+             create table guard_bash_invocations (id integer);",
+        )
+        .expect("tamper");
+    let error = super::families::ensure_bash_operations(&connection, NOW).expect_err("refused");
+    match error {
+        StoreError::Runtime(message) => assert_eq!(
+            message,
+            "incompatible command activity Bash operation schema object: guard_bash_reviews"
+        ),
+        other => panic!("unexpected {other:?}"),
+    }
+}
