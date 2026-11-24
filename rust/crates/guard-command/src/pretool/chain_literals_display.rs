@@ -134,7 +134,7 @@ pub(super) fn display_slot(
             if program == "printf"
                 && arguments
                     .first()
-                    .is_some_and(|format| !format.starts_with('-')) =>
+                    .is_some_and(|format| !format.starts_with('-') && plain_format(format)) =>
         {
             true
         }
@@ -225,6 +225,31 @@ fn labelled(
             };
             text.chars().any(char::is_alphanumeric)
         })
+}
+
+/// Whether every conversion in a printf `format` only prints its argument.
+///
+/// zsh's `%n` stores a count in the variable its argument names, and a
+/// length modifier (`%ls`) is syntax this scan does not read, so either
+/// keeps the print out of the display slot. `%%` is a literal percent.
+fn plain_format(format: &str) -> bool {
+    let mut characters = format.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character != '%' {
+            continue;
+        }
+        while characters
+            .next_if(|c| matches!(c, '-' | '+' | ' ' | '#' | '0'..='9' | '.' | '*'))
+            .is_some()
+        {}
+        if characters
+            .next_if(|c| "%AEFGXabcdefgioqsux".contains(*c))
+            .is_none()
+        {
+            return false;
+        }
+    }
+    true
 }
 
 /// `word` with its printf conversions (`%s`, `%-10.3d`, `%%`) removed.
@@ -343,13 +368,17 @@ fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bo
         STEERING_WORDS
             .split_ascii_whitespace()
             .any(|entry| entry == word)
+    }) || words.iter().enumerate().any(|(at, word)| {
+        // zsh binds several names at once: `for a PATH in ...`.
+        matches!(word.as_str(), "for" | "select")
+            && words[at + 1..]
+                .iter()
+                .take_while(|name| !matches!(name.as_str(), "in" | "do"))
+                .any(|name| !loop_name(name))
     }) || words
-        .windows(2)
-        .any(|pair| matches!(pair[0].as_str(), "for" | "select") && !loop_name(&pair[1]))
-        || words
-            .iter()
-            .position(|word| word == "printf")
-            .is_some_and(|at| words[at + 1..].iter().any(|word| word.starts_with("-v")))
+        .iter()
+        .position(|word| word == "printf")
+        .is_some_and(|at| words[at + 1..].iter().any(|word| word.starts_with("-v")))
 }
 
 /// Whether `name`, bound by `for` or `select`, is a plain variable the shell

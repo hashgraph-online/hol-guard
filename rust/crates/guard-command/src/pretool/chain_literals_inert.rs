@@ -149,13 +149,24 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                         return None;
                     }
                     let value = match stand_in(&substitution.body) {
-                        Some(value) => value,
+                        // A lookup can print nothing; only a Git command reads
+                        // a missing revision as the same kind of operation.
+                        Some(value)
+                            if value != git_value::COMMIT_VALUE
+                                || (git_value::in_git_command(
+                                    &masked,
+                                    &substitutions,
+                                    substitution.start,
+                                ) && git_value::standalone(&masked, substitution)) =>
+                        {
+                            value
+                        }
                         // A value that is only printed needs no stand-in of its
                         // own shape (`display`).
-                        None if display::display_slot(&masked, &substitutions, substitution) => {
+                        _ if display::display_slot(&masked, &substitutions, substitution) => {
                             display::DISPLAY_VALUE
                         }
-                        None => return None,
+                        _ => return None,
                     };
                     (value.to_owned(), substitution.body.clone(), false)
                 }

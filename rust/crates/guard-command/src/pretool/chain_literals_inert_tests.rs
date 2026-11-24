@@ -384,6 +384,11 @@ fn printed_values_take_the_display_stand_in() {
             format!("echo \"version: {v}\""),
         ),
         (
+            // A revision lookup outside a Git command is only printed.
+            "echo \"commit: $(git rev-parse HEAD)\"".to_owned(),
+            format!("echo \"commit: {v}\""),
+        ),
+        (
             "printf 'version %s\\n' \"$(cat VERSION)\"".to_owned(),
             format!("printf 'version %s\\n' \"{v}\""),
         ),
@@ -476,6 +481,10 @@ fn values_used_as_more_than_output_stay_opaque() {
         "printf '%s\\n' \"$(cat x)\"",
         "printf '%-10.3s%%\\t' \"$(cat x)\"",
         "printf '%s' \"$(cat workspace/notes)\" \"$(cat x)\"",
+        "printf '%ls' \"$(cat x)\"",
+        // zsh's `%n` stores into the variable its argument names.
+        "printf 'label %n' \"$(cat x)\"",
+        "printf 'label %s %n' \"$(cat x)\" PATH",
         "echo \"$(cat x)\" | sh",
         // Nested or heredoc-fed substitutions.
         "echo \"$(cat $(ls))\"",
@@ -522,6 +531,9 @@ fn a_slot_this_scan_cannot_place_stays_opaque() {
         "for HOME in ~/.aws; do echo \"k: $(cat ~/config)\"; done",
         "select HOME in ~/.aws; do echo \"k: $(cat ~/config)\"; done",
         "for path in bin; do echo \"v: $(cat README.md)\"; done",
+        // zsh binds every name up to `in`.
+        "for a PATH in x /evil; do echo \"v: $(ls)\"; done",
+        "for a HOME in x ~/.aws; do echo \"k: $(cat ~/config)\"; done",
     ] {
         assert_eq!(projected(command), None, "{command}");
     }
