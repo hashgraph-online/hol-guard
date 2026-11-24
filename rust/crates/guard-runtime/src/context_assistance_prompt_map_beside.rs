@@ -8,6 +8,9 @@ use super::more::{fenced, whole};
 use super::rename::stubbed;
 use super::{Asked, Entry, File, Pick, Span, MAX_LINE_CHARS};
 
+#[path = "context_assistance_prompt_map_callees.rs"]
+pub(super) mod callees;
+
 /// The most of the list, and of one class's member list in it.
 const MAX_BESIDE_CHARS: usize = 1_400;
 const MAX_CLASS_MEMBERS_CHARS: usize = 240;
