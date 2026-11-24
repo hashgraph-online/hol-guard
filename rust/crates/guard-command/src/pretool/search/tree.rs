@@ -267,6 +267,42 @@ pub(in crate::pretool) fn safe_unmatched_glob_operand(
     context: ReadContext<'_>,
     recursive: bool,
 ) -> bool {
+    unmatched_glob_operand(
+        value,
+        context,
+        recursive,
+        glob_expand::expand_glob_matches_strict,
+    )
+}
+
+/// [`safe_unmatched_glob_operand`] for a listing that prints names and never
+/// contents, such as `ls` or `echo`. A pattern led by a literal `.` there
+/// stands for hidden names `ls -a` already prints, so `ls eslint.config.*
+/// .eslintrc*`, which asks which config file a project keeps, qualifies when
+/// nothing matches the hidden spelling. A hidden directory before the pattern
+/// is still refused, and a recursive listing keeps the content screen.
+pub(in crate::pretool) fn safe_unmatched_listing_glob_operand(
+    value: &str,
+    context: ReadContext<'_>,
+    recursive: bool,
+) -> bool {
+    if recursive {
+        return safe_unmatched_glob_operand(value, context, true);
+    }
+    unmatched_glob_operand(
+        value,
+        context,
+        false,
+        glob_expand::expand_glob_matches_strict_listing,
+    )
+}
+
+fn unmatched_glob_operand(
+    value: &str,
+    context: ReadContext<'_>,
+    recursive: bool,
+    expand: fn(&str, ReadContext<'_>) -> Option<Vec<PathBuf>>,
+) -> bool {
     if !value.contains('[') {
         // Only the last component may be a pattern, inside a real directory.
         let directory = value
@@ -277,8 +313,7 @@ pub(in crate::pretool) fn safe_unmatched_glob_operand(
             && expanded_operand(directory, context)
                 .and_then(|path| std::fs::symlink_metadata(path).ok())
                 .is_some_and(|metadata| metadata.is_dir())
-            && glob_expand::expand_glob_matches_strict(value, context)
-                .is_some_and(|matches| matches.is_empty());
+            && expand(value, context).is_some_and(|matches| matches.is_empty());
     }
     inert_bracket_class(value, context) && safe_literal_bracket_tree(value, context, recursive)
 }

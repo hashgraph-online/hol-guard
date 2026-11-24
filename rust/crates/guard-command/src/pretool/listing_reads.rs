@@ -115,7 +115,7 @@ pub(super) fn safe_listing_segment(
                 true
             }
             Operand::Glob => {
-                search::safe_unmatched_glob_operand(argument, context, recursive)
+                search::safe_unmatched_listing_glob_operand(argument, context, recursive)
                     || (!recursive && leaf_glob_operand(argument, context))
                     || (!recursive
                         && search::safe_literal_bracket_listing_target(argument, context))
@@ -135,7 +135,7 @@ pub(super) fn safe_listing_segment(
 /// the word takes that listing's proof.
 pub(super) fn listable_glob(value: &str, context: super::PathContext<'_>) -> bool {
     search::safe_glob_operand(value, context, false)
-        || search::safe_unmatched_glob_operand(value, context, false)
+        || search::safe_unmatched_listing_glob_operand(value, context, false)
         || leaf_glob_operand(value, context)
 }
 
