@@ -403,7 +403,15 @@ fn evaluate_validated_envelope<Lease>(
         origin_store,
         started,
     );
-    let requires_approval = edge_result_check::requires_approval(&event_name, &result);
+    let result_object = result
+        .as_object()
+        .ok_or_else(|| "native_hook_pre_tool_result_invalid".to_owned())?;
+    let requires_approval = edge_result_check::requires_approval(&event_name, result_object);
+    let recording_only_response = edge_result_check::recording_only_response(
+        &event_name,
+        envelope.recording_only,
+        result_object,
+    );
     let mut edge = GuardHookEdgeResultV2 {
         exact_command_block: None,
         review_evidence,
@@ -421,6 +429,7 @@ fn evaluate_validated_envelope<Lease>(
         payload_kind: kind,
         result,
         requires_approval,
+        recording_only_response,
         harness_response,
         receipt,
     };

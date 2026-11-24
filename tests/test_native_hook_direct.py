@@ -12,6 +12,7 @@ _EDGE = {
     "event_name": "PreToolUse",
     "payload_kind": "inline",
     "requires_approval": False,
+    "recording_only_response": False,
     "result": {"decision": "allow", "minimum_action": "allow", "policy_action": "allow"},
     "receipt": {"request_id": "req-1", "decision_id": "a" * 64},
     "harness_response": {"policy_action": "allow"},

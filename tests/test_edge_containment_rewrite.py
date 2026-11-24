@@ -68,6 +68,7 @@ def _edge(**fields: object) -> dict[str, object]:
         "event_name": "PreToolUse",
         "payload_kind": "inline",
         "requires_approval": False,
+        "recording_only_response": False,
         "result": dict(_RESULT),
         "receipt": {"request_id": "req-1", "decision_id": "b" * 64},
         "harness_response": dict(_RECEIPT_RESPONSE),

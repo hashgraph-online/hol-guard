@@ -487,6 +487,11 @@ pub struct GuardHookEdgeResultV2 {
     /// checks it before the edge is returned, so the adapter never classifies
     /// policy actions itself.
     pub requires_approval: bool,
+    /// Whether a recording-only `PreToolUse` answer is returned as-is instead
+    /// of entering the daemon's approval and containment control path. Rust
+    /// derives this from the envelope posture and the checked result, so the
+    /// adapter does not classify Watch outcomes from policy fields.
+    pub recording_only_response: bool,
     /// The harness-specific JSON a hook must print for `result`, rendered by
     /// the resident so no other layer interprets the verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
