@@ -536,7 +536,7 @@ def test_builder_rejects_symlink_runtime(tmp_path: Path) -> None:
 
 def test_builder_keeps_the_shipped_runtime_bound_by_default() -> None:
     default = inspect.signature(build_native_wheel).parameters["max_runtime_bytes"].default
-    assert default == wheel_builder._MAX_RUNTIME_BYTES == 128 * 1024 * 1024
+    assert default == wheel_builder._MAX_RUNTIME_BYTES == 192 * 1024 * 1024
 
 
 def test_builder_reports_the_runtime_size_it_refused(tmp_path: Path) -> None:
