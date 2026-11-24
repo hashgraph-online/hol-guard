@@ -7,6 +7,25 @@ use guard_contracts::{GuardHookEnvelopeV2, PreToolResultV1};
 use serde_json::{Map, Value};
 use std::time::{Duration, Instant};
 
+/// The most of a hook's budget the native check leaves for its caller.
+const REVIEW_QUEUE_RESERVE_MS: u64 = 500;
+
+/// When the native check must stop. A check that runs out of time settles at
+/// a review, and that review keeps Allow once and Always allow only if the
+/// caller still has time to queue its approval card and render the pause.
+/// A check given the whole budget leaves none, so the caller can only fail
+/// closed with a block no approval can clear. The check therefore stops a
+/// quarter of the budget early, never more than half a second.
+pub(super) fn native_check_deadline(budget_ms: Option<u64>) -> Instant {
+    Instant::now() + Duration::from_millis(native_check_budget_ms(budget_ms))
+}
+
+/// The part of the hook's budget the native check may spend.
+pub(super) fn native_check_budget_ms(budget_ms: Option<u64>) -> u64 {
+    let budget = budget_ms.unwrap_or(9_000).min(9_000);
+    budget - (budget / 4).min(REVIEW_QUEUE_RESERVE_MS)
+}
+
 /// The `PreToolUse` and `UserPromptSubmit` verdict before the per-session
 /// stop: the native review, then every policy layer joined over it. It holds
 /// no session state, so it also judges one step of a chained command alone
@@ -24,10 +43,7 @@ pub(super) fn evaluate_pre_tool_chain(
         event_name,
         &envelope.raw_payload,
         policy_snapshot.and_then(|snapshot| snapshot.command_extensions.as_ref()),
-        Some(
-            Instant::now()
-                + Duration::from_millis(envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000)),
-        ),
+        Some(native_check_deadline(envelope.deadline_budget_ms)),
         // The envelope carries only the roots. Every proof a context
         // holds is set by a caller with the command, so all stay false.
         guard_command::pretool::PathContext {
@@ -82,3 +98,7 @@ pub(super) fn step(
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "edge_pre_tool_chain_tests.rs"]
+mod tests;
