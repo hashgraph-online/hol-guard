@@ -91,11 +91,15 @@ pub(crate) fn project(command: &str, cwd: Option<&str>) -> Option<String> {
     if !chain_reads_only(command, cwd.map(Path::new), None) {
         return None;
     }
+    // Every word the rename can touch is proven and compared: the arguments
+    // and the redirect targets, which the model keeps apart from them.
     let words = |text: &str| -> Vec<String> {
-        parse(text)
+        let model = parse(text);
+        model
             .segments
             .iter()
             .flat_map(|segment| segment.arguments.clone())
+            .chain(model.redirects.iter().map(|redirect| redirect.target.clone()))
             .collect()
     };
     let original = words(command);

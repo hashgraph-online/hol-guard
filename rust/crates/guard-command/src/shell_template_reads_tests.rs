@@ -217,6 +217,13 @@ fn an_unproven_or_rerouted_template_is_not_projected() {
             "{command}"
         );
     }
+    // A redirect target holding the same name is proven like an argument.
+    for command in [
+        "cat .env.example - < /elsewhere/.env.example",
+        "cat .env.example - < ../.env.example",
+    ] {
+        assert_eq!(projected(command, &project), None, "{command}");
+    }
     let header = concat!("-----BEGIN RSA PRIVATE", " KEY-----");
     std::fs::write(
         project.join(".env.example"),
