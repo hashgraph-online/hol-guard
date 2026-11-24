@@ -476,6 +476,8 @@ fn values_used_as_more_than_output_stay_opaque() {
         "printf '%d' PATH=0; echo \"label: $(cat marker)\"",
         ": *(e:PATH=0:); echo \"label: $(cat marker)\"",
         ": *(+steer); echo \"label: $(cat marker)\"",
+        "for i in 1 2; do echo \"key: $(cat id_rsa)\"; : (marker|x)(e:'cd ~/.ssh':); done",
+        "for i in 1 2; do echo \"key: $(cat id_rsa)\"; : {marker,x}(e:'cd ~/.ssh':); done",
         "trap 'HOME=/tmp/inert' DEBUG; echo \"label: $(cat ~/marker)\"",
         "cd ~/.ssh && echo \"$(cat id_rsa)\"",
         "pushd ~/.ssh; echo \"$(cat id_rsa)\"",
@@ -510,6 +512,11 @@ fn values_used_as_more_than_output_stay_opaque() {
         // zsh's `%n` stores into the variable its argument names.
         "printf 'label %n' \"$(cat x)\"",
         "printf 'label %s %n' \"$(cat x)\" PATH",
+        // zsh evaluates the argument of a numeric conversion or a `*` width
+        // as arithmetic, which can run a substitution held in the value.
+        "printf 'count: %d\\n' \"$(cat x)\"",
+        "printf 'label: %x' \"$(cat x)\"",
+        "printf 'label: %*s' \"$(cat x)\" y",
         "echo \"$(cat x)\" | sh",
         // Nested or heredoc-fed substitutions.
         "echo \"$(cat $(ls))\"",

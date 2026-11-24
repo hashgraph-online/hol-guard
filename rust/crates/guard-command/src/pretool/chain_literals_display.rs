@@ -228,11 +228,15 @@ fn labelled(
         })
 }
 
-/// Whether every conversion in a printf `format` only prints its argument.
+/// Whether every conversion in a printf `format` only prints its argument
+/// as text.
 ///
-/// zsh's `%n` stores a count in the variable its argument names, and a
-/// length modifier (`%ls`) is syntax this scan does not read, so either
-/// keeps the print out of the display slot. `%%` is a literal percent.
+/// zsh evaluates the argument of a numeric conversion (`%d`, `%x`, `%f`, ...)
+/// and of a `*` width or precision as an arithmetic expression, which can
+/// assign a variable or run a command substitution held in the value. zsh's
+/// `%n` stores a count in the variable its argument names, and a length
+/// modifier (`%ls`) is syntax this scan does not read. Each of these keeps
+/// the print out of the display slot. `%%` is a literal percent.
 fn plain_format(format: &str) -> bool {
     let mut characters = format.chars().peekable();
     while let Some(character) = characters.next() {
@@ -240,13 +244,10 @@ fn plain_format(format: &str) -> bool {
             continue;
         }
         while characters
-            .next_if(|c| matches!(c, '-' | '+' | ' ' | '#' | '0'..='9' | '.' | '*'))
+            .next_if(|c| matches!(c, '-' | '+' | ' ' | '#' | '0'..='9' | '.'))
             .is_some()
         {}
-        if characters
-            .next_if(|c| "%AEFGXabcdefgioqsux".contains(*c))
-            .is_none()
-        {
+        if characters.next_if(|c| "%bcqs".contains(*c)).is_none() {
             return false;
         }
     }
@@ -352,13 +353,15 @@ fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bo
             // `name()` opens a function definition.
             ')' if !quoted && previous == '(' => return true,
             // A `(` joined to a word is a zsh glob qualifier, which can run
-            // code (`*(e:...:)`, `*(+name)`) while the glob expands.
+            // code (`*(e:...:)`, `*(+name)`) while the glob expands. That
+            // includes one joined to a group or a brace expansion
+            // (`(a|b)(e:...:)`, `{a,b}(e:...:)`).
             '(' if !quoted
                 && at
                     .checked_sub(1)
                     .map(|before| chars[before])
                     .is_some_and(|before| {
-                        !before.is_ascii_whitespace() && !";&|(){}$<>=".contains(before)
+                        !before.is_ascii_whitespace() && !";&|({$<>=".contains(before)
                     }) =>
             {
                 return true;
