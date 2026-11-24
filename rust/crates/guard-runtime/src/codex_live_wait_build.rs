@@ -50,7 +50,16 @@ pub(crate) fn prepare(
     prepared.remove("codex_live_wait");
     let facts = match args.get(FACTS_KEY).cloned().or_else(|| payload_facts(args)) {
         Some(facts) => facts,
-        None if args.contains_key(PAYLOAD_KEY) => return Some(prepared),
+        None if args.contains_key(PAYLOAD_KEY)
+            && args
+                .get("request")
+                .and_then(Value::as_object)
+                .and_then(|request| request.get("harness"))
+                .and_then(Value::as_str)
+                == Some("codex") =>
+        {
+            return Some(prepared);
+        }
         None => return None,
     };
     let built = build(&facts, args, guard_home);
