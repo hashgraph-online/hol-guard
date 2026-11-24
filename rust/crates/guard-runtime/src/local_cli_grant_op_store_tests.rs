@@ -187,7 +187,14 @@ fn a_script_grant_covers_every_javascript_runtime_that_runs_the_file() {
     let fixture = Fixture::new();
     let node = runtime_script("node-script", CONTENT);
     fixture.grant(&node, "allowed", None);
-    for kind in ["node-script", "bun-script", "bun.exe-script", "deno-script"] {
+    for kind in [
+        "node-script",
+        "bun-script",
+        "bun.exe-script",
+        "deno-script",
+        "tsx-script",
+        "ts-node.cmd-script",
+    ] {
         let launch = runtime_script(kind, CONTENT);
         assert_eq!(launch.cli_id, node.cli_id, "{kind}");
         let found = payload(&fixture, &launch, "review", None);
@@ -227,4 +234,19 @@ fn a_runtime_grant_stays_bound_to_the_file_content_and_language() {
     let python = runtime_script("python-script", CONTENT);
     assert_eq!(python.cli_id, node.cli_id);
     assert_eq!(state(&fixture, &python, "review", None), "none");
+}
+
+#[test]
+fn a_grant_recorded_under_a_typescript_runner_covers_node() {
+    let fixture = Fixture::new();
+    for kind in ["tsx-script", "ts-node-script"] {
+        let runner = runtime_script(kind, CONTENT);
+        fixture
+            .connection
+            .execute("delete from local_cli_grant", [])
+            .unwrap();
+        fixture.grant(&runner, "allowed", None);
+        let node = runtime_script("node-script", CONTENT);
+        assert_eq!(state(&fixture, &node, "review", None), "allowed", "{kind}");
+    }
 }

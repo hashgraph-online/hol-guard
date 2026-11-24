@@ -17,16 +17,21 @@ const REGISTRY_PACKAGE_CLI_PREFIX: &str = "local-cli.npm-";
 const PACKAGE_SCRIPT_SURFACE: &str = "package-scripts";
 const PACKAGE_SCRIPT_KINDS: [&str; 1] = ["bun-package-script"];
 const INLINE_KINDS: [&str; 4] = ["python-c", "python-m", "node-eval", "inline-script"];
-/// Entrypoint kinds of the JavaScript runtimes that run the same script file.
+/// Entrypoint kinds of the JavaScript runtimes (and the `tsx` and `ts-node`
+/// runners on top of them) that run the same script file.
 /// A grant stored while one of them launched a file also covers the others:
 /// the grant binds the file's content and path, and which runtime an agent
 /// picks to run it says nothing new about the file.
-const JAVASCRIPT_SCRIPT_KINDS: [&str; 5] = [
+const JAVASCRIPT_SCRIPT_KINDS: [&str; 9] = [
     "node-script",
     "bun-script",
     "bun.exe-script",
     "deno-script",
     "deno.exe-script",
+    "tsx-script",
+    "tsx.cmd-script",
+    "ts-node-script",
+    "ts-node.cmd-script",
 ];
 
 pub(crate) fn local_cli_identity(
