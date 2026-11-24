@@ -485,6 +485,7 @@ mod shell_secret_read_stdin_search_tests;
 mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
+mod shell_template_reads;
 pub mod source_cli;
 pub mod tool_action_identity;
 #[cfg(test)]
