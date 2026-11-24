@@ -533,12 +533,19 @@ def test_desktop_dashboard_update_parser_accepts_runner_args(tmp_path: Path) -> 
     assert args.alpha is True
 
 
-def test_select_desktop_core_latest_stays_on_current_series() -> None:
+def test_select_desktop_core_latest_crosses_minor_within_major() -> None:
     selected = update_desktop_core.select_desktop_core_latest(
         "3.0.0a239",
         ["3.1.0a13", "3.1.0a5", "3.0.0a239", "3.0.0a238", "2.2.122"],
     )
-    assert selected == "3.0.0a239"
+    assert selected == "3.1.0a13"
+    assert (
+        update_desktop_core.select_desktop_core_latest(
+            "3.61.0",
+            ["4.0.0a1", "3.62.0a1", "3.61.0", "3.61.0a90"],
+        )
+        == "3.62.0a1"
+    )
     assert (
         update_desktop_core.select_desktop_core_latest(
             "4.0.0a2",
@@ -548,15 +555,47 @@ def test_select_desktop_core_latest_stays_on_current_series() -> None:
     )
 
 
-def test_select_desktop_core_latest_picks_newer_same_series() -> None:
+def test_select_desktop_core_latest_stays_within_major() -> None:
     selected = update_desktop_core.select_desktop_core_latest(
         "3.0.0a230",
-        ["3.1.0a13", "3.0.0a239", "3.0.0a231"],
+        ["4.0.0a1", "3.0.0a239", "3.0.0a231"],
     )
     assert selected == "3.0.0a239"
 
 
-def test_desktop_status_does_not_advertise_newer_train(
+def test_refine_offers_a_live_alpha_on_the_next_minor() -> None:
+    from codex_plugin_scanner.guard.cli.update_desktop_apply import refine_desktop_version_check
+
+    check = {
+        "source": "pypi",
+        "status": "stale",
+        "current_version": "3.61.0",
+        "latest_version": "3.62.0a1",
+        "update_available": True,
+    }
+    refined = refine_desktop_version_check(
+        "3.61.0",
+        check,
+        candidates=["3.62.0a1", "3.61.0"],
+        include_alpha=True,
+        alpha_is_live=lambda _version: True,
+    )
+    assert refined["latest_version"] == "3.62.0a1"
+    assert refined["update_available"] is True
+    assert refined["status"] == "stale"
+
+    retracted = refine_desktop_version_check(
+        "3.61.0",
+        check,
+        candidates=["3.62.0a1", "3.61.0"],
+        include_alpha=True,
+        alpha_is_live=lambda _version: False,
+    )
+    assert retracted["latest_version"] == "3.61.0"
+    assert retracted["update_available"] is False
+
+
+def test_desktop_status_does_not_advertise_next_major(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(update_desktop_core, "is_frozen_runtime", lambda: True)
@@ -581,15 +620,13 @@ def test_desktop_status_does_not_advertise_newer_train(
             "source": "pypi",
             "status": "stale",
             "current_version": current_version,
-            "latest_version": "3.1.0a13",
+            "latest_version": "4.0.0a1",
             "update_available": True,
         },
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_desktop_apply.pypi_desktop_core_versions",
-        lambda _payload, *, include_alpha: (
-            ["3.1.0a13", "3.1.0a5", "3.0.0a239", "3.0.0a238"] if include_alpha else ["3.0.7"]
-        ),
+        lambda _payload, *, include_alpha: ["4.0.0a1", "3.0.0a239", "3.0.0a238"] if include_alpha else ["3.0.7"],
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_desktop_apply.desktop_core_updates_supported",
@@ -611,7 +648,7 @@ def test_desktop_status_does_not_advertise_newer_train(
     assert payload["version_check"]["update_available"] is False
 
 
-def test_desktop_cli_update_does_not_apply_newer_train(
+def test_desktop_cli_update_does_not_apply_next_major(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -632,17 +669,17 @@ def test_desktop_cli_update_does_not_apply_newer_train(
             "source": "pypi",
             "status": "stale",
             "current_version": current_version,
-            "latest_version": "3.1.0a13",
+            "latest_version": "4.0.0a1",
             "update_available": True,
         },
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_desktop_apply.pypi_desktop_core_versions",
-        lambda _payload, *, include_alpha: ["3.1.0a13", "3.0.0a239"] if include_alpha else ["3.0.7"],
+        lambda _payload, *, include_alpha: ["4.0.0a1", "3.0.0a239"] if include_alpha else ["3.0.7"],
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_desktop_apply.apply_desktop_core_update",
-        MagicMock(side_effect=AssertionError("must not apply a newer 3.Y train")),
+        MagicMock(side_effect=AssertionError("must not apply a newer major")),
     )
 
     payload, exit_code = update_commands.run_guard_update(
@@ -667,10 +704,10 @@ def test_refine_keeps_current_when_older_same_series_is_listed() -> None:
             "source": "pypi",
             "status": "stale",
             "current_version": "3.0.0a239",
-            "latest_version": "3.1.0a13",
+            "latest_version": "4.0.0a1",
             "update_available": True,
         },
-        candidates=["3.1.0a13", "3.0.0a238"],
+        candidates=["4.0.0a1", "3.0.0a238"],
         include_alpha=True,
     )
     assert refined["latest_version"] == "3.0.0a239"
