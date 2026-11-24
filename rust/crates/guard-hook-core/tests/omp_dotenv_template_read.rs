@@ -169,3 +169,19 @@ fn a_write_result_for_a_committed_template_keeps_the_refusal() {
     assert_eq!(response.decision, "deny");
     assert_eq!(response.reason_code, "sensitive_path");
 }
+
+/// A `~/` spelling names the home file, not a same-named file the repository
+/// happens to track below a directory called `~`, so the proof must run on the
+/// file the review reads.
+#[test]
+fn a_home_spelling_is_proven_against_the_home_file() {
+    let fixture = Fixture::new();
+    fixture.write(&format!("~/{TEMPLATE}"), TEMPLATE_TEXT);
+    fixture.track(&[&format!("~/{TEMPLATE}")]);
+    let home_file = fixture.home().join(TEMPLATE);
+    std::fs::write(&home_file, TEMPLATE_TEXT).unwrap();
+    let spelling = format!("~/{TEMPLATE}");
+    let response = review_post_tool(&fixture.result("read", &spelling, TEMPLATE_TEXT));
+    assert_eq!(response.decision, "deny", "{response:?}");
+    assert_eq!(response.reason_code, "sensitive_path");
+}
