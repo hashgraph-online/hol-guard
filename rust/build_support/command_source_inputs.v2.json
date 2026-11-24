@@ -593,6 +593,7 @@
       "src/pretool/postgres_reads.rs",
       "src/pretool/preference_reads.rs",
       "src/pretool/property_list_reads.rs",
+      "src/pretool/shell_limits.rs",
       "src/pretool/sqlite_reads.rs",
       "src/pretool/printf_words.rs",
       "src/pretool/private_temporary_workspace.rs",

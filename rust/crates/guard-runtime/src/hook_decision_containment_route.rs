@@ -154,6 +154,12 @@ fn route(inputs: &ContainmentRouteInputsV1) -> &'static str {
     "none"
 }
 
+/// Whether `platform`'s sink runs `profile`, for a bridge that checks the
+/// host before it asks the resident to route a call.
+pub(crate) fn host_runs(platform: &str, profile: &str) -> bool {
+    Host::parse(platform).is_some_and(|host| host.runs(profile))
+}
+
 pub(crate) fn containment_sink(
     inputs: &ContainmentSinkInputsV1,
 ) -> Result<ContainmentSinkV1, String> {

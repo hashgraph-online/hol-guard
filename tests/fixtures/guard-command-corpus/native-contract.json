@@ -1312,7 +1312,7 @@
   "immutable_input_sha256": {
     "tests/fixtures/guard-command-corpus/known-gaps.json": "5574b48b2a274aaf43d964b4bf4ff75ac337ff86c3c3d25b23dcbcf63de13513",
     "tests/fixtures/guard-command-corpus/minimal-delta-pairs.json": "f8a972f4924ad015753659cd0a987e5d077f2c9981b42187184ad689231c459f",
-    "tests/fixtures/guard-command-corpus/seed-manifest.json": "9cb33472d122058e8ede6ede57d55d0ebf29b832f8b4eb5321a2309862cf3728",
+    "tests/fixtures/guard-command-corpus/seed-manifest.json": "789a4e1b2f3ceda89d5a3427ab87c7eff520b8cdd6c195657985f9ae5d204832",
     "tests/guard_command_corpus.py": "47d191710b9a903f539375d25b3b356057d09480874f862ec676173727595ecb",
     "tests/guard_command_corpus_oracle.py": "7c7dee62735838dd5cf759156a64860e24c1afc6a5df54aeb402a9785f1a0d91",
     "tests/guard_command_corpus_oracle_adversarial.py": "cbe6761e3ae7e6f646947d212998a26846742ccd702f2d6b237c72f83b8d23c5",

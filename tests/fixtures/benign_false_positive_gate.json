@@ -3655,6 +3655,55 @@
       "expect": "allow"
     },
     {
+      "id": "shell-limit-ulimit-raises-open-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ulimit -n 10240"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-limit-ulimit-soft-then-reads-it",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ulimit -Sn 10240; ulimit -Sn"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-limit-ulimit-unlimited-stack",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ulimit -s unlimited"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "host-fact-sysctl-core-count",
       "fix_area": "shell",
       "harnesses": [
@@ -10616,6 +10665,96 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "home-toolchain-ls-absent-version-global-modules",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ~/.nvm/versions/node/v24.0.0/lib/node_modules"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "home-toolchain-find-absent-version-global-modules",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ~/.nvm/versions/node/v24.0.0/lib/node_modules -mindepth 1 -maxdepth 1 -type d -print"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "home-toolchain-ls-absent-name-below-version",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ~/.nvm/versions/node/v25.2.1/include/node"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-absent-name-below-aws-store",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ~/.aws/sso/cache"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-absent-name-below-gh-store",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ~/.config/gh/extra"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-absent-hidden-name-below-toolchain",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ~/.nvm/versions/node/v25.2.1/.secrets/extra"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "absent-hidden-home-directory-listing",

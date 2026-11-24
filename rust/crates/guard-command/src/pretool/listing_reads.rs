@@ -216,12 +216,19 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
                 ) || hidden_listing::absent_repository_hidden_path(
                     &expanded, ancestor, home, cwd,
                 ) || private_temporary;
+                // A missing name below a tool's own directory in the home
+                // directory (`lib` below `~/.nvm/versions/node/v24.9.0`).
+                let home_tool_ancestor = hidden_listing::absent_below_home_tool_directory(
+                    &expanded, ancestor, home, cwd,
+                );
                 // The owner's private temporary root itself (`$TMPDIR`) sits
                 // in a location the listing screens deny, but nobody else can
                 // put an entry there, so a missing name below it is enough.
                 return !missing.is_empty()
                     && spelled
-                    && (private_temporary || listable_ancestor(ancestor, context));
+                    && (private_temporary
+                        || listable_ancestor(ancestor, context)
+                        || home_tool_ancestor);
             }
             Err(error) if absent(&error) => {
                 let Some(name) = ancestor.file_name() else {

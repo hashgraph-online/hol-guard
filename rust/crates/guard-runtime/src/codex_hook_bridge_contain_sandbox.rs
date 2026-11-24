@@ -1,10 +1,13 @@
 //! A Codex turn that already runs inside Codex's own sandbox.
 //!
 //! Codex's `workspace-write` and `read-only` sandboxes run each shell call
-//! under a macOS Seatbelt profile. Guard's contained sink cannot start in
-//! there: the profile refuses its connection to the resident socket, and
-//! macOS refuses to apply a second Seatbelt profile inside the first. The
-//! rewrite would fail every time, so a call in a turn whose sandbox
+//! under a macOS Seatbelt profile, or on Linux with every mount read-only
+//! but the writable roots and a seccomp filter that refuses internet
+//! sockets. Guard's contained sink cannot start in there: on macOS the
+//! profile refuses its connection to the resident socket and macOS refuses
+//! to apply a second Seatbelt profile inside the first; on Linux the sink
+//! cannot take its lock in the read-only Guard home. The rewrite would
+//! fail every time, so a call in a turn whose sandbox
 //! confines it at least as tightly as the profile Guard requires runs in
 //! Codex's sandbox instead: a read-only turn for any profile, a
 //! workspace-write turn with no extra writable roots that also keeps `/tmp`
@@ -114,10 +117,11 @@ const CONTAINED_PROFILES: &[&str] = &[
     "vitest-readonly-v1",
 ];
 
-/// The sandbox of the turn this hook call belongs to. Only macOS is known
-/// to refuse a nested sandbox; elsewhere Guard's rewrite stands.
+/// The sandbox of the turn this hook call belongs to. On macOS and Linux
+/// Guard's sink cannot start inside Codex's sandbox; elsewhere Guard's
+/// rewrite stands.
 pub(super) fn launching_turn(payload: &PyVal) -> Turn {
-    if !cfg!(target_os = "macos") {
+    if !cfg!(any(target_os = "macos", target_os = "linux")) {
         return Turn::Unknown;
     }
     turn(payload)
