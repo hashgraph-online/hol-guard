@@ -88,14 +88,13 @@ fn screened(path: &Path, root: &Path, is_file: bool, packaged: fn(&Path) -> bool
     // the committed-document proof. The fixture-directory relief below does
     // not reach it: an untracked key-named file under `fixtures/` keeps its
     // review.
-    let family_hit = if is_file
-        && guard_secure_fs::sensitive_path_family_beside_name_proof(path).is_none()
-    {
-        guard_secure_fs::sensitive_path_family(path).is_some()
-            && !crate::pretool::search_scope_tracked::names::committed_document(path)
-    } else {
-        guard_secure_fs::sensitive_path_family(path).is_some()
-    };
+    let family_hit =
+        if is_file && guard_secure_fs::sensitive_path_family_beside_name_proof(path).is_none() {
+            guard_secure_fs::sensitive_path_family(path).is_some()
+                && !crate::pretool::search_scope_tracked::names::committed_document(path)
+        } else {
+            guard_secure_fs::sensitive_path_family(path).is_some()
+        };
     if family_hit
         || (name.starts_with('.')
             && !hidden_allowed(name)
