@@ -41,7 +41,12 @@ pub fn wallet_key_named(name: &str) -> bool {
 /// A key container carries no extension, or a key or certificate extension,
 /// both of which are read above, and a hidden name is refused on the dot
 /// alone, so neither reaches this.
-const PROVABLE_DOCUMENT_EXTENSIONS: &[&str] = &["json", "md", "toml", "yaml", "yml"];
+///
+/// JSON is left out on purpose. A JSON Web Key stores its private parts in
+/// one-letter members (`d`, `p`, `q`), which the credential scan does not
+/// read as assignments, so a `private-key.json` holding one would pass the
+/// proof. A key-named JSON file stays a key container.
+const PROVABLE_DOCUMENT_EXTENSIONS: &[&str] = &["md", "toml", "yaml", "yml"];
 
 fn provable_document_name(basename: &str) -> bool {
     !basename.starts_with('.')
@@ -81,7 +86,7 @@ pub fn sensitive_path_family(path: &Path) -> Option<(&'static str, &'static str)
 /// Only a screen that also applies [`crate::credential_named_path`], which
 /// still matches the marker, and clears that name only through the
 /// committed-document proof may use this. Every other caller keeps the full
-/// family, so an untracked `wallet-key.json` is still refused wherever no
+/// family, so an untracked `wallet-key.yaml` is still refused wherever no
 /// proof runs.
 pub fn sensitive_path_family_beside_name_proof(
     path: &Path,

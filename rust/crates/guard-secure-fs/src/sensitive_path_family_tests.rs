@@ -77,16 +77,15 @@ fn a_key_named_document_keeps_the_container_family_outside_the_name_proof() {
     // Only a screen that also runs `credential_named_path` and the
     // committed-document proof drops the container family for it; every other
     // screen, such as the post-tool source review and project context reads,
-    // keeps refusing the name, so an untracked `wallet-key.json` stays held
+    // keeps refusing the name, so an untracked `wallet-key.yaml` stays held
     // wherever no proof runs.
     for path in [
         "docs/auth/private-key-jwt-client-auth.md",
         "docs/auth/PRIVATE-KEY-JWT.md",
-        "contracts/wallet-key-rotation.json",
         "config/private_key_jwt.toml",
         "deploy/wallet-key-rotation.yaml",
         "deploy/wallet-key-rotation.yml",
-        "keys/wallet-key.json",
+        "keys/wallet-key.yaml",
     ] {
         assert_eq!(
             sensitive_path_family(Path::new(path)),
@@ -99,6 +98,25 @@ fn a_key_named_document_keeps_the_container_family_outside_the_name_proof() {
             "{path}"
         );
         assert!(crate::credential_named_path(Path::new(path)), "{path}");
+    }
+}
+
+/// A JSON Web Key keeps its private parts in one-letter members the
+/// credential scan does not read, so a key-named JSON file keeps the
+/// container family even beside the name proof.
+#[test]
+fn a_key_named_json_file_stays_a_key_container_beside_the_name_proof() {
+    for path in [
+        "keys/wallet-key.json",
+        "keys/private-key.json",
+        "contracts/wallet-key-rotation.json",
+        "config/PRIVATE_KEY_JWT.JSON",
+    ] {
+        assert_eq!(
+            sensitive_path_family_beside_name_proof(Path::new(path)),
+            Some(("wallet/private-key file", "critical")),
+            "{path}"
+        );
     }
 }
 
