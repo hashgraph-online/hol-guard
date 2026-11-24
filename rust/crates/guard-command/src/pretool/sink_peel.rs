@@ -194,8 +194,10 @@ pub(super) fn peel(
         // by `&&`, so the sink reads both: refusing the `;` here sent the run
         // to the session's sandbox, which cannot follow the `cd`.
         let listed = tokens.iter().any(list_separator);
-        if log.is_some() && listed {
-            // The shell writes only the last command's output to the file.
+        if log.is_some() && (listed || into_sibling_root || (root.is_some() && !within)) {
+            // The shell writes only the last command's output to the file,
+            // and the sibling-root rejoin below runs the list without the
+            // peeled redirect, so the file would never be written.
             return Err("unsupported wrapper shape");
         }
         if into_sibling_root || (root.is_some() && !within && listed) {

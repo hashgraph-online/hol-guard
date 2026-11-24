@@ -152,3 +152,37 @@ fn a_write_into_the_workspace_is_left_to_the_redirect_review() {
     let command = format!("npm test > {}/out.log 2>&1", root.display());
     assert_eq!(log_redirect(&chars(&command)), None);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_scratch_log_after_a_cd_into_a_sibling_root_is_refused() {
+    // The sibling-root rejoin rebuilds its output without the peeled file,
+    // so the log the command names would never be written.
+    let home = workspace("sibling-home");
+    let inside = home.join("app");
+    let sibling = home.join("other");
+    for directory in [&inside, &sibling] {
+        std::fs::create_dir_all(directory.join(".git")).unwrap();
+    }
+    let (log, _) = scratch("sibling");
+    for command in [
+        format!("cd {} && npm test > {log} 2>&1", sibling.display()),
+        format!(
+            "cd {} && npm test 2>/dev/null | cut -f1 > {log} 2>&1",
+            sibling.display()
+        ),
+    ] {
+        assert!(
+            peel(
+                &command,
+                inside.to_str().unwrap(),
+                None,
+                Some(home.to_str().unwrap()),
+                false,
+            )
+            .is_err(),
+            "{command}"
+        );
+    }
+    std::fs::remove_dir_all(home).unwrap();
+}
