@@ -530,7 +530,8 @@ fn classify(
 #[path = "sensitive_path_family.rs"]
 mod sensitive;
 pub use sensitive::{
-    dotenv_template_basename, sensitive_path_family, win32_name, DOTENV_TEMPLATE_SUFFIXES,
+    dotenv_template_basename, sensitive_path_family, sensitive_path_family_beside_name_proof,
+    wallet_key_named, win32_name, DOTENV_TEMPLATE_SUFFIXES,
 };
 
 /// True when every hidden (`.`-prefixed) path component is on the benign

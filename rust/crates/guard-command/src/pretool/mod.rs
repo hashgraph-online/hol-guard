@@ -704,7 +704,7 @@ fn sensitive_literal_path(value: &str) -> bool {
     .iter()
     .any(|candidate| {
         let relative = Path::new(candidate.strip_prefix("./").unwrap_or(candidate));
-        sensitive_path_family(relative).is_some()
+        guard_secure_fs::sensitive_path_family_beside_name_proof(relative).is_some()
             || guard_secure_fs::credential_named_path(relative)
     })
 }
@@ -922,7 +922,12 @@ fn sensitive_path_argument_with_credentials(value: &str, include_credential_name
     ];
     candidates.iter().any(|candidate| {
         let relative = candidate.strip_prefix("./").unwrap_or(candidate);
-        sensitive_path_family(Path::new(relative)).is_some()
+        let family = if include_credential_names {
+            guard_secure_fs::sensitive_path_family_beside_name_proof
+        } else {
+            sensitive_path_family
+        };
+        family(Path::new(relative)).is_some()
             || (include_credential_names
                 && (guard_secure_fs::credential_named_path(Path::new(relative))
                     || search::glob_can_select_sensitive_path(relative)))
@@ -1679,6 +1684,9 @@ fn evaluate_single_command(
 mod control_flow_tests;
 #[cfg(test)]
 mod fixed_glob_option_boundary_tests;
+#[cfg(test)]
+#[path = "for_loop_sequence_tests.rs"]
+mod for_loop_sequence_tests;
 #[cfg(test)]
 #[path = "for_loop_tests.rs"]
 mod for_loop_tests;

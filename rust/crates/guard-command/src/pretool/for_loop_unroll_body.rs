@@ -668,6 +668,11 @@ pub(crate) fn unquote_whole_references(item: &str) -> String {
     out
 }
 
+/// Whether a body item reads the loop variable anywhere in its text.
+pub(crate) fn reads_the_variable(item: &str) -> bool {
+    item.contains(MARKER)
+}
+
 pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
     if !stages_are_plain(item) {
         return None;

@@ -17987,6 +17987,86 @@
       "expect": "allow"
     },
     {
+      "id": "sibling-sed-print-range-counted-from-a-line",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n '2,+10p' ${ORG}/service-api/src/index.ts"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "sibling-sed-print-range-counted-from-a-match",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n \"^mod \" ${ORG}/service-api/src/index.ts | head -3; sed -n '/^mod /,+6p' ${ORG}/service-api/src/index.ts"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "sibling-sed-print-range-from-a-looked-up-line",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n \"^mod \" ${ORG}/service-api/src/index.ts | head -3; sed -n \"$(grep -n '^mod ' ${ORG}/service-api/src/index.ts | head -1 | cut -d: -f1),+6p\" ${ORG}/service-api/src/index.ts"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sibling-sed-looked-up-line-writes-a-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n \"$(grep -n '^mod ' ${ORG}/service-api/src/index.ts | cut -d: -f1),+6w ${HOME}/notes.md\" ${ORG}/service-api/src/index.ts"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-sibling-sed-counted-range-writes-a-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n '2,+10w ${HOME}/notes.md' ${ORG}/service-api/src/index.ts"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-sibling-grep-glob-operand",
       "fix_area": "queue",
       "harnesses": [
@@ -47874,6 +47954,86 @@
       "expect": "not_allow"
     },
     {
+      "id": "tracked-key-named-document-cat",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat docs/auth-evidence/private-key-jwt-client-auth.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tracked-key-named-document-head",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "head -5 docs/auth-evidence/private-key-jwt-client-auth.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tracked-key-named-document-grep",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n assertion docs/auth-evidence/private-key-jwt-client-auth.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tracked-key-named-document-recursive-grep",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn assertion docs/auth-evidence"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-key-named-document-beside-store",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat docs/auth-evidence/private-key-jwt-client-auth.md deploy/app-secrets.yaml"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-brace-group-reads-private-key",
       "fix_area": "shell",
       "harnesses": [
@@ -66027,6 +66187,54 @@
       "tool": "shell",
       "tool_input": {
         "command": "for i in 1 2 3; do curl -sf http://127.0.0.1:3000/health && break; sleep 1; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-wait-loop-over-a-brace-sequence",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for n in {1..135}; do if ! ps -p 4242 >/dev/null 2>&1; then break; fi; sleep 20; done; date '+%Y-%m-%d %H:%M:%S %z'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-wait-loop-breaks-on-a-finished-process",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for n in {1..40}; do if ! ps -p 99999999 >/dev/null 2>&1; then break; fi; sleep 1; done; echo waited"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-loop-echoes-a-brace-sequence",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for i in {1..5}; do echo \"pass $i\"; done"
       },
       "cwd": "worktree",
       "expect": "allow"

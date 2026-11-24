@@ -149,7 +149,7 @@ pub(in crate::pretool) fn committed_document(path: &Path) -> bool {
         && !path
             .components()
             .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
-        && guard_secure_fs::sensitive_path_family(path).is_none()
+        && guard_secure_fs::sensitive_path_family_beside_name_proof(path).is_none()
         && WALK.with(|walk| match walk.borrow_mut().as_mut() {
             Some(tracked) => tracked.non_secret(path),
             None => TrackedFiles::default().non_secret(path),
@@ -353,6 +353,64 @@ pub(in crate::pretool) fn secret_object(text: &str) -> bool {
         }
 }
 
+/// Whether `text` holds a JSON Web Key with private material: a `kty` member
+/// beside a filled `d`, `p`, `q`, `dp`, `dq`, `qi` or `k` member. A JWK keeps
+/// its secret in these one-letter members, which the credential scan does not
+/// read as assignments, so a key-named document holding one, in JSON, YAML,
+/// TOML or a fenced block of Markdown, would otherwise pass as clean. A JSON
+/// document is read again after decoding so an escape cannot spell a member
+/// past the plain reading; outside JSON, [`secret_object`] already refuses a
+/// document that holds a backslash.
+pub(in crate::pretool) fn private_jwk(text: &str) -> bool {
+    plain_private_jwk(text)
+        || serde_json::from_str::<Value>(text)
+            .is_ok_and(|value| plain_private_jwk(&value.to_string()))
+}
+
+fn plain_private_jwk(text: &str) -> bool {
+    keyed_value(text, "kty", 1)
+        && ["d", "p", "q", "dp", "dq", "qi", "k"]
+            .iter()
+            .any(|member| keyed_value(text, member, 16))
+}
+
+/// Whether `key` appears as a member name, at a word boundary and followed by
+/// `:` or `=`, whose value opens with at least `min` base64url characters.
+/// A value this plain reading cannot see counts as filled: one that starts on
+/// the next line, after a YAML block-scalar header, tag, anchor, alias or
+/// comment, or inside a TOML multiline string.
+fn keyed_value(text: &str, key: &str, min: usize) -> bool {
+    text.match_indices(key).any(|(at, _)| {
+        if text[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            return false;
+        }
+        let rest = text[at + key.len()..]
+            .trim_start_matches(['"', '\''])
+            .trim_start_matches([' ', '\t']);
+        let Some(value) = rest.strip_prefix([':', '=']) else {
+            return false;
+        };
+        let value = value.trim_start_matches([' ', '\t']);
+        let quoted = value.trim_start_matches(['"', '\'']);
+        hidden_value(value)
+            || hidden_value(quoted)
+            || quoted
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .count()
+                >= min
+    })
+}
+
+/// Whether a member's value does not start on its own line as plain text.
+fn hidden_value(value: &str) -> bool {
+    value.is_empty() || value.starts_with(['\n', '\r', '|', '>', '!', '&', '*', '#'])
+}
+
 /// Whether `text`, a value a tool call carries such as an edit's new text or
 /// a command, declares a `Secret` kind in plain or JSON spelling.
 pub(in crate::pretool) fn declares_secret_object(text: &str) -> bool {
@@ -399,3 +457,7 @@ mod tests;
 #[cfg(test)]
 #[path = "tracked_image_tests.rs"]
 mod image_tests;
+
+#[cfg(test)]
+#[path = "tracked_private_jwk_tests.rs"]
+mod private_jwk_tests;

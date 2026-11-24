@@ -109,8 +109,8 @@ fn unrolled<'a>(
         return None;
     }
     let rest = keyword(rest, "in")?;
-    let (words, rest) = header_words(rest, home)?;
-    if words.is_empty() || words.len() > MAX_WORDS {
+    let (mut words, rest) = header_words(rest, home)?;
+    if words.is_empty() {
         return None;
     }
     let rest = rest.trim_start_matches([' ', '\t', '\n', ';']);
@@ -158,6 +158,22 @@ fn unrolled<'a>(
         }
     };
     if items.is_empty() || items.iter().any(|(text, _)| rebinds(text, name)) {
+        return None;
+    }
+    // A body that never reads the loop variable runs the same text on every
+    // pass, so one written-out pass is the work every pass does, however many
+    // words the header holds. `for n in {1..60}; do sleep 5; done` is
+    // `sleep 5` sixty times. That holds only while a pass leaves nothing the
+    // next one reads: `cd ..` run five times climbs five directories, and one
+    // written-out `cd ..` would prove the later commands in the wrong place.
+    // A body that reads the variable, or carries shell state from pass to
+    // pass, is written out once per word, which the word bound keeps finite.
+    let same_every_pass = !items
+        .iter()
+        .any(|(text, _)| body::reads_the_variable(text) || carries_state(text));
+    if same_every_pass {
+        words.truncate(1);
+    } else if words.len() > MAX_WORDS {
         return None;
     }
     // A glob reaches the body as the names the shell expanded it to, one
@@ -422,6 +438,15 @@ fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &
                 current.push_str(home?);
                 in_word = true;
             }
+            // A whole unquoted word such as `{1..60}` is a sequence the shell
+            // writes out as its numbers before the loop runs.
+            '{' if !in_word => {
+                let (numbers, length) = sequence(&text[index..])?;
+                words.extend(numbers.into_iter().map(|number| (number, false)));
+                for _ in 1..length {
+                    chars.next();
+                }
+            }
             '$' | '`' | '\\' | '(' | ')' | '{' | '}' | '~' | '&' | '|' | '<' | '>' | '#' | '!' => {
                 return None
             }
@@ -434,9 +459,75 @@ fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &
     None
 }
 
+/// The most digits a sequence bound may have, which bounds how many passes a
+/// sequence names.
+const MAX_SEQUENCE_DIGITS: usize = 6;
+
+/// A brace sequence `{FIRST..LAST}` or `{FIRST..LAST..STEP}` of plain numbers
+/// standing as a whole word, as bash and zsh both expand it: every number from
+/// FIRST to LAST, counting down when LAST is smaller. It returns the numbers,
+/// up to one more than [`MAX_WORDS`] so a longer sequence still reads as too
+/// long to write out per word, and the length of the text it consumed.
+///
+/// A bound with a leading zero pads every number to its width and a signed
+/// bound counts through zero; neither is read here, so both keep the review,
+/// as does any other text in braces.
+fn sequence(text: &str) -> Option<(Vec<String>, usize)> {
+    let close = text.find('}')?;
+    let after = text[close + 1..].chars().next();
+    if !matches!(after, None | Some(' ' | '\t' | '\n' | ';')) {
+        return None;
+    }
+    let parts: Vec<&str> = text[1..close].split("..").collect();
+    let number = |part: &str| {
+        (!part.is_empty()
+            && part.len() <= MAX_SEQUENCE_DIGITS
+            && part.bytes().all(|byte| byte.is_ascii_digit())
+            && (part == "0" || !part.starts_with('0')))
+        .then(|| part.parse::<u64>().ok())
+        .flatten()
+    };
+    let (first, last, step) = match parts.as_slice() {
+        [first, last] => (number(first)?, number(last)?, 1),
+        [first, last, step] => (number(first)?, number(last)?, number(step)?),
+        _ => return None,
+    };
+    if step == 0 {
+        return None;
+    }
+    let count = first.abs_diff(last) / step + 1;
+    let numbers = (0..count.min(MAX_WORDS as u64 + 1))
+        .map(|pass| {
+            if first <= last {
+                first + pass * step
+            } else {
+                first - pass * step
+            }
+            .to_string()
+        })
+        .collect();
+    Some((numbers, close + 1))
+}
+
 /// `valid_identifier` already limits loop variables to lowercase names. The
 /// `*_proxy` names are lowercase environment variables, and the zsh specials
 /// change shell state, so binding either changes what the body would run.
 pub(super) fn ordinary_loop_name(name: &str) -> bool {
     !name.ends_with("_proxy") && !SHELL_SPECIAL_NAMES.contains(&name)
+}
+
+/// Whether one body item can change shell state a later pass reads: a state
+/// builtin such as `cd` or `export`, read through the keyword that opens a
+/// conditional's part (`if cd ..`, `then export X=1`), or a construct this
+/// check does not look inside. A bare `then`, `else` or `fi` changes nothing.
+fn carries_state(item: &str) -> bool {
+    let text = item.trim();
+    if matches!(text, "then" | "else" | "fi") {
+        return false;
+    }
+    let command = ["if", "elif", "then", "else"]
+        .into_iter()
+        .find_map(|opener| super::control_flow_flatten::keyword(text, opener))
+        .unwrap_or(text);
+    super::control_flow_chain::changes_shell_state(command)
 }

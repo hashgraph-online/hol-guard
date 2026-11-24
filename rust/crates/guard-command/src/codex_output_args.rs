@@ -324,7 +324,26 @@ pub(crate) fn sed_print_command_is_bounded(command: &str) -> bool {
     let Some(parts) = sed_addresses_split(body) else {
         return false;
     };
-    parts.len() <= 2 && parts.iter().all(|part| sed_address_is_bounded(part))
+    match parts.as_slice() {
+        [only] => sed_address_is_bounded(only),
+        [start, end] => {
+            sed_address_is_bounded(start)
+                && (sed_address_is_bounded(end) || sed_relative_range_end(py_strip(end)))
+        }
+        _ => false,
+    }
+}
+
+/// The end of a range that counts on from its start: `+N` prints N more lines
+/// and `~N` prints up to the next line whose number is a multiple of N, as in
+/// `sed -n '/fn main/,+20p'` or `sed -n '120,+40p'`. Either way the range ends
+/// a bounded number of lines after a line the start already names, and the
+/// command is still a print. Only the second address may take this form; a
+/// sed that does not know it refuses the script and prints nothing.
+pub(crate) fn sed_relative_range_end(address: &str) -> bool {
+    address.strip_prefix(['+', '~']).is_some_and(|count| {
+        (1..=6).contains(&count.len()) && count.bytes().all(|byte| byte.is_ascii_digit())
+    })
 }
 
 /// The addresses a print command carries, split on the comma that separates a

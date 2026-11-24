@@ -1,7 +1,7 @@
 use super::evaluate_pre_tool_with_context;
 use crate::CommandModelRequestV1;
 
-fn decide(command: &str) -> (String, String) {
+pub(super) fn decide(command: &str) -> (String, String) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .canonicalize()
         .unwrap();
