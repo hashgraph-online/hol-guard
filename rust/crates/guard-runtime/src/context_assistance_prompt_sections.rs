@@ -92,7 +92,7 @@ fn block_end(lines: &[&str], at: usize, rust: bool) -> usize {
         if text == "end" || text.starts_with("end ") {
             return index;
         }
-        if text.starts_with([')', ']', '{']) || text == "where" || text.starts_with("where ") {
+        if text.starts_with([')', ']', '{', '`']) || text == "where" || text.starts_with("where ") {
             last = index;
             continue;
         }
@@ -210,22 +210,38 @@ pub(super) fn test_call(line: &str) -> Option<&'static str> {
 }
 
 /// Whether a section opening is a test by its name, `def test_parse` or
-/// `func TestParse`, or by the call it makes, `it("parses", ...)`.
+/// `func TestParse`, or by the call it makes, `it("parses", ...)`. A group,
+/// `describe("URL tests", ...)`, is none, whatever its label says.
 pub(super) fn named_test(opening: &str) -> bool {
-    matches!(test_call(opening), Some("it" | "test"))
-        || written_name(opening).is_some_and(|name| name.to_lowercase().starts_with("test"))
+    match test_call(opening) {
+        Some(called) => matches!(called, "it" | "test"),
+        None => written_name(opening).is_some_and(|name| name.to_lowercase().starts_with("test")),
+    }
 }
 
-/// A test's name as its runner reports it: a test call's quoted text or the
-/// value it passes first, `test "adds a slash"` or `it name`, or the name a
-/// definition gives.
+/// A test's name as its runner reports it: a test call with its label,
+/// `test "adds a slash"` or `it name`, or the name a definition gives.
 pub(super) fn test_name(opening: &str) -> Option<String> {
-    test_label(opening).or_else(|| written_name(opening))
+    match test_call(opening) {
+        Some(called) => Some(match test_label(opening) {
+            Some(label) => format!("{called} {label}"),
+            None => called.to_owned(),
+        }),
+        None => written_name(opening),
+    }
 }
 
+/// The quoted text or first value a test call passes; past a `.each` table,
+/// the title after it, `"joins %s"` in `it.each([...])("joins %s", ...)`.
+/// None when the line does not hold it, as under a tagged-template table.
 fn test_label(line: &str) -> Option<String> {
-    let called = test_call(line)?;
-    let (_, args) = line.split_once('(')?;
+    let text = line.trim_start();
+    let head = text.find(['(', '`'])?;
+    let args = if text[..head].contains(".each") {
+        text.split_once(")(")?.1
+    } else {
+        text[head..].strip_prefix('(')?
+    };
     let args = args.trim_start();
     let label = match args.chars().next() {
         Some(quote @ ('"' | '\'' | '`')) => {
@@ -241,7 +257,7 @@ fn test_label(line: &str) -> Option<String> {
             .to_owned(),
     };
     let label: String = label.chars().take(60).collect();
-    Some(format!("{called} {label}"))
+    (!label.is_empty()).then_some(label)
 }
 
 /// The line `section` opens with, past its decorators and attributes.
