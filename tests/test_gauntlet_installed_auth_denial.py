@@ -128,3 +128,41 @@ def test_unrelated_stderr_json_cannot_override_a_policy_denial(tmp_path, monkeyp
     )
     assert result["failures"] == []
     assert all("bridge_failure_reason_code" not in run for run in result["runs"])
+
+
+@pytest.mark.parametrize("expect", ["allow", "not-allow"])
+def test_prompt_authority_outage_is_not_a_policy_decision(tmp_path, monkeypatch, expect):
+    """A fail-closed prompt outage must be diagnosed even when a denial is expected."""
+    import subprocess
+
+    response = {
+        "decision": "block",
+        "policy_action": "block",
+        "reason_code": "native_prompt_unavailable",
+        "reason": "HOL Guard could not check this prompt, so it was blocked.",
+        "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
+    }
+    monkeypatch.setattr(
+        subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, json.dumps(response), "")
+    )
+    result = replay_case(
+        ["registered-claude-hook"],
+        {
+            "id": "benign-prompt-submit-names-a-file" if expect == "allow" else "synthetic-denial-expectation",
+            "expect": expect,
+            "payload": {
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Read README.md and summarise what this project does.",
+                "cwd": "{workspace}",
+            },
+        },
+        home=tmp_path,
+        guard_home=tmp_path / ".hol-guard",
+        workspace=tmp_path,
+        repeat=5,
+    )
+    assert all(run["decision"] == "block" for run in result["runs"])
+    assert any(
+        "hook infrastructure failed" in failure and "native_prompt_unavailable" in failure
+        for failure in result["failures"]
+    )

@@ -49,6 +49,7 @@ EXPECTATIONS = {"allow", "not-allow", "defer", "notice"}
 NON_DECISION_REASONS = {
     "native_policy_not_ready",
     "native_pre_tool_unavailable",
+    "native_prompt_unavailable",
     "native_hook_worker_exception",
     "native_request_invalid_json",
     "native_request_schema_unsupported",
