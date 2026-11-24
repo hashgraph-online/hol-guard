@@ -13,7 +13,7 @@ use crate::context_assistance_prompt_words::{marked_terms, spellings};
 use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
-use lookup::{anchored, lookup, truncated, Miss, Request};
+use lookup::{anchored, lookup, points_nowhere, truncated, Miss, Request};
 use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
@@ -376,7 +376,7 @@ fn attach(
     // With nothing mapped, excerpts ranked on plain words alone ("keep
     // going", "so is it fixed?") are a guess: mostly a README or changelog.
     // They need the prompt to name a file, a quoted phrase or code by name.
-    if !anchored(prompt) {
+    if !anchored(prompt) || points_nowhere(prompt, &root, &searched.quoting) {
         return;
     }
     // An excerpt holding only the quoted text is still about the request.
