@@ -54,6 +54,48 @@ fn every_evaluated_edge_passes_its_own_check() {
 }
 
 #[test]
+fn the_edge_stamps_approval_classification_from_its_minimum_action() {
+    let edge = pre_tool();
+    let result = edge.result.as_object().unwrap();
+    assert_eq!(
+        edge.requires_approval,
+        edge_result_check::requires_approval("PreToolUse", result)
+    );
+    assert!(edge_result_check::requires_approval(
+        "PreToolUse",
+        &serde_json::json!({"minimum_action": "review"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+    assert!(edge_result_check::requires_approval(
+        "PreToolUse",
+        &serde_json::json!({"minimum_action": "require-reapproval"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+    assert!(!edge_result_check::requires_approval(
+        "PreToolUse",
+        &serde_json::json!({"minimum_action": "sandbox-required"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+    assert!(!edge_result_check::requires_approval(
+        "PostToolUse",
+        &serde_json::json!({"minimum_action": "review"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+
+    let mut tampered = edge;
+    tampered.requires_approval = !tampered.requires_approval;
+    assert!(edge_result_check::check(&tampered).is_err());
+}
+
+#[test]
 fn a_repaired_block_keeps_its_repair_link() {
     // `command_policy_repair` adds the link and its status to a block the
     // user can repair; the hook client used to refuse the whole answer.

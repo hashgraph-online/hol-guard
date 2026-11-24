@@ -482,6 +482,11 @@ pub struct GuardHookEdgeResultV2 {
     pub event_name: String,
     pub payload_kind: GuardHookPayloadKindV2,
     pub result: Value,
+    /// Whether the native `PreToolUse` result requires the Python adapter to
+    /// pause for an approval. Rust derives this from `minimum_action` and
+    /// checks it before the edge is returned, so the adapter never classifies
+    /// policy actions itself.
+    pub requires_approval: bool,
     /// The harness-specific JSON a hook must print for `result`, rendered by
     /// the resident so no other layer interprets the verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
