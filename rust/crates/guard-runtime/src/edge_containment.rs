@@ -22,6 +22,7 @@ use guard_contracts::{ContainmentRewriteInputsV1, GuardHookEdgeResultV2, GuardHo
 use serde_json::{json, Map, Value};
 
 use crate::hook_decision_containment_rewrite::containment_rewrite_with;
+use crate::hook_decision_containment_rewrite::routed_shape;
 use crate::hook_decision_containment_route::host_platform;
 use crate::hook_direct::contained::NativeSink;
 
@@ -49,6 +50,7 @@ pub(super) fn attach(envelope: &GuardHookEnvelopeV2, edge: &mut GuardHookEdgeRes
         &mut edge.harness_response,
     ) {
         edge.containment_rewrite = Some(answer.to_owned());
+        prove_routed_shape(envelope, edge);
         return;
     }
     let custom_block = edge
@@ -65,6 +67,33 @@ pub(super) fn attach(envelope: &GuardHookEnvelopeV2, edge: &mut GuardHookEdgeRes
         crate::hook_direct::contained::native_sink,
     )
     .map(str::to_owned);
+    prove_routed_shape(envelope, edge);
+}
+
+/// Every edge route, including Cursor's probe path, carries the same Rust
+/// proof before the `routed` marker reaches a transport adapter.
+fn prove_routed_shape(envelope: &GuardHookEnvelopeV2, edge: &mut GuardHookEdgeResultV2) {
+    if edge.containment_rewrite.as_deref() != Some(ROUTED) {
+        return;
+    }
+    let Some(original) = envelope
+        .raw_payload
+        .as_object()
+        .and_then(|payload| first(payload, &["tool_input", "toolInput"]))
+        .and_then(Value::as_object)
+    else {
+        edge.containment_rewrite = Some(KEPT.to_owned());
+        edge.harness_response = None;
+        return;
+    };
+    if !edge
+        .harness_response
+        .as_ref()
+        .is_some_and(|response| routed_shape(response, original))
+    {
+        edge.containment_rewrite = Some(KEPT.to_owned());
+        edge.harness_response = None;
+    }
 }
 
 /// The edge's rewrite of a sink-routed `PreToolUse`, replacing

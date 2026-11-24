@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
 
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
-from ..native_hook_containment_route import edge_routed_shape
 from ..native_hook_decision import NativeHookDecisionError
 from ..native_hook_direct_route import native_or_daemon_edge
 from ..native_hook_render import native_exact_command_block_response, native_recording_only_for_binding
@@ -45,7 +44,6 @@ def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
 _NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
 # `containment_rewrite` answers the edge gives once it rewrote a sink route.
 _EDGE_CONTAINMENT_REWRITES = frozenset({"routed", "kept"})
-_EDGE_REWRITE_INVALID = "native_containment_rewrite_invalid"
 _EDGE_REWRITE_UNAVAILABLE = "native_containment_rewrite_unavailable"
 
 
@@ -435,13 +433,10 @@ class HookWorkerNativeMixin:
                     )
             rendered = _edge_harness_response(edge)
             # The edge rewrites a sink route in a workspace itself and says so;
-            # an edge that could not is the outage response. Its routed allow
-            # is held to the shape the sink's rewrite gives. Without a
-            # workspace there is no snapshot to write, so the receipt stands.
+            # the Rust edge proves the routed allow's shape, while Python only
+            # transports it. Without a workspace there is no snapshot to write,
+            # so the receipt stands.
             rewrite = edge.get("containment_rewrite") if containment == "sink" else None
-            if rewrite == "routed" and not edge_routed_shape(rendered, payload):
-                error = NativeHookDecisionError(_EDGE_REWRITE_INVALID)
-                return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
             if containment == "sink" and workspace is not None and rewrite not in _EDGE_CONTAINMENT_REWRITES:
                 error = NativeHookDecisionError(_EDGE_REWRITE_UNAVAILABLE)
                 return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
