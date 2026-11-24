@@ -119,6 +119,8 @@ fn a_product_name_alone_does_not_point_at_code() {
         "Add a GitHub Actions job that runs lint on pull requests",
         "Port the build script from JavaScript to TypeScript",
         "Does the CLI work on macOS and iOS?",
+        "Run lint on GitHub-hosted runners",
+        "Make the build TypeScript-only",
     ] {
         assert!(!anchored(prompt), "{prompt}");
     }
@@ -126,6 +128,7 @@ fn a_product_name_alone_does_not_point_at_code() {
         "the `GitHub` class drops redirects",
         "GitHubClient.fetch drops redirects",
         "GitHub() should accept a base URL",
+        "GitHub::new drops the token",
     ] {
         assert!(anchored(prompt), "{prompt}");
     }
