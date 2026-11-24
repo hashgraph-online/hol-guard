@@ -475,12 +475,21 @@ fn a_search_pattern_beside_a_stderr_redirect_names_no_credential() {
         "grep --colour api_token .env 2>/dev/null",
         "rg --files .env 2>/dev/null",
         // A pattern the shell can still expand is not text: a glob becomes
-        // file names, a substitution becomes the output of what it runs.
+        // file names.
         "grep -n .env* 2>/dev/null",
         "grep -n *credentials* 2>/dev/null",
+    ] {
+        assert!(writes_sensitive(command), "{command}");
+    }
+    // A substitution in the pattern slot runs a command, which this model
+    // never reads as a plain search.
+    for command in [
         "grep -e \"$(cat .env)\" src 2>/dev/null",
         "grep -e `cat .env` src 2>/dev/null",
     ] {
-        assert!(writes_sensitive(command), "{command}");
+        assert!(
+            compatibility_observations(&model(command), None).is_err(),
+            "{command}"
+        );
     }
 }
