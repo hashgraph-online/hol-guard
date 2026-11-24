@@ -184,6 +184,37 @@ def test_publish_action_repo_workflow_syncs_action_repository() -> None:
     assert "README usage examples were not rewritten to ${ACTION_TAG}." in workflow_text
 
 
+def test_publish_action_repo_prefers_release_app_tokens() -> None:
+    yaml = pytest.importorskip("yaml")
+    workflow_path = ROOT / ".github" / "workflows" / "publish-action-repo.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["publish-action-repo"]["steps"]
+    mints = {step["id"]: step for step in steps if step.get("id") in {"action_app_token", "awesome_app_token"}}
+
+    assert set(mints) == {"action_app_token", "awesome_app_token"}
+    for step_id, repository in (
+        ("action_app_token", "ai-plugin-scanner-action"),
+        ("awesome_app_token", "awesome-codex-plugins"),
+    ):
+        mint = mints[step_id]
+        assert mint["uses"].startswith("actions/create-github-app-token@")
+        assert mint["continue-on-error"] is True
+        assert mint["with"]["owner"] == "hashgraph-online"
+        assert mint["with"]["repositories"] == repository
+        assert mint["with"]["permission-contents"] == "write"
+
+    names = [step.get("name") for step in steps]
+    assert names.index("Mint action repository token") < names.index("Validate publication credentials")
+    assert names.index("Mint awesome-codex-plugins token") < names.index("Validate publication credentials")
+
+    for step in steps:
+        for value in (step.get("env") or {}).values():
+            if "secrets.ACTION_REPO_TOKEN" in value:
+                assert "steps.action_app_token.outputs.token || secrets.ACTION_REPO_TOKEN" in value
+            if "secrets.AWESOME_CODEX_PLUGINS_TOKEN" in value:
+                assert "steps.awesome_app_token.outputs.token || secrets.AWESOME_CODEX_PLUGINS_TOKEN" in value
+
+
 def test_publish_action_repo_scanner_version_heredoc_is_shell_aligned() -> None:
     yaml = pytest.importorskip("yaml")
     workflow_path = ROOT / ".github" / "workflows" / "publish-action-repo.yml"
