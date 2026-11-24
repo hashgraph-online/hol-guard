@@ -58,6 +58,17 @@ fn a_common_word_naming_one_source_file_maps_its_outline() {
     assert!(!main.contains("type Route struct"), "{main}");
 }
 
+/// The short type the outlined file is named for, `Route` in `route.go`, is
+/// what such a request changes: it comes whole, fields and all, while its
+/// methods stay one line each.
+#[test]
+fn the_short_type_an_outlined_file_is_named_for_is_shown_whole() {
+    let prompt = "Feature route metadata\n\nAdded metadata to route, as proposed in the issue.";
+    let text = map_of(&[("route.go", ROUTE)], prompt);
+    assert!(text.contains("\tregexp routeRegexpGroup\n}\n```"), "{text}");
+    assert!(!text.contains("\treturn r.name"), "{text}");
+}
+
 /// A Go method is named after its receiver, so a prompt naming it maps to it.
 #[test]
 fn a_go_method_is_named_past_its_receiver() {
