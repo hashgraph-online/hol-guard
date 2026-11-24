@@ -678,6 +678,7 @@
       "src/pretool/search/grep/exclusion.rs",
       "src/pretool/search/grep/includes.rs",
       "src/pretool/search/grep/missing.rs",
+      "src/pretool/search/grep/writes_nothing.rs",
       "src/pretool/search/grep/reach.rs",
       "src/pretool/search/hint.rs",
       "src/pretool/search/literal_bracket.rs",
