@@ -54,9 +54,91 @@ fn template_named(path: &str) -> bool {
         .is_some_and(guard_secure_fs::dotenv_template_basename)
 }
 
+/// Whether `model`, a whole command that `words` were taken from, is a chain
+/// of plain readers naming a dotenv template, so a credential-word screen may
+/// set aside a template word that the tracked-template proof accepts.
+pub(crate) fn names_template_reads(
+    model: &crate::CanonicalCommandV1,
+    words: &[&String],
+    cwd: Option<&str>,
+) -> bool {
+    model.wrapper_chain.is_empty()
+        && words.iter().any(|word| template_named(word))
+        && chain_reads_only(&model.normalized_text, cwd.map(Path::new), None)
+}
+
+/// The name a projected read gives a committed template in place of its own.
+const STAND_IN: &str = "hol-guard-committed-template";
+
+/// `command` with each committed dotenv template it only reads renamed to a
+/// plain sibling name, so the read proofs judge the rest of the command.
+///
+/// Every word naming a template must pass the tracked-template proof, and the
+/// projected text must parse to the same words with only those renamed, so a
+/// word that merely contains a template name is never rewritten.
+pub(crate) fn project(command: &str, cwd: Option<&str>) -> Option<String> {
+    let parse = |text: &str| {
+        parse_shell_command(
+            text,
+            cwd.map(Path::new),
+            None,
+            "posix",
+            "shell_string",
+            "guard-shell",
+            false,
+        )
+    };
+    if !chain_reads_only(command, cwd.map(Path::new), None) {
+        return None;
+    }
+    let words = |text: &str| -> Vec<String> {
+        parse(text)
+            .segments
+            .iter()
+            .flat_map(|segment| segment.arguments.clone())
+            .collect()
+    };
+    let original = words(command);
+    let templates: Vec<&String> = original
+        .iter()
+        .filter(|word| template_named(word))
+        .collect();
+    if templates.is_empty()
+        || !templates
+            .iter()
+            .all(|word| crate::pretool::proven_tracked_dotenv_template(word, cwd))
+    {
+        return None;
+    }
+    let renamed = |word: &str| match word.rsplit_once('/') {
+        Some((parent, _)) => format!("{parent}/{STAND_IN}"),
+        None => STAND_IN.to_owned(),
+    };
+    let mut projected = command.to_owned();
+    for template in &templates {
+        projected = projected.replace(template.as_str(), &renamed(template));
+    }
+    let expected: Vec<String> = original
+        .iter()
+        .map(|word| {
+            if template_named(word) {
+                renamed(word)
+            } else {
+                word.clone()
+            }
+        })
+        .collect();
+    (words(&projected) == expected && chain_reads_only(&projected, cwd.map(Path::new), None))
+        .then_some(projected)
+}
+
 /// Whether every command in `command_text` is a reader from `READERS` whose
 /// output reaches only a pipe, the terminal or `/dev/null`.
-fn chain_reads_only(command_text: &str, cwd: Option<&Path>, home_dir: Option<&Path>) -> bool {
+pub(crate) fn chain_reads_only(
+    command_text: &str,
+    cwd: Option<&Path>,
+    home_dir: Option<&Path>,
+) -> bool {
     if command_text.trim().is_empty() {
         return false;
     }
@@ -69,7 +151,10 @@ fn chain_reads_only(command_text: &str, cwd: Option<&Path>, home_dir: Option<&Pa
         "guard-shell",
         false,
     );
+    // A process substitution runs a command the model keeps inside a word.
     model.uncertainty_reason.is_none()
+        && !command_text.contains("<(")
+        && !command_text.contains(">(")
         && model.embedded_commands.is_empty()
         && model.wrapper_chain.is_empty()
         && !model.segments.is_empty()
@@ -82,6 +167,12 @@ fn chain_reads_only(command_text: &str, cwd: Option<&Path>, home_dir: Option<&Pa
                     .executable
                     .as_deref()
                     .is_some_and(|program| READERS.contains(&program))
+                // `printf -v` assigns a variable and `%n` stores a count in one.
+                && !(segment.executable.as_deref() == Some("printf")
+                    && segment
+                        .arguments
+                        .iter()
+                        .any(|argument| argument.starts_with("-v") || argument.contains("%n")))
                 && !(segment.executable.as_deref() == Some("rg")
                     && segment.arguments.iter().any(|argument| {
                         argument.starts_with("--pre")
@@ -98,7 +189,7 @@ fn chain_reads_only(command_text: &str, cwd: Option<&Path>, home_dir: Option<&Pa
             match operator {
                 ">" | ">>" | ">|" | "&>" | "&>>" => redirect.target == "/dev/null",
                 ">&" => redirect.target.chars().all(|c| c.is_ascii_digit()),
-                "<" => true,
+                "<" => !redirect.target.starts_with('('),
                 _ => false,
             }
         })

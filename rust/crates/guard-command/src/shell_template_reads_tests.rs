@@ -134,3 +134,92 @@ fn a_chain_that_could_change_or_reroute_the_template_keeps_its_review() {
         );
     }
 }
+
+fn projected(command: &str, project: &Path) -> Option<String> {
+    crate::shell_template_reads::project(command, project.to_str())
+}
+
+#[test]
+fn a_plain_read_of_a_committed_template_projects_to_a_plain_name() {
+    let (_home, project) = fixture(TRACKED);
+    for (command, expected) in [
+        ("cat .env.example", "cat hol-guard-committed-template"),
+        (
+            "grep -n APP_PORT .env.example",
+            "grep -n APP_PORT hol-guard-committed-template",
+        ),
+        (
+            "tail -n 3 ./.env.example",
+            "tail -n 3 ./hol-guard-committed-template",
+        ),
+        (
+            "grep -n port src/app.ts | head -8; grep -n APP_PORT .env.example",
+            "grep -n port src/app.ts | head -8; grep -n APP_PORT hol-guard-committed-template",
+        ),
+    ] {
+        assert_eq!(
+            projected(command, &project).as_deref(),
+            Some(expected),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_projection_never_hides_another_dotenv_file() {
+    let (_home, project) = fixture(TRACKED);
+    // The live file is left in place for the read proofs to refuse.
+    for command in [
+        "cat .env.example .env",
+        "grep -n APP_PORT .env.example; cat .env",
+    ] {
+        let text = projected(command, &project).unwrap_or_default();
+        assert!(
+            text.split([' ', ';']).any(|word| word == ".env"),
+            "{command}: {text}"
+        );
+    }
+    // A word that only contains a template name is never rewritten.
+    std::fs::write(project.join(".env.example.bak"), "APP_PORT=3000\n").unwrap();
+    for command in [
+        "cat .env",
+        "cat .env.sample",
+        "cat .env.example .env.example.bak",
+        "cat '.env.example'.bak .env.example",
+    ] {
+        assert_eq!(projected(command, &project), None, "{command}");
+    }
+}
+
+#[test]
+fn an_unproven_or_rerouted_template_is_not_projected() {
+    let (_home, project) = fixture(TRACKED);
+    for command in [
+        "cp .env .env.example; cat .env.example",
+        "ln -sf .env .env.example; cat .env.example",
+        "cat .env.example > copy.txt",
+        "cat .env.example $(echo .env)",
+        "PATH=/tmp/bin cat .env.example",
+        "env cat .env.example",
+        "source .env.example",
+        "cat <(cp .env .env.example; sleep 1) .env.example",
+        "cat .env.example <(cat .env)",
+        "grep -n APP .env.example > >(cat)",
+        "printf -v PATH /tmp/bin; cat .env.example",
+        "printf -vPATH /tmp/bin; cat .env.example",
+        "printf 'x%n' PATH; cat .env.example",
+    ] {
+        assert_eq!(projected(command, &project), None, "{command}");
+        assert!(
+            !crate::shell_template_reads::chain_reads_only(command, Some(&project), None),
+            "{command}"
+        );
+    }
+    let header = concat!("-----BEGIN RSA PRIVATE", " KEY-----");
+    std::fs::write(
+        project.join(".env.example"),
+        format!("SIGNING_KEY=\"{header}\n  MIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\"\n"),
+    )
+    .unwrap();
+    assert_eq!(projected("cat .env.example", &project), None);
+}
