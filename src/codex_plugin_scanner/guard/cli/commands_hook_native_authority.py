@@ -23,9 +23,6 @@ from ..hook_review.hook_fail_closed import fail_closed_response
 from ..hook_review.hook_worker import HookWorker
 from ..hook_review.hook_worker_unavailable import withhold_structured_destination, withholds_structured_destination
 from ..native_hook_render import (
-    availability_harness_response,
-    canonical_hook_event_name,
-    hook_event_pauses_when_unavailable,
     native_cli_hook_emit,
 )
 from ..native_payload_facts import native_cli_hook_admission
