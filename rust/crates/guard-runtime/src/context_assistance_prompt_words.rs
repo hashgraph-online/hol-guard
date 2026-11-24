@@ -121,8 +121,7 @@ pub(crate) fn terms(prompt: &str) -> Vec<String> {
 /// marked when the prompt wrote it whole as a name (`case_sensitive`,
 /// `IntRange`), not as a plain word or a piece of a name. Words written like
 /// code come first, so a long prompt keeps the names it is about over the
-/// plain words around them. An absolute path such as `/tmp/run-1/out.log`
-/// gives none.
+/// plain words around them. An absolute path (`/tmp/run-1/out.log`) gives none.
 pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
     let prompt = &without_paths(prompt);
     let mut code: Vec<(String, bool)> = Vec::new();
@@ -248,7 +247,9 @@ fn command(span: &str) -> bool {
 fn tokens(span: &str) -> impl Iterator<Item = &str> {
     let split = span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')));
     split.filter(|token| {
-        !(token.trim_start_matches(['v', 'V']).chars()).all(|c| c.is_ascii_digit() || c == '.')
+        let body = token.strip_prefix(['v', 'V']).unwrap_or(token);
+        let number = body.chars().all(|c| c.is_ascii_digit() || c == '.');
+        !(number && (body.len() == token.len() || body.contains(|c: char| c.is_ascii_digit())))
     })
 }
 
@@ -404,8 +405,7 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
 
 /// `phrase` cut to its first words that fit in `MAX_PHRASE_CHARS`. Every
 /// file that holds the whole quote holds these words too, and a quote that
-/// ends differently from the source (a period added or left off) still
-/// matches.
+/// ends differently from the source (a period added or left off) matches.
 fn first_words(phrase: String) -> String {
     let Some((cut, _)) = phrase.char_indices().nth(MAX_PHRASE_CHARS) else {
         return phrase;

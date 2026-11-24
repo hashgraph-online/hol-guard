@@ -255,4 +255,10 @@ fn steering_words_and_versions_are_not_search_words() {
     }
     assert!(terms("Fix `resume` so it keeps the session").contains(&"resume".to_owned()));
     assert!(spellings("Make parse_v2 accept 1.5x").contains(&"parse_v2".to_owned()));
+    for name in ["vv3", "v"] {
+        assert!(
+            spellings(&format!("Fix `{name}`")).contains(&name.to_owned()),
+            "{name}"
+        );
+    }
 }
