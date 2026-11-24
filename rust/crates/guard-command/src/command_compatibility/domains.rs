@@ -450,12 +450,14 @@ pub(super) fn observe(
         // src/token.test.ts 2>&1` reads the test file it was asked to run.
         let text = crate::pretool::search_scope_tracked::screen(command, segment, context.cwd);
         // A `grep` or `rg` pattern is text the search looks for, not a file it
-        // opens: `grep -rn scan_secret_text src 2>/dev/null` reads `src`.
+        // opens: `grep -rn scan_secret_text src 2>/dev/null` reads `src`. The
+        // words here have lost their quotes, so one the shell could still expand
+        // into file names or command output stays in the screen.
         let patterns = crate::pretool::search_pattern_words(&executable, arguments)
             .unwrap_or_default()
             .into_iter()
             .filter(|pattern| {
-                !pattern.contains(['/', '~'])
+                !pattern.contains(['/', '~', '*', '?', '[', '{', '$', '`', '(', '\\'])
                     && arguments
                         .iter()
                         .filter(|argument| *argument == pattern)
