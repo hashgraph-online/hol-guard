@@ -6,6 +6,9 @@ use crate::CommandModelRequestV1;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 use std::path::Path;
 
+#[path = "source_reader_options.rs"]
+mod source_reader_options;
+
 /// A single plain relative-or-absolute path token naming a source-code file.
 /// Words such as "password" in its name describe code, not a credential store.
 pub(super) fn plain_source_code_path(value: &str) -> bool {
@@ -45,47 +48,67 @@ pub(super) fn plain_source_code_path(value: &str) -> bool {
         .is_some_and(guard_secure_fs::is_source_code_extension)
 }
 
-/// `cat`/`head`/`tail`/`wc` over plain source-code file tokens only. Each
-/// argument is rechecked on its own, so credential-family paths still match.
+/// Plain source-file reads only. Each argument is rechecked on its own, so
+/// credential-family paths still match. A chain qualifies when every segment
+/// is such a read, a `cd` into a plain directory or a literal `echo` line.
 fn exact_source_file_read(model: &CanonicalCommandV1) -> bool {
     if model.confidence != "exact"
         || model.path_overridden
-        || model.segments.len() != 1
+        || model.segments.is_empty()
         || !model.wrapper_chain.is_empty()
     {
         return false;
     }
-    source_file_read_segment(&model.segments[0])
+    model.segments.iter().any(source_file_read_segment)
+        && model.segments.iter().all(|segment| {
+            source_file_read_segment(segment)
+                || plain_directory_change(segment)
+                || literal_echo(segment)
+        })
 }
 
+/// `echo ---` and the like: literal words printed to the same output, with no
+/// expansion, redirect or credential word.
+fn literal_echo(segment: &CommandSegmentV1) -> bool {
+    segment.executable.as_deref() == Some("echo")
+        && segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && segment.tokens.len() == segment.arguments.len() + 1
+        && segment.arguments.iter().all(|word| {
+            !word.contains(['$', '`', '>', '<', '~', '*', '?']) && !sensitive_command(word)
+        })
+}
+
+/// `cd DIR` into a plain directory whose name carries no credential word.
+fn plain_directory_change(segment: &CommandSegmentV1) -> bool {
+    segment.executable.as_deref().map(executable_basename) == Some("cd")
+        && segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && matches!(segment.arguments.as_slice(), [directory]
+            if !directory.starts_with('-')
+                && !directory.contains(['$', '`', '~', '*', '?'])
+                && !sensitive_command(directory))
+}
+
+/// `cat`, `head`, `tail`, `wc`, `nl` or a line-printing `sed -n` over plain
+/// source-code file tokens only.
 pub(super) fn source_file_read_segment(segment: &CommandSegmentV1) -> bool {
     let Some(executable) = segment.executable.as_deref() else {
         return false;
     };
-    if !matches!(
-        executable_basename(executable),
-        "cat" | "head" | "tail" | "wc" | "nl"
-    ) {
-        return false;
-    }
-    // Options end at `--`; a lone `-` is the stdin operand, never an option,
-    // and stdin is not a source file, so it disqualifies the exemption.
-    let mut options_ended = false;
-    let mut operands = 0_usize;
-    for argument in &segment.arguments {
-        if !options_ended && argument == "--" {
-            options_ended = true;
-        } else if !options_ended && argument.starts_with('-') && argument != "-" {
-            if argument.len() > 3 || argument.contains(|c: char| c.is_alphabetic() && c != 'n') {
-                return false;
-            }
-        } else if plain_source_code_path(argument) && !sensitive_command(argument) {
-            operands += 1;
-        } else {
-            return false;
-        }
-    }
-    operands > 0
+    let name = executable_basename(executable);
+    let operands = if name == "sed" {
+        source_reader_options::sed_print_operands(&segment.arguments)
+    } else {
+        source_reader_options::reader_operands(name, &segment.arguments)
+    };
+    // A lone `-` is the stdin operand, and stdin is not a source file.
+    operands.is_some_and(|operands| {
+        !operands.is_empty()
+            && operands
+                .iter()
+                .all(|argument| plain_source_code_path(argument) && !sensitive_command(argument))
+    })
 }
 
 fn exact_safe_search_command(model: &CanonicalCommandV1) -> bool {
