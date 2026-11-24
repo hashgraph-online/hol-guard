@@ -441,9 +441,11 @@ fn a_body_reaches_only_a_scratch_file_of_the_workspace() {
 fn create_dirs_reaches_new_directories_only_under_a_scratch_root() {
     use std::os::unix::fs::PermissionsExt;
 
-    let root = std::fs::canonicalize("/tmp")
-        .unwrap()
-        .join(format!("guard-curl-create-dirs-{}", std::process::id()));
+    let scratch = tempfile::Builder::new()
+        .prefix("guard-curl-create-dirs-")
+        .tempdir_in(std::fs::canonicalize("/tmp").unwrap())
+        .unwrap();
+    let root = scratch.path().to_path_buf();
     let project = root.join("project");
     let home_dir = root.join("home");
     std::fs::create_dir_all(&project).unwrap();
@@ -481,5 +483,4 @@ fn create_dirs_reaches_new_directories_only_under_a_scratch_root() {
     ] {
         assert!(!proven_in(&command, context), "{command}");
     }
-    std::fs::remove_dir_all(root).unwrap();
 }
