@@ -155,7 +155,7 @@ fn an_allow_of_an_earlier_version_is_told_apart_from_no_decision() {
     let fixture = Fixture::new();
     let identity = script();
     let home = fixture.home.to_string_lossy().into_owned();
-    let unset = |hash: &str| grant_unset(&home, &identity.cli_id, hash).unwrap();
+    let unset = |hash: &str| grant_unset(&home, &identity.cli_id, hash, &identity.source).unwrap();
     assert_eq!(unset(&identity.hash), Some(Undecided::Never));
     let older = "0".repeat(64);
     fixture.grant(&identity, "allowed", Some(&older));
@@ -171,4 +171,60 @@ fn an_allow_of_an_earlier_version_is_told_apart_from_no_decision() {
         .unwrap();
     assert_eq!(unset(&older), None);
     assert_eq!(unset(&identity.hash), Some(Undecided::Never));
+}
+
+fn runtime_script(kind: &str, content: &str) -> Identity {
+    derived(LocalCliIdentitySourceV1::Script {
+        entrypoint: serde_json::json!({
+            "kind": kind, "status": "verified",
+            "sha256": content, "path": "/opt/tools/scripts/context.mjs",
+        }),
+    })
+}
+
+#[test]
+fn a_script_grant_covers_every_javascript_runtime_that_runs_the_file() {
+    let fixture = Fixture::new();
+    let node = runtime_script("node-script", CONTENT);
+    fixture.grant(&node, "allowed", None);
+    for kind in ["node-script", "bun-script", "bun.exe-script", "deno-script"] {
+        let launch = runtime_script(kind, CONTENT);
+        assert_eq!(launch.cli_id, node.cli_id, "{kind}");
+        let found = payload(&fixture, &launch, "review", None);
+        assert_eq!(found["state"], "allowed", "{kind}");
+        assert_eq!(found["identity_hash"], launch.hash, "{kind}");
+    }
+    let home = fixture.home.to_string_lossy().into_owned();
+    let bun = runtime_script("bun-script", CONTENT);
+    assert_eq!(
+        grant_unset(&home, &bun.cli_id, &bun.hash, &bun.source).unwrap(),
+        None
+    );
+}
+
+#[test]
+fn a_block_recorded_under_one_javascript_runtime_binds_the_others() {
+    let fixture = Fixture::new();
+    let bun = runtime_script("bun-script", CONTENT);
+    fixture.grant(&bun, "blocked", None);
+    let node = runtime_script("node-script", CONTENT);
+    assert_eq!(state(&fixture, &node, "review", None), "blocked");
+}
+
+#[test]
+fn a_runtime_grant_stays_bound_to_the_file_content_and_language() {
+    let fixture = Fixture::new();
+    let node = runtime_script("node-script", CONTENT);
+    fixture.grant(&node, "allowed", None);
+    let changed = runtime_script("bun-script", &"b".repeat(64));
+    assert_eq!(state(&fixture, &changed, "review", None), "none");
+    let home = fixture.home.to_string_lossy().into_owned();
+    assert_eq!(
+        grant_unset(&home, &changed.cli_id, &changed.hash, &changed.source).unwrap(),
+        Some(Undecided::AllowedEarlierVersion)
+    );
+    // Another language reading the same file is not one of the runtimes.
+    let python = runtime_script("python-script", CONTENT);
+    assert_eq!(python.cli_id, node.cli_id);
+    assert_eq!(state(&fixture, &python, "review", None), "none");
 }

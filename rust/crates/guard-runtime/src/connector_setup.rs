@@ -70,6 +70,7 @@ pub(crate) fn for_launch(request: &LocalCliHookRequestV1, launch: &Launch) -> Op
         &request.guard_home,
         &launch.cli_id,
         &launch.identity_hash,
+        &launch.source,
     )
     .ok()
     .flatten()
