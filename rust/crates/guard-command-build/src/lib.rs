@@ -363,6 +363,8 @@ mod shell_secret_read_stdin_search;
 mod shell_secret_read_support;
 #[path = "../../guard-command/src/shell_structure.rs"]
 mod shell_structure;
+#[path = "../../guard-command/src/shell_template_reads.rs"]
+mod shell_template_reads;
 #[path = "../../guard-command/src/source_cli.rs"]
 pub mod source_cli;
 #[path = "../../guard-command/src/supply_chain_package_eval.rs"]
