@@ -415,6 +415,8 @@ def test_desktop_cli_update_applies_signed_core_feed(
             "update_available": True,
         },
     )
+    # The index's latest alpha passes the same liveness check as any candidate.
+    monkeypatch.setattr(update_commands, "_alpha_liveness_checker", lambda *_args: lambda _version: True)
     apply = MagicMock(return_value=DesktopCoreApplyResult(executable=new_core, version="3.0.0a200", changed=True))
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.update_desktop_apply.apply_desktop_core_update",
