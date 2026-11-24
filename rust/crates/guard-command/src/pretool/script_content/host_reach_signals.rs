@@ -11,7 +11,7 @@ use regex::Regex;
 /// spread over several lines, which make the call bare.
 static SIGNAL_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(concat!(
-        r"\bfrom\s+(?:os|signal)\s+import\s+",
+        r"\bfrom\s+(?:os|signal|posix|nt|_signal)\s+import\s+",
         r"(?:\([^)]*\b(?:kill|killpg|pthread_kill)\b[^)]*\)",
         r"|[\w, \t\\]*\b(?:kill|killpg|pthread_kill)\b)",
     ))
@@ -20,7 +20,7 @@ static SIGNAL_IMPORT: LazyLock<Regex> = LazyLock::new(|| {
 
 /// `from os import *`, after which a bare `kill(` is the signal call.
 static SIGNAL_STAR_IMPORT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\bfrom\s+(?:os|signal)\s+import\s+\*").unwrap());
+    LazyLock::new(|| Regex::new(r"\bfrom\s+(?:os|signal|posix|nt|_signal)\s+import\s+\*").unwrap());
 
 static BARE_SIGNAL_CALL: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?m)(?:^|[^.\w])(?:kill|killpg|pthread_kill)\s*\(").unwrap());
