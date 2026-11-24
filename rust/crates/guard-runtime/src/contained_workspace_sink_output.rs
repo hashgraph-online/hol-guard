@@ -137,6 +137,42 @@ impl Shaping {
     }
 }
 
+/// Open the scratch log a peeled `> FILE` names, before the core runs, as
+/// the shell opens a redirect first. The file is never followed through a
+/// link, and only a regular file of this user's with a single link is
+/// emptied and written, so a name planted in a shared temporary directory
+/// cannot carry the write to another file.
+#[cfg(unix)]
+pub(super) fn open_log(path: &std::path::Path) -> Option<File> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+        .ok()?;
+    let metadata = file.metadata().ok()?;
+    let owned = metadata.file_type().is_file()
+        && metadata.uid() == nix::unistd::geteuid().as_raw()
+        && metadata.nlink() == 1;
+    (owned && file.set_len(0).is_ok()).then_some(file)
+}
+
+#[cfg(not(unix))]
+pub(super) fn open_log(_path: &std::path::Path) -> Option<File> {
+    None
+}
+
+/// Write the output held for a scratch log to it, raw, with the truncation
+/// notice when a stream was cut at `CAPTURE_LIMIT`.
+pub(super) fn write_log(mut file: File, captured: &[u8], cut: bool) {
+    write(&mut file, captured);
+    if cut {
+        write(&mut file, TRUNCATED.as_bytes());
+    }
+}
+
 fn write(stream: &mut impl Write, bytes: &[u8]) {
     if !bytes.is_empty() {
         let _ = stream.write_all(bytes);

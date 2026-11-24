@@ -823,12 +823,15 @@ fn evaluate_envelope(
         }
     }
 
-    if let Some(projection) = signals
+    if let Some(mut projection) = signals
         .command
         .as_deref()
         .filter(|_| project_redirects && !search_scope_proven && !apply_patch_proven)
         .and_then(|command| redirect_projection::project(command, context))
     {
+        projection.sink_log = signals.command.as_deref().is_some_and(|command| {
+            crate::pretool::sink_peel::scratch_log::sink_writes(command, context)
+        });
         let projected_payload = payload_with_command(
             payload,
             signals.command.as_deref().unwrap_or_default(),

@@ -40494,6 +40494,22 @@
       "expect": "allow"
     },
     {
+      "id": "toolchain-tsc-report-saved-to-a-temporary-scratch-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit --pretty false > /tmp/hg-typecheck-scratch.log 2>&1 && echo TYPES_CLEAN || echo TYPES_FAILED"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "toolchain-npx-tsx-run-source",
       "fix_area": "shell",
       "harnesses": [

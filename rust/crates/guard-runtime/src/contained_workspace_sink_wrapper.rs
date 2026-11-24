@@ -202,7 +202,13 @@ fn bounded(
     signals: &process::Signals,
     run: impl FnOnce() -> Outcome<i32>,
 ) -> Outcome<i32> {
-    let capture = output.is_some_and(|output| output.kind != "all");
+    // A scratch log is opened first, as the shell opens it, and takes the
+    // output the core prints in place of the terminal.
+    let log = match output.and_then(|output| output.file.as_deref()) {
+        Some(path) => Some(output::open_log(path).ok_or_else(Failure::unauthorized)?),
+        None => None,
+    };
+    let capture = output.is_some_and(|output| output.kind != "all") || log.is_some();
     let merge = output.is_some_and(|output| output.merge_stderr);
     // A core wrapped again is peeled only by Guard's own sink.
     if !signals.output.enter(merge, capture) {
@@ -210,8 +216,14 @@ fn bounded(
     }
     let result = run();
     let (captured, cut) = signals.output.leave();
-    let chain = match output {
-        Some(output) if capture => filters::emit(output, (&captured, cut), &signals.output)?,
+    let chain = match (output, log) {
+        (_, Some(file)) => {
+            output::write_log(file, &captured, cut);
+            None
+        }
+        (Some(output), None) if capture => {
+            filters::emit(output, (&captured, cut), &signals.output)?
+        }
         _ => None,
     };
     let exit_code = result?;

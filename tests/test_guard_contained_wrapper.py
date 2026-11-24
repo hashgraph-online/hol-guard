@@ -8,6 +8,7 @@ from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_vitest
 from codex_plugin_scanner.guard.runtime.contained_wrapper import (
     OutputFilter,
+    _output_filter,
     bounded_output,
     peel_contained_wrapper,
     sibling_project_root,
@@ -260,6 +261,14 @@ def emit() -> None:
         print(f"out {index}")
     for index in range(3):
         print(f"err {index}", file=sys.stderr)
+
+
+def test_a_scratch_log_is_left_to_the_native_sink() -> None:
+    """Only the native sink opens a peeled scratch log; the Python fallback refuses the plan."""
+    encoded = {"kind": "all", "count": 0, "merge_stderr": True, "file": "/tmp/hg-scratch.log"}
+    with pytest.raises(ValueError, match="unsupported wrapper shape"):
+        _output_filter(encoded)
+    assert _output_filter({**encoded, "file": None}) == OutputFilter("all", 0, True)
 
 
 def test_output_filter_runs_in_process(capsys: pytest.CaptureFixture[str]) -> None:
