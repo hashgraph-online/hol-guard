@@ -1,4 +1,5 @@
-use super::{capacity_harness, slot, Counts};
+use super::{capacity_harness, resident_counts, slot, Counts};
+use serde_json::json;
 
 #[test]
 fn an_unknown_harness_counts_as_other() {
@@ -28,4 +29,32 @@ fn capacity_counts_under_the_adapter_an_alias_names() {
     assert_eq!(capacity_harness("paseo"), "paseo");
     assert_eq!(capacity_harness("claude_code"), "other");
     assert_eq!(capacity_harness(""), "other");
+}
+
+#[test]
+fn resident_counter_pages_are_bounded_and_normalized() {
+    let normalized = resident_counts(&json!({
+        "by_harness": {
+            "codex": {"answer": 3},
+            "gemini": {"answer": 1}
+        }
+    }))
+    .expect("valid counters");
+    assert_eq!(
+        normalized,
+        json!({"codex": {"answer": 3}, "other": {"answer": 1}})
+    );
+}
+
+#[test]
+fn malformed_resident_counter_pages_are_ignored() {
+    assert!(resident_counts(&json!({"by_harness": []})).is_none());
+    assert!(resident_counts(&json!({
+        "by_harness": {"codex": {"Bad-Code": 1}}
+    }))
+    .is_none());
+    assert!(resident_counts(&json!({
+        "by_harness": {"codex": {"answer": -1}}
+    }))
+    .is_none());
 }

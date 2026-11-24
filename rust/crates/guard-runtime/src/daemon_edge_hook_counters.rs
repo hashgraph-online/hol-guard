@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use serde_json::json;
+use serde_json::{json, Map, Value};
 
 /// `HARNESS_SLOTS` without the catch-all.
 const NAMED_SLOTS: [&str; 15] = [
@@ -95,6 +95,9 @@ struct State {
     counts: Counts,
     logged: Option<Counts>,
     logged_at: Option<Instant>,
+    resident: Option<(String, Value)>,
+    resident_logged: Option<Value>,
+    resident_logged_at: Option<Instant>,
 }
 
 fn state() -> &'static Mutex<State> {
@@ -104,8 +107,95 @@ fn state() -> &'static Mutex<State> {
             counts: Counts::default(),
             logged: None,
             logged_at: None,
+            resident: None,
+            resident_logged: None,
+            resident_logged_at: None,
         })
     })
+}
+
+const RESIDENT_LOG_EVENT: &str = "hook_direct_counters";
+const RESIDENT_LOG_INTERVAL: Duration = Duration::from_secs(300);
+const RESIDENT_HARNESSES: [&str; 16] = [
+    "codex",
+    "claude-code",
+    "cursor",
+    "copilot",
+    "kimi",
+    "devin",
+    "zcode",
+    "openclaw",
+    "hermes",
+    "cline",
+    "opencode",
+    "grok",
+    "pi",
+    "omp",
+    "muse",
+    "other",
+];
+
+fn resident_counts(value: &Value) -> Option<Value> {
+    let by_harness = value.get("by_harness")?.as_object()?;
+    let mut normalized = Map::new();
+    for (harness, outcomes) in by_harness {
+        let slot = if RESIDENT_HARNESSES[..RESIDENT_HARNESSES.len() - 1].contains(&harness.as_str())
+        {
+            harness.as_str()
+        } else {
+            "other"
+        };
+        let outcomes = outcomes.as_object()?;
+        if outcomes.len() > 64 {
+            return None;
+        }
+        let mut cells = Map::new();
+        for (code, count) in outcomes {
+            if code.is_empty()
+                || code.len() > 64
+                || !code
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte == b'_')
+            {
+                return None;
+            }
+            let count = count.as_u64()?;
+            cells.insert(code.clone(), count.into());
+        }
+        normalized.insert(slot.to_owned(), Value::Object(cells));
+    }
+    Some(Value::Object(normalized))
+}
+
+/// Record the resident's direct-hook counters with the same change and
+/// five-minute pacing semantics as the former Python diagnostics shim.
+pub(crate) fn note_resident(guard_home: &Path, epoch: &str, counters: &Value) {
+    let Some(resident) = resident_counts(counters) else {
+        return;
+    };
+    let Ok(mut state) = state().lock() else {
+        return;
+    };
+    state.resident = Some((epoch.to_owned(), resident.clone()));
+    let now = Instant::now();
+    if state
+        .resident_logged_at
+        .is_some_and(|logged| now.duration_since(logged) < RESIDENT_LOG_INTERVAL)
+        || state.resident_logged.as_ref() == Some(&resident)
+        || resident.as_object().is_none_or(|map| map.is_empty())
+    {
+        return;
+    }
+    state.resident_logged_at = Some(now);
+    drop(state);
+    let detail = json!({"epoch": epoch, "resident": resident}).to_string();
+    if super::super::writes::record_diagnostic(guard_home, RESIDENT_LOG_EVENT, Some(&detail))
+        .is_ok()
+    {
+        if let Ok(mut state) = self::state().lock() {
+            state.resident_logged = Some(resident);
+        }
+    }
 }
 
 /// Counts one hook the route received, then logs the counts when they

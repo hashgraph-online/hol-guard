@@ -45,7 +45,6 @@ from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS, TRANSIE
 from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
 from ..resident_evidence_dispatch import ResidentEvidenceDispatch, run_resident_evidence
-from ..resident_route_counters import RouteCounterLog
 from ..runtime.extension_control_runtime import current_extension_control_binding_digest
 from .hook_worker_native import HookWorkerNativeMixin
 from .hook_worker_readiness import prepare_workspace_policy
@@ -118,7 +117,6 @@ class HookWorker(HookWorkerNativeMixin):
         from ..route_metrics import RouteMetricsRecorder
 
         self.metrics = RouteMetricsRecorder()
-        self.hook_counters = RouteCounterLog()
         self.policy_snapshot_publisher = get_native_policy_snapshot_publisher(self.store)
         # Resolve harness modules before a managed hook request starts
         # its deadline. This lookup grants no authority; native policy

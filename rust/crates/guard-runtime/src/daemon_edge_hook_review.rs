@@ -28,7 +28,7 @@ use admission::{
 #[path = "daemon_edge_hook_admission.rs"]
 mod admission;
 #[path = "daemon_edge_hook_counters.rs"]
-mod counters;
+pub(crate) mod counters;
 #[path = "daemon_edge_hook_cursor_sink.rs"]
 mod cursor_sink;
 #[path = "daemon_edge_hook_envelopes.rs"]
