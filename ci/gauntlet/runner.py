@@ -63,7 +63,7 @@ from .input_evidence import (
 )
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
-from .native_routes import await_native_routes
+from .native_routes import SinkReceiptTally, await_native_routes
 from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_private_temp
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
@@ -183,6 +183,7 @@ def run_case(
         "guard_observations": [],
         "native_routes": {},
         "resident_direct_answers": 0,
+        "sink_receipt_routes": {},
         "inference": {"live_rounds": [], "canary_export_violations": 0},
         "filesystem": {},
         "egress_requests": [],
@@ -272,6 +273,7 @@ def run_case(
                     case["business_policy"], publisher.current_snapshot(), policy_snapshot
                 )
             worker = daemon._server.hook_worker
+            receipt_tally = SinkReceiptTally(worker)
             if scenario.oracle == "blocked-extension":
                 extension_receipt_ids = native_probe.persisted_native_receipt_ids(worker.store)
                 extension_receipt_writer = daemon._server.runtime_hook_evidence_writer
@@ -398,9 +400,11 @@ def run_case(
             # A bridged hook is answered either by a live resident, which counts
             # it itself, or by the daemon, which routes it; read both once the
             # case's observations say how many answers to account for.
-            case["native_routes"], case["resident_direct_answers"] = await_native_routes(
-                worker, len(case["guard_observations"])
-            )
+            (
+                case["native_routes"],
+                case["resident_direct_answers"],
+                case["sink_receipt_routes"],
+            ) = await_native_routes(worker, len(case["guard_observations"]), tally=receipt_tally)
             if proofs := request_proofs(host_log, fixture.workspace, replacements):
                 case["contained_request_proofs"] = proofs
             if scenario.oracle == "blocked-extension":

@@ -24,7 +24,7 @@ from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .input_evidence import Redaction, redact_value
 from .interruptions import case_interruptions, describe
 from .mixed_reads import assess_mixed_reads
-from .native_routes import native_route_proof_error
+from .native_routes import native_route_proof_error, native_sink_calls
 from .native_tools import (
     BACKGROUND_READ_CASE,
     JOB_OUTPUT_PATH,
@@ -312,6 +312,7 @@ def _assess_observed(
     guards = case["guard_observations"]
     routes = case["native_routes"]
     resident_direct = case.get("resident_direct_answers", 0)
+    sink_receipts = case.get("sink_receipt_routes")
     rounds = case["inference"]["live_rounds"]
     if not reconcile_rounds(rounds)[0]:
         return "inference-error", "a provider round failed or ended before completion"
@@ -319,13 +320,16 @@ def _assess_observed(
         return "inference-error", "the model session aborted before completion"
     if not any(e.get("type") == "agent_end" and e.get("terminal") is True for e in case["events"]):
         return "harness-error", "missing terminal host event"
-    if route_error := native_route_proof_error(routes, resident_direct):
+    if route_error := native_route_proof_error(routes, resident_direct, sink_receipts):
         return "harness-error", route_error
     bound, contained_error = contained
     if contained_error:
         return contained_error
+    sink_calls = native_sink_calls(calls, bound)
     calls = effective_calls(calls, bound)
-    by_id, guard_error = guard_inventory(calls, guards, routes, frozenset(bound), resident_direct)
+    by_id, guard_error = guard_inventory(
+        calls, guards, routes, frozenset(bound), resident_direct, sink_receipts, sink_calls
+    )
     if guard_error:
         return "harness-error", guard_error
     guards = [g for g in guards if not is_contained_deny(g, bound)]

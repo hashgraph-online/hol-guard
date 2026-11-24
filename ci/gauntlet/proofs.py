@@ -216,6 +216,8 @@ def guard_inventory(
     routes: dict[str, int],
     contained: frozenset[str] = frozenset(),
     resident_direct: int = 0,
+    sink_receipts: object = None,
+    native_sink_calls: int = 0,
 ) -> tuple[dict[str, list[dict[str, Any]]], str | None]:
     """Require a native pre-tool response for every actual call and post-tool coverage for execution.
 
@@ -250,7 +252,7 @@ def guard_inventory(
         by_id.setdefault(call_id, []).append(observation)
     if set(by_id) != {call["id"] for call in calls}:
         return {}, "host/Guard call inventories disagree"
-    if route_error := native_route_error(routes, resident_direct, len(observations)):
+    if route_error := native_route_error(routes, resident_direct, len(observations), sink_receipts, native_sink_calls):
         return {}, route_error
     for call in calls:
         bound = by_id[call["id"]]

@@ -72,6 +72,7 @@ OPERATOR_HOME_WINDOWS_SINK = [
 ]
 
 
+SINK_RECEIPTS = 2
 NATIVE_RUNTIME = "/candidate/.venv/lib/python3.12/site-packages/codex_plugin_scanner/_native/hol-guard-runtime"
 
 
@@ -185,6 +186,10 @@ def _contained(
             )
         else:
             row.update(input={"command": wrapper}, input_sha256=input_digest({"command": wrapper}))
+    if wrapper_options.get("native"):
+        # The runtime sink asks the daemon again, receipt-only, before it runs.
+        case["native_routes"]["native_resident"] += SINK_RECEIPTS
+        case["sink_receipt_routes"] = {"native_resident": SINK_RECEIPTS}
     return case
 
 

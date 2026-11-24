@@ -7,9 +7,12 @@ from typing import Any
 import pytest
 
 from ci.gauntlet.native_routes import (
+    RECEIPT_ONLY_FIELD,
+    SinkReceiptTally,
     await_native_routes,
     native_route_error,
     native_route_proof_error,
+    native_sink_calls,
     resident_direct_answers,
 )
 
@@ -123,3 +126,99 @@ def test_a_case_with_no_observations_is_not_waited_for() -> None:
     routes, direct = await_native_routes(_Worker(metrics, counters), 0, timeout_seconds=30.0)
     assert (routes, direct) == ({}, 0)
     assert counters.reads == 1
+
+
+_UNRECONCILED = "native route counts do not reconcile with observed Guard responses"
+_NATIVE_WRAPPER = (
+    "'/candidate/hol-guard-runtime' 'contained-workspace-sink' '--harness' 'omp' '--guard-home' '/g'"
+    " '--workspace' '/w' '--request-file' '/r' '--request-sha256' '" + "0" * 64 + "' '--home' '/h'"
+)
+_LAUNCHER_WRAPPER = "'/candidate/.venv/bin/hol-guard' 'execute-contained-test' '--guard-home' '/g'"
+
+
+def test_a_native_sink_runs_receipt_only_questions_come_out_one_for_one() -> None:
+    # The scratch-log run: three observed hook answers, and four daemon routes
+    # for the receipt-only questions the runtime sink asked before it ran.
+    routes = {"native_resident": 7}
+    assert native_route_error(routes, 0, 3) == _UNRECONCILED
+    assert native_route_error(routes, 0, 3, {"native_resident": 4}, 1) is None
+    # One receipt route too many or too few is still a mismatch.
+    assert native_route_error(routes, 0, 3, {"native_resident": 3}, 1) == _UNRECONCILED
+    assert native_route_error(routes, 0, 3, {"native_resident": 5}, 1) == _UNRECONCILED
+
+
+def test_receipt_only_routes_need_a_bound_native_sink_run() -> None:
+    assert native_route_error({"native_resident": 7}, 0, 3, {"native_resident": 4}, 0) == (
+        "receipt-only routes have no bound native sink run"
+    )
+    assert native_route_error({"native_resident": 3}, 0, 3, {}, 1) == (
+        "a bound native sink run has no receipt-only route"
+    )
+
+
+def test_receipt_only_routes_cannot_hide_answers_or_leave_the_native_route() -> None:
+    assert native_route_error({"native_resident": 3}, 0, 3, {"native_resident": 4}, 1) == (
+        "sink receipt routes exceed the daemon's route counts"
+    )
+    assert native_route_error({"native_resident": 4}, 0, 3, {"native_resident": "1"}, 1) == (
+        "sink receipt route counts are malformed"
+    )
+    assert native_route_error({"native_resident": 4}, 0, 3, ["native_resident"], 1) == (
+        "sink receipt route counts are malformed"
+    )
+    # A sink question the daemon failed safe on is still an off-route answer.
+    assert (
+        native_route_error({"native_resident": 3, "native_fail_safe": 1}, 0, 3, {"native_fail_safe": 1}, 1)
+        == "Guard answered outside the native resident route"
+    )
+    # Taking every route out as a sink question leaves no proof of a hook answer.
+    assert native_route_proof_error({"native_resident": 2}, 0, {"native_resident": 2}) == (
+        "native Guard enforcement route was not proven"
+    )
+
+
+def test_only_bound_calls_through_the_runtime_sink_count() -> None:
+    calls = [
+        {"id": "a", "args": {"command": _NATIVE_WRAPPER}},
+        {"id": "b", "args": {"command": _LAUNCHER_WRAPPER}},
+        {"id": "c", "args": {"command": _NATIVE_WRAPPER}},
+        {"id": "d", "args": {"command": "'unterminated"}},
+    ]
+    assert native_sink_calls(calls, {"a": {}, "b": {}, "d": {}}) == 1
+    assert native_sink_calls(calls, frozenset({"a", "c"})) == 2
+    assert native_sink_calls(calls, {}) == 0
+
+
+class _Recorder:
+    def __init__(self) -> None:
+        self.routes: dict[str, int] = {}
+
+    def record_route(self, route: str) -> None:
+        self.routes[route] = self.routes.get(route, 0) + 1
+
+    def snapshot(self) -> dict[str, Any]:
+        return {"routes": dict(self.routes)}
+
+
+class _HookWorker:
+    def __init__(self) -> None:
+        self.metrics = _Recorder()
+        self.hook_counters = _Snapshot(_counters(0))
+
+    def review_http_payload(self, *, payload: dict[str, object], route: str = "native_resident") -> dict[str, object]:
+        self.metrics.record_route(route)
+        return {"decision": "allow"}
+
+
+def test_the_tally_counts_only_routes_recorded_for_a_receipt_only_payload() -> None:
+    worker = _HookWorker()
+    tally = SinkReceiptTally(worker)
+    worker.review_http_payload(payload={"hook_event_name": "PreToolUse"})
+    worker.review_http_payload(payload={"hook_event_name": "PreToolUse", RECEIPT_ONLY_FIELD: True})
+    worker.review_http_payload(payload={"hook_event_name": "PreToolUse", RECEIPT_ONLY_FIELD: "true"})
+    worker.review_http_payload(payload={RECEIPT_ONLY_FIELD: True}, route="native_fail_safe")
+    worker.metrics.record_route("native_resident")
+    assert worker.metrics.routes == {"native_resident": 4, "native_fail_safe": 1}
+    assert tally.snapshot() == {"native_resident": 1, "native_fail_safe": 1}
+    routes, direct, receipts = await_native_routes(worker, 3, timeout_seconds=0.0, tally=tally)
+    assert (routes, direct, receipts) == (worker.metrics.routes, 0, tally.snapshot())

@@ -12,10 +12,18 @@ can answer, so the direct-answer term is zero for every case the Gauntlet runs
 today. It stays in the reconciliation because the counters are read from the
 live resident either way: a non-zero or malformed reading must reach the judge
 rather than be assumed absent.
+
+The runtime's contained-workspace sink asks Guard once more, receipt-only,
+before it runs a call the hook routed to it. The daemon answers that question
+on the same route as a hook, but no harness hook observed it, so the case
+records those routes apart (``SinkReceiptTally``) and the judge takes them out
+one for one, only when the case bound a native sink run.
 """
 
 from __future__ import annotations
 
+import shlex
+import threading
 import time
 from collections.abc import Mapping
 from typing import Any
@@ -25,6 +33,10 @@ OMP_HARNESS = "omp"
 # How long the resident's counters may take to reach the daemon after a case.
 _DRAIN_SECONDS = 10.0
 _DRAIN_POLL = 0.02
+# The field the contained-workspace sink stamps on its receipt-only question.
+RECEIPT_ONLY_FIELD = "guard_containment_receipt_only"
+# The runtime subcommand an Oh My Pi containment rewrite runs.
+NATIVE_SINK = "contained-workspace-sink"
 
 
 def _count(value: object) -> int | None:
@@ -35,11 +47,38 @@ def _count(value: object) -> int | None:
     return value
 
 
-def _native_answers(routes: object, resident_direct: object) -> int | str:
-    """Hooks the native resident answered on either lane, or why they do not count."""
+def _sink_receipts(routes: Mapping[str, Any], receipts: object) -> dict[str, int] | str:
+    """The routes the daemon recorded for sink receipt-only questions, or why they do not count."""
+
+    if receipts is None:
+        return {}
+    if not isinstance(receipts, Mapping):
+        return "sink receipt route counts are malformed"
+    counted: dict[str, int] = {}
+    for name, value in receipts.items():
+        count = _count(value)
+        if count is None or not isinstance(name, str):
+            return "sink receipt route counts are malformed"
+        recorded = _count(routes.get(name, 0))
+        if recorded is None or count > recorded:
+            return "sink receipt routes exceed the daemon's route counts"
+        counted[name] = count
+    return counted
+
+
+def _native_answers(routes: object, resident_direct: object, receipts: object = None) -> int | str:
+    """Hooks the native resident answered on either lane, or why they do not count.
+
+    Routes the daemon recorded for a sink's receipt-only question are not hook
+    answers and are taken out; one recorded anywhere but the native resident
+    still fails the case like any other off-route answer.
+    """
 
     if not isinstance(routes, Mapping):
         return "native route counts are missing"
+    sink = _sink_receipts(routes, receipts)
+    if isinstance(sink, str):
+        return sink
     daemon = 0
     for name, value in routes.items():
         count = _count(value)
@@ -49,31 +88,108 @@ def _native_answers(routes: object, resident_direct: object) -> int | str:
             if count:
                 return "Guard answered outside the native resident route"
             continue
-        daemon = count
+        daemon = count - sink.get(name, 0)
     direct = _count(resident_direct)
     if direct is None:
         return "resident direct answer counts are malformed"
     return daemon + direct
 
 
-def native_route_proof_error(routes: object, resident_direct: object) -> str | None:
+def native_route_proof_error(routes: object, resident_direct: object, receipts: object = None) -> str | None:
     """Why the native resident is not proven to have answered this case, or ``None``."""
 
-    answers = _native_answers(routes, resident_direct)
+    answers = _native_answers(routes, resident_direct, receipts)
     if isinstance(answers, str):
         return answers
     return None if answers > 0 else "native Guard enforcement route was not proven"
 
 
-def native_route_error(routes: object, resident_direct: object, observed: int) -> str | None:
-    """Why the observed answers do not reconcile with the native routes, or ``None``."""
+def native_route_error(
+    routes: object,
+    resident_direct: object,
+    observed: int,
+    receipts: object = None,
+    native_sink_calls: int = 0,
+) -> str | None:
+    """Why the observed answers do not reconcile with the native routes, or ``None``.
 
-    if proof_error := native_route_proof_error(routes, resident_direct):
+    ``receipts`` are the case's sink receipt-only routes and ``native_sink_calls``
+    the bound contained calls that ran through the runtime's sink. Each such run
+    asks at least once; a receipt-only route with no bound run is unexplained.
+    """
+
+    if proof_error := native_route_proof_error(routes, resident_direct, receipts):
         return proof_error
-    answers = _native_answers(routes, resident_direct)
+    sink = _sink_receipts(routes, receipts) if isinstance(routes, Mapping) else {}
+    asked = sum(sink.values()) if isinstance(sink, dict) else 0
+    if asked and not native_sink_calls:
+        return "receipt-only routes have no bound native sink run"
+    if asked < native_sink_calls:
+        return "a bound native sink run has no receipt-only route"
+    answers = _native_answers(routes, resident_direct, receipts)
     if answers != observed:
         return "native route counts do not reconcile with observed Guard responses"
     return None
+
+
+def native_sink_calls(calls: list[dict[str, Any]], contained: Mapping[str, Any] | frozenset[str]) -> int:
+    """How many bound contained calls the host ran through the runtime's native sink.
+
+    ``calls`` are the host calls before ``effective_calls`` swaps in the reviewed
+    input; ``contained_core`` has already bound each wrapper's exact argv.
+    """
+
+    count = 0
+    for call in calls:
+        args = call.get("args")
+        command = args.get("command") if isinstance(args, dict) else None
+        if call.get("id") not in contained or not isinstance(command, str):
+            continue
+        try:
+            argv = shlex.split(command)
+        except ValueError:
+            continue
+        count += len(argv) > 1 and argv[1] == NATIVE_SINK
+    return count
+
+
+class SinkReceiptTally:
+    """Daemon routes recorded while answering a contained sink's receipt-only question.
+
+    Wraps this worker's own hook entry point and route recorder, so a route is
+    tallied only when the payload the daemon reviewed carried the sink's
+    receipt-only field. The route is recorded before it is tallied: a tally read
+    before the route counts can never exceed them.
+    """
+
+    def __init__(self, worker: Any) -> None:
+        self._local = threading.local()
+        self._lock = threading.Lock()
+        self._routes: dict[str, int] = {}
+        review = worker.review_http_payload
+        record = worker.metrics.record_route
+
+        def review_http_payload(*args: Any, **kwargs: Any) -> Any:
+            payload = kwargs.get("payload")
+            prior = getattr(self._local, "receipt_only", False)
+            self._local.receipt_only = isinstance(payload, Mapping) and payload.get(RECEIPT_ONLY_FIELD) is True
+            try:
+                return review(*args, **kwargs)
+            finally:
+                self._local.receipt_only = prior
+
+        def record_route(route: str) -> None:
+            record(route)
+            if getattr(self._local, "receipt_only", False):
+                with self._lock:
+                    self._routes[route] = self._routes.get(route, 0) + 1
+
+        worker.review_http_payload = review_http_payload
+        worker.metrics.record_route = record_route
+
+    def snapshot(self) -> dict[str, int]:
+        with self._lock:
+            return dict(self._routes)
 
 
 def resident_direct_answers(worker: Any, harness: str = OMP_HARNESS) -> int:
@@ -94,23 +210,31 @@ def resident_direct_answers(worker: Any, harness: str = OMP_HARNESS) -> int:
     return count
 
 
-def await_native_routes(worker: Any, observed: int, *, timeout_seconds: float = _DRAIN_SECONDS) -> tuple[Any, int]:
+def await_native_routes(
+    worker: Any,
+    observed: int,
+    *,
+    timeout_seconds: float = _DRAIN_SECONDS,
+    tally: SinkReceiptTally | None = None,
+) -> tuple[Any, int] | tuple[Any, int, dict[str, int]]:
     """The case's route metrics and resident direct answers, once they reconcile.
 
     The resident reports its direct answers to the daemon on its own schedule,
     so a reading taken the moment the harness exits can still be short. Reading
     until the counts account for every observation keeps that lag out of the
     judge; an unreconcilable case returns its last reading for the judge to
-    report.
+    report. With a ``tally`` the sink's receipt-only routes are returned too and
+    left out of the count being waited for.
     """
 
     deadline = time.monotonic() + timeout_seconds
     while True:
+        receipts = tally.snapshot() if tally is not None else None
         routes = worker.metrics.snapshot().get("routes", {})
         direct = resident_direct_answers(worker)
-        answers = _native_answers(routes, direct)
+        answers = _native_answers(routes, direct, receipts)
         # Only a count still short of the observations can grow; anything else
         # is as final as it will get, and the judge reports it.
         if isinstance(answers, str) or answers >= observed or time.monotonic() >= deadline:
-            return routes, direct
+            return (routes, direct) if receipts is None else (routes, direct, receipts)
         time.sleep(_DRAIN_POLL)

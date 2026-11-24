@@ -251,6 +251,30 @@ def test_runtime_sink_run_passes_with_the_same_bindings(fixture, tmp_path):
     assert assessment["interruptions"]["events"] == []
 
 
+def test_runtime_sink_receipt_routes_are_accounted_one_for_one(fixture, tmp_path):
+    """The sink's receipt-only daemon routes leave the count only with a bound runtime-sink run."""
+    for name in ("native", "launcher", "extra"):
+        (tmp_path / name).mkdir()
+    native = _contained(fixture, tmp_path / "native", native=True)
+    native["sink_receipt_routes"] = {}
+    assessment = assess_case(SCENARIO, native)
+    assert assessment["outcome"] == "harness-error"
+    assert assessment["reason"] == "a bound native sink run has no receipt-only route"
+
+    launcher = _contained(fixture, tmp_path / "launcher")
+    launcher["native_routes"]["native_resident"] += 1
+    launcher["sink_receipt_routes"] = {"native_resident": 1}
+    assessment = assess_case(SCENARIO, launcher)
+    assert assessment["outcome"] == "harness-error"
+    assert assessment["reason"] == "receipt-only routes have no bound native sink run"
+
+    extra = _contained(fixture, tmp_path / "extra", native=True)
+    extra["native_routes"]["native_resident"] += 1
+    assessment = assess_case(SCENARIO, extra)
+    assert assessment["outcome"] == "harness-error"
+    assert assessment["reason"] == "native route counts do not reconcile with observed Guard responses"
+
+
 @pytest.mark.parametrize(
     ("old", "new", "reason"),
     [
