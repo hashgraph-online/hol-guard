@@ -69,6 +69,19 @@ def test_unavailable_resident_never_renders_an_allow(monkeypatch: pytest.MonkeyP
     assert render_recording_only_pre_tool("pi", reason_code="x", reason="y")["decision"] == "deny"
 
 
+def test_unavailable_verdict_uses_the_native_fail_closed_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        hook_fail_closed,
+        "native_render_fail_closed_verdict",
+        lambda *_a, **_k: {"decision": "deny", "from": "rust"},
+    )
+    assert render_pre_tool("pi", {"decision": "allow", "minimum_action": "allow"}, guard_home=_HOME) == {
+        "decision": "deny",
+        "from": "rust",
+    }
+
+
 def test_resident_response_is_returned_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     seen: dict[str, object] = {}
 
@@ -82,12 +95,16 @@ def test_resident_response_is_returned_unchanged(monkeypatch: pytest.MonkeyPatch
 
 
 def test_accepted_allow_is_marked_only_when_the_resident_rendered_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool", lambda *a, **k: {"decision": "allow"})
+    monkeypatch.setattr(
+        hook_fail_closed,
+        "native_render_accepted_allow",
+        lambda *a, **k: {"decision": "allow", "approval_reuse_status": "accepted"},
+    )
     assert render_accepted_allow("pi", {"decision": "allow"}) == {
         "decision": "allow",
         "approval_reuse_status": "accepted",
     }
-    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool", lambda *a, **k: None)
+    monkeypatch.setattr(hook_fail_closed, "native_render_accepted_allow", lambda *a, **k: None)
     failed = render_accepted_allow("pi", {"decision": "allow"})
     assert failed["decision"] == "deny"
     assert "approval_reuse_status" not in failed
@@ -224,6 +241,17 @@ def test_guard_home_preserves_default_prompt_guidance_for_native_failure(
         "copilot", "userPromptSubmitted", guard_home=tmp_path
     ) == {"behavior": "deny"}
     assert seen["args"] == ("copilot", "userPromptSubmitted", hook_fail_closed.PROMPT_UNAVAILABLE_REASON)
+
+
+def test_fail_closed_response_uses_the_native_contract_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.hook_failure_bridge.native_hook_failure_document",
+        lambda *args, **kwargs: {"from": "rust", "policy_action": "block"},
+    )
+    assert hook_fail_closed.fail_closed_response("pi", "PreToolUse", guard_home=_HOME) == {
+        "from": "rust",
+        "policy_action": "block",
+    }
 
 
 def test_review_render_failure_drops_a_raw_approval_url(monkeypatch: pytest.MonkeyPatch) -> None:
