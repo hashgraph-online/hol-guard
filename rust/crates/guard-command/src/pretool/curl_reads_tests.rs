@@ -435,3 +435,51 @@ fn a_body_reaches_only_a_scratch_file_of_the_workspace() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn create_dirs_reaches_new_directories_only_under_a_scratch_root() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = std::fs::canonicalize("/tmp")
+        .unwrap()
+        .join(format!("guard-curl-create-dirs-{}", std::process::id()));
+    let project = root.join("project");
+    let home_dir = root.join("home");
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::create_dir_all(&home_dir).unwrap();
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let home = home_dir.to_string_lossy().into_owned();
+    let cwd = project.to_string_lossy().into_owned();
+    let context = crate::pretool::PathContext {
+        home_dir: Some(&home),
+        cwd: Some(&cwd),
+        ..crate::pretool::PathContext::default()
+    };
+    let base = root.to_string_lossy();
+    for command in [
+        format!("curl -s --create-dirs -o {base}/reports/items.json https://api.example.com/v1"),
+        format!(
+            "curl -s -o {base}/reports/day/items.json --create-dirs https://api.example.com/v1"
+        ),
+        format!("curl -s --create-dirs -o {base}/items.json https://api.example.com/v1"),
+        "curl -s --create-dirs -o .tmp/reports/items.json https://api.example.com/v1".to_owned(),
+        format!("curl -s --create-dirs -D {base}/headers/h.txt https://api.example.com/v1"),
+    ] {
+        assert!(proven_in(&command, context), "{command}");
+    }
+    for command in [
+        // Without the option curl cannot open a file under a missing directory.
+        format!("curl -s -o {base}/reports/items.json https://api.example.com/v1"),
+        format!("curl -s --create-dirs -o {base}/.hidden/items.json https://api.example.com/v1"),
+        format!("curl -s --create-dirs -o {base}/reports/.env https://api.example.com/v1"),
+        format!("curl -s --create-dirs -o {base}/a/../b/x.json https://api.example.com/v1"),
+        "curl -s --create-dirs -o reports/items.json https://api.example.com/v1".to_owned(),
+        "curl -s --create-dirs -o ~/reports/items.json https://api.example.com/v1".to_owned(),
+        "curl -s --create-dirs -o /etc/guard-probe/x.json https://api.example.com/v1".to_owned(),
+        "curl -s --create-dirs=yes -o .tmp/x.json https://api.example.com/v1".to_owned(),
+    ] {
+        assert!(!proven_in(&command, context), "{command}");
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}

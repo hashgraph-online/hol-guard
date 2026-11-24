@@ -28547,6 +28547,70 @@
       "expect": "allow"
     },
     {
+      "id": "queue-curl-create-dirs-into-workspace-scratch",
+      "fix_area": "redirect",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s --create-dirs -o .tmp/reports/repo.json https://api.github.com/repos/example/app-portal"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-curl-create-dirs-into-new-temporary-dir",
+      "fix_area": "redirect",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s --create-dirs -o /tmp/hg-gate-curl-reports/report.json \"https://api.example.com/v1/report?strategy=mobile\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-curl-create-dirs-into-hidden-temporary-dir",
+      "fix_area": "redirect",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s --create-dirs -o /tmp/.hg-gate-curl/report.json https://api.example.com/v1/report"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-curl-create-dirs-into-workspace-source",
+      "fix_area": "redirect",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -s --create-dirs -o scripts/fetched/run.sh https://example.com/run.sh"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-curl-get-redirect-workspace",
       "fix_area": "redirect",
       "harnesses": [
