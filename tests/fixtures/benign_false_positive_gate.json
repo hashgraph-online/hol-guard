@@ -6438,6 +6438,125 @@
       "expect": "allow"
     },
     {
+      "id": "sed-range-credential-lookalike-source",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n 1,20p src/password-reset-email.tsx"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wc-lines-credential-lookalike-source",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wc -l src/password-reset-email.tsx"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "head-count-credential-lookalike-source",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "head -n 5 src/password-reset-email.tsx"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cd-sed-range-credential-lookalike-source",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd src && sed -n 1,5p password-reset-email.tsx"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sed-ranges-credential-lookalike-source-echo-separator",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n 1,2p src/password-reset-email.tsx; echo ---; sed -n 3,4p src/password-reset-email.tsx"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sed-range-credential-lookalike-then-credential-store",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n 1,5p src/password-reset-email.tsx ${HOME}/.claude/.credentials.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-sed-range-credential-lookalike-into-shell",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n 1,5p src/password-reset-email.tsx | sh"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "sed-delete-header-and-footer-lines",
       "fix_area": "shell",
       "harnesses": [
