@@ -31,6 +31,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use guard_command::pretool::contained_wrapper_plan;
 use serde_json::{json, Value};
 
 use crate::bounded_hook_bridge::{daemon_target, read_hook_input, Input};
@@ -146,6 +147,11 @@ pub(crate) fn reply(
             return Some(fallback);
         }
     }
+    let text = if status == 200 {
+        daemon_marked(&config.query, data, text, native_sink)
+    } else {
+        text
+    };
     Some((status, mark_watch_readiness_answer(config, data, text)))
 }
 
@@ -251,6 +257,33 @@ fn marked(query: &str, data: &str, answer: String, native: NativeSink) -> String
         serde_json::to_string(&response).ok()
     };
     mark().unwrap_or(answer)
+}
+
+/// A daemon `answer` marked for the runtime's own sink only when the call
+/// writes a scratch log (`... > "$log" 2>&1`), which only that sink writes.
+/// The resident defers some calls to the daemon (a transition probe, a cold
+/// policy), and an unmarked answer goes to the Python launcher, which refuses
+/// a log-carrying plan. The sink asks the resident, then the daemon, for its
+/// own receipt before it runs anything, so the mark grants nothing by itself.
+/// Every other daemon answer is relayed as sent.
+fn daemon_marked(query: &str, data: &str, answer: String, native: NativeSink) -> String {
+    let writes_log = || {
+        let payload: Value = serde_json::from_str(data).ok()?;
+        let command = payload.get("tool_input")?.get("command")?.as_str()?;
+        let query = parse_hook_query(query)?;
+        let workspace = query.workspace?;
+        let home = match query.home {
+            Some(home) => home,
+            None => std::env::var("HOME").ok()?,
+        };
+        let plan = contained_wrapper_plan(command, &workspace, None, Some(&home), None);
+        Some(plan.refusal.is_none() && plan.plan?.output?.file.is_some())
+    };
+    if writes_log() == Some(true) {
+        marked(query, data, answer, native)
+    } else {
+        answer
+    }
 }
 
 /// The line the extension reads for a reply.
