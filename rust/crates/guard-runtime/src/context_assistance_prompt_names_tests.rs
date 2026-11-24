@@ -160,4 +160,24 @@ fn prose_holds_a_name_only_written_as_code() {
         "The prompt goes to ScheduleWakeup each tick."
     ));
     assert!(render("src/loop.py", "prompt = ask()"));
+    // Longer and tilde fences hold their contents; a parenthesis, emphasis
+    // and a stray backtick in prose do not make a word code.
+    assert!(render("docs/PLAN.md", "````text\nprompt\n````"));
+    assert!(render("docs/PLAN.md", "~~~text\nprompt\n~~~"));
+    assert!(!render(
+        "docs/PLAN.md",
+        "Record each answer (prompt included)."
+    ));
+    assert!(!render("docs/PLAN.md", "Write the _prompt_ down."));
+    assert!(!render(
+        "docs/PLAN.md",
+        "One ` tick, then a reproducible prompt."
+    ));
+    assert!(render("docs/PLAN.md", "Call run(prompt) once."));
+    // A chunk that starts inside a code block cannot tell code from prose,
+    // so it counts whole.
+    assert!(render(
+        "docs/PLAN.md",
+        "prompt = ask()\n```\nThen a reproducible prompt."
+    ));
 }

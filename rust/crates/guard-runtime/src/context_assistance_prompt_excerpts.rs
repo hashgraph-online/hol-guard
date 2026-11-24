@@ -163,28 +163,85 @@ pub(super) fn render(
     Some(Rendered { text: out, shown })
 }
 
-/// What a prose file writes as code: between backticks, as Markdown and
-/// reStructuredText do, or in a word shaped like code (`parse_args`,
-/// `ScheduleWakeup`, `run()`). Other files count whole. A plan that only
-/// uses a word the prompt wrote as code, as in "with a reproducible prompt"
-/// for `prompt`, is not about that code.
+/// What a prose file writes as code: fenced blocks (``` or ~~~), inline
+/// code between matching backtick runs on one line (Markdown, and the
+/// double backticks of reStructuredText), and words shaped like code
+/// (`parse_args`, `ScheduleWakeup`, `run()`, `a::b`). Other files count
+/// whole, and so does an excerpt whose fences do not balance, such as a
+/// chunk that starts inside a code block. A plan that only uses a word the
+/// prompt wrote as code, as in "with a reproducible prompt" for `prompt`,
+/// is not about that code.
 fn as_code<'a>(path: &str, text: &'a str) -> Cow<'a, str> {
     let extension = Path::new(path).extension().and_then(|ext| ext.to_str());
     let prose = ["md", "mdx", "markdown", "rst", "txt", "adoc"];
     if !extension.is_some_and(|ext| prose.iter().any(|p| ext.eq_ignore_ascii_case(p))) {
         return Cow::Borrowed(text);
     }
-    let ticks = text
-        .replace("```", "\0")
-        .replace("``", "`")
-        .replace('\0', "`");
-    let quoted = ticks.split('`').skip(1).step_by(2);
-    let shaped = text.split_whitespace().filter(|word| {
-        let inner_capital = (word.chars().zip(word.chars().skip(1)))
-            .any(|(a, b)| a.is_lowercase() && b.is_uppercase());
-        inner_capital || word.contains(['_', '(']) || word.contains("::")
-    });
-    Cow::Owned(quoted.chain(shaped).collect::<Vec<_>>().join("\n"))
+    let mut code = Vec::new();
+    let mut fence: Option<(char, usize)> = None;
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        let mark = trimmed.chars().next().filter(|c| matches!(c, '`' | '~'));
+        let run = mark.map_or(0, |m| trimmed.chars().take_while(|&c| c == m).count());
+        match (fence, mark) {
+            (Some((open, len)), Some(m))
+                if m == open && run >= len && trimmed[run..].trim().is_empty() =>
+            {
+                fence = None
+            }
+            (Some(_), _) => code.push(line),
+            (None, Some(m)) if run >= 3 => fence = Some((m, run)),
+            (None, _) => {
+                code.extend(inline_code(line));
+                code.extend(line.split_whitespace().filter(|word| shaped(word)));
+            }
+        }
+    }
+    if fence.is_some() {
+        return Cow::Borrowed(text);
+    }
+    Cow::Owned(code.join("\n"))
+}
+
+/// Text between a run of backticks and the next run of the same length on
+/// the same line. An opening run with no match is a literal backtick.
+fn inline_code(line: &str) -> Vec<&str> {
+    let mut spans = Vec::new();
+    let mut rest = line;
+    while let Some(open) = rest.find('`') {
+        let run = rest[open..].bytes().take_while(|&b| b == b'`').count();
+        let after = &rest[open + run..];
+        let mut at = 0;
+        rest = after;
+        while let Some(found) = after[at..].find('`') {
+            let start = at + found;
+            let len = after[start..].bytes().take_while(|&b| b == b'`').count();
+            if len == run {
+                spans.push(&after[..start]);
+                rest = &after[start + len..];
+                break;
+            }
+            at = start + len;
+        }
+    }
+    spans
+}
+
+/// A word written the way code is: a capital inside it, an underscore
+/// between letters (not `_emphasis_`), a call (`run(`, not "(prompt"), or
+/// a path (`a::b`).
+fn shaped(word: &str) -> bool {
+    let chars: Vec<char> = word.chars().collect();
+    let inner_capital = chars
+        .windows(2)
+        .any(|p| p[0].is_lowercase() && p[1].is_uppercase());
+    let inner_underscore = chars
+        .windows(3)
+        .any(|w| w[1] == '_' && w[0].is_alphanumeric() && w[2].is_alphanumeric());
+    let call = word
+        .find('(')
+        .is_some_and(|i| word[..i].ends_with(|c: char| c.is_alphanumeric() || c == '_'));
+    inner_capital || inner_underscore || call || word.contains("::")
 }
 
 fn lines(span: &Span) -> String {
