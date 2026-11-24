@@ -36,7 +36,7 @@ from .extension_catalog_fixtures import CONTRIBUTIONS
 from .extension_catalog_fixtures import SOURCES as CATALOG_SOURCES
 from .feature_directory_fixtures import CONSOLE
 from .feature_directory_fixtures import SOURCES as FEATURE_SOURCES
-from .source_output_fixtures import FALLBACK_SOURCES, PORTAL, SOURCES
+from .source_output_fixtures import EXAMPLE_SOURCES, FALLBACK_SOURCES, PORTAL, SOURCES
 
 DASHBOARD = "dashboard"
 VITE_VERSION = "5.4.0"
@@ -377,7 +377,7 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
     _write(main / "docs/review-notes.md", REVIEW_NOTES)
     for relative, text in SOURCES.items():
         _write(main / relative, text)
-    for relative, text in {**FEATURE_SOURCES, **CATALOG_SOURCES, **FALLBACK_SOURCES}.items():
+    for relative, text in {**FEATURE_SOURCES, **CATALOG_SOURCES, **FALLBACK_SOURCES, **EXAMPLE_SOURCES}.items():
         _write(main / relative, text)
     _write(main / "scripts/check.sh", CHECK_SCRIPT, 0o755)
     _write(main / "scripts/release/deploy.sh", DEPLOY_SCRIPT, 0o755)

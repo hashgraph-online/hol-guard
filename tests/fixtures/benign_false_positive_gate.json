@@ -37490,6 +37490,48 @@
       "expect": "not_allow"
     },
     {
+      "id": "post-tool-source-read-doc-example-credential-word-value",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "sed -n 320,340p src/utils.ts"
+      },
+      "tool_response": {
+        "stdout": "export function withQuery(input: string, query: QueryObject) {\n  // ...\n}\n\n/**\n * Adds query parameters to a URL.\n *\n * @example\n * ```js\n * withQuery(\"/foo?page=a\", { token: \"secret\" }); // \"/foo?page=a&token=secret\"\n * ```\n */\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-post-tool-source-read-doc-example-credential-word-with-more-value",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "sed -n 320,340p src/utils.ts"
+      },
+      "tool_response": {
+        "stdout": " * withQuery(\"/foo\", { token: \"secret-Kx9-Hunter2-value\" });\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gauntlet-sed-credential-field-fallback-source",
       "fix_area": "secrets",
       "harnesses": [
