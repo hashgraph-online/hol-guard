@@ -508,6 +508,14 @@
   },
   {
    "verdict": "windows-unsupported",
+   "note": "The scratch-log check needs Unix owner, link-count and private temporary-directory facts, so off Unix no redirect is taken as a sink-written log and a trailing write outside the workspace keeps its existing review.",
+   "file": "rust/crates/guard-command/src/pretool/sink_peel_log.rs",
+   "item": "pub(in crate::pretool) fn log_target(_spelled: &str) -> Option<PathBuf>",
+   "cfg": "not(unix)",
+   "body": "7b56b4da1a36"
+  },
+  {
+   "verdict": "windows-unsupported",
    "note": "The nested mkdir carve-out walks Unix temporary roots and owner/mode bits, so off Unix `mkdir -p` with a missing parent keeps the existing single-level screen and its review.",
    "file": "rust/crates/guard-command/src/pretool/temporary_directories.rs",
    "item": "pub(super) fn nested_temporary_directory(_value: &str, _context: PathContext<'_>) -> bool",
@@ -1433,6 +1441,14 @@
    "item": "fn read_snapshot(_: &Path) -> Option<Vec<u8>>",
    "cfg": "not(any(unix, windows))",
    "body": "24533b1b187e"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Opening the scratch log safely needs O_NOFOLLOW and an owner and link-count check on the open file, so off Unix the sink writes no log; the command side never plans one there because its non-Unix log_target takes none.",
+   "file": "rust/crates/guard-runtime/src/contained_workspace_sink_output.rs",
+   "item": "pub(super) fn open_log(_path: &std::path::Path) -> Option<File>",
+   "cfg": "not(unix)",
+   "body": "e20b05d9b60f"
   },
   {
    "verdict": "posix-primitive",

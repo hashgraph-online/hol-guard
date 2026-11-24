@@ -145,10 +145,10 @@ pub(in crate::pretool) fn sink_writes(
     let Some(peeled) = plan.plan else {
         return false;
     };
-    if !peeled
+    if peeled
         .output
         .as_ref()
-        .is_some_and(|output| output.file.is_some())
+        .is_none_or(|output| output.file.is_none())
     {
         return false;
     }

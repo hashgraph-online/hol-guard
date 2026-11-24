@@ -331,10 +331,13 @@ fn contained_commands_with_an_output_redirect_keep_protected_execution() {
         "review"
     };
     // The sandbox cannot keep a write outside the workspace: Linux mounts a
-    // private /tmp and macOS refuses it. That redirect stays at review.
+    // private /tmp and macOS refuses it. A scratch log directly in the
+    // temporary directory is written by the sink itself, so it stays
+    // contained; any other file there stays at review.
     for (command, action) in [
         ("pnpm test > out.log", contained),
-        ("pnpm test > /tmp/guard-test.log 2>&1", "review"),
+        ("pnpm test > /tmp/guard-test.log 2>&1", contained),
+        ("pnpm test > /tmp/guard-test.json 2>&1", "review"),
     ] {
         let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
             "zcode",
