@@ -54,7 +54,7 @@ static IMPORT_STATEMENT: LazyLock<Regex> =
 /// Names the signal modules are reachable under: themselves and their
 /// `import ... as` aliases.
 fn signal_receivers(code: &str) -> BTreeSet<&str> {
-    let mut names = BTreeSet::from(["os", "signal", "_signal", "posix", "nt"]);
+    let mut names = BTreeSet::from(["os", "signal", "_signal", "posix", "nt", "_os"]);
     for statement in IMPORT_STATEMENT.captures_iter(code) {
         let body = statement.get(1).map_or("", |body| body.as_str());
         for item in body.split(',') {
