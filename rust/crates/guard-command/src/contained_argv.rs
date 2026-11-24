@@ -1174,6 +1174,26 @@ fn planned_route_argv(command: &[String]) -> Vec<String> {
     command.to_vec()
 }
 
+/// The word a `bunx` or `npx` call names its tool with, read behind the
+/// runner's own options: `--no-install`, and Bun's `--cwd <dir>` or
+/// `--cwd=<dir>`. The route and the sink peel the same options before they
+/// read the tool, so `bunx --cwd app tsc --noEmit` is the `tsc` run they admit
+/// and plan, and the kind has to name that tool too. The directory itself is
+/// not judged here; the tool planner reads it against the run's own directory
+/// and refuses one it does not accept.
+fn runner_tool_word<'a>(runner: &str, arguments: &'a [String]) -> Option<&'a str> {
+    let mut rest = arguments;
+    loop {
+        rest = match rest {
+            [flag, tail @ ..] if flag == "--no-install" => tail,
+            [flag, _, tail @ ..] if runner == "bunx" && flag == "--cwd" => tail,
+            [flag, tail @ ..] if runner == "bunx" && flag.starts_with("--cwd=") => tail,
+            [tool, ..] => return Some(tool),
+            [] => return None,
+        };
+    }
+}
+
 fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let inline = inline_eval(command)?;
     let name = basename(command);
@@ -1238,9 +1258,11 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
             name,
             "eslint" | "tsc" | "vite" | "prettier" | "bun" | "npm" | "pnpm" | "yarn"
         ) || (matches!(name, "bunx" | "npx")
-            && entries
+            && (entries
                 .clone()
-                .any(|v| matches!(v.as_str(), "eslint" | "tsc" | "vite" | "prettier")))
+                .any(|v| matches!(v.as_str(), "eslint" | "tsc" | "vite" | "prettier"))
+                || runner_tool_word(name, &command[1..])
+                    .is_some_and(|v| matches!(v, "eslint" | "tsc" | "vite" | "prettier"))))
             // The entry a `node` command names is read back to its tool
             // through the same table the route and the sink read, so a
             // spelling one of them admits cannot be a kind the others miss.
