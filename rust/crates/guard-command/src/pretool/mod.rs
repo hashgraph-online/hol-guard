@@ -288,6 +288,17 @@ pub(crate) mod search_scope_tracked;
 pub fn proven_tracked_dotenv_template(value: &str, cwd: Option<&str>) -> bool {
     search_scope_tracked::names::resolves_to_tracked_dotenv_template(value, cwd)
 }
+
+/// Whether `value`, a path as a hook payload spelled it, resolves to a
+/// committed document named for the key it describes, such as
+/// `private-key-jwt-client-auth.md`: the name the request wrote and the file
+/// it lands on clear every sensitive family but the key-name rule, and the
+/// repository's index lists the file with no secret in it. The policy floor
+/// reads this where its own name-only screen has no working directory to
+/// resolve against.
+pub fn proven_tracked_key_named_document(value: &str, cwd: Option<&str>) -> bool {
+    search_scope_tracked::names::resolves_to_tracked_key_named_document(value, cwd)
+}
 mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;

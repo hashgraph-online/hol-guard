@@ -206,6 +206,36 @@ pub(in crate::pretool) fn resolves_to_tracked_dotenv_template(
     std::fs::canonicalize(target).is_ok_and(|canonical| tracked_dotenv_template(&canonical, cwd))
 }
 
+/// Whether `value`, a path as a request spelled it, names a document whose
+/// only sensitive family is the key-name rule and resolves to one
+/// [`tracked_document`] proves.
+///
+/// The spelled path is screened as well as the file it resolves to, so a
+/// document parked in a key container, or a link named for a key file that
+/// points at a committed page, keeps its review. A relative request is
+/// screened where it lands, so the directories above a bare name requested
+/// from inside a credential store keep their family.
+pub(in crate::pretool) fn resolves_to_tracked_key_named_document(
+    value: &str,
+    cwd: Option<&str>,
+) -> bool {
+    let supplied = Path::new(value);
+    let target = match cwd {
+        _ if supplied.is_absolute() => supplied.to_path_buf(),
+        Some(cwd) => Path::new(cwd).join(supplied),
+        None => return false,
+    };
+    guard_secure_fs::sensitive_path_family_beside_name_proof(supplied).is_none()
+        && target
+            .parent()
+            .is_none_or(|parent| guard_secure_fs::sensitive_path_family(parent).is_none())
+        && supplied
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(guard_secure_fs::wallet_key_named)
+        && resolves_to_tracked(value, cwd)
+}
+
 /// Whether `value`, a path as a command or tool spelled it, resolves to a
 /// document [`tracked_document`] proves.
 pub(in crate::pretool) fn resolves_to_tracked(value: &str, cwd: Option<&str>) -> bool {
