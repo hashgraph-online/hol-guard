@@ -13,24 +13,61 @@
 //! long line of paths is read again once per path, not once per path for
 //! every path after it.
 
-/// How much of the rest of the line the second read sees: enough for any
-/// value assigned to the path.
+/// How much of the rest of the line the second read sees. A cut inside a
+/// quoted value keeps the match flagged instead.
 const MAX_REREAD_BYTES: usize = 512;
 
 /// Whether the first separator in a credential assignment match is a `::`
-/// path separator, and the path read as one name (`Secret_TOKEN`) with
-/// `rest_of_line` holds no credential assignment by `flagged`.
+/// path separator followed by a name, and the path read as one name
+/// (`Secret_TOKEN`) with `rest_of_line` holds no credential assignment by
+/// `flagged`. A value written straight after `::` (`token::Kq7x...`) is not
+/// a name, so it stays flagged.
 pub(crate) fn is_path_segment(
     matched: &str,
     rest_of_line: &str,
     flagged: impl Fn(&str) -> bool,
 ) -> bool {
+    let start = line_start(rest_of_line);
+    let cut_in_quote = start.len() < rest_of_line.len()
+        && ['"', '\'']
+            .iter()
+            .any(|quote| start.matches(*quote).count() % 2 == 1);
     matched
         .find([':', '='])
         .filter(|&index| matched[index..].starts_with("::"))
-        .is_some_and(|_| {
-            !flagged(&format!("{matched}{}", line_start(rest_of_line)).replace("::", "_"))
-        })
+        .filter(|&index| name_segment(&matched[index + 2..]))
+        .is_some_and(|_| !cut_in_quote && !flagged(&format!("{matched}{start}").replace("::", "_")))
+}
+
+/// Whether the path segment `text` starts with reads as a name: words of
+/// letters, each optionally ending in digits (`Claims`, `finds_keys`,
+/// `Sha256Hasher`, `v2`), not a run that mixes them (`Kq7xY2mN9pL4`).
+fn name_segment(text: &str) -> bool {
+    let segment: Vec<char> = text
+        .chars()
+        .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+        .collect();
+    let mut after_digit = false;
+    for (index, character) in segment.iter().enumerate() {
+        let previous = index.checked_sub(1).map(|at| segment[at]);
+        let next_lower = segment.get(index + 1).is_some_and(char::is_ascii_lowercase);
+        let word_start = match previous {
+            None | Some('_') => true,
+            Some(before) if character.is_ascii_uppercase() => {
+                before.is_ascii_lowercase() || (before.is_ascii_digit() && next_lower)
+            }
+            Some(_) => false,
+        };
+        if word_start {
+            after_digit = false;
+        }
+        if character.is_ascii_digit() {
+            after_digit = true;
+        } else if after_digit && *character != '_' {
+            return false;
+        }
+    }
+    !segment.is_empty()
 }
 
 /// The first `MAX_REREAD_BYTES` of `rest`, cut at a character boundary.
@@ -44,7 +81,7 @@ fn line_start(rest: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_path_segment, line_start, MAX_REREAD_BYTES};
+    use super::{is_path_segment, line_start, name_segment, MAX_REREAD_BYTES};
     use crate::scan_text;
     use guard_rules::MAX_SCAN_BYTES;
 
@@ -102,6 +139,31 @@ mod tests {
         let short = "x".repeat(MAX_REREAD_BYTES - 1);
         assert_eq!(line_start(&format!("{short}é")), short);
         assert_eq!(line_start(&format!("{short}xé")).len(), MAX_REREAD_BYTES);
+    }
+
+    #[test]
+    fn a_value_after_a_path_separator_stays_flagged() {
+        let long = format!("Secret::JWT_TOKEN = \"{}\"\n", SAMPLE.repeat(60));
+        assert!(credential_assignment(&long));
+        assert!(credential_assignment(&format!("token::{SAMPLE}\n")));
+        assert!(!is_path_segment(
+            &format!("token::{SAMPLE}"),
+            "",
+            |_: &str| false
+        ));
+        for name in [
+            "Claims",
+            "finds_keys",
+            "Sha256Hasher",
+            "v2",
+            "HTTP2Client",
+            "u8",
+        ] {
+            assert!(name_segment(name), "{name}");
+        }
+        for value in [SAMPLE, "A1B2C3D4E5F6", "a1b2c3d4e5f6"] {
+            assert!(!name_segment(value), "{value}");
+        }
     }
 
     #[test]

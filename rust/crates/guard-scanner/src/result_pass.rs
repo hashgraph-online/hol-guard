@@ -35,8 +35,11 @@ const RESULT_VALUES: [&str; 18] = [
     "skip", "skipped", "pending", "none", "null", "nil", "n/a",
 ];
 
-/// Longest number read as a count, score or ratio.
+/// Longest number read as a count, score or ratio (`97.5%`, `120/128`).
 const MAX_NUMBER_CHARS: usize = 12;
+/// Longest bare digit run read as a count; longer, it may be a PIN or
+/// numeric password.
+const MAX_COUNT_DIGITS: usize = 6;
 
 /// Whether a credential assignment match names a test result: its key ends in
 /// `_pass` or `-pass` after a result word, holds no other credential word, and
@@ -63,18 +66,25 @@ pub(crate) fn is_result_pass(matched: &str) -> bool {
 }
 
 /// Whether an assigned value reads as a test result rather than a password.
+/// An opening `{` or `[` counts only with nothing or a result after it, so
+/// `[Kq7x...]` stays a password.
 fn result_value(value: &str) -> bool {
     let value = value
         .trim()
         .trim_matches(['"', '\''])
-        .trim_end_matches([',', ';', ')'])
+        .trim_end_matches([',', ';', ')', ']', '}'])
         .to_ascii_lowercase();
+    if let Some(inner) = value.strip_prefix(['{', '[']) {
+        return inner.is_empty() || result_value(inner);
+    }
+    let digits = value.chars().filter(char::is_ascii_digit).count();
     let number = value.chars().count() <= MAX_NUMBER_CHARS
-        && value.chars().any(|character| character.is_ascii_digit())
+        && digits > 0
+        && (digits < value.len() || digits <= MAX_COUNT_DIGITS)
         && value
             .chars()
             .all(|character| character.is_ascii_digit() || matches!(character, '.' | '%' | '/'));
-    value.starts_with(['{', '[']) || number || RESULT_VALUES.contains(&value.as_str())
+    number || RESULT_VALUES.contains(&value.as_str())
 }
 
 #[cfg(test)]
@@ -136,5 +146,9 @@ mod tests {
         assert!(!is_result_pass("test_pass=x"));
         assert!(is_result_pass("test_pass=97.5%"));
         assert!(is_result_pass("CHECKS_PASS=3/4"));
+        assert!(is_result_pass("all_pass=[true"));
+        assert!(is_result_pass("test_pass=128"));
+        assert!(!is_result_pass("ALL_PASS=123456789012"));
+        assert!(!is_result_pass(&format!("test_pass=[{SAMPLE}]")));
     }
 }
