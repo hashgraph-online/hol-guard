@@ -2,6 +2,10 @@
 //! shell, and whether any of them signals processes, writes Git
 //! configuration or lists the root directory.
 
+use std::sync::LazyLock;
+
+use regex::Regex;
+
 /// Commands that list, copy or enter what a root-directory operand names.
 const ROOT_COMMANDS: &[&str] = &[
     "ls", "find", "du", "tree", "grep", "rg", "cat", "rm", "cp", "mv", "chmod", "chown", "tar",
@@ -178,4 +182,27 @@ pub(super) fn command_reaches(command: &str) -> bool {
                     && !git_config_reads(rest()))
                 || (ROOT_COMMANDS.contains(&name) && rest().any(|word| word == "/"))
         })
+}
+
+/// The rest of an argument list for `git ... config`.
+static GIT_CONFIG_LIST: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(concat!(
+        r#"["']git["']\s*,\s*(?:["'][^"'\n]*["']\s*,\s*)*?["']config["']"#,
+        r#"((?:\s*,\s*["'][^"'\n]*["'])*)"#,
+    ))
+    .unwrap()
+});
+
+static QUOTED_WORD: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"["']([^"'\n]*)["']"#).unwrap());
+
+/// Whether a Python argument list runs `git config` with words that write.
+pub(super) fn git_config_list_writes(code: &str) -> bool {
+    GIT_CONFIG_LIST.captures_iter(code).any(|captures| {
+        let words: Vec<&str> = QUOTED_WORD
+            .captures_iter(&captures[1])
+            .filter_map(|word| word.get(1).map(|word| word.as_str()))
+            .collect();
+        !git_config_reads(words)
+    })
 }

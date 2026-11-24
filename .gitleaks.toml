@@ -53,6 +53,15 @@ regexes = [
 ]
 
 [[rules.allowlists]]
+description = "Synthetic password literal in the benign-gate negative case for test-result field names, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/benign_false_positive_gate\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"stdout":\ "DB_(?:TEST_)?PASS=Kq7xY2mN9pL4vR8tW3sZ\\n",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
 description = "CIGAR verification manifests record SHA-256 source digests, not credentials"
 condition = "AND"
 regexTarget = "line"

@@ -14,7 +14,9 @@ with synthetic names; none holds a credential, a key or a real value.
 * a Python link helper that copies credential fields with a fallback
   (``password=dest.password or self.password)``) and tests them in block
   headers (``if self.password:``);
-* a URL helper whose doc comment shows a call with ``{ token: "secret" }``.
+* a URL helper whose doc comment shows a call with ``{ token: "secret" }``;
+* a release script that fills token variables from local tools
+  (``GH_TOKEN=$(gh auth token)``) and sets a git credential helper that way.
 """
 
 from __future__ import annotations
@@ -155,3 +157,19 @@ export function withQuery(input: string, query: QueryObject): string {
 }
 """
 EXAMPLE_SOURCES = {EXAMPLE_PATH: EXAMPLE_SOURCE}
+
+SCRIPT_PATH = f"{PORTAL}/scripts/open-release-pr.sh"
+SCRIPT_SOURCE = """\
+#!/usr/bin/env bash
+# Opens the weekly release pull request with tokens read from local tools.
+set -euo pipefail
+
+export GH_TOKEN=$(gh auth token)
+REGISTRY_TOKEN="$(op read op://release/registry/token)"
+SIGNING_KEY=$(security find-generic-password -s release-signing -w)
+export REGISTRY_TOKEN SIGNING_KEY
+
+git -c "credential.helper=!f() { echo username=release-bot; echo password=\\$(gh auth token); }; f" push origin HEAD
+gh pr create --fill --base main
+"""
+SCRIPT_SOURCES = {SCRIPT_PATH: SCRIPT_SOURCE}

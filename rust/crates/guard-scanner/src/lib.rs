@@ -10,14 +10,17 @@ mod code_cursor;
 mod code_expression;
 mod code_shapes;
 mod code_value;
+mod command_value;
 mod continuation;
 mod field_copy;
 mod guard_link;
 mod masked_value;
 mod match_spans;
+mod path_segment;
 mod payment_key;
 mod prose_answer_value;
 mod reference_value;
+mod result_pass;
 mod self_named_value;
 mod url_credential;
 mod wiped_read;
@@ -313,11 +316,20 @@ fn next_line_flagged(
         return false;
     }
     let line = format!("{}{}", swallowed.trim_start(), rest_of_line);
+    assignment_flagged(&line, suppress_samples, documentation_sample_context)
+}
+
+/// Whether `line` holds a credential assignment that is not a sample.
+fn assignment_flagged(
+    line: &str,
+    suppress_samples: bool,
+    documentation_sample_context: bool,
+) -> bool {
     PATTERNS
         .iter()
         .position(|def| def.classifier == "credential-assignment")
         .is_some_and(|rule| {
-            counted_matches(rule, &line, suppress_samples, documentation_sample_context)
+            counted_matches(rule, line, suppress_samples, documentation_sample_context)
                 .next()
                 .is_some()
         })
@@ -362,10 +374,15 @@ fn is_sample(
             || guard_link::is_guard_link(matched, preceding)
             || code_value::is_block_header(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
+            || result_pass::is_result_pass(matched)
+            || path_segment::is_path_segment(matched, rest_of_line, |line| {
+                assignment_flagged(line, suppress_samples, documentation_sample_context)
+            })
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
             || reference_value::is_reference(matched, preceding, rest_of_line)
+            || command_value::is_command_substitution(matched, rest_of_line)
             || code_value::is_code_value(matched, rest_of_line)
             || code_expression::is_code_expression(matched, rest_of_line))
     {

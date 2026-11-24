@@ -293,9 +293,9 @@ fn a_long_class_is_listed_by_its_members() {
     assert!(text.len() <= MAX_MAP_CHARS, "{}", text.len());
 }
 
-/// A plain word in many of the project's code files places nothing, even
-/// where a file defines it; a rarer one that a file defines is listed like a
-/// name.
+/// A plain word in many of the project's code files places no uses, only the
+/// outline of a file named for it (see `pick`); a rarer one that a file
+/// defines is listed like a name.
 #[test]
 fn a_common_plain_word_places_nothing() {
     let uses = "def read():\n    token = 1\n    return token\n";
@@ -307,7 +307,7 @@ fn a_common_plain_word_places_nothing() {
     let text = map(&list, &rare, &Asked::default(), later()).unwrap().text;
     assert!(text.contains("src/token.py:1-2 class Token:"), "{text}");
     let common = looking_for(&[("token", false, MAX_PLAIN_FILES + 1)]);
-    assert!(map(&list, &common, &Asked::default(), later()).is_none());
+    assert!(map(&list, &common, &Asked::default(), later()).is_some());
     let named = looking_for(&[("token", true, 50)]);
     assert!(map(&list, &named, &Asked::default(), later()).is_some());
     // A name as common as a package's own is still listed where it is
