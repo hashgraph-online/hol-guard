@@ -148,11 +148,33 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                     if inner.trim() != substitution.body {
                         return None;
                     }
-                    (
-                        stand_in(&substitution.body)?.to_owned(),
-                        substitution.body.clone(),
-                        false,
-                    )
+                    let value = match stand_in(&substitution.body) {
+                        // A lookup can print nothing; only a Git command reads
+                        // a missing revision as the same kind of operation.
+                        Some(value)
+                            if (value != git_value::COMMIT_VALUE
+                                || (git_value::in_git_command(
+                                    &masked,
+                                    &substitutions,
+                                    substitution.start,
+                                ) && git_value::standalone(&masked, substitution)))
+                                && (value != line_number::LINE_VALUE
+                                    || line_number::opens_sed_range(
+                                        &masked,
+                                        &substitutions,
+                                        substitution,
+                                    )) =>
+                        {
+                            value
+                        }
+                        // A value that is only printed needs no stand-in of its
+                        // own shape (`display`).
+                        _ if display::display_slot(&masked, &substitutions, substitution) => {
+                            display::DISPLAY_VALUE
+                        }
+                        _ => return None,
+                    };
+                    (value.to_owned(), substitution.body.clone(), false)
                 }
             };
         // A lookup can print nothing; only a Git command reads a missing
@@ -498,6 +520,9 @@ fn date_arguments(arguments: &[&str]) -> bool {
 
 #[path = "chain_literals_commit_message.rs"]
 mod commit_message;
+
+#[path = "chain_literals_display.rs"]
+mod display;
 
 #[path = "chain_literals_git_value.rs"]
 mod git_value;
