@@ -36,7 +36,12 @@
 //!   written after the slot still runs before it on the next pass, so the
 //!   whole command is read for steering rather than the text ahead;
 //! - the print adds no text of its own (`printf '%s' "$(cat f)"`), so the
-//!   wrapper does nothing but put a second layer around the read.
+//!   wrapper does nothing but put a second layer around the read;
+//! - a `#` starts a word anywhere in the command, since a comment hides its
+//!   quotes from the shell and this scan would read them as live;
+//! - a `for` or `select` binds a name the shell reads for itself (`PATH`,
+//!   `HOME`, zsh's tied `path`), which changes what the inner command runs
+//!   or opens.
 
 use crate::shell_structure::ShellCommandSubstitution;
 
@@ -73,7 +78,7 @@ pub(super) fn display_slot(
     {
         return false;
     }
-    if dollar_quoted(chars, spans) {
+    if dollar_quoted(chars, spans) || commented(chars, spans) {
         return false;
     }
     let (mut single, mut double, mut escaped) = (false, false, false);
@@ -339,9 +344,40 @@ fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bo
             .split_ascii_whitespace()
             .any(|entry| entry == word)
     }) || words
-        .iter()
-        .position(|word| word == "printf")
-        .is_some_and(|at| words[at + 1..].iter().any(|word| word.starts_with("-v")))
+        .windows(2)
+        .any(|pair| matches!(pair[0].as_str(), "for" | "select") && !loop_name(&pair[1]))
+        || words
+            .iter()
+            .position(|word| word == "printf")
+            .is_some_and(|at| words[at + 1..].iter().any(|word| word.starts_with("-v")))
+}
+
+/// Whether `name`, bound by `for` or `select`, is a plain variable the shell
+/// does not read for itself: lowercase, and none of zsh's lowercase names
+/// tied to a search path.
+fn loop_name(name: &str) -> bool {
+    let mut characters = name.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_lowercase() || first == '_')
+        && characters.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && !TIED_NAMES.split_ascii_whitespace().any(|tied| tied == name)
+}
+
+/// zsh's lowercase arrays tied to the variables it reads for itself.
+const TIED_NAMES: &str = "cdpath fignore fpath mailpath manpath module_path path psvar";
+
+/// Whether a `#` starts a word anywhere in the command. Outside quotes it
+/// opens a comment, whose quotes the shell ignores but a character walk would
+/// count; inside quotes it only refuses the slot.
+fn commented(chars: &[char], spans: &[ShellCommandSubstitution]) -> bool {
+    chars.iter().enumerate().any(|(at, &character)| {
+        character == '#'
+            && !spans.iter().any(|span| span.start <= at && at < span.end)
+            && at.checked_sub(1).is_none_or(|before| {
+                chars[before].is_ascii_whitespace() || ";&|()".contains(chars[before])
+            })
+    })
 }
 
 /// Whether `word` so far is `NAME=`, the start of an assignment.

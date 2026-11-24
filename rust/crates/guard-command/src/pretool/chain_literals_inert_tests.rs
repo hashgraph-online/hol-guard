@@ -513,6 +513,15 @@ fn a_slot_this_scan_cannot_place_stays_opaque() {
         // `>&` and `>|` are redirections, not separators.
         "ls >| out; echo \"name: $(cat y)\"",
         "ls >&2; echo \"name: $(cat y)\"",
+        // A comment hides its quotes from the shell, so a `cd` after a quote
+        // in a comment still runs.
+        "echo a # '\ncd ~/.ssh\necho \"it's\"\" $(cat id_rsa)\"",
+        "echo a #'\ncd ~/.ssh\necho \"it's\"\" $(cat id_rsa)\"",
+        // A loop that binds a name the shell reads for itself.
+        "for PATH in bin; do echo \"v: $(cat README.md)\"; done",
+        "for HOME in ~/.aws; do echo \"k: $(cat ~/config)\"; done",
+        "select HOME in ~/.aws; do echo \"k: $(cat ~/config)\"; done",
+        "for path in bin; do echo \"v: $(cat README.md)\"; done",
     ] {
         assert_eq!(projected(command), None, "{command}");
     }
