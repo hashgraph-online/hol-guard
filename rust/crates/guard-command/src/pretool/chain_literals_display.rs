@@ -51,12 +51,13 @@ pub(super) const DISPLAY_VALUE: &str = "hol-guard-substituted-output";
 
 const MAX_BODY_CHARS: usize = 256;
 
+/// Keywords that open a body the shell runs more than once; zsh adds
+/// `repeat` and `foreach`.
+const LOOP_WORDS: &str = "for foreach repeat select until while";
+
 /// Words that change, for the rest of the chain, the directory, the
 /// variables or the meaning of a command name.
-/// Keywords that open a body the shell runs more than once.
-const LOOP_WORDS: &str = "for while until select";
-
-const STEERING_WORDS: &str = ". alias builtin cd command declare enable eval exec export \
+const STEERING_WORDS: &str = ". alias builtin cd chdir command declare enable eval exec export \
     function getopts hash let local mapfile popd pushd read readarray readonly set \
     setopt shopt source trap typeset unalias unset";
 
@@ -375,10 +376,25 @@ fn steered(chars: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bo
                 .iter()
                 .take_while(|name| !matches!(name.as_str(), "in" | "do"))
                 .any(|name| !loop_name(name))
-    }) || words
-        .iter()
-        .position(|word| word == "printf")
-        .is_some_and(|at| words[at + 1..].iter().any(|word| word.starts_with("-v")))
+    }) || words.iter().enumerate().any(|(at, word)| {
+        // `printf -v` and zsh's `print -v` write a variable.
+        matches!(word.as_str(), "printf" | "print")
+            && words[at + 1..].iter().any(|word| word.starts_with("-v"))
+    }) || expansion_assigns(&chars[..end.min(chars.len())])
+}
+
+/// Whether `chars` holds `${NAME=...}`, `${NAME:=...}` or an arithmetic
+/// `((...))`/`$((...))` with an `=`, each of which can assign a variable
+/// without a word the scan reads as an assignment.
+fn expansion_assigns(chars: &[char]) -> bool {
+    let text: String = chars.iter().collect();
+    let assigns = |open: &str, close: char| {
+        text.match_indices(open).any(|(at, _)| {
+            let body = &text[at + open.len()..];
+            body[..body.find(close).unwrap_or(body.len())].contains('=')
+        })
+    };
+    assigns("${", '}') || assigns("((", ')')
 }
 
 /// Whether `name`, bound by `for` or `select`, is a plain variable the shell
@@ -413,6 +429,13 @@ fn commented(chars: &[char], spans: &[ShellCommandSubstitution]) -> bool {
 fn assignment_head(word: &str) -> bool {
     let Some(name) = word.strip_suffix('=') else {
         return false;
+    };
+    // `NAME+=` appends and `NAME[index]=` sets an element; both assign NAME.
+    let name = name.strip_suffix('+').unwrap_or(name);
+    let name = match name.split_once('[') {
+        Some((name, subscript)) if subscript.ends_with(']') => name,
+        Some(_) => return false,
+        None => name,
     };
     let mut characters = name.chars();
     characters

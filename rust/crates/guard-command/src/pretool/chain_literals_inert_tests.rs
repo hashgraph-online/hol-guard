@@ -389,6 +389,11 @@ fn printed_values_take_the_display_stand_in() {
             format!("echo \"commit: {v}\""),
         ),
         (
+            // So is a line-number lookup outside a `sed` range.
+            "echo \"line: $(grep -n foo f | cut -d: -f1)\"".to_owned(),
+            format!("echo \"line: {v}\""),
+        ),
+        (
             "printf 'version %s\\n' \"$(cat VERSION)\"".to_owned(),
             format!("printf 'version %s\\n' \"{v}\""),
         ),
@@ -451,6 +456,16 @@ fn values_used_as_more_than_output_stay_opaque() {
         "readarray HOME; echo \"label: $(cat marker)\"",
         "getopts a opt; echo \"label: $(cat marker)\"",
         "let HOME=1; echo \"label: $(cat marker)\"",
+        // zsh's `chdir` and `print -v`, appends, subscripts and expansions
+        // that assign also change what the read sees.
+        "chdir ~/.ssh; echo \"key: $(cat id_rsa)\"",
+        "print -v PATH /tmp/inert; echo \"label: $(cat marker)\"",
+        "HOME+=/x; echo \"key: $(cat ~/id_rsa)\"",
+        "PATH+=:/tmp/inert; echo \"label: $(cat marker)\"",
+        "HOME[0]=/etc; echo \"key: $(cat ~/passwd)\"",
+        "echo \"${PATH:=/tmp/inert}\"; echo \"label: $(cat marker)\"",
+        ": ${HOME=/etc}; echo \"key: $(cat ~/passwd)\"",
+        ": $((HOME=1)); echo \"label: $(cat marker)\"",
         "trap 'HOME=/tmp/inert' DEBUG; echo \"label: $(cat ~/marker)\"",
         "cd ~/.ssh && echo \"$(cat id_rsa)\"",
         "pushd ~/.ssh; echo \"$(cat id_rsa)\"",
@@ -502,6 +517,9 @@ fn a_slot_this_scan_cannot_place_stays_opaque() {
         "for i in 1 2; do echo \"key: $(cat id_rsa)\"; cd ~/.ssh; done",
         "while echo \"key: $(cat id_rsa)\"; cd ~/.ssh; do :; done",
         "until false; do echo \"key: $(cat id_rsa)\"; cd ~/.ssh; done",
+        "repeat 2; do echo \"key: $(cat id_rsa)\"; cd ~/.ssh; done",
+        "repeat 2 do\necho \"key: $(cat id_rsa)\"\ncd ~/.ssh\ndone",
+        "foreach i (1 2); echo \"key: $(cat id_rsa)\"; cd ~/.ssh; end",
         // `$'...'` and `$"..."` carry the shell's own escape rules, so the
         // quoting ahead of the slot is not what a character walk reads.
         "rm $'\\'; echo \"' $(cat x) \"\"",
