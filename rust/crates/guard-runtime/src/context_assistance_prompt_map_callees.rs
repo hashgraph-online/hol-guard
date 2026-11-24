@@ -38,44 +38,52 @@ pub(in super::super) fn callees(
         .take(MAX_CALLERS)
         .collect();
     let first = callers.first()?;
-    let own: Vec<&str> = (callers.iter())
-        .filter_map(|(file, at)| file.sections[*at].name.as_deref())
-        .collect();
     let mut names: Vec<(Option<(&File, usize)>, &str)> = Vec::new();
     for &(file, at) in &callers {
         let section = &file.sections[at];
         let body = file
             .lines
             .get(section.start.checked_sub(1)?..section.end.min(file.lines.len()))?;
+        let python = file.path.ends_with(".py");
         for line in body {
-            for (through, name) in called(line) {
-                let own_name = own.contains(&&*stored(name));
-                let seen = names.iter().any(|(_, seen)| *seen == name);
-                if name.len() < MIN_NAME_CHARS || own_name || seen {
+            for (through, name) in called(line, python) {
+                // Its own name is a recursive call; another caller's name is
+                // a helper, left out below once it is found to be shown.
+                let own_name = section.name.as_deref() == Some(&*stored(name));
+                if name.len() < MIN_NAME_CHARS || own_name {
                     continue;
                 }
                 let sibling = match through {
-                    None => false,
-                    Some(word) if OWN_RECEIVERS.contains(&word) => true,
+                    None => None,
+                    Some(word) if OWN_RECEIVERS.contains(&word) => Some((file, at)),
                     Some(_) => continue,
                 };
-                names.push((sibling.then_some((file, at)), name));
+                let same = |seen: &Option<(&File, usize)>| match (seen, sibling) {
+                    (None, None) => true,
+                    (Some((a, x)), Some((b, y))) => a.path == b.path && *x == y,
+                    _ => false,
+                };
+                if !(names.iter()).any(|(seen, called)| *called == name && same(seen)) {
+                    names.push((sibling, name));
+                }
             }
         }
     }
     let mut lines = Vec::new();
     let mut spans = Vec::new();
+    let mut listed: Vec<(&str, usize)> = Vec::new();
     let mut room = MAX_CALLEE_CODE_CHARS;
     for (sibling, name) in names {
         let Some((file, at)) = defined_once(files, name, sibling) else {
             continue;
         };
-        if chosen
-            .iter()
-            .any(|pick| files[pick.file].path == file.path && pick.at == at)
-        {
+        let place = (file.path, at);
+        let picked =
+            (chosen.iter()).any(|pick| files[pick.file].path == file.path && pick.at == at);
+        if picked || listed.contains(&place) {
             continue;
         }
+        listed.push(place);
         let section = &file.sections[at];
         let opening: String = file.opening(at).chars().take(MAX_LINE_CHARS).collect();
         let mut line = format!("{}:{}-{} {opening}", file.path, section.start, section.end);
@@ -110,9 +118,15 @@ pub(in super::super) fn callees(
 /// The names on `line` written right before an opening parenthesis, in
 /// order, each with the word it is called through: `withBase(` (none),
 /// `self.parse(` (`self`), `Self::new(` (`Self`). A call through anything
-/// else, such as `(a).b(`, comes with an empty word.
-fn called(line: &str) -> Vec<(Option<&str>, &str)> {
+/// else, such as `(a).b(`, comes with an empty word. A comment, `//` or a
+/// Python `#` outside quotes, holds no calls.
+fn called(line: &str, python: bool) -> Vec<(Option<&str>, &str)> {
     let code = line.split("//").next().unwrap_or(line);
+    let code = if python {
+        &code[..hash_comment(code)]
+    } else {
+        code
+    };
     let word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
     let bytes = code.as_bytes();
     let mut names = Vec::new();
@@ -138,6 +152,25 @@ fn called(line: &str) -> Vec<(Option<&str>, &str)> {
         names.push((through, &code[from..end]));
     }
     names
+}
+
+/// Where a Python `#` comment starts on `code`, outside quoted text; its
+/// length when there is none.
+fn hash_comment(code: &str) -> usize {
+    let mut quote = None;
+    let mut escaped = false;
+    for (at, c) in code.char_indices() {
+        match quote {
+            Some(_) if escaped => escaped = false,
+            Some(_) if c == '\\' => escaped = true,
+            Some(open) if c == open => quote = None,
+            Some(_) => {}
+            None if c == '"' || c == '\'' => quote = Some(c),
+            None if c == '#' => return at,
+            None => {}
+        }
+    }
+    code.len()
 }
 
 /// The one function named `name` outside tests, if the files read define

@@ -168,3 +168,81 @@ def _encode(text):
     );
     assert!(text.contains("return text.encode('utf-8')"), "{text}");
 }
+
+/// A method and a module function can share a name; a caller using both,
+/// `self._expired(key)` and `_expired(entry)`, gets both.
+#[test]
+fn a_method_and_a_function_of_one_name_are_both_listed() {
+    let source = "def _expired(entry):
+    return entry.age > 10
+
+
+class Cache:
+    def get(self, key):
+        entry = self.items[key]
+        if self._expired(key) or _expired(entry):
+            return None
+        return entry
+
+    def _expired(self, key):
+        return key in self.stale
+";
+    let (home, _project, root) = project(ON, &[("pkg/cache.py", source)]);
+    let text = prompt_map(home.path(), &root, "Cache.get should count misses").unwrap();
+    assert!(text.contains("return key in self.stale"), "{text}");
+    assert!(text.contains("return entry.age > 10"), "{text}");
+}
+
+/// A call in a Python comment is not made; a `#` in quotes starts none.
+#[test]
+fn a_call_in_a_python_comment_is_not_listed() {
+    let source = "def open_workspace(env):
+    # was: legacy_open(env)
+    return make_session(\"#1\", env)
+
+
+def legacy_open(env):
+    return env.legacy()
+
+
+def make_session(tag, env):
+    return env.open(tag)
+";
+    let (home, _project, root) = project(ON, &[("pkg/app.py", source)]);
+    let text = prompt_map(home.path(), &root, "Add a doctest to open_workspace").unwrap();
+    assert!(text.contains("return env.open(tag)"), "{text}");
+    assert!(!text.contains("env.legacy()"), "{text}");
+}
+
+/// A helper is left out for being another caller only when it is that
+/// caller: `Cache.get` calls its own `load`, not `Store.load`.
+#[test]
+fn a_helper_named_like_another_caller_is_listed() {
+    let source = "class Store:
+    def load(self, key):
+        return self.rows.get(key)
+
+
+class Cache:
+    def get(self, key):
+        return self.load(key) or self.miss(key)
+
+    def load(self, key):
+        return self.items.get(key)
+
+    def miss(self, key):
+        return None
+";
+    let (home, _project, root) = project(ON, &[("pkg/cache.py", source)]);
+    let text = prompt_map(
+        home.path(),
+        &root,
+        "Cache.get and Store.load should log misses",
+    )
+    .unwrap();
+    let block = text
+        .split("Project functions get calls:")
+        .nth(1)
+        .unwrap_or_default();
+    assert!(block.contains("pkg/cache.py:10-11"), "{text}");
+}
