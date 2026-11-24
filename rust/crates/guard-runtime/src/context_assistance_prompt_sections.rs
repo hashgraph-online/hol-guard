@@ -1,7 +1,7 @@
 //! The sections of a project file the prompt map places code in: each
 //! definition in a code file, and each headed section of a prose file.
 use crate::context_assistance_engine::{definition, opened, prose};
-use crate::context_assistance_prompt_words::term_form;
+use crate::context_assistance_prompt_words::{term_form, test_file};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -17,9 +17,13 @@ pub(super) fn sections(path: &str, lines: &[&str]) -> Vec<Section> {
     if headed(path) {
         headed_sections(lines)
     } else {
-        code_sections(lines, path.ends_with(".rs"))
+        let calls = test_file(path) && SCRIPTS.iter().any(|end| path.ends_with(end));
+        code_sections(lines, path.ends_with(".rs"), calls)
     }
 }
+
+/// Files whose tests are calls, `it("...", () => {...})`, not definitions.
+const SCRIPTS: [&str; 8] = [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"];
 
 /// Whether `path` is a prose file, split by headings, not definitions.
 pub(super) fn headed(path: &str) -> bool {
@@ -29,15 +33,16 @@ pub(super) fn headed(path: &str) -> bool {
 /// Each definition in a code file, from its decorators to the last line
 /// indented under it or the brace that closes it. Lines inside a docstring
 /// or block comment open nothing. In Rust, `rust`, a `'` is a lifetime
-/// unless it opens a character literal.
-fn code_sections(lines: &[&str], rust: bool) -> Vec<Section> {
+/// unless it opens a character literal. In a JavaScript or TypeScript test
+/// file, `calls`, each `describe`, `it` and `test` call opens one too.
+fn code_sections(lines: &[&str], rust: bool, calls: bool) -> Vec<Section> {
     let mut sections = Vec::new();
     let mut closer: Option<&str> = None;
     for (index, line) in lines.iter().enumerate() {
         closer = match closer {
             Some(mark) => (!line.contains(mark)).then_some(mark),
             None => {
-                if definition(line) {
+                if definition(line) || (calls && test_call(line).is_some()) {
                     let mut start = index;
                     while start > 0 && decorates(lines[start - 1]) {
                         start -= 1;
@@ -181,6 +186,62 @@ pub(super) fn written_name(line: &str) -> Option<String> {
         .take_while(|c| c.is_alphanumeric() || *c == '_')
         .collect();
     (!name.is_empty()).then_some(name)
+}
+
+/// The test function a line calls, as `it` in `it("adds", () => {` or
+/// `test.each([...])(...)`, with `describe` and `suite` for the groups.
+pub(super) fn test_call(line: &str) -> Option<&'static str> {
+    let text = line.trim_start();
+    let called = ["describe", "suite", "it", "test"]
+        .into_iter()
+        .find(|name| text.starts_with(name))?;
+    let mut rest = &text[called.len()..];
+    // `.only`, `.skip`, `.each`, `.concurrent` and the like.
+    while let Some(after) = rest.strip_prefix('.') {
+        let word = after
+            .find(|c: char| !c.is_alphanumeric())
+            .unwrap_or(after.len());
+        if word == 0 {
+            return None;
+        }
+        rest = &after[word..];
+    }
+    rest.starts_with(['(', '`']).then_some(called)
+}
+
+/// Whether a section opening is a test by its name, `def test_parse` or
+/// `func TestParse`, or by the call it makes, `it("parses", ...)`.
+pub(super) fn named_test(opening: &str) -> bool {
+    matches!(test_call(opening), Some("it" | "test"))
+        || written_name(opening).is_some_and(|name| name.to_lowercase().starts_with("test"))
+}
+
+/// A test's name as its runner reports it: a test call's quoted text or the
+/// value it passes first, `test "adds a slash"` or `it name`, or the name a
+/// definition gives.
+pub(super) fn test_name(opening: &str) -> Option<String> {
+    test_label(opening).or_else(|| written_name(opening))
+}
+
+fn test_label(line: &str) -> Option<String> {
+    let called = test_call(line)?;
+    let (_, args) = line.split_once('(')?;
+    let args = args.trim_start();
+    let label = match args.chars().next() {
+        Some(quote @ ('"' | '\'' | '`')) => {
+            let inner = &args[1..];
+            let end = inner.find(quote).unwrap_or(inner.len());
+            format!("{quote}{}{quote}", &inner[..end])
+        }
+        _ => args
+            .split([',', ')'])
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .to_owned(),
+    };
+    let label: String = label.chars().take(60).collect();
+    Some(format!("{called} {label}"))
 }
 
 /// The line `section` opens with, past its decorators and attributes.

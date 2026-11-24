@@ -2,7 +2,8 @@
 //! prompt names, where a new test goes; the doc sections about it; and the
 //! changelog section an entry for the change belongs in.
 use super::super::sections::{
-    headed_sections, inheriting_test_class, marked_test, members, written_name, Section,
+    headed_sections, inheriting_test_class, marked_test, members, named_test, test_name,
+    written_name, Section,
 };
 use super::super::seen::Span;
 use super::{
@@ -133,9 +134,7 @@ pub(super) fn tests(
     let mut using: Vec<(&File, usize, BTreeSet<&String>)> = Vec::new();
     for file in files.iter().filter(|file| file.kind == Kind::Test) {
         let named_test = |at: &usize| {
-            marked_test(&file.lines, &file.sections[*at])
-                || written_name(file.opening(*at))
-                    .is_some_and(|name| name.to_lowercase().starts_with("test"))
+            marked_test(&file.lines, &file.sections[*at]) || named_test(file.opening(*at))
         };
         let named: Vec<usize> = (0..file.sections.len()).filter(named_test).collect();
         let above = |at: usize| std::iter::successors(file.parent[at], |&outer| file.parent[outer]);
@@ -204,7 +203,7 @@ pub(super) fn tests(
             Some(outer) if outer.starts_with("Test") || outer.ends_with("Tests") => {
                 file.qualified(*at)
             }
-            _ => written_name(file.opening(*at)).unwrap_or_default(),
+            _ => test_name(file.opening(*at)).unwrap_or_default(),
         };
         found.push((
             best,

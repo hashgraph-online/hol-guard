@@ -124,3 +124,7 @@ fn line(file: &File, at: usize) -> String {
     }
     line
 }
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_js_tests.rs"]
+mod js_tests;
