@@ -596,6 +596,19 @@ def test_refine_offers_a_live_alpha_on_the_next_minor() -> None:
     assert retracted["latest_version"] == "3.61.0"
     assert retracted["update_available"] is False
 
+    # The index check itself can still name the alpha retracted after it ran;
+    # that value passes the same liveness filter as every other candidate.
+    stale_index = refine_desktop_version_check(
+        "3.61.0",
+        check,
+        candidates=["3.61.0"],
+        include_alpha=True,
+        alpha_is_live=lambda _version: False,
+    )
+    assert stale_index["latest_version"] == "3.61.0"
+    assert stale_index["update_available"] is False
+    assert stale_index["status"] == "current"
+
 
 def test_desktop_status_does_not_advertise_next_major(
     monkeypatch: pytest.MonkeyPatch,
