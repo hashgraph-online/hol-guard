@@ -197,11 +197,39 @@ fn untrusted_home_cannot_be_a_write_free_predecessor() {
             }
         ));
     }
+    // A leading `~` expands to the same HOME, so it needs the same check.
+    for (command, program) in [("find ~ -print", "find"), ("sed -n 1p ~ notes.md", "sed")] {
+        let segment = step(command, program).expect("read parses");
+        for context in [
+            crate::pretool::PathContext::default(),
+            crate::pretool::PathContext {
+                home_dir: Some("-delete"),
+                cwd: Some("/"),
+                shell_home_matches: true,
+                ..Default::default()
+            },
+            crate::pretool::PathContext {
+                home_dir: Some("/"),
+                cwd: Some("/"),
+                shell_home_matches: false,
+                ..Default::default()
+            },
+        ] {
+            assert!(!writes_nothing_with_context(&segment, context), "{command}");
+        }
+    }
+    // Another user's home and the directory stack are not HOME.
+    for command in ["find ~root -print", "find ~+ -print", "find ~- -print"] {
+        let segment = step(command, "find").expect("find parses");
+        assert!(!writes_nothing(&segment), "{command}");
+    }
     // Existing accepted paths still retain their proof when the HOME value
     // is absolute and matches the shell that executes the command.
     for command in [
         r#"find "${HOME}/notes" -type f -print"#,
         r#"sed -n '1p' "${HOME}/notes.md""#,
+        "find ~/notes -type f -print",
+        "find ~ -name notes.md -print",
     ] {
         let program = if command.starts_with("find ") {
             "find"

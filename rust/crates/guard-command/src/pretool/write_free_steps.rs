@@ -37,8 +37,9 @@ pub(super) fn writes_nothing(
 
 /// Whether the shell hands every word over as written: no unquoted glob or
 /// brace list (an unquoted `*` can expand to a file named `-delete`), no
-/// unquoted escape, and no expansion but a double-quoted `$HOME` path, which
-/// the shell can neither split nor turn into an option.
+/// unquoted escape, and no expansion but a double-quoted `$HOME` path or a
+/// leading `~`, which the shell can neither split nor turn into an option
+/// once HOME is a verified absolute path.
 fn words_as_written(text: &str, context: super::PathContext<'_>) -> bool {
     // HOME must come from a verified absolute shell home, not an option
     // such as -delete or -i that expansion can insert as a program flag.
@@ -74,6 +75,19 @@ fn words_as_written(text: &str, context: super::PathContext<'_>) -> bool {
                         }
                         break;
                     }
+                }
+            }
+            // A leading unquoted `~` expands to HOME just as `$HOME` does,
+            // so it needs the same verified home. `~user`, `~+` and `~-`
+            // name other directories and are refused outright.
+            None if character == '~'
+                && plain[..plain.len() - 1]
+                    .chars()
+                    .next_back()
+                    .is_none_or(char::is_whitespace) =>
+            {
+                if !trusted_home || !(rest.is_empty() || rest.starts_with(['/', ' ', '\t'])) {
+                    return false;
                 }
             }
             None => {}
