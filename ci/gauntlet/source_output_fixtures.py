@@ -13,7 +13,8 @@ with synthetic names; none holds a credential, a key or a real value.
   only through the environment;
 * a Python link helper that copies credential fields with a fallback
   (``password=dest.password or self.password)``) and tests them in block
-  headers (``if self.password:``).
+  headers (``if self.password:``);
+* a URL helper whose doc comment shows a call with ``{ token: "secret" }``.
 """
 
 from __future__ import annotations
@@ -126,3 +127,31 @@ def check_prompt(prompt, output):
         assert "Confirm Password: " in output
 """
 FALLBACK_SOURCES = {FALLBACK_PATH: FALLBACK_SOURCE}
+
+EXAMPLE_PATH = f"{PORTAL}/src/lib/with-query.ts"
+EXAMPLE_SOURCE = """\
+export type QueryObject = Record<string, string | number | undefined>;
+
+/**
+ * Adds query parameters to a URL, replacing any that are already set.
+ *
+ * @example
+ * ```js
+ * withQuery("/foo?page=a", { token: "secret" }); // "/foo?page=a&token=secret"
+ * ```
+ */
+export function withQuery(input: string, query: QueryObject): string {
+  const [path, search = ""] = input.split("?");
+  const params = new URLSearchParams(search);
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined) {
+      params.delete(key);
+    } else {
+      params.set(key, String(value));
+    }
+  }
+  const joined = params.toString();
+  return joined ? `${path}?${joined}` : path;
+}
+"""
+EXAMPLE_SOURCES = {EXAMPLE_PATH: EXAMPLE_SOURCE}

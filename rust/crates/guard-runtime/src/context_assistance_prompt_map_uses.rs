@@ -8,9 +8,55 @@ use crate::context_assistance_prompt_words::unwrapped;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Instant;
 
+/// Language keywords. Written plainly in a prompt they are prose ("the
+/// function incorrectly stripped `/admin`", "it should return None"), and in
+/// code they hold no name, only syntax on line after line, so they place no
+/// code however few files a small project has. Words that also name things
+/// in ordinary code (`default`, `match`, `type`, `raise`) are left out.
+const KEYWORDS: &[&str] = &[
+    "await",
+    "catch",
+    "class",
+    "const",
+    "def",
+    "elif",
+    "else",
+    "except",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "fn",
+    "func",
+    "function",
+    "impl",
+    "implements",
+    "import",
+    "instanceof",
+    "nil",
+    "none",
+    "null",
+    "package",
+    "pub",
+    "return",
+    "self",
+    "struct",
+    "super",
+    "switch",
+    "throw",
+    "true",
+    "typeof",
+    "undefined",
+    "var",
+    "void",
+    "yield",
+];
+
 /// What the map looks for, with how rare the walk found each. The walk
 /// reads text as written, so it finds no file holding `casesensitive` when
-/// the code says `case_sensitive`; such a term counts as the rarest.
+/// the code says `case_sensitive`; such a term counts as the rarest. A
+/// keyword is not looked for where used unless the prompt wrote it as a
+/// name, but a definition by that name is still found.
 pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -> Vec<Sought> {
     let rarity = |holding: usize| (1.0 + walk.checked.max(1) as f64 / holding.max(1) as f64).ln();
     let mut found = Vec::new();
@@ -25,6 +71,7 @@ pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -
             name: *name,
             rarity: rarity(holding),
             common: words > MAX_PLAIN_FILES,
+            keyword: !*name && KEYWORDS.contains(&term.as_str()),
             spelled: (walk.spelled.get(at).copied()).filter(|_| walk.complete),
         });
     }
@@ -40,6 +87,7 @@ pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -
                 name: false,
                 rarity: rarity(holding),
                 common: false,
+                keyword: false,
                 spelled: None,
             });
         }
@@ -133,7 +181,7 @@ pub(super) fn uses<'a>(
             };
             let after = &file.lines[number + 1..(number + WRAPPED_LINES).min(file.lines.len())];
             let held: Vec<usize> = (holds(line, after, rare).into_iter())
-                .filter(|&word| !comment || rare[word].phrase)
+                .filter(|&word| !rare[word].keyword && (!comment || rare[word].phrase))
                 .collect();
             let Some(at) = innermost[number] else {
                 continue;
@@ -266,3 +314,7 @@ fn innermost(sections: &[Section], count: usize, until: Instant) -> Option<Vec<O
     }
     Some(innermost)
 }
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_uses_tests.rs"]
+mod tests;
