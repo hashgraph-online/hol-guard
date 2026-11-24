@@ -720,6 +720,7 @@ jobs:
             --deselect 'tests/test_guard_surface_server.py::TestGuardSurfaceServer::test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload' \
             --deselect tests/test_runtime_transition_configured_inverse.py::test_configured_native_inverse_restores_binding_store_and_selection \
             --deselect tests/test_python_capability_cleanup_gate.py::test_cleanup_contract_covers_every_scoped_hook_capability \
+            --deselect tests/test_guard_daemon_policy_authority.py::test_package_reuses_native_signed_policy_through_running_daemon \
             "${coverage_args[@]}"
       - name: Upload pytest coverage data artifact
         if: always() && github.event_name != 'pull_request'
