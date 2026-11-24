@@ -161,8 +161,8 @@ fn launch_for<'a>(
 /// The daemon's environment with the agent's `PATH`, when the hook stamped
 /// one into `payload`, less Guard's package shim directory. `None` without a
 /// daemon environment, which no launch past a package script resolves
-/// against. A stamped `PATH` whose entries cannot all be resolved is kept as
-/// it was stamped.
+/// against. A stamped `PATH` keeps its empty entries and is used even when
+/// empty, so the launch resolves the way the agent's shell resolves it.
 fn agent_launch_env(
     payload: &Map<String, Value>,
     launch_env: Option<LaunchEnv<'_>>,
@@ -171,29 +171,27 @@ fn agent_launch_env(
 ) -> Option<BTreeMap<String, String>> {
     let launch_env = launch_env?;
     let mut env = launch_env.env.clone();
-    let Some(path) = stamped_path(payload) else {
-        return Some(env);
-    };
-    let path = crate::package_manager_launch_path::without_package_shims(
-        Path::new(guard_home),
-        path,
-        if cfg!(windows) { ";" } else { ":" },
-        Path::new(cwd),
-        Some(Path::new(launch_env.user_home)),
-    )
-    .unwrap_or_else(|_| path.to_owned());
-    env.insert("PATH".to_owned(), path);
+    if let Some(path) = stamped_path(payload) {
+        let path = crate::package_manager_launch_path::without_package_shim_entries(
+            Path::new(guard_home),
+            path,
+            if cfg!(windows) { ";" } else { ":" },
+            Path::new(cwd),
+            Some(Path::new(launch_env.user_home)),
+        );
+        env.insert("PATH".to_owned(), path);
+    }
     Some(env)
 }
 
-/// The `PATH` the hook stamped from the agent's shell.
+/// The `PATH` the hook stamped from the agent's shell, empty or not.
 fn stamped_path(payload: &Map<String, Value>) -> Option<&str> {
     payload
         .get(crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD)
         .and_then(Value::as_object)
         .and_then(|environment| environment.get("path"))
         .and_then(Value::as_str)
-        .filter(|path| !path.is_empty() && !path.contains('\0'))
+        .filter(|path| !path.contains('\0'))
 }
 
 /// The launch identity the daemon derives: the package script's, else the
@@ -287,17 +285,15 @@ fn review_after_cd(payload: &Map<String, Value>, check: &RuleCheck<'_>) -> Optio
     let command = pre_tool_command(payload).ok()??;
     let cwd = launch_cwd(payload, check.workspace).ok()??;
     let daemon = check.launch_env?;
+    let (command, cwd) =
+        crate::local_cli_hook_op::cd_then_launch(command, &cwd, Some(check.home_dir), daemon.env)?;
+    // A relative `PATH` entry names a directory under the one the command
+    // runs in, so the shim directory is matched from there.
     let env = agent_launch_env(payload, Some(daemon), check.guard_home, &cwd)?;
     let launch_env = LaunchEnv {
         user_home: daemon.user_home,
         env: &env,
     };
-    let (command, cwd) = crate::local_cli_hook_op::cd_then_launch(
-        command,
-        &cwd,
-        Some(check.home_dir),
-        launch_env.env,
-    )?;
     let launch = local_launch(&command, &cwd, check.home_dir, Some(launch_env)).ok()??;
     review_read(
         &Launched {

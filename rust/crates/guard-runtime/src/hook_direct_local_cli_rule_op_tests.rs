@@ -429,4 +429,39 @@ fn a_script_grant_matches_the_runtime_on_the_agent_path_past_the_package_shim() 
         reviewed(Some(format!("{shim_dir}:{system}"))),
         RuleVerdict::None
     );
+    // An entry the check cannot resolve keeps its place without bringing the
+    // shims back.
+    assert_eq!(
+        reviewed(Some(format!(
+            "~someone/bin:{shim_dir}:{runtime_dir}:{system}"
+        ))),
+        RuleVerdict::Allowed
+    );
+    // An empty stamped `PATH` is the agent's, not a reason to fall back to the
+    // daemon's.
+    assert_eq!(reviewed(Some(String::new())), RuleVerdict::None);
+
+    // After `cd`, a relative entry names a directory under the new working
+    // directory: there it is the shim directory, and is dropped.
+    let parent = Path::new(&case.workspace).parent().unwrap();
+    let home_name = Path::new(&case.guard_home).file_name().unwrap();
+    let relative_shims = format!("../{}/package-shims/bin", home_name.to_str().unwrap());
+    let mut after_cd = case.request(
+        "review",
+        &format!("cd {} && {command}", case.workspace),
+        review("native_command_review_required"),
+    );
+    after_cd.env = Some(
+        [("PATH".to_owned(), system.to_owned())]
+            .into_iter()
+            .collect(),
+    );
+    after_cd
+        .payload
+        .insert("cwd".to_owned(), json!(parent.to_str().unwrap()));
+    after_cd.payload.insert(
+        crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD.to_owned(),
+        json!({ "path": format!("{relative_shims}:{runtime_dir}:{system}") }),
+    );
+    assert_eq!(review_verdict(&after_cd), RuleVerdict::Allowed);
 }
