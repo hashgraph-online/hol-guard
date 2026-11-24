@@ -384,3 +384,36 @@ fn a_write_of_a_committed_key_named_document_keeps_its_floor() {
         false
     ));
 }
+
+/// A bare name requested from inside a key container is screened where it
+/// lands, as the same request spelled in full is, even when the link it names
+/// points at a committed page.
+#[cfg(unix)]
+#[test]
+fn a_relative_key_named_link_inside_a_key_container_keeps_its_floor() {
+    let repo = Repo::new();
+    repo.write("docs/private-key-jwt.md", CLIENT_AUTH_PAGE);
+    repo.write(".gnupg/.keep", "");
+    repo.commit("document the method");
+    let store = repo.path().join(".gnupg");
+    std::os::unix::fs::symlink(
+        "../docs/private-key-jwt.md",
+        store.join("private-key-guide.md"),
+    )
+    .expect("a link inside the key container");
+    let payload = json!({
+        "tool_name": "Read",
+        "tool_input": {"file_path": "private-key-guide.md"},
+    });
+    let facts = payload_facts(
+        &payload,
+        "claude-code",
+        PreToolActionTypeV1::Harness,
+        true,
+        "native_policy_reapproval_required",
+        Some(store.to_str().expect("a printable store")),
+    )
+    .expect("a read payload");
+    assert!(facts.sensitive_target);
+    assert!(!repo.sensitive("docs/private-key-jwt.md"));
+}

@@ -212,13 +212,23 @@ pub(in crate::pretool) fn resolves_to_tracked_dotenv_template(
 ///
 /// The spelled path is screened as well as the file it resolves to, so a
 /// document parked in a key container, or a link named for a key file that
-/// points at a committed page, keeps its review.
+/// points at a committed page, keeps its review. A relative request is
+/// screened where it lands, so the directories above a bare name requested
+/// from inside a credential store keep their family.
 pub(in crate::pretool) fn resolves_to_tracked_key_named_document(
     value: &str,
     cwd: Option<&str>,
 ) -> bool {
     let supplied = Path::new(value);
+    let target = match cwd {
+        _ if supplied.is_absolute() => supplied.to_path_buf(),
+        Some(cwd) => Path::new(cwd).join(supplied),
+        None => return false,
+    };
     guard_secure_fs::sensitive_path_family_beside_name_proof(supplied).is_none()
+        && !target
+            .parent()
+            .is_some_and(|parent| guard_secure_fs::sensitive_path_family(parent).is_some())
         && supplied
             .file_name()
             .and_then(|name| name.to_str())
