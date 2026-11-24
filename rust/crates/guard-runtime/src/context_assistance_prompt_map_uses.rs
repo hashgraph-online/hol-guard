@@ -55,7 +55,8 @@ const KEYWORDS: &[&str] = &[
 /// What the map looks for, with how rare the walk found each. The walk
 /// reads text as written, so it finds no file holding `casesensitive` when
 /// the code says `case_sensitive`; such a term counts as the rarest. A
-/// keyword counts as common unless the prompt wrote it as a name.
+/// keyword is not looked for where used unless the prompt wrote it as a
+/// name, but a definition by that name is still found.
 pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -> Vec<Sought> {
     let rarity = |holding: usize| (1.0 + walk.checked.max(1) as f64 / holding.max(1) as f64).ln();
     let mut found = Vec::new();
@@ -69,7 +70,8 @@ pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -
             phrase: false,
             name: *name,
             rarity: rarity(holding),
-            common: words > MAX_PLAIN_FILES || (!*name && KEYWORDS.contains(&term.as_str())),
+            common: words > MAX_PLAIN_FILES,
+            keyword: !*name && KEYWORDS.contains(&term.as_str()),
             spelled: (walk.spelled.get(at).copied()).filter(|_| walk.complete),
         });
     }
@@ -85,6 +87,7 @@ pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -
                 name: false,
                 rarity: rarity(holding),
                 common: false,
+                keyword: false,
                 spelled: None,
             });
         }
@@ -178,7 +181,7 @@ pub(super) fn uses<'a>(
             };
             let after = &file.lines[number + 1..(number + WRAPPED_LINES).min(file.lines.len())];
             let held: Vec<usize> = (holds(line, after, rare).into_iter())
-                .filter(|&word| !comment || rare[word].phrase)
+                .filter(|&word| !rare[word].keyword && (!comment || rare[word].phrase))
                 .collect();
             let Some(at) = innermost[number] else {
                 continue;

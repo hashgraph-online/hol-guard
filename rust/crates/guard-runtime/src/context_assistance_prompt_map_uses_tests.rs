@@ -29,3 +29,14 @@ fn a_plain_keyword_places_no_code() {
         "{text}"
     );
 }
+
+/// A plain keyword that a source file defines is still that definition's
+/// name: "fix catch" places `def catch`.
+#[test]
+fn a_plain_keyword_still_names_its_definition() {
+    let source = "def catch(error):\n    return str(error)\n\n\ndef other():\n    pass\n";
+    let list = files(&[("src/errors.py", source)]);
+    let plain = looking_for(&[("catch", false, 1)]);
+    let text = map(&list, &plain, &Asked::default(), later()).unwrap().text;
+    assert!(text.contains("src/errors.py:1-2"), "{text}");
+}
