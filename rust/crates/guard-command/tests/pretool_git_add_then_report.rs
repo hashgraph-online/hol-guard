@@ -116,4 +116,16 @@ fn trailing_report_does_not_settle_what_the_allow_does_not_cover() {
     let git_tail = format!("cd {w} && git add -- {FILES} && git status --short; git log -1");
     let result = evaluate(&s, "codex", &git_tail, &git_allowed());
     assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+    // Only a report of how the run went is carried past the fork. Any other
+    // Git-free tail leaves the reads' directory unresolved for the allow, so
+    // the chain keeps its review.
+    for tail in ["true", "ls", "echo done; true"] {
+        let other = format!("cd {w} && git add -- {FILES} && git status --short; {tail}");
+        let result = evaluate(&s, "codex", &other, &git_allowed());
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{other}: {}",
+            result.reason_code
+        );
+    }
 }

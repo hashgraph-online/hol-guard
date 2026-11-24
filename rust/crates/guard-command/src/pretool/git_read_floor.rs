@@ -213,12 +213,17 @@ fn verdict(
         let head = verdict(&rest, moved, deadline, execution_environment);
         let after = verdict(&tail, context, deadline, execution_environment);
         // `cd <dir> && git add <file> && git status; echo "exit $?"`: when
-        // the tail is clear and runs no Git, only the head's earlier steps
-        // keep its reads under the floor. The head holds every segment after
-        // the `cd`, so its step indexes name this model's segments one place
-        // later, and an allow is asked the same question it would be asked
-        // without the tail.
+        // the whole tail is the trailing report, only the head's earlier
+        // steps keep its reads under the floor. The head holds every segment
+        // after the `cd`, so its step indexes name this model's segments one
+        // place later, and an allow is asked the same question it would be
+        // asked without the tail. Any other tail keeps the review: the read
+        // directory an allow settles in resolves through the `cd` only when
+        // the tail is that report.
+        let reported = super::contained_wrapper::trailing_report_steps(model, &model.segments, 1);
         if matches!(after, Verdict::Clear)
+            && reported > 0
+            && reported == tail.segments.len()
             && !tail
                 .segments
                 .iter()
