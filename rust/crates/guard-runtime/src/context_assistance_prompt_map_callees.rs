@@ -46,7 +46,7 @@ pub(in super::super) fn callees(
         let section = &file.sections[at];
         let body = file
             .lines
-            .get(section.start..section.end.min(file.lines.len()))?;
+            .get(section.start.checked_sub(1)?..section.end.min(file.lines.len()))?;
         for line in body {
             for (through, name) in called(line) {
                 let own_name = own.contains(&&*stored(name));

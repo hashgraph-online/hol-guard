@@ -149,3 +149,22 @@ fn a_helper_in_a_withheld_file_is_not_shown() {
         assert_eq!(text.contains("return env.open()"), shown, "{text}");
     }
 }
+
+/// A call on the function's first line counts: a one-line function's only
+/// call is there.
+#[test]
+fn a_call_on_the_first_line_is_listed() {
+    let source = "def quote_part(text): return _encode(text)
+
+
+def _encode(text):
+    return text.encode('utf-8')
+";
+    let (home, _project, root) = project(ON, &[("pkg/urls.py", source)]);
+    let text = prompt_map(home.path(), &root, "Add a doctest to quote_part").unwrap();
+    assert!(
+        text.contains("Project functions quote_part calls:"),
+        "{text}"
+    );
+    assert!(text.contains("return text.encode('utf-8')"), "{text}");
+}
