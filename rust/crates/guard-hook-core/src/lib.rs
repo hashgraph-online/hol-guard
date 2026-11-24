@@ -280,8 +280,9 @@ fn tracked_project_document(target: &str, request: &NativeHookRequestV1) -> bool
 /// output review repeats the same proof rather than answering the template as
 /// the local `.env`. The path the host read and the path the call named are
 /// each resolved once, against home for a `~/` spelling and the working
-/// directory otherwise, and must be the same file; the proof then runs on that
-/// resolved file, and it is the file the review reads and scans. Only the read
+/// directory otherwise, and must be the same file, which is the file the
+/// review reads and scans. The proof runs on each spelling with its `~/`
+/// expanded, so it screens the written name and the resolved file together. Only the read
 /// tool's output qualifies: a write or edit of the template is not the request
 /// the gate proved.
 fn committed_dotenv_template_read(
@@ -307,9 +308,21 @@ fn committed_dotenv_template_read(
     if resolve(target)? != file {
         return None;
     }
-    let spelled = file.to_str()?;
-    guard_command::pretool::proven_tracked_dotenv_template(spelled, request.cwd.as_deref())
-        .then_some(file)
+    // The proof screens the name as written as well as the file it resolves
+    // to: a link named `.env`, or one inside a credential store, stays the
+    // secret it is named after whatever it points at. So each spelling is
+    // proven with only its `~/` expanded, the way the read resolved it.
+    let proven = |value: &str| {
+        let value = value.trim();
+        let spelled = match value.strip_prefix("~/") {
+            Some(rest) => home.join(rest),
+            None => Path::new(value).to_path_buf(),
+        };
+        spelled.to_str().is_some_and(|spelled| {
+            guard_command::pretool::proven_tracked_dotenv_template(spelled, request.cwd.as_deref())
+        })
+    };
+    (proven(candidate) && proven(target)).then_some(file)
 }
 
 fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {

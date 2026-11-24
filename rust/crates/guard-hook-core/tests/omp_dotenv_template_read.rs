@@ -185,3 +185,36 @@ fn a_home_spelling_is_proven_against_the_home_file() {
     assert_eq!(response.decision, "deny", "{response:?}");
     assert_eq!(response.reason_code, "sensitive_path");
 }
+
+/// A link named after the local dotenv file stays the secret it is named
+/// after, even when it points at the committed template.
+#[test]
+fn a_dotenv_link_to_the_committed_template_keeps_the_refusal() {
+    let fixture = Fixture::new();
+    let template = fixture.write(TEMPLATE, TEMPLATE_TEXT);
+    let link = fixture.project().join(".env");
+    std::os::unix::fs::symlink(&template, &link).unwrap();
+    fixture.track(&[TEMPLATE]);
+    for spelling in [link.to_string_lossy().into_owned(), ".env".to_owned()] {
+        let response = review_post_tool(&fixture.result("read", &spelling, TEMPLATE_TEXT));
+        assert_eq!(response.decision, "deny", "{spelling}: {response:?}");
+        assert_eq!(response.reason_code, "sensitive_path");
+    }
+}
+
+/// A template-named link inside a credential store keeps its refusal even
+/// when it points at the committed template.
+#[test]
+fn a_template_link_inside_a_credential_store_keeps_the_refusal() {
+    let fixture = Fixture::new();
+    let template = fixture.write(TEMPLATE, TEMPLATE_TEXT);
+    let store = fixture.home().join(".gnupg");
+    std::fs::create_dir_all(&store).unwrap();
+    let link = store.join(TEMPLATE);
+    std::os::unix::fs::symlink(&template, &link).unwrap();
+    fixture.track(&[TEMPLATE]);
+    let response =
+        review_post_tool(&fixture.result("read", &link.to_string_lossy(), TEMPLATE_TEXT));
+    assert_eq!(response.decision, "deny", "{response:?}");
+    assert_eq!(response.reason_code, "sensitive_path");
+}
