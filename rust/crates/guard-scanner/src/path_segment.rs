@@ -41,7 +41,8 @@ pub(crate) fn is_path_segment(
 
 /// Whether the path segment `text` starts with reads as a name: words of
 /// letters, each optionally ending in digits (`Claims`, `finds_keys`,
-/// `Sha256Hasher`, `v2`), not a run that mixes them (`Kq7xY2mN9pL4`).
+/// `Sha256Hasher`, `v2`), not a run that mixes them (`Kq7xY2mN9pL4`) or
+/// one that starts with a digit (`84736251`), which no path segment does.
 fn name_segment(text: &str) -> bool {
     let segment: Vec<char> = text
         .chars()
@@ -67,7 +68,7 @@ fn name_segment(text: &str) -> bool {
             return false;
         }
     }
-    !segment.is_empty()
+    segment.first().is_some_and(|first| !first.is_ascii_digit())
 }
 
 /// The first `MAX_REREAD_BYTES` of `rest`, cut at a character boundary.
@@ -161,7 +162,8 @@ mod tests {
         ] {
             assert!(name_segment(name), "{name}");
         }
-        for value in [SAMPLE, "A1B2C3D4E5F6", "a1b2c3d4e5f6"] {
+        assert!(credential_assignment("password::84736251\n"));
+        for value in [SAMPLE, "A1B2C3D4E5F6", "a1b2c3d4e5f6", "84736251", "1abc"] {
             assert!(!name_segment(value), "{value}");
         }
     }

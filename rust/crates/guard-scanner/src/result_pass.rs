@@ -68,15 +68,22 @@ pub(crate) fn is_result_pass(matched: &str) -> bool {
 /// Whether an assigned value reads as a test result rather than a password.
 /// An opening `{` or `[` counts only with nothing or a result after it, so
 /// `[Kq7x...]` stays a password.
+/// Nested openers are peeled in a loop, so a line of brackets costs one
+/// pass, not one stack frame each.
 fn result_value(value: &str) -> bool {
-    let value = value
-        .trim()
-        .trim_matches(['"', '\''])
-        .trim_end_matches([',', ';', ')', ']', '}'])
-        .to_ascii_lowercase();
-    if let Some(inner) = value.strip_prefix(['{', '[']) {
-        return inner.is_empty() || result_value(inner);
+    let mut value = value;
+    loop {
+        value = value
+            .trim()
+            .trim_matches(['"', '\''])
+            .trim_end_matches([',', ';', ')', ']', '}']);
+        match value.strip_prefix(['{', '[']) {
+            Some("") => return true,
+            Some(inner) => value = inner,
+            None => break,
+        }
     }
+    let value = value.to_ascii_lowercase();
     let digits = value.chars().filter(char::is_ascii_digit).count();
     let number = value.chars().count() <= MAX_NUMBER_CHARS
         && digits > 0
@@ -101,6 +108,14 @@ mod tests {
             .matches
             .iter()
             .any(|matched| matched.classifier == "credential-assignment")
+    }
+
+    #[test]
+    fn a_long_line_of_brackets_is_read_without_recursion() {
+        let deep = format!("tests_pass = {}ok\n", "[".repeat(200_000));
+        assert!(!credential_assignment(&deep));
+        let hidden = format!("tests_pass = {}{SAMPLE}\n", "[".repeat(200_000));
+        assert!(credential_assignment(&hidden));
     }
 
     #[test]
