@@ -52,7 +52,7 @@ pub(crate) fn prepare(
     prepared.remove(FACTS_KEY);
     prepared.remove(PAYLOAD_KEY);
     prepared.remove("codex_live_wait");
-    let built = build(facts, args, guard_home);
+    let built = build(&facts, args, guard_home);
     match (built, prepared.get_mut("request")) {
         (Some((link, snapshot)), Some(Value::Object(request))) => {
             request.insert("continuation_snapshot".to_owned(), snapshot);
