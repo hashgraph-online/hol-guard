@@ -130,29 +130,31 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         if substitution.start < cursor || patterned_word(&patterned, substitution) {
             return None;
         }
-        let (value, judged_text) = match heredoc_value(&chars, &masked, substitution, message) {
-            // The heredoc is the whole of what the `cat` reads, so judging
-            // the bare `cat` is judging the command the shell runs.
-            Some(value) => (value, "cat".to_owned()),
-            // A message the heredoc form does not read is never a stand-in.
-            None if !substitution.body.is_ascii() => return None,
-            None => {
-                let text: String = chars
-                    .get(substitution.start..substitution.end)?
-                    .iter()
-                    .collect();
-                let inner = text
-                    .strip_prefix(open)
-                    .and_then(|rest| rest.strip_suffix(close))?;
-                if inner.trim() != substitution.body {
-                    return None;
+        let (value, judged_text, heredoc) =
+            match heredoc_value(&chars, &masked, substitution, message) {
+                // The heredoc is the whole of what the `cat` reads, so judging
+                // the bare `cat` is judging the command the shell runs.
+                Some(value) => (value, "cat".to_owned(), true),
+                // A message the heredoc form does not read is never a stand-in.
+                None if !substitution.body.is_ascii() => return None,
+                None => {
+                    let text: String = chars
+                        .get(substitution.start..substitution.end)?
+                        .iter()
+                        .collect();
+                    let inner = text
+                        .strip_prefix(open)
+                        .and_then(|rest| rest.strip_suffix(close))?;
+                    if inner.trim() != substitution.body {
+                        return None;
+                    }
+                    (
+                        stand_in(&substitution.body)?.to_owned(),
+                        substitution.body.clone(),
+                        false,
+                    )
                 }
-                (
-                    stand_in(&substitution.body)?.to_owned(),
-                    substitution.body.clone(),
-                )
-            }
-        };
+            };
         // A lookup can print nothing; only a Git command reads a missing
         // revision as the same kind of operation.
         if value == git_value::COMMIT_VALUE
@@ -161,7 +163,10 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         {
             return None;
         }
-        if value == line_number::LINE_VALUE
+        // A heredoc that holds `1` prints exactly that; only the lookup's
+        // stand-in depends on the place it fills.
+        if !heredoc
+            && value == line_number::LINE_VALUE
             && !line_number::opens_sed_range(&masked, &substitutions, substitution)
         {
             return None;

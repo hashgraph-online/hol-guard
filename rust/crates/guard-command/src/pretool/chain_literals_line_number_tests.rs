@@ -91,3 +91,11 @@ fn only_a_lookup_that_prints_line_numbers_takes_the_stand_in() {
         assert_eq!(stand_in(body), None, "{body}");
     }
 }
+
+#[test]
+fn a_heredoc_that_holds_the_line_value_still_projects_anywhere() {
+    assert_eq!(
+        projected("echo \"$(cat <<'EOF'\n1\nEOF\n)\""),
+        Some("echo \"1\"".to_owned())
+    );
+}
