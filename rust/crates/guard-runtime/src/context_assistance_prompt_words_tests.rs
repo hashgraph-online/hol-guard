@@ -228,3 +228,37 @@ fn a_prompt_that_asks_for_no_change_is_told_apart() {
         assert!(!asks_no_change(prompt), "{prompt}");
     }
 }
+
+/// Telling the agent to carry on names no code, even where a project defines
+/// `resume` or `finish`; a version number names a release.
+#[test]
+fn steering_words_and_versions_are_not_search_words() {
+    for prompt in [
+        "Resume where we left off, you decide",
+        "Okay finish it end to end",
+        "continue, then proceed with the release",
+        "okay just make sure we get 3.60 soon, was it there before v3.49.1?",
+        "Did V3.49 ship it?",
+    ] {
+        let found = terms(prompt);
+        for steer in ["resume", "finish", "continue", "proceed", "3", "60", "349"] {
+            assert!(
+                !found.iter().any(|term| term == steer),
+                "{prompt}: {found:?}"
+            );
+        }
+        assert!(
+            spellings(prompt).is_empty(),
+            "{prompt}: {:?}",
+            spellings(prompt)
+        );
+    }
+    assert!(terms("Fix `resume` so it keeps the session").contains(&"resume".to_owned()));
+    assert!(spellings("Make parse_v2 accept 1.5x").contains(&"parse_v2".to_owned()));
+    for name in ["vv3", "v"] {
+        assert!(
+            spellings(&format!("Fix `{name}`")).contains(&name.to_owned()),
+            "{name}"
+        );
+    }
+}

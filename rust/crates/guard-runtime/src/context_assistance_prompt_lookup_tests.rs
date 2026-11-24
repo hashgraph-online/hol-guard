@@ -97,6 +97,8 @@ fn only_a_prompt_that_points_at_code_gets_ranked_excerpts() {
         "push this branch and open a PR",
         "run the test suite and tell me what fails",
         "write a PRD, a TODO list and a takeaway prompt for this work",
+        "okay just make sure we get 3.60 soon",
+        "whats the severity of the FP? was it there before 3.49?",
     ] {
         assert!(!anchored(prompt), "{prompt}");
     }

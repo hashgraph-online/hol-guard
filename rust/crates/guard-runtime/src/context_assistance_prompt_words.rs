@@ -10,6 +10,9 @@ mod no_change;
 mod paths;
 #[path = "context_assistance_prompt_product_names.rs"]
 mod product_names;
+#[path = "context_assistance_prompt_task_words.rs"]
+mod task_words;
+use task_words::TASK_WORDS;
 
 pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
@@ -36,90 +39,19 @@ const STOP_WORDS: &[&str] = &[
     "whether", "which", "while", "who", "whose", "why", "will", "with", "without", "would", "you",
     "your",
 ];
-/// Words that, written plainly, say what to do or how a task came about, not
-/// which code it is about: "find the root cause after the last commit" names
-/// no function `find`, `root` or `last`, and "tests are red on main, sort it
-/// out" none named `red`, `main` or `out`. Written like code they still count.
-const TASK_WORDS: &[&str] = &[
-    "actually",
-    "alone",
-    "answer",
-    "behavior",
-    "behaviour",
-    "broke",
-    "broken",
-    "bug",
-    "cause",
-    "check",
-    "code",
-    "commit",
-    "committed",
-    "describe",
-    "docstring",
-    "doctest",
-    "edit",
-    "everywhere",
-    "example",
-    "expected",
-    "explain",
-    "fail",
-    "failing",
-    "find",
-    "first",
-    "green",
-    "implement",
-    "implementation",
-    "last",
-    "leave",
-    "library",
-    "line",
-    "lines",
-    "look",
-    "main",
-    "out",
-    "output",
-    "pass",
-    "passes",
-    "passing",
-    "push",
-    "pushed",
-    "question",
-    "recently",
-    "red",
-    "refactor",
-    "remove",
-    "rename",
-    "reply",
-    "review",
-    "root",
-    "run",
-    "short",
-    "since",
-    "something",
-    "started",
-    "sure",
-    "teammate",
-    "touch",
-    "track",
-    "usage",
-    "write",
-    "written",
-];
 
-/// Lowercase words from the prompt worth looking for in paths and code.
-/// Words written like code come first, so a long prompt keeps the names it
-/// is about (`case_sensitive`, `IntRange`) over the plain words around them.
 #[cfg(test)]
 pub(crate) fn terms(prompt: &str) -> Vec<String> {
-    marked_terms(prompt)
-        .into_iter()
+    (marked_terms(prompt).into_iter())
         .map(|(term, _)| term)
         .collect()
 }
 
-/// The prompt's `terms`, each marked when the prompt wrote it whole as a
-/// name (`case_sensitive`, `IntRange`), not as a plain word or a piece of a
-/// name. An absolute path such as `/tmp/run-1/out.log` gives none.
+/// Lowercase words from the prompt worth looking for in paths and code, each
+/// marked when the prompt wrote it whole as a name (`case_sensitive`,
+/// `IntRange`), not as a plain word or a piece of a name. Words written like
+/// code come first, so a long prompt keeps the names it is about over the
+/// plain words around them. An absolute path (`/tmp/run-1/out.log`) gives none.
 pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
     let prompt = &without_paths(prompt);
     let mut code: Vec<(String, bool)> = Vec::new();
@@ -241,8 +173,14 @@ fn command(span: &str) -> bool {
             .any(|word| word.starts_with('-') || word.contains('/') || file_name(word).is_some())
 }
 
+/// The prompt's words but numbers and versions (`3.60`), which name no code.
 fn tokens(span: &str) -> impl Iterator<Item = &str> {
-    span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')))
+    let split = span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')));
+    split.filter(|token| {
+        let body = token.strip_prefix(['v', 'V']).unwrap_or(token);
+        let number = body.chars().all(|c| c.is_ascii_digit() || c == '.');
+        !(number && (body.len() == token.len() || body.contains(|c: char| c.is_ascii_digit())))
+    })
 }
 
 fn camel(word: &str) -> bool {
@@ -397,8 +335,7 @@ pub(crate) fn phrases(prompt: &str) -> Vec<String> {
 
 /// `phrase` cut to its first words that fit in `MAX_PHRASE_CHARS`. Every
 /// file that holds the whole quote holds these words too, and a quote that
-/// ends differently from the source (a period added or left off) still
-/// matches.
+/// ends differently from the source (a period added or left off) matches.
 fn first_words(phrase: String) -> String {
     let Some((cut, _)) = phrase.char_indices().nth(MAX_PHRASE_CHARS) else {
         return phrase;
