@@ -285,7 +285,15 @@ fn tracked_project_document(target: &str, request: &NativeHookRequestV1) -> bool
 /// expanded, so it screens the written name and the resolved file together. Only the read
 /// tool's output qualifies: a write or edit of the template is not the request
 /// the gate proved.
-fn committed_dotenv_template_read(
+///
+/// A committed page named for the key it documents
+/// (`private-key-jwt-client-auth.md`) is read on the same terms: the read gate
+/// admits it through the committed-document proof, so the output review
+/// repeats that proof instead of answering the page as a key file. Every
+/// spelling and the resolved file must pass the same one of the two proofs,
+/// so a link named like a template that lands on a key-named page, or the
+/// reverse, keeps the refusal.
+fn committed_named_document_read(
     request: &NativeHookRequestV1,
     candidate: &str,
     target: &str,
@@ -312,19 +320,26 @@ fn committed_dotenv_template_read(
     // to: a link named `.env`, or one inside a credential store, stays the
     // secret it is named after whatever it points at. So each spelling is
     // proven with only its `~/` expanded, the way the read resolved it.
-    let proven = |value: &str| {
+    let proven = |value: &str, proof: fn(&str, Option<&str>) -> bool| {
         let value = value.trim();
         let spelled = match value.strip_prefix("~/") {
             Some(rest) => home.join(rest),
             None => Path::new(value).to_path_buf(),
         };
-        spelled.to_str().is_some_and(|spelled| {
-            guard_command::pretool::proven_tracked_dotenv_template(spelled, request.cwd.as_deref())
-        })
+        spelled
+            .to_str()
+            .is_some_and(|spelled| proof(spelled, request.cwd.as_deref()))
     };
     // Prove the resolved file too: a link can be retargeted between resolving
     // it above and the spelling proofs, and the review reads `file`.
-    (proven(candidate) && proven(target) && file.to_str().is_some_and(proven)).then_some(file)
+    let proven_by = |proof: fn(&str, Option<&str>) -> bool| {
+        proven(candidate, proof)
+            && proven(target, proof)
+            && file.to_str().is_some_and(|file| proven(file, proof))
+    };
+    (proven_by(guard_command::pretool::proven_tracked_dotenv_template)
+        || proven_by(guard_command::pretool::proven_tracked_key_named_document))
+    .then_some(file)
 }
 
 fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {
@@ -586,7 +601,7 @@ fn review_source(
         .map(Path::new)
         .unwrap_or_else(|| Path::new("."));
     let home = Path::new(&request.home_dir);
-    let template = committed_dotenv_template_read(request, candidate, &target, cwd, home);
+    let template = committed_named_document_read(request, candidate, &target, cwd, home);
     if let Some((family, _)) = sensitive_path_family(Path::new(candidate)) {
         if template.is_none() {
             return HookReviewResponseV1::deny("sensitive_path", sensitive_reason(family));
