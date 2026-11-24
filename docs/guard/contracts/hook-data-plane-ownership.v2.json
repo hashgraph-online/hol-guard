@@ -343,6 +343,7 @@
     "src/codex_plugin_scanner/guard/hook_review/hook_worker_native_evidence.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_worker_native_review.py",
     "src/codex_plugin_scanner/guard/hook_review/hook_worker_unavailable.py",
+    "src/codex_plugin_scanner/guard/native_hook_availability.py",
     "src/codex_plugin_scanner/guard/native_approval_errors.py",
     "src/codex_plugin_scanner/guard/native_approval_gate.py",
     "src/codex_plugin_scanner/guard/native_approval_reuse.py",
