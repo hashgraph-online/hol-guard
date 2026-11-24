@@ -67,6 +67,9 @@ pub(crate) fn is_self_named(matched: &str, tail: &str) -> bool {
     let mut counters = 0_usize;
     let mut qualifiers = 0_usize;
     let mut named = false;
+    // A credential word the field name lacks (`{ token: "secret" }`) is a
+    // stand-in only bare: with a counter, `Secret123` is a chosen password.
+    let mut foreign = false;
     for word in words(value) {
         if word.chars().all(|character| character.is_ascii_digit()) {
             counters += 1;
@@ -93,9 +96,10 @@ pub(crate) fn is_self_named(matched: &str, tail: &str) -> bool {
             continue;
         }
         named = true;
+        foreign |= !name_words.contains(&word);
         credential_word |= CREDENTIAL_WORDS.contains(&word.as_str());
     }
-    credential_word
+    credential_word && !(foreign && counters > 0)
 }
 
 /// Whether `tail` begins where the assigned value ends. A closing quote ends
@@ -104,8 +108,9 @@ pub(crate) fn is_self_named(matched: &str, tail: &str) -> bool {
 /// assigns everything up to the space, so a delimiter followed directly by
 /// more value text does not end it. An unquoted value also ends at the quote
 /// closing the string it sits in, as in `"/foo?page=a&token=secret"`, when
-/// that quote ends the line or comes before a delimiter. A quote followed by
-/// anything else may open more value (`TOKEN=token"$more"`).
+/// that quote ends the line or comes before a delimiter that ends the value
+/// too. A quote followed by anything else may open more value
+/// (`TOKEN=token"$more"`, `TOKEN=secret",more"`).
 fn ends_value(tail: &str, quoted: bool) -> bool {
     let delimiter = |character: char| matches!(character, ',' | '}' | ')' | ']' | ';');
     let mut rest = tail.chars();
@@ -118,9 +123,13 @@ fn ends_value(tail: &str, quoted: bool) -> bool {
                     .next()
                     .is_none_or(|after| after.is_whitespace() || delimiter(after))
         }
-        Some('"' | '\'') if !quoted => rest
-            .next()
-            .is_none_or(|after| matches!(after, '\r' | '\n') || delimiter(after)),
+        Some('"' | '\'') if !quoted => match rest.next() {
+            None | Some('\r' | '\n') => true,
+            Some(after) if delimiter(after) => rest
+                .next()
+                .is_none_or(|next| next.is_whitespace() || delimiter(next)),
+            Some(_) => false,
+        },
         Some(_) => false,
     }
 }
@@ -284,6 +293,8 @@ mod tests {
             "api_key = \"secret-token\"\n",
             "auth({ password: 'secret' })\n",
             "PASSWORD=token\n",
+            "fetch(\"/api?token=secret\", options);\n",
+            "TOKEN=secret\"),\n",
         ] {
             assert!(!credential_assignment(text), "{text}");
         }
@@ -299,6 +310,11 @@ mod tests {
             format!("url = \"/foo?token=secret\"{visible}\n"),
             String::from("TOKEN=secret\"$MORE\"\n"),
             String::from("password: \"MySecret1\"\n"),
+            String::from("password: \"Secret123\"\n"),
+            String::from("PASSWORD=Token2024\n"),
+            String::from("api_key = \"secret-1\"\n"),
+            format!("TOKEN=secret\",{visible}\"\n"),
+            format!("TOKEN=secret';{visible}\n"),
         ] {
             assert!(credential_assignment(&text), "{text}");
         }
