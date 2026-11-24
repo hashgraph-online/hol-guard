@@ -126,6 +126,26 @@ class RouteCounterLog:
         return True
 
 
+class ResidentRouteCounterSnapshot:
+    """Keep native resident counters available to existing diagnostics readers."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._resident: tuple[str, dict[str, dict[str, int]]] | None = None
+
+    def observe_page(self, epoch: object, counters: object) -> None:
+        decoded = decode_route_counters(counters)
+        if decoded is None or not isinstance(epoch, str) or not epoch:
+            return
+        with self._lock:
+            self._resident = (epoch, decoded)
+
+    def snapshot(self) -> dict[str, object]:
+        with self._lock:
+            epoch, resident = self._resident if self._resident is not None else (None, {})
+        return {"epoch": epoch, "resident": resident}
+
+
 def bind_route_counter_sink(worker: object, diagnostics: object) -> None:
     """Log the worker's counts through the daemon diagnostics, when both exist."""
 
@@ -137,6 +157,7 @@ def bind_route_counter_sink(worker: object, diagnostics: object) -> None:
 
 __all__ = [
     "ROUTE_HARNESS_SLOTS",
+    "ResidentRouteCounterSnapshot",
     "RouteCounterLog",
     "bind_route_counter_sink",
     "decode_route_counters",
