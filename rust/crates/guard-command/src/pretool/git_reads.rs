@@ -197,7 +197,7 @@ pub(super) fn safe_git_arguments(
     }
     if matches!(
         subcommand,
-        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout"
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "fsck" | "sparse-checkout"
     ) {
         // A shortlog pages (pager.shortlog) and all of them run under the
         // repository's configuration, so the probe clears them first.

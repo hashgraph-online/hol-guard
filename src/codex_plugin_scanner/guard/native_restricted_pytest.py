@@ -125,6 +125,21 @@ def restricted_native(operation: str, fields: Mapping[str, Any], expected: type 
     return _request(operation, wire_input, expected)
 
 
+def _list_item(operation: str, item: Any) -> bool:
+    """Whether one entry of a list reply has the shape its operation returns.
+
+    Lists are paths, except `private_links`, which pairs each cache link the
+    contained run gets with the host path it points at.
+    """
+    if operation == "private_links":
+        return (
+            type(item) is dict
+            and set(item) == {"link", "target"}
+            and all(isinstance(part, str) for part in item.values())
+        )
+    return isinstance(item, str)
+
+
 def _request(operation: str, wire_input: Mapping[str, Any], expected: type | tuple[type, ...]) -> Any:
     try:
         payload = _call(
@@ -150,7 +165,7 @@ def _request(operation: str, wire_input: Mapping[str, Any], expected: type | tup
                     type(value) is list
                     and operation
                     not in {"bun_vitest_invocation", "tsx_test_invocation", "mapping_evidence", "mapping_elf"}
-                    and not all(isinstance(item, str) for item in value)
+                    and not all(_list_item(operation, item) for item in value)
                 ) or (expected is dict and not all(isinstance(key, str) for key in value)):
                     pass
                 else:

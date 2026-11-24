@@ -33,6 +33,43 @@ fn checkout(label: &str) -> (PathBuf, FixtureCleanup) {
         "import os as proc\nproc.kill(4242, 15)\n",
     )
     .unwrap();
+    for (name, source) in [
+        (
+            "lazy",
+            "class Pool:\n    def __init__(self):\n        self._module = __import__('concurrent.futures').futures\n",
+        ),
+        ("lazystop", "p = __import__('os')\np.kill(4242, 15)\n"),
+        ("lazyremote", "m = __import__('socket')\n"),
+        ("lazylocal", "m = __import__('pkg.stopper')\n"),
+        (
+            "documented",
+            "\"\"\"Tools.\n\n.. [1] See the guide.\n\"\"\"\n\ndef chunked(it):\n    \"\"\"Split it.\n\n    .. deprecated:: 1.0\n    \"\"\"\n    return it\n",
+        ),
+        ("docpath", "\"\"\"/home/user/.aws/credentials\"\"\"\n"),
+    ] {
+        std::fs::write(project.join(format!("pkg/{name}.py")), source).unwrap();
+    }
+    // A package whose initializer signals, under a harmless module.
+    std::fs::create_dir_all(project.join("nested/inner")).unwrap();
+    std::fs::write(
+        project.join("nested/__init__.py"),
+        "import os as proc\nproc.kill(4242, 15)\n",
+    )
+    .unwrap();
+    std::fs::write(project.join("nested/inner/leaf.py"), "X = 1\n").unwrap();
+    // A package and a same-named module: Python loads the package.
+    std::fs::create_dir_all(project.join("shadow")).unwrap();
+    std::fs::write(
+        project.join("shadow/__init__.py"),
+        "import os as proc\nproc.kill(4242, 15)\n",
+    )
+    .unwrap();
+    std::fs::write(project.join("shadow.py"), "X = 1\n").unwrap();
+    std::fs::write(
+        project.join("caf\u{e9}.py"),
+        "import os as proc\nproc.kill(4242, 15)\n",
+    )
+    .unwrap();
     std::fs::create_dir_all(project.join("wide")).unwrap();
     for index in 0..40 {
         std::fs::write(project.join(format!("wide/m{index}.py")), "X = 1\n").unwrap();
@@ -107,6 +144,31 @@ fn a_probe_that_imports_modules_runs_in_the_workspace_sandbox() {
 }
 
 #[test]
+fn a_probe_whose_modules_import_by_a_constant_name_runs_in_the_workspace_sandbox() {
+    let (root, _cleanup) = checkout("constant");
+    for command in [
+        "python3 - <<'PY'\nfrom pkg import lazy\nprint(lazy.Pool)\nPY",
+        "python3 - <<'PY'\nimport importlib\njson = importlib.import_module('json')\nprint(json.dumps({}))\nPY",
+        "python3 - <<'EOF'\nimport importlib\njson = importlib.import_module('json')\nprint(json.dumps({'lazy': True}))\nEOF",
+    ] {
+        let (action, reason) = outcome(&root, command);
+        assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+    }
+}
+
+#[test]
+fn a_probe_whose_modules_document_themselves_runs_in_the_workspace_sandbox() {
+    let (root, _cleanup) = checkout("documented");
+    for command in [
+        "python3 - <<'PY'\nfrom pkg import documented\nprint(documented.chunked([1]))\nPY",
+        "python3 - <<'EOF'\ndef chunk(items):\n    \"\"\"Split items into one batch.\n\n    .. note:: see the guide\n    \"\"\"\n    return [items]\n\nprint(chunk([1, 2]))\nEOF",
+    ] {
+        let (action, reason) = outcome(&root, command);
+        assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+    }
+}
+
+#[test]
 fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
     let (root, _cleanup) = checkout("misfits");
     for command in [
@@ -167,6 +229,15 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 - <<'PY'\nimport os\nprint(os.listdir('/'))\nPY",
         // A local module the program imports counts too.
         "python3 - <<'PY'\nimport pkg.stopper\nPY",
+        // So does a module it imports by a constant name, and one whose
+        // name reaches signals through an alias.
+        "python3 - <<'PY'\nimport pkg.lazylocal\nPY",
+        "python3 - <<'PY'\nimport pkg.lazystop\nPY",
+        "python3 - <<'PY'\nimport pkg.lazyremote\nPY",
+        // A docstring the program reads back is a string like any other.
+        "python3 - <<'PY'\nimport pkg.docpath\nprint(open(pkg.docpath.__doc__).read())\nPY",
+        "python3 - <<'EOF'\n\"\"\"/etc/passwd\"\"\"\nprint(open(__doc__).read())\nEOF",
+        "python3 - <<'EOF'\nimport importlib\nsock = importlib.import_module('socket')\nprint(sock.gethostname())\nEOF",
         // Every command of a command line, past wrapper option values and
         // nested shells, and paths spelled with escapes, joined literals or
         // formatted strings.
@@ -177,6 +248,17 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 - <<'PY'\nimport os\nos.system('sh -c \"kill 1\"')\nPY",
         "python3 - <<'PY'\np = '/' 'etc/passwd'\nprint(open(p).read())\nPY",
         "python3 - <<'PY'\npart = 'etc'\nprint(open(f'/{part}/passwd').read())\nPY",
+        // A dotted import runs each enclosing package's `__init__.py` first.
+        "python3 - <<'PY'\nimport nested.inner.leaf\nPY",
+        "python3 - <<'PY'\nfrom nested.inner import leaf\nPY",
+        "python3 - <<'PY'\nm = __import__('nested.inner.leaf')\nPY",
+        "python3 - <<'PY'\nimport shadow\nPY",
+        "python3 - <<'PY'\nm = __import__('shadow')\nPY",
+        "python3 - <<'PY'\nm = __import__('caf\u{e9}')\nPY",
+        "python3 - <<'PY'\np = __import__('subprocess').os\np.kill(4242, 15)\nPY",
+        "python3 - <<'PY'\nfrom importlib import import_module as load\nimport_module = lambda _: load('o' + 's')\np = import_module('json')\np.kill(4242, 15)\nPY",
+        "python3 - <<'PY'\ndef f():\n    '../secret.txt'\nprint(open(f.__code__.co_consts[0]).read())\nPY",
+        "python3 - <<'PY'\ndef f():\n    '../secret.txt'\nprint(open(getattr(f, '__d' 'oc__')).read())\nPY",
     ] {
         let (action, _) = outcome(&root, command);
         assert!(
@@ -198,4 +280,61 @@ fn a_probe_whose_local_imports_are_not_all_read_keeps_its_review() {
         action != "allow" && action != "sandbox-required",
         "{command}: {action}"
     );
+}
+
+/// Agents look before they probe. Readers that run before the program have
+/// finished when it starts and write nothing, so the chain earns what the
+/// program earns alone instead of falling through to a block.
+#[test]
+fn a_probe_after_plain_readers_runs_in_the_workspace_sandbox() {
+    let (root, _cleanup) = checkout("readers");
+    let body = "<<'PY'\nimport pkg\nprint(pkg.X)\nPY";
+    for command in [
+        format!("git diff --check && git diff && python3 - {body}"),
+        format!("ls pkg; python3 - {body}"),
+        format!("ls pkg\npython3 - {body}"),
+        format!("git log --oneline -- pkg | head -20; python3 - {body}"),
+        format!("rg -n X -g '*.py' && python3 {body}"),
+        format!("git diff --name-only -z; python3 - {body}"),
+    ] {
+        let (action, reason) = outcome(&root, &command);
+        assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+    }
+}
+
+#[test]
+fn a_probe_after_a_writer_or_before_anything_keeps_its_review() {
+    let (root, _cleanup) = checkout("writers");
+    let body = "<<'PY'\nimport pkg\nprint(pkg.X)\nPY";
+    for command in [
+        // A writer before the program could change what it imports.
+        format!("sed -i 's/X = 1/X = 2/' pkg/__init__.py; python3 - {body}"),
+        format!("cp keys.py pkg/__init__.py && python3 - {body}"),
+        format!("git checkout -- pkg && python3 - {body}"),
+        format!("git diff --output=pkg/__init__.py && python3 - {body}"),
+        // Quotes the shell drops, abbreviations Git expands and clustered
+        // short options do not hide a writer or a preprocessor.
+        format!("git diff --o'utput'=pkg/__init__.py && python3 - {body}"),
+        format!("git diff --out=pkg/__init__.py && python3 - {body}"),
+        format!("rg -nz X pkg; python3 - {body}"),
+        // ripgrep runs its hostname helper even with hyperlinks off.
+        format!("rg --hostname-bin=./run X pkg; python3 - {body}"),
+        format!("rg --hostname=./run X pkg; python3 - {body}"),
+        format!("ls > pkg/__init__.py; python3 - {body}"),
+        format!("cat pkg/remote.py > pkg/__init__.py; python3 - {body}"),
+        // A `cd` moves where its imports resolve.
+        format!("cd pkg; ls; python3 - {body}"),
+        // Readers do not admit what the program itself would not.
+        "ls; python3 - <<'PY'\nimport pkg.remote\nPY".to_string(),
+        "ls; python3 - <<'PY'\nimport pkg.stopper\nPY".to_string(),
+        // A command after the program could run what it prepares.
+        format!("ls; python3 - {body}\nls"),
+        format!("ls; python3 - {body}\ngit add -A"),
+    ] {
+        let (action, _) = outcome(&root, &command);
+        assert!(
+            action != "allow" && action != "sandbox-required",
+            "{command}: {action}"
+        );
+    }
 }

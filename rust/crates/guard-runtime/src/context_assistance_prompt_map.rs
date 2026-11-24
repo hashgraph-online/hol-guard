@@ -33,7 +33,7 @@ mod imports;
 mod more;
 #[path = "context_assistance_prompt_map_pick.rs"]
 mod pick;
-use pick::{named_definitions, Pick};
+use pick::{named_definitions, outlined, Pick};
 #[path = "context_assistance_prompt_map_rename.rs"]
 pub(super) mod rename;
 #[path = "context_assistance_prompt_map_render.rs"]
@@ -80,10 +80,10 @@ const CONTAINERS: &[&str] = &[
     "namespace",
 ];
 
-/// One thing the prompt asks about, as the map looks for it: a term spelled
-/// as `terms` spells it, or quoted text; whether the prompt wrote it as a
-/// name; how rare the walk found it; and whether so many code files hold it
-/// that its uses place nothing, as for a package's own name.
+/// One thing the prompt asks about: a term spelled as `terms` spells it, or
+/// quoted text; whether the prompt wrote it as a name; how rare it is; and
+/// whether its uses place nothing, being in so many code files (a package's
+/// own name) or a plain keyword.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Sought {
     pub(super) text: String,
@@ -91,6 +91,7 @@ pub(super) struct Sought {
     pub(super) name: bool,
     pub(super) rarity: f64,
     pub(super) common: bool,
+    pub(super) keyword: bool,
     /// How many project files hold it, when the walk read them all.
     pub(super) spelled: Option<usize>,
 }
@@ -279,9 +280,8 @@ pub(super) fn map(
         }
         files.push(file(path, text));
     }
-    // A plain word a source file defines is a name too, unless it is common
-    // or the prompt reviews its changes, where "naming and style" say how to
-    // review and name no code. Sample code does not count: an example script
+    // A plain word a source file defines is a name, unless common or the prompt
+    // reviews its changes ("naming and style" name no code). A sample script
     // defining `commit` does not make the word a name.
     let defined: BTreeSet<String> = (files.iter())
         .filter(|file| file.kind == Kind::Source && !more::sample(file.path))
@@ -324,7 +324,7 @@ pub(super) fn map(
     // A named file stands for its outline only when the prompt's words are placed nowhere:
     // "utils.py where the timeout is ignored" means the lines using `timeout`.
     if chosen.is_empty() && uses.is_empty() {
-        chosen = named_definitions(&files, &names, asked, true);
+        chosen = outlined(&files, &names, sought, asked);
     }
     let mut mentioned: Vec<String> = (chosen.iter())
         .filter(|pick| !pick.base)

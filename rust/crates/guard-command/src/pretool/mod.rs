@@ -175,6 +175,7 @@ mod inplace_edit_reason;
 pub(crate) mod recoverable_removal;
 mod repo_create_reason;
 mod root_removal;
+mod write_free_steps;
 use git_reads::safe_git_arguments;
 mod git_helper_context;
 mod git_history_reads;
@@ -284,6 +285,26 @@ mod search_scope_glob;
 mod search_scope_ignore;
 mod search_scope_plain_skips;
 pub(crate) mod search_scope_tracked;
+
+/// Whether `value`, a path as a hook payload spelled it, resolves to a
+/// committed dotenv template: the repository's index lists it and the secret
+/// scan a tracked document already passes finds no live value in it. The
+/// policy floor reads this where its own name-only screen has no working
+/// directory to resolve against.
+pub fn proven_tracked_dotenv_template(value: &str, cwd: Option<&str>) -> bool {
+    search_scope_tracked::names::resolves_to_tracked_dotenv_template(value, cwd)
+}
+
+/// Whether `value`, a path as a hook payload spelled it, resolves to a
+/// committed document named for the key it describes, such as
+/// `private-key-jwt-client-auth.md`: the name the request wrote and the file
+/// it lands on clear every sensitive family but the key-name rule, and the
+/// repository's index lists the file with no secret in it. The policy floor
+/// reads this where its own name-only screen has no working directory to
+/// resolve against.
+pub fn proven_tracked_key_named_document(value: &str, cwd: Option<&str>) -> bool {
+    search_scope_tracked::names::resolves_to_tracked_key_named_document(value, cwd)
+}
 mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;
@@ -700,7 +721,7 @@ fn sensitive_literal_path(value: &str) -> bool {
     .iter()
     .any(|candidate| {
         let relative = Path::new(candidate.strip_prefix("./").unwrap_or(candidate));
-        sensitive_path_family(relative).is_some()
+        guard_secure_fs::sensitive_path_family_beside_name_proof(relative).is_some()
             || guard_secure_fs::credential_named_path(relative)
     })
 }
@@ -918,7 +939,12 @@ fn sensitive_path_argument_with_credentials(value: &str, include_credential_name
     ];
     candidates.iter().any(|candidate| {
         let relative = candidate.strip_prefix("./").unwrap_or(candidate);
-        sensitive_path_family(Path::new(relative)).is_some()
+        let family = if include_credential_names {
+            guard_secure_fs::sensitive_path_family_beside_name_proof
+        } else {
+            sensitive_path_family
+        };
+        family(Path::new(relative)).is_some()
             || (include_credential_names
                 && (guard_secure_fs::credential_named_path(Path::new(relative))
                     || search::glob_can_select_sensitive_path(relative)))
@@ -1675,6 +1701,9 @@ fn evaluate_single_command(
 mod control_flow_tests;
 #[cfg(test)]
 mod fixed_glob_option_boundary_tests;
+#[cfg(test)]
+#[path = "for_loop_sequence_tests.rs"]
+mod for_loop_sequence_tests;
 #[cfg(test)]
 #[path = "for_loop_tests.rs"]
 mod for_loop_tests;

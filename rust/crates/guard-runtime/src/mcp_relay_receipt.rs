@@ -116,6 +116,10 @@ pub(crate) fn is_plain(record: &Value) -> bool {
     plain_either(record)
 }
 
+pub(crate) fn rejection_code(record: &Value) -> &'static str {
+    record::rejection_code(record)
+}
+
 fn plain_either(record: &Value) -> bool {
     plain(record).is_some() || package::plain(record).is_some()
 }
@@ -410,10 +414,12 @@ fn receipt_evidence(
         params: call.params.clone(),
         risk: None,
     })
-    .ok()?;
+    .ok();
     // `argument_entries`: only the keys the command text reads are shipped.
-    let arguments: Option<Vec<ArgumentEntry>> =
-        projection["safe_arguments"].as_object().map(|safe| {
+    let arguments: Option<Vec<ArgumentEntry>> = projection
+        .as_ref()
+        .and_then(|projection| projection["safe_arguments"].as_object())
+        .map(|safe| {
             safe.iter()
                 .filter(|(key, _)| {
                     MCP_RUNTIME_EVIDENCE_COMMAND_ARGUMENT_KEYS.contains(&key.as_str())
@@ -469,7 +475,7 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
         params: plain.params,
         artifact_name: name,
         description: artifact["metadata"]["tool_description"].as_str(),
-        firewall: Some(plain.firewall),
+        firewall: plain.firewall,
     };
     let (raw_command_text, firewall_evidence) =
         receipt_evidence(guard_home, &call, stamp, &risk_categories)?;
@@ -477,9 +483,12 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
     // the inbox row records as well.
     let mut call_evidence = decision_evidence(plain.decision);
     call_evidence.extend(plain.append.iter().cloned());
-    let row = projected
-        .as_ref()
-        .and_then(|projected| row::silent_review(&plain, projected, &call_evidence, stamp));
+    let row = row::silent_review(
+        &plain,
+        projected.as_ref().unwrap_or(&Value::Null),
+        &call_evidence,
+        stamp,
+    );
     let mut scanner_evidence = vec![firewall_evidence];
     scanner_evidence.extend(call_evidence);
     let launch_command = artifact["command"]

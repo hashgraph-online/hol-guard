@@ -446,6 +446,11 @@ pub(super) fn exact_safe_segment_with_context(
                 context,
             );
     };
+    // `last -n $((PATH=1))` assigns while its words expand, before the shell
+    // looks the program up, so the step could run a `1/last` never read.
+    if super::shell_arithmetic::arithmetic_assigns(&segment.text) {
+        return false;
+    }
     let basename = executable_basename(executable);
     // `jq` and `yq` both take an expression that selects fields inside the
     // document they read, so the words in it are not names on this machine.

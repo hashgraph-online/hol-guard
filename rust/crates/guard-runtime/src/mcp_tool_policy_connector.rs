@@ -29,12 +29,16 @@ fn explicit_choice(config: &Map<String, Value>, key: &str, id: Option<&str>) -> 
         .is_some_and(|value| !value.is_null())
 }
 
-/// Whether `decision` is a review due only to Guard not recognising the server.
+/// Whether `decision` is due only to Guard not recognising the server.
 fn non_recognition(subject: &McpToolPolicySubjectV1, decision: &Decision) -> bool {
     let command = subject.artifact.command.as_deref().unwrap_or("");
-    decision.action == GuardAction::Review
-        && decision.policy_action() == GuardAction::Review
-        && decision.signals.is_empty()
+    matches!(
+        decision.action,
+        GuardAction::Allow | GuardAction::Warn | GuardAction::Review
+    ) && matches!(
+        decision.policy_action(),
+        GuardAction::Allow | GuardAction::Warn | GuardAction::Review
+    ) && decision.signals.is_empty()
         && decision.risk_categories.is_empty()
         && BASE_SOURCES.contains(&decision.source.as_str())
         && matches!(
@@ -91,7 +95,11 @@ pub(crate) fn connector_setup_with_catalog(
         return None;
     }
     let identity_hash = unset_connector(subject.extension.as_ref()?, catalog)?;
-    Some(json!({
+    Some(setup_value(subject, identity_hash))
+}
+
+fn setup_value(subject: &McpToolPolicySubjectV1, identity_hash: String) -> Value {
+    json!({
         "reason_code": CONNECTOR_SETUP_REQUIRED,
         "identity_hash": identity_hash,
         "surface": "mcp",
@@ -99,7 +107,7 @@ pub(crate) fn connector_setup_with_catalog(
         // The queue appends the row's own action digest, so identical calls
         // merge and distinct calls keep their own rows.
         "queue_group_id": format!("connector:{identity_hash}"),
-    }))
+    })
 }
 
 #[cfg(test)]

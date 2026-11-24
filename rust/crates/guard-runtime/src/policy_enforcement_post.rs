@@ -242,7 +242,12 @@ fn post_tool_policy(
         &request.payload,
         &harness,
         action_type,
+        // A completed call carries no operation of its own, so the output of
+        // a file read is the only post-tool request the template relief
+        // answers.
+        action_type == PreToolActionTypeV1::FileRead,
         &response.reason_code,
+        request.cwd.as_deref(),
     )?;
     // The operator's exact-tool allow answers the unreviewed-tool setting for
     // the call's output as it does for the call.

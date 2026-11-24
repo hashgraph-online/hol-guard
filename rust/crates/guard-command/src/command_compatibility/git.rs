@@ -286,9 +286,8 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
         "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
         // These listings only print, and their grammars already exclude the
         // forms that run a configured program; the read proof still decides.
-        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout" => {
-            crate::pretool::git_listing_reads::read_form(command, rest)
-        }
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "fsck"
+        | "sparse-checkout" => crate::pretool::git_listing_reads::read_form(command, rest),
         "rev-list" => !rest.iter().any(|argument| {
             matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
         }),
@@ -327,7 +326,7 @@ pub(super) fn inspection_arguments<'a>(
             | "range-diff" | "cherry" | "show" | "blame" | "annotate" | "describe" | "reflog"
             | "branch" | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote"
             | "worktree" | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref"
-            | "rev-list" | "shortlog" | "check-ignore" | "count-objects" | "check-attr"
+            | "rev-list" | "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "fsck"
             | "name-rev" | "show-branch" | "check-ref-format" | "var" | "patch-id" | "stripspace",
         ) => true,
         // Both also have a spelling that opens a file the caller names, so

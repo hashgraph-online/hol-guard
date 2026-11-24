@@ -145,3 +145,44 @@ fn a_stream_edit_never_writes_reads_or_runs() {
     assert!(!reads(&["1d", "Cargo.toml", "-i"]));
     assert!(!reads(&["-f", "script.sed", "Cargo.toml"]));
 }
+
+/// `120,+40p` prints the 40 lines after line 120, and `/fn main/,+20p` the 20
+/// after a match: the end counts on from a start the script already names.
+/// The proof read only absolute ends, so a reader who counted forward instead
+/// of adding the numbers went to review for the same print.
+#[test]
+fn a_range_end_that_counts_on_from_its_start_reads_like_a_line_number() {
+    assert!(reads(&["-n", "120,+40p", "Cargo.toml"]));
+    assert!(reads(&["-n", "120, +40p", "Cargo.toml"]));
+    assert!(reads(&["-n", "1,~8p", "Cargo.toml"]));
+    assert!(reads(&["-n", "/export/,+20p", "Cargo.toml"]));
+    assert!(reads(&["-n", "/export/,~4p", "Cargo.toml"]));
+    assert!(reads(&["-n", "10,+2p;40,+5p", "Cargo.toml"]));
+    assert!(reads(&[
+        "-n",
+        "-e",
+        "10,+2p",
+        "-e",
+        "/export/,+3p",
+        "Cargo.toml"
+    ]));
+}
+
+/// The counted end is only a print range. It never stands first, never
+/// carries more than six digits or anything but digits, and a write or run
+/// command after it keeps the review.
+#[test]
+fn a_counted_range_end_never_carries_a_write_or_starts_the_range() {
+    assert!(!reads(&["-n", "+3p", "Cargo.toml"]));
+    assert!(!reads(&["-n", "+3,10p", "Cargo.toml"]));
+    assert!(!reads(&["-n", "~3,10p", "Cargo.toml"]));
+    assert!(!reads(&["-n", "10,+p", "Cargo.toml"]));
+    assert!(!reads(&["-n", "10,+1234567p", "Cargo.toml"]));
+    assert!(!reads(&["-n", "10,+-3p", "Cargo.toml"]));
+    assert!(!reads(&["-n", "10,+$p", "Cargo.toml"]));
+    assert!(!reads(&["-n", "10,+3,+4p", "Cargo.toml"]));
+    assert!(!reads(&["-n", "10,+3w out.txt", "Cargo.toml"]));
+    assert!(!reads(&["-n", "/export/,+3w out.txt", "Cargo.toml"]));
+    assert!(!reads(&["-n", "/export/,+3e id", "Cargo.toml"]));
+    assert!(!reads(&["10,+3p", "Cargo.toml"]));
+}

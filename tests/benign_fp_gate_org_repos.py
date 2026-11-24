@@ -110,7 +110,9 @@ def write_org_repos(org: Path, home: Path) -> None:
 
 def write_ignore_rule_repos(home: Path) -> None:
     # Repositories whose `.gitignore` re-includes literal paths: an ordinary
-    # kept file and editor setting, and a `.env` template that stays reviewed.
+    # kept file and editor setting, and a committed `.env` template. A command
+    # that takes the template as an operand is still screened; a plain read of
+    # it is ordinary work.
     for name, ignore, files in (
         (
             "web-console",

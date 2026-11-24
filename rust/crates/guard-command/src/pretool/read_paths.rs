@@ -177,6 +177,7 @@ pub(super) fn bounded_structured_file_read_target(
         ReadScreen {
             literal_brackets: true,
             directory_listing: true,
+            request_profile: true,
             ..ReadScreen::default()
         },
     )
@@ -218,6 +219,11 @@ pub(super) fn bounded_literal_bracket_target(
 #[derive(Clone, Copy, Default)]
 struct ReadScreen {
     allow_directory: bool,
+    /// The call names one path and does nothing else with it, so a committed
+    /// dotenv template is the ordinary file it is. A shell operand keeps the
+    /// whole dotenv family, because what the command does with the path is
+    /// the action being judged.
+    request_profile: bool,
     literal_brackets: bool,
     missing_notes: bool,
     directory_listing: bool,
@@ -280,7 +286,13 @@ fn bounded_read_target_with_brackets(
         return (canonical.is_file()
             || ((screen.allow_directory || listing) && canonical.is_dir()))
             && (listing
-                || resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
+                || resolved_read_target_allowed_profile(
+                    &candidate,
+                    &canonical,
+                    home_dir,
+                    cwd,
+                    screen.request_profile,
+                )
                 || package_source::installed_package_source(
                     &candidate, &canonical, home_dir, cwd,
                 ));
@@ -371,7 +383,7 @@ pub fn proven_repository_hidden_document(
     cwd: Option<&str>,
 ) -> bool {
     let temporary = private_temporary::inside_private_temporary_directory(canonical, home_dir);
-    location_allowed(canonical, home_dir, cwd, temporary, true)
+    location_allowed(canonical, home_dir, cwd, temporary, true, false)
         && (hidden_listing::repository_hidden_source_document(canonical, home_dir, cwd)
             || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd)
             || git_ref_document(canonical, home_dir, cwd))
@@ -384,14 +396,49 @@ pub(super) fn resolved_path_allowed_for_operation(
     verified_temporary: bool,
     read_only: bool,
 ) -> bool {
-    path_gate(canonical, home_dir, cwd, verified_temporary, read_only, true)
+    path_allowed_for_operation(
+        canonical,
+        home_dir,
+        cwd,
+        verified_temporary,
+        read_only,
+        false,
+    )
+}
+
+fn path_allowed_for_operation(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    verified_temporary: bool,
+    read_only: bool,
+    request_profile: bool,
+) -> bool {
+    path_gate(
+        canonical,
+        home_dir,
+        cwd,
+        verified_temporary,
+        read_only,
+        true,
+        request_profile,
+    )
         // A directory named for a login feature inside a repository is code,
         // not a credential store; every other screen still runs on the path.
         || (read_only
             && feature_directories::feature_only_credential_name(canonical, home_dir)
-            && path_gate(canonical, home_dir, cwd, verified_temporary, read_only, false))
+            && path_gate(
+                canonical,
+                home_dir,
+                cwd,
+                verified_temporary,
+                read_only,
+                false,
+                request_profile,
+            ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn path_gate(
     canonical: &std::path::Path,
     home_dir: Option<&str>,
@@ -399,35 +446,45 @@ fn path_gate(
     verified_temporary: bool,
     read_only: bool,
     credential_names: bool,
+    request_profile: bool,
 ) -> bool {
     // Reading a scratch file in the private temporary directory is routine.
     let temporary = verified_temporary
         || (read_only
             && private_temporary::inside_private_temporary_directory(canonical, home_dir));
-    if !location_allowed(canonical, home_dir, cwd, temporary, credential_names)
-        || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
-            || (read_only && guard_secure_fs::hidden_empty_work_tree_file(canonical))
-            || (read_only && project_dotfile_read(canonical, home_dir))
-            || guard_safety_doc(canonical, home_dir)
-            || (read_only
-                && (agent_skill_document(canonical, home_dir)
-                    || agent_skill_script(canonical, home_dir)
-                    || agent_home_state(canonical, home_dir)
-                    || project_skill_document(canonical, home_dir, cwd)
-                    || codex_notes_document(canonical, home_dir)
-                    || harness_notes::harness_home_document(canonical, home_dir)
-                    || git_ref_document(canonical, home_dir, cwd)
-                    || git_config_document(canonical, cwd)
-                    || worktree_gitfile(canonical)
-                    || scratch::workspace_scratch_read(canonical, home_dir, cwd)
-                    || scratch::private_temporary_scratch_read(canonical, home_dir)
-                    || virtualenv_activation_script(canonical)
-                    || hidden_listing::repository_hidden_source_document(
-                        canonical, home_dir, cwd,
-                    )
-                    || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd)
-                    || super::cursor_session_outputs::own_output(canonical, home_dir)))
-            || (read_only && execution_output_log(canonical, home_dir)))
+    if !location_allowed(
+        canonical,
+        home_dir,
+        cwd,
+        temporary,
+        credential_names,
+        request_profile,
+    ) || !((if request_profile
+        && super::search_scope_tracked::names::tracked_dotenv_template(canonical, cwd)
+    {
+        guard_secure_fs::hidden_request_parts_allowed(canonical)
+    } else {
+        guard_secure_fs::hidden_read_parts_allowed(canonical)
+    }) || (read_only && guard_secure_fs::hidden_empty_work_tree_file(canonical))
+        || (read_only && project_dotfile_read(canonical, home_dir))
+        || guard_safety_doc(canonical, home_dir)
+        || (read_only
+            && (agent_skill_document(canonical, home_dir)
+                || agent_skill_script(canonical, home_dir)
+                || agent_home_state(canonical, home_dir)
+                || project_skill_document(canonical, home_dir, cwd)
+                || codex_notes_document(canonical, home_dir)
+                || harness_notes::harness_home_document(canonical, home_dir)
+                || git_ref_document(canonical, home_dir, cwd)
+                || git_config_document(canonical, cwd)
+                || worktree_gitfile(canonical)
+                || scratch::workspace_scratch_read(canonical, home_dir, cwd)
+                || scratch::private_temporary_scratch_read(canonical, home_dir)
+                || virtualenv_activation_script(canonical)
+                || hidden_listing::repository_hidden_source_document(canonical, home_dir, cwd)
+                || hidden_listing::repository_hidden_marker_file(canonical, home_dir, cwd)
+                || super::cursor_session_outputs::own_output(canonical, home_dir)))
+        || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;
     }
@@ -450,7 +507,19 @@ pub(super) fn resolved_read_target_allowed(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    resolved_path_allowed_for_operation(canonical, home_dir, cwd, false, true)
+    resolved_read_target_allowed_profile(candidate, canonical, home_dir, cwd, false)
+}
+
+/// The read-target gate above, for a call that names one path and does
+/// nothing else with it.
+fn resolved_read_target_allowed_profile(
+    candidate: &std::path::Path,
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    request_profile: bool,
+) -> bool {
+    path_allowed_for_operation(canonical, home_dir, cwd, false, true, request_profile)
         || (!guard_secure_fs::contains_symlink_component(candidate)
             && resolved_location_allowed(canonical, home_dir, cwd, false)
             && resolved_home_hidden_content_read(canonical, home_dir))
@@ -513,7 +582,7 @@ pub(super) fn resolved_location_allowed(
     cwd: Option<&str>,
     verified_temporary: bool,
 ) -> bool {
-    location_allowed(canonical, home_dir, cwd, verified_temporary, true)
+    location_allowed(canonical, home_dir, cwd, verified_temporary, true, false)
 }
 
 fn location_allowed(
@@ -522,6 +591,7 @@ fn location_allowed(
     cwd: Option<&str>,
     verified_temporary: bool,
     credential_names: bool,
+    request_profile: bool,
 ) -> bool {
     let rendered = canonical.to_string_lossy().replace('\\', "/");
     let lowered = rendered.to_ascii_lowercase();
@@ -540,8 +610,27 @@ fn location_allowed(
             .iter()
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
         || foreign_user_home(canonical, home_dir, cwd)
-        || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || (credential_names && super::search_scope_tracked::names::unproven(canonical, cwd)))
+        // A committed dotenv template is read past the dotenv family screen
+        // only where the index and the secret scan prove it is the template
+        // its name claims. A key-named document is read past the key family
+        // only where the name screen below runs, which still matches it and
+        // clears it only through the committed-document proof. Every other
+        // family, and every path a command acts on rather than names, answers
+        // unchanged.
+        || ((if credential_names {
+            guard_secure_fs::sensitive_path_family_beside_name_proof(canonical)
+        } else {
+            guard_secure_fs::sensitive_path_family(canonical)
+        })
+        .is_some()
+            && !(request_profile
+                && super::search_scope_tracked::names::tracked_dotenv_template(canonical, cwd)))
+        || (credential_names
+            && if request_profile {
+                super::search_scope_tracked::names::unproven_request(canonical, cwd)
+            } else {
+                super::search_scope_tracked::names::unproven(canonical, cwd)
+            }))
 }
 
 pub(super) fn foreign_user_home(
@@ -631,3 +720,7 @@ mod directory_read_tests;
 #[cfg(all(test, unix))]
 #[path = "directory_read_tmp_alias_tests.rs"]
 mod directory_read_tmp_alias_tests;
+
+#[cfg(test)]
+#[path = "read_request_template_tests.rs"]
+mod read_request_template_tests;

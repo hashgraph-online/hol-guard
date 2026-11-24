@@ -5,7 +5,7 @@ use serde_json::{json, Map, Value};
 
 use super::record::Plain;
 use super::{strings, Stamp};
-use crate::mcp_relay_decide::ask_row::{projection, silent_review_args, Queue};
+use crate::mcp_relay_decide::ask_row::{projection, silent_review_args, Projection, Queue};
 
 /// `_record_unprompted_review`: the `queue_blocked_approvals` arguments of a
 /// safe-alternative block's inbox row, written with no prompt shown and the
@@ -18,7 +18,16 @@ pub(super) fn silent_review(
     stamp: &Stamp,
 ) -> Option<Map<String, Value>> {
     let (redaction_level, center, queue_group_id) = plain.silent_review()?;
-    let projection = projection(projected)?;
+    let projection = projection(projected).unwrap_or_else(|| Projection {
+        launch_target: plain
+            .artifact
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or(plain.tool_name)
+            .to_owned(),
+        risk_summary: "MCP tool call requires review.".to_owned(),
+        browser_intent: None,
+    });
     let artifact: McpToolCallArtifactV1 =
         serde_json::from_value(Value::Object(plain.artifact.clone())).ok()?;
     // `str(Path.cwd())`, the writing process's, or null when it is gone.

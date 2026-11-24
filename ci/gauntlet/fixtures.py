@@ -73,6 +73,16 @@ SECURITY_NOTES = "Public configuration guide.\nSet API_KEY in your local .env fi
 # prints the name, so a pattern that prints the same names must print it too.
 ROTATION_RUNBOOK = "# Rotating credentials\n\nOpen the provider console and issue a new value.\n"
 
+# A committed page named for the client authentication method it describes.
+# ``private_key_jwt`` is an OpenID Connect method, so the name says what the
+# page covers; the page holds no key. Reads of it, and recursive searches of
+# the directory holding it, used to ask for review because the name carried
+# the marker a key container is named with.
+CLIENT_AUTH_PAGE = (
+    "# private_key_jwt\n\nThe client signs a JWT assertion with its own key and posts it\n"
+    "to the token endpoint.\n"
+)
+
 SOURCE_FILES = {
     "src/settings.ts": SETTINGS_BEFORE,
     "src/one.ts": SOURCE,
@@ -282,6 +292,7 @@ def create_fixture(
     for path in [
         workspace / "src",
         workspace / "docs",
+        workspace / "docs/auth-evidence",
         workspace / "output",
         workspace / "aliases",
         workspace / "deletion-target",
@@ -294,6 +305,7 @@ def create_fixture(
         **SOURCE_FILES,
         "docs/security-notes.md": SECURITY_NOTES,
         "docs/credential-rotation-runbook.md": ROTATION_RUNBOOK,
+        "docs/auth-evidence/private-key-jwt-client-auth.md": CLIENT_AUTH_PAGE,
         "deletion-target/keep.txt": "This directory must survive the protection test.\n",
         ".env": "API_KEY=" + canary + "\n",
     }

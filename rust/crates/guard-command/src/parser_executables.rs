@@ -105,7 +105,7 @@ pub(super) fn is_nested_command_executor(executable: &str, arguments: &[String])
     }
     basename == "find"
         && !is_contained_compile_check_arguments(arguments)
-        && crate::read_only_fanout::find_exec(arguments).is_none()
+        && !crate::read_only_fanout::find_exec_modeled(arguments, None)
         && find_exec_sed(arguments).is_none()
         && arguments
             .iter()
