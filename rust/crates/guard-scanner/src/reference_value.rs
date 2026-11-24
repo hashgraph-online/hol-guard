@@ -82,7 +82,7 @@ static ACTIONS_EXPRESSION: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Whether a credential assignment match is a reference or placeholder, not a
 /// credential. `rest_of_line` is the text after the match on the same line.
-pub(crate) fn is_reference(matched: &str, rest_of_line: &str) -> bool {
+pub(crate) fn is_reference(matched: &str, preceding: &str, rest_of_line: &str) -> bool {
     let Some(index) = matched.find([':', '=']) else {
         return false;
     };
@@ -101,9 +101,31 @@ pub(crate) fn is_reference(matched: &str, rest_of_line: &str) -> bool {
             && !hides_literal("", rest_of_line);
     }
     let placeholder = PLACEHOLDER.is_match(value);
+    if !placeholder && value.starts_with('$') && !value.starts_with("$(") {
+        let line_start = preceding.rfind(['\n', '\r']).map_or(0, |at| at + 1);
+        let before = format!("{}{}", &preceding[line_start..], &matched[..index]);
+        return UNQUOTED_REFERENCE.is_match(value) && !joins_literal(value, &before, rest_of_line);
+    }
     (placeholder || UNQUOTED_REFERENCE.is_match(value))
         && ((placeholder && value.ends_with(';'))
             || !hides_literal(if placeholder { "" } else { value }, rest_of_line))
+}
+
+/// Whether text joined to a shell parameter makes it part of a longer word,
+/// as in `${PREFIX}Kq7x...`. The rule stops an unquoted value at `}`, so a
+/// braced parameter's closing brace starts `rest_of_line`. When the
+/// assignment sits inside a double-quoted string, as in
+/// `echo "TOKEN=${TOKEN}" > .env`, the next quote closes that string rather
+/// than opening a literal. `before` is the line up to the separator.
+fn joins_literal(value: &str, before: &str, rest_of_line: &str) -> bool {
+    let mut rest = rest_of_line;
+    if value.starts_with("${") && !value.ends_with('}') {
+        rest = rest.strip_prefix('}').unwrap_or(rest);
+    }
+    if before.matches('"').count() % 2 == 1 {
+        rest = rest.strip_prefix('"').unwrap_or(rest);
+    }
+    has_attached_literal(rest)
 }
 
 /// Whether `value` is one whole Actions context read and nothing else.

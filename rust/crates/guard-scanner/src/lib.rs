@@ -22,6 +22,10 @@ mod self_named_value;
 mod url_credential;
 mod wiped_read;
 
+#[cfg(test)]
+#[path = "shell_reference_tests.rs"]
+mod shell_reference_tests;
+
 pub use match_spans::scan_match_spans;
 pub use payment_key::holds_live_payment_key;
 
@@ -328,6 +332,12 @@ fn is_sample(
     suppress_samples: bool,
     documentation_sample_context: bool,
 ) -> bool {
+    // `_authToken=${NPM_TOKEN}` in an `.npmrc` and `NPM_TOKEN: ${{ secrets.NPM_TOKEN }}`
+    // in a publish workflow name where the token comes from. Sample wording
+    // still proves nothing for this rule, so only a reference passes.
+    if classifier == "npm-auth-token" {
+        return reference_value::is_reference(matched, preceding, rest_of_line);
+    }
     if !suppressible(classifier) {
         return false;
     }
@@ -355,7 +365,7 @@ fn is_sample(
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
-            || reference_value::is_reference(matched, rest_of_line)
+            || reference_value::is_reference(matched, preceding, rest_of_line)
             || code_value::is_code_value(matched, rest_of_line)
             || code_expression::is_code_expression(matched, rest_of_line))
     {
