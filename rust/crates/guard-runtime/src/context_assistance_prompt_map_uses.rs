@@ -98,16 +98,30 @@ pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -
 /// The shortest prompt word read as a misspelled name.
 const MIN_MISSPELLED: usize = 5;
 
-/// The one definition a misspelled name means, a letter away from it:
-/// "chunkd" is `chunked`. Only for a word of five letters or more that no
-/// project file holds, and only when one name is that near.
-pub(super) fn misspelled<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<&'a str> {
-    if item.phrase || item.spelled != Some(0) || item.text.chars().count() < MIN_MISSPELLED {
+/// The shortest defined name a new name is read as growing from.
+const MIN_STEM: usize = 6;
+
+/// The one definition a name no project file holds means. A misspelled name
+/// means the definition a letter away from it: "chunkd" is `chunked`, for a
+/// word of five letters or more, and only when one name is that near. A new
+/// name written as code means the longest defined name it starts with: asked
+/// to add `isRelativeURL`, an agent reads `isRelative` first, to reuse it or
+/// to write the new one like it.
+pub(super) fn meant<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<&'a str> {
+    if item.phrase || item.spelled != Some(0) {
         return None;
     }
-    let mut near = (defined.iter()).filter(|name| one_letter_apart(&item.text, name));
-    let first = near.next()?;
-    near.next().is_none().then_some(first.as_str())
+    if item.text.chars().count() >= MIN_MISSPELLED {
+        let mut near = (defined.iter()).filter(|name| one_letter_apart(&item.text, name));
+        if let Some(first) = near.next() {
+            return near.next().is_none().then_some(first.as_str());
+        }
+    }
+    (defined.iter())
+        .filter(|name| item.name && name.len() >= MIN_STEM && name.len() < item.text.len())
+        .filter(|name| item.text.starts_with(name.as_str()))
+        .max_by_key(|name| name.len())
+        .map(String::as_str)
 }
 
 /// Whether `a` and `b` differ by one letter added, dropped or changed, or
