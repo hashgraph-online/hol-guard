@@ -190,7 +190,11 @@ fn as_code<'a>(path: &str, text: &'a str) -> Cow<'a, str> {
                 fence = None
             }
             (Some(_), _) => code.push(line),
-            (None, Some(m)) if run >= 3 => fence = Some((m, run)),
+            // A backtick fence's info string has no backticks, so
+            // ```code``` on one line is inline code.
+            (None, Some(m)) if run >= 3 && (m == '~' || !trimmed[run..].contains('`')) => {
+                fence = Some((m, run))
+            }
             (None, _) => {
                 code.extend(inline_code(line));
                 code.extend(line.split_whitespace().filter(|word| shaped(word)));
