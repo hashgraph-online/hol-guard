@@ -37469,6 +37469,69 @@
       "expect": "allow"
     },
     {
+      "id": "post-tool-cargo-test-credential-named-module",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "cargo test -q -p auth"
+      },
+      "tool_response": {
+        "stdout": "running 3 tests\ntest token::tests::issues_claims ... ok\ntest auth_token::tests::rejects_expired ... ok\ntest secret::store::tests::round_trips ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "post-tool-report-test-result-pass-names",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "python3 tools/report.py"
+      },
+      "tool_response": {
+        "stdout": "{\"tests_pass\": true, \"total\": 12}\nboth-pass: {'cost': 1.25, 'requests': 14}\nall_pass = True\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-post-tool-report-db-pass-value",
+      "fix_area": "secrets",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "event": "PostToolUse",
+      "tool_input": {
+        "command": "python3 tools/report.py"
+      },
+      "tool_response": {
+        "stdout": "DB_PASS=Kq7xY2mN9pL4vR8tW3sZ\n",
+        "stderr": ""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-post-tool-test-runner-traceback-real-password",
       "fix_area": "secrets",
       "harnesses": [

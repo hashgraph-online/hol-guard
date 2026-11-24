@@ -15,9 +15,11 @@ mod field_copy;
 mod guard_link;
 mod masked_value;
 mod match_spans;
+mod path_segment;
 mod payment_key;
 mod prose_answer_value;
 mod reference_value;
+mod result_pass;
 mod self_named_value;
 mod url_credential;
 mod wiped_read;
@@ -352,6 +354,8 @@ fn is_sample(
             || guard_link::is_guard_link(matched, preceding)
             || code_value::is_block_header(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
+            || result_pass::is_result_pass(matched)
+            || path_segment::is_path_segment(matched)
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
