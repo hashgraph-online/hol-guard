@@ -497,3 +497,7 @@ mod image_tests;
 #[cfg(test)]
 #[path = "tracked_private_jwk_tests.rs"]
 mod private_jwk_tests;
+
+#[cfg(test)]
+#[path = "tracked_key_named_reads_tests.rs"]
+mod key_named_reads_tests;
