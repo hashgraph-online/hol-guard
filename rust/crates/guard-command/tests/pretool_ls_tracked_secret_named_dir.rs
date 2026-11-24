@@ -99,6 +99,8 @@ fn listing_that_could_show_more_than_committed_names_keeps_its_review() {
     .unwrap();
     // A directory named as a store keeps its review even when committed.
     commit(&s, &s.worktree, &["config/secrets/readme.md"]);
+    // A hidden directory keeps its review even when every entry is committed.
+    commit(&s, &s.worktree, &["app/.secret-feature/page.tsx"]);
     // A checkout of another repository is not the session's.
     let other = s.home.join("other");
     std::fs::create_dir_all(&other).unwrap();
@@ -114,7 +116,9 @@ fn listing_that_could_show_more_than_committed_names_keeps_its_review() {
     for command in [
         format!("ls \"{w}/app/(group)/topics/secret-rotation-demo\""),
         format!("ls \"{w}/config/secrets\""),
+        format!("ls \"{w}/app/.secret-feature\""),
         format!("ls -R \"{w}/app/(group)/topics/input-handling\" \"{w}/app/(group)/topics/secret-rotation-demo/view\""),
+        format!("ls --rec \"{w}/app/(group)/topics/input-handling\" \"{w}/app/(group)/topics/secret-rotation-demo/view\""),
         format!("ls \"{o}/secret-rotation-demo\""),
         format!("cat \"{w}/app/(group)/topics/secret-rotation-demo/view/card.tsx\" \"{w}/app/(group)/topics/secret-rotation-demo/notes.txt\""),
     ] {

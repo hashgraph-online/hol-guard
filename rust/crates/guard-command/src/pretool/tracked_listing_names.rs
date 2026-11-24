@@ -7,8 +7,9 @@
 //! worktrees, whose every entry that repository tracks shows only names
 //! already committed. A path there that does not exist shows nothing at all.
 //! A directory holding an untracked entry, a credential store, a `.git`
-//! directory, a repository root, a checkout outside the session's
-//! repository, or a recursive listing keeps the review.
+//! directory, a hidden directory below the repository root, a repository
+//! root, a checkout outside the session's repository, or a recursive listing
+//! keeps the review.
 
 use super::{read_index, TrackedFiles, MAX_ANCESTORS, STORE_DIRECTORIES};
 use crate::CanonicalCommandV1;
@@ -46,9 +47,10 @@ pub(in crate::pretool) fn listing_only(model: &CanonicalCommandV1) -> bool {
         })
 }
 
-/// `-R`, `--recursive`, or a short-option cluster holding `R`.
+/// `-R`, `--recursive` or an abbreviation of it that GNU `ls` accepts, or a
+/// short-option cluster holding `R`.
 fn recursive(argument: &str) -> bool {
-    argument == "--recursive"
+    (argument.len() > 2 && argument.starts_with("--") && "--recursive".starts_with(argument))
         || (argument.starts_with('-') && !argument.starts_with("--") && argument[1..].contains('R'))
 }
 
@@ -155,7 +157,16 @@ fn committed_directory(directory: &Path, entries: Entries) -> bool {
                 .is_none_or(|part| STORE_DIRECTORIES.contains(&part.to_ascii_lowercase().as_str()))
         })
     };
-    if store_part(relative)
+    // A hidden name below the repository root keeps its review, whether the
+    // operand spells it or reaches it through a link, as a missing hidden
+    // name does.
+    let hidden = relative.components().any(|part| {
+        part.as_os_str()
+            .to_str()
+            .is_none_or(|part| part.starts_with('.'))
+    });
+    if hidden
+        || store_part(relative)
         || store_part(repository)
         || guard_secure_fs::credential_directory_path(relative)
         || guard_secure_fs::credential_directory_path(repository)
