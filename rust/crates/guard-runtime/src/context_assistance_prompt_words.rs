@@ -173,14 +173,52 @@ fn command(span: &str) -> bool {
             .any(|word| word.starts_with('-') || word.contains('/') || file_name(word).is_some())
 }
 
-/// The prompt's words but numbers and versions (`3.60`), which name no code.
+/// The prompt's words but those that name no code: numbers and versions
+/// (`3.60`), abbreviations such as "e.g." and "i.e.", and every piece of an
+/// email address. A decorator (`@app.route`), an import alias
+/// (`@/lib/api.ts`) and a package version (`lodash@4.17.21`) are still read.
 fn tokens(span: &str) -> impl Iterator<Item = &str> {
+    let mail = mail_spans(span);
     let split = span.split(|c: char| !(c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '/')));
-    split.filter(|token| {
+    split.filter(move |token| {
         let body = token.strip_prefix(['v', 'V']).unwrap_or(token);
         let number = body.chars().all(|c| c.is_ascii_digit() || c == '.');
-        !(number && (body.len() == token.len() || body.contains(|c: char| c.is_ascii_digit())))
+        let abbreviation = token.len() > 1
+            && token.ends_with('.')
+            && token.split('.').all(|piece| piece.chars().count() <= 1);
+        let start = token.as_ptr() as usize - span.as_ptr() as usize;
+        let email = mail.iter().any(|range| range.contains(&start));
+        !((number && (body.len() == token.len() || body.contains(|c: char| c.is_ascii_digit())))
+            || abbreviation
+            || email)
     })
+}
+
+/// Byte ranges of email addresses: a mailbox of letters, digits and
+/// `._%+-`, an `@`, and a host with a dot whose last label is letters. A
+/// bare `@name` has no mailbox, and `name@4.17` no such host.
+fn mail_spans(span: &str) -> Vec<std::ops::Range<usize>> {
+    let bytes = span.as_bytes();
+    let mailbox = |b: &u8| b.is_ascii_alphanumeric() || b"._%+-".contains(b);
+    let host = |b: &u8| b.is_ascii_alphanumeric() || b".-".contains(b);
+    let mut spans = Vec::new();
+    for (at, _) in span.match_indices('@') {
+        let start = bytes[..at]
+            .iter()
+            .rposition(|b| !mailbox(b))
+            .map_or(0, |i| i + 1);
+        let end = bytes[at + 1..]
+            .iter()
+            .position(|b| !host(b))
+            .map_or(bytes.len(), |i| at + 1 + i);
+        let domain = span[at + 1..end].trim_end_matches(['.', '-']);
+        let last = domain.rsplit('.').next().unwrap_or("");
+        let tld = last.len() >= 2 && last.bytes().all(|b| b.is_ascii_alphabetic());
+        if start < at && domain.contains('.') && tld {
+            spans.push(start..at + 1 + domain.len());
+        }
+    }
+    spans
 }
 
 fn camel(word: &str) -> bool {
