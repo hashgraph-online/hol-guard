@@ -10,6 +10,9 @@ mod no_change;
 mod paths;
 #[path = "context_assistance_prompt_product_names.rs"]
 mod product_names;
+#[path = "context_assistance_prompt_task_words.rs"]
+mod task_words;
+use task_words::TASK_WORDS;
 
 pub(crate) const MAX_TERMS: usize = 32;
 const MAX_PHRASES: usize = 4;
@@ -35,79 +38,6 @@ const STOP_WORDS: &[&str] = &[
     "too", "until", "update", "use", "very", "want", "was", "were", "what", "when", "where",
     "whether", "which", "while", "who", "whose", "why", "will", "with", "without", "would", "you",
     "your",
-];
-/// Words that, written plainly, say what to do or how a task came about, not
-/// which code it is about: "find the root cause after the last commit" names
-/// no function `find`, `root` or `last`, and "resume" or "finish it end to
-/// end" none named `resume` or `finish`. Written like code they still count.
-const TASK_WORDS: &[&str] = &[
-    "actually",
-    "alone",
-    "answer",
-    "behavior",
-    "behaviour",
-    "broke",
-    "broken",
-    "bug",
-    "cause",
-    "check",
-    "code",
-    "commit",
-    "committed",
-    "continue",
-    "describe",
-    "docstring",
-    "doctest",
-    "edit",
-    "everywhere",
-    "example",
-    "expected",
-    "explain",
-    "fail",
-    "failing",
-    "find",
-    "finish",
-    "first",
-    "green",
-    "implement",
-    "implementation",
-    "last",
-    "leave",
-    "library",
-    "line",
-    "lines",
-    "look",
-    "main",
-    "out",
-    "output",
-    "pass",
-    "passes",
-    "passing",
-    "proceed",
-    "push",
-    "pushed",
-    "question",
-    "recently",
-    "red",
-    "refactor",
-    "remove",
-    "rename",
-    "reply",
-    "resume",
-    "review",
-    "root",
-    "run",
-    "short",
-    "since",
-    "something",
-    "started",
-    "sure",
-    "teammate",
-    "touch",
-    "track",
-    "usage",
-    "write",
-    "written",
 ];
 
 #[cfg(test)]
