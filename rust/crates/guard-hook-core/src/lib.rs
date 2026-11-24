@@ -274,6 +274,29 @@ fn tracked_project_document(target: &str, request: &NativeHookRequestV1) -> bool
     })
 }
 
+/// Whether a read's output comes from the dotenv template the session's
+/// repository commits, such as `.env.example`. The read gate admits that read
+/// once the file proves it is tracked and holds no secret, so the output review
+/// repeats the same proof for the path the host read and the path the call
+/// named rather than answering the template as the local `.env`. The file's
+/// text is still scanned after this. Only the read tool's output qualifies: a
+/// write or edit of the template is not the request the gate proved.
+fn committed_dotenv_template_read(
+    request: &NativeHookRequestV1,
+    candidate: &str,
+    target: &str,
+) -> bool {
+    let read = request
+        .payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .is_some_and(|tool| tool.eq_ignore_ascii_case("read"));
+    let cwd = request.cwd.as_deref();
+    read && [candidate, target]
+        .iter()
+        .all(|value| guard_command::pretool::proven_tracked_dotenv_template(value.trim(), cwd))
+}
+
 fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {
     let payload = &request.payload;
     let target = envelope_target(payload);
@@ -533,8 +556,11 @@ fn review_source(
         .map(Path::new)
         .unwrap_or_else(|| Path::new("."));
     let home = Path::new(&request.home_dir);
+    let template = committed_dotenv_template_read(request, candidate, &target);
     if let Some((family, _)) = sensitive_path_family(Path::new(candidate)) {
-        return HookReviewResponseV1::deny("sensitive_path", sensitive_reason(family));
+        if !template {
+            return HookReviewResponseV1::deny("sensitive_path", sensitive_reason(family));
+        }
     }
     // A failed read of a missing file returns the host's error text, not file
     // content. No file backs the reference, so the presented text is reviewed
@@ -551,6 +577,8 @@ fn review_source(
         let decision = classify_scannable_source_path(value, cwd, Some(home), allow_external);
         if decision.allowed {
             decision.resolved_path
+        } else if template {
+            committed_template_path(value, cwd, home)
         } else {
             repository_hidden_document(value, request, cwd, home)
         }
@@ -623,6 +651,13 @@ fn review_source(
 /// admits that read with the same proof. The file is still read and scanned
 /// in full afterwards, so a manifest that holds a credential keeps its
 /// refusal.
+/// The file a proven committed dotenv template read names, resolved the way
+/// the proof resolved it.
+fn committed_template_path(value: &str, cwd: &Path, home: &Path) -> Option<std::path::PathBuf> {
+    let resolved = guard_secure_fs::resolve_candidate(value.trim(), Some(cwd), home).ok()?;
+    std::fs::canonicalize(resolved).ok()
+}
+
 fn repository_hidden_document(
     value: &str,
     request: &NativeHookRequestV1,
