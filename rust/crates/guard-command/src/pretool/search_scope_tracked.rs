@@ -90,7 +90,10 @@ impl TrackedFiles {
         // A Kubernetes `Secret` holds base64 values the detector does not
         // flag, so a manifest that declares one is never a fixture, whether
         // a tool names it or a recursive search walks into it.
-        if names::secret_object(&text) {
+        // A JSON Web Key holds its private parts in one-letter members the
+        // detector does not read either, so a document carrying one is held
+        // the same way, whatever its name or format.
+        if names::secret_object(&text) || names::private_jwk(&text) {
             return Tracked::SecretManifest;
         }
         if clean(&text, &rendered) {
