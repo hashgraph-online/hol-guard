@@ -174,6 +174,7 @@ fn prose_holds_a_name_only_written_as_code() {
         "One ` tick, then a reproducible prompt."
     ));
     assert!(render("docs/PLAN.md", "Call run(prompt) once."));
+    assert!(render("docs/PLAN.md", "Wrap it (run(prompt)) once."));
     // Three backticks closed on the same line are inline code, not a fence.
     assert!(!render(
         "docs/PLAN.md",

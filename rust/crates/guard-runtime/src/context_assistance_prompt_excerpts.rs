@@ -242,9 +242,9 @@ fn shaped(word: &str) -> bool {
     let inner_underscore = chars
         .windows(3)
         .any(|w| w[1] == '_' && w[0].is_alphanumeric() && w[2].is_alphanumeric());
-    let call = word
-        .find('(')
-        .is_some_and(|i| word[..i].ends_with(|c: char| c.is_alphanumeric() || c == '_'));
+    let call = chars
+        .windows(2)
+        .any(|p| p[1] == '(' && (p[0].is_alphanumeric() || p[0] == '_'));
     inner_capital || inner_underscore || call || word.contains("::")
 }
 
