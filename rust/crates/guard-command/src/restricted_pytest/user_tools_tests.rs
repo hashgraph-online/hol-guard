@@ -288,3 +288,29 @@ fn shims_in_a_shared_directory_grant_no_siblings() {
     tree.dir("home/.pyenv/libexec", 0o755);
     assert!(shim_siblings(&shims, &[], &workspace).is_empty());
 }
+
+#[test]
+fn absolute_words_keep_a_quoted_release_path_whole() {
+    assert_eq!(
+        super::absolute_words(
+            "'/home/Test User/.nvm/versions/node/v22.1.0/bin/node' x.js && echo done"
+        ),
+        vec!["/home/Test User/.nvm/versions/node/v22.1.0/bin/node".to_owned()]
+    );
+    assert_eq!(
+        super::absolute_words("\"/opt/a;b/bin/node\"|/usr/bin/true;/tmp/notbin/x"),
+        vec!["/opt/a;b/bin/node".to_owned(), "/usr/bin/true".to_owned()]
+    );
+}
+
+#[test]
+fn absolute_words_skip_bare_names_before_the_limit() {
+    let text = format!(
+        "{}/home/user/.nvm/versions/node/v22.1.0/bin/node x.js",
+        "true; ".repeat(40)
+    );
+    assert_eq!(
+        super::absolute_words(&text),
+        vec!["/home/user/.nvm/versions/node/v22.1.0/bin/node".to_owned()]
+    );
+}

@@ -7,6 +7,7 @@ use std::os::unix::fs::MetadataExt;
 
 #[path = "user_tools.rs"]
 mod user_tools;
+pub(in crate::restricted_pytest) use user_tools::{absolute_words, named_release_roots};
 pub(super) use user_tools::{
     host_cargo_caches, host_corepack_home, host_go_module_cache, host_maven_repository,
     host_maven_wrapper_dists, host_rustup_home, is_package_tree,
@@ -349,6 +350,19 @@ pub(super) fn workspace_exec_roots(
             }
         }
     }
+    // A release a version manager installed that the command starts by its
+    // own path, with no PATH entry naming it.
+    if let Some(text) = text {
+        for root in named_release_roots(
+            absolute_words(text).iter().map(String::as_str),
+            home,
+            workspace,
+        ) {
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+    }
     for system in ["/usr/bin", "/bin"] {
         if !entries.iter().any(|entry| entry == system) {
             entries.push(system.to_owned());
@@ -632,6 +646,43 @@ mod tests {
                 PathBuf::from("/sandbox/.cargo/registry"),
                 host.0.join("missing")
             )]
+        );
+    }
+
+    #[test]
+    fn a_release_the_command_starts_by_its_path_is_an_executable_root() {
+        // The session PATH names another release, or none; the command
+        // starts this one by spelling its path.
+        let home = dir_with(0o755);
+        let release = home.0.join(".nvm/versions/node/v22.1.0");
+        fs::create_dir_all(release.join("bin")).unwrap();
+        let other = home.0.join("tools/bin");
+        fs::create_dir_all(&other).unwrap();
+        let workspace = Path::new("/nonexistent-workspace");
+        let roots = |text: &str| {
+            workspace_exec_roots(
+                "",
+                Some(&home.0),
+                workspace,
+                Some(text),
+                false,
+                false,
+                false,
+            )
+            .0
+        };
+        let named = format!(
+            "{}/bin/node ./node_modules/typescript/bin/tsc --noEmit",
+            release.display()
+        );
+        assert!(roots(&named).contains(&release), "{named}");
+        assert!(roots(&format!("'{}/bin/node' x.js", release.display())).contains(&release));
+        // A bare name is the PATH's to resolve, and a directory outside a
+        // version manager's prefix gets no grant from being named.
+        assert!(!roots("node ./x.js").contains(&release));
+        assert_eq!(
+            roots(&format!("{}/node x.js", other.display())),
+            roots("true")
         );
     }
 

@@ -37,10 +37,18 @@ pub(crate) fn launches_outside_exec_roots<'a>(
     // Maven repository and every workspace venv stay in view and such a run
     // is not judged unreachable before the plan decides whether to grant
     // them.
+    let launches: Vec<_> = launches.into_iter().collect();
     let (roots, sandbox_path) =
         workspace_exec_roots(search_path, home, workspace, None, true, true, true);
     let mut executable = executable_roots(workspace, roots);
     executable.extend(linked_checkout(workspace, home));
+    // The plan grants a version manager's release the command starts by its
+    // own path, so the check reaches it too.
+    executable.extend(super::toolchains::named_release_roots(
+        launches.iter().map(|(program, _)| *program),
+        home,
+        workspace,
+    ));
     let reaches = |path: &Path| path_is_within_any(path, &executable);
     let shimless = without_package_shims(search_path, workspace);
     launches.into_iter().any(|(program, places)| {
