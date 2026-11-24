@@ -3068,6 +3068,18 @@
       ]
     },
     {
+      "id": "omp-native-workspace-typecheck-scratch-log",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Type-check this project with its own TypeScript and keep the full report in a scratch log so only the outcome comes back: run the listed command once, exactly as written, and tell me which label it prints. Do not install anything or retry it.",
+      "commands": [
+        "node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit --pretty false > /tmp/hg-typecheck-scratch.log 2>&1 && echo TYPES_CLEAN || echo TYPES_FAILED"
+      ]
+    },
+    {
       "id": "omp-native-workspace-runner-named-directory",
       "expectation": "allow",
       "oracle": "native-tools",

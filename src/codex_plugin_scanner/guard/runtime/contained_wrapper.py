@@ -112,6 +112,9 @@ def _output_filter(encoded: object) -> OutputFilter | None:
     stages = fields.get("stages") or ()
     if not isinstance(count, int) or not isinstance(stages, Sequence):
         raise ValueError("unsupported wrapper shape")
+    if fields.get("file") is not None:
+        # Only the native sink writes a peeled scratch log.
+        raise ValueError("unsupported wrapper shape")
     label = fields.get("status_label")
     success = fields.get("success_label")
     failure = fields.get("failure_label")

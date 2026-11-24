@@ -102,6 +102,15 @@ impl Shaping {
         self.out(&shown(&bytes[..bytes.len().min(OUTPUT_LIMIT)], truncated));
     }
 
+    /// Write held output to standard error as display text, cut at
+    /// `OUTPUT_LIMIT` with the truncation notice, the way [`Self::show`]
+    /// writes a filter chain's result. A scratch log that cannot be written
+    /// sends its output here, so the terminal never takes the raw capture.
+    pub(super) fn show_err(&self, bytes: &[u8], cut: bool) {
+        let truncated = cut || bytes.len() > OUTPUT_LIMIT;
+        self.err(&shown(&bytes[..bytes.len().min(OUTPUT_LIMIT)], truncated));
+    }
+
     /// Write `bytes` to standard output.
     pub(super) fn out(&self, bytes: &[u8]) {
         match self.frame().as_mut() {
@@ -135,6 +144,45 @@ impl Shaping {
     fn frame(&self) -> MutexGuard<'_, Option<Frame>> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
+}
+
+/// Open the scratch log a peeled `> FILE` names, before the core runs, as
+/// the shell opens a redirect first. The file is never followed through a
+/// link, and only a regular file of this user's with a single link is
+/// emptied and written, so a name planted in a shared temporary directory
+/// cannot carry the write to another file.
+#[cfg(unix)]
+pub(super) fn open_log(path: &std::path::Path) -> Option<File> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+        .ok()?;
+    let metadata = file.metadata().ok()?;
+    let owned = metadata.file_type().is_file()
+        && metadata.uid() == nix::unistd::geteuid().as_raw()
+        && metadata.nlink() == 1;
+    (owned && file.set_len(0).is_ok()).then_some(file)
+}
+
+#[cfg(not(unix))]
+pub(super) fn open_log(_path: &std::path::Path) -> Option<File> {
+    None
+}
+
+/// Write the output held for a scratch log to it, raw, with the truncation
+/// notice when a stream was cut at `CAPTURE_LIMIT`. A failed write, such as a
+/// full disk, is returned so the caller can keep the output and the status
+/// honest rather than report a log that was only partly saved.
+pub(super) fn write_log(mut file: File, captured: &[u8], cut: bool) -> std::io::Result<()> {
+    file.write_all(captured)?;
+    if cut {
+        file.write_all(TRUNCATED.as_bytes())?;
+    }
+    file.flush()
 }
 
 fn write(stream: &mut impl Write, bytes: &[u8]) {

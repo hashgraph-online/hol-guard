@@ -101,6 +101,12 @@ WORKSPACE_TSC_NAMED_DIRECTORY_CASE = "omp-native-workspace-runner-named-director
 # bounded and the line after it prints the checker's own status, which `$?`
 # cannot reach past the filter and `${PIPESTATUS[0]}` can.
 WORKSPACE_TSC_STATUS_REPORT_CASE = "omp-native-workspace-typecheck-status-report"
+# The same checker run the way an agent keeps a long report out of the
+# conversation: everything it prints goes to a scratch log in the shared
+# temporary directory, and only the label the run ends on comes back.
+WORKSPACE_TSC_SCRATCH_LOG_CASE = "omp-native-workspace-typecheck-scratch-log"
+# The label the scratch-log case prints when the checker exits cleanly.
+TSC_SCRATCH_LOG_LABEL = "TYPES_CLEAN"
 # The same type checker in a workspace pnpm installed. pnpm writes its lockfile
 # in YAML rather than JSON, so the pin the verdict reads is the same fact
 # written in another dialect.
@@ -171,6 +177,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_TSC_CASE,
         WORKSPACE_TSC_GENERATED_PROJECT_CASE,
         WORKSPACE_TSC_STATUS_REPORT_CASE,
+        WORKSPACE_TSC_SCRATCH_LOG_CASE,
         WORKSPACE_TSC_NAMED_DIRECTORY_CASE,
         WORKSPACE_PNPM_TSC_CASE,
         WORKSPACE_SHARED_BASE_TSC_CASE,
@@ -545,6 +552,21 @@ _TYPESCRIPT_FILES = {
     ),
 }
 
+# The scratch-log case reads only the label the `&&` arm prints, so its checker
+# fails outright when the project option is lost: the run then ends on the
+# failure arm instead of printing the clean label over a diagnostic.
+_TSC_SCRATCH_LOG_FILES = {
+    **_TYPESCRIPT_FILES,
+    "node_modules/typescript/bin/tsc": (
+        "#!/usr/bin/env node\n"
+        f"if (!process.argv.slice(2).includes('{TSC_PROJECT_OPTION}')) {{\n"
+        "  console.error('tsc: the project option was not forwarded');\n"
+        "  process.exit(1);\n"
+        "}\n"
+        f"console.log('{TSC_MARKER}');\n"
+    ),
+}
+
 
 # The subdirectory the named-directory case asks the checker to start in.
 TSC_NAMED_DIRECTORY = "app"
@@ -870,6 +892,13 @@ _INSTALLS = {
     WORKSPACE_TSC_STATUS_REPORT_CASE: _Install(
         "tsc",
         _TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_TSC_SCRATCH_LOG_CASE: _Install(
+        "tsc",
+        _TSC_SCRATCH_LOG_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",

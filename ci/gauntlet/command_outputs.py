@@ -40,7 +40,9 @@ from .source_output_fixtures import (
 from .workspace_runner_fixtures import (
     HOME_BUN_ENTRY_CASES,
     HOME_BUN_ENTRY_CWD_CASE,
+    TSC_SCRATCH_LOG_LABEL,
     WORKSPACE_RUNNER_CASES,
+    WORKSPACE_TSC_SCRATCH_LOG_CASE,
     WORKSPACE_VITEST_LINE_COUNT_CASE,
     runner_marker,
 )
@@ -309,6 +311,20 @@ def _workspace_runner_match(scenario: Scenario, calls: list[dict[str, Any]]) -> 
 
 
 
+def _scratch_log_label_match(calls: list[dict[str, Any]]) -> bool:
+    """The checker ran to a clean exit while its report went to the scratch log.
+
+    Everything the checker prints lands in the log, so the call's own output is
+    the label alone. Only the clean arm prints it, so a contained run that failed
+    to start or to open the log ends on the other label instead, and a run that
+    leaked the report to the terminal prints more than the label.
+    """
+    if len(calls) != 1:
+        return False
+    lines = [line.strip() for line in (_text(calls[0]) or "").splitlines() if line.strip()]
+    return lines == [TSC_SCRATCH_LOG_LABEL]
+
+
 def _workspace_runner_count_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
     """`wc -l` counted the lines only a forwarded run of the workspace's runner prints."""
     if len(calls) != 1:
@@ -343,6 +359,8 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
         return _workspace_find_match(calls)
     if scenario.id == WORKSPACE_VITEST_LINE_COUNT_CASE:
         return _workspace_runner_count_match(scenario, calls)
+    if scenario.id == WORKSPACE_TSC_SCRATCH_LOG_CASE:
+        return _scratch_log_label_match(calls)
     if scenario.id in WORKSPACE_RUNNER_CASES:
         return _workspace_runner_match(scenario, calls)
     if scenario.id == STATUS_TAIL_BUILD_CASE:

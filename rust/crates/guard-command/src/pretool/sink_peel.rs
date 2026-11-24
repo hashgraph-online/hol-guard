@@ -106,6 +106,11 @@ pub(super) fn peel(
             characters.pop();
         }
     }
+    // A trailing `> <scratch log> 2>&1` is written by the sink itself.
+    let log = scratch_log::log_redirect(&characters);
+    if let Some((start, _, _)) = &log {
+        characters.truncate(*start);
+    }
     let quiet = quiet_cd(&characters);
     if let Some((kept, end)) = quiet {
         characters.drain(kept..end);
@@ -126,7 +131,7 @@ pub(super) fn peel(
     // The text `directory` was resolved from, which decides whether a `\\?\`
     // prefix on it is the caller's or one Windows generated.
     let mut spelled = PathBuf::from(workspace);
-    let mut wrapped = report.is_some();
+    let mut wrapped = report.is_some() || log.is_some();
     let mut output: Option<ContainedOutput> = None;
 
     if tokens.first().map(word) == Some("cd") {
@@ -189,6 +194,12 @@ pub(super) fn peel(
         // by `&&`, so the sink reads both: refusing the `;` here sent the run
         // to the session's sandbox, which cannot follow the `cd`.
         let listed = tokens.iter().any(list_separator);
+        if log.is_some() && (listed || into_sibling_root || (root.is_some() && !within)) {
+            // The shell writes only the last command's output to the file,
+            // and the sibling-root rejoin below runs the list without the
+            // peeled redirect, so the file would never be written.
+            return Err("unsupported wrapper shape");
+        }
         if into_sibling_root || (root.is_some() && !within && listed) {
             // `cd <sibling root> && a && b` is re-authorized whole in that
             // root. A filter after `a && b` would apply to `b` alone, so none
@@ -221,7 +232,15 @@ pub(super) fn peel(
         }
     }
 
-    if let Some(index) = tokens.iter().position(|token| operator(token) == Some("|")) {
+    if let Some((_, file, merge_stderr)) = log {
+        // Any pipe or redirect left in the text is refused below: the file
+        // takes the core's output whole.
+        output = Some(ContainedOutput {
+            merge_stderr,
+            file: Some(file),
+            ..passthrough()
+        });
+    } else if let Some(index) = tokens.iter().position(|token| operator(token) == Some("|")) {
         let stages = filter_chain(&tokens[index + 1..])?;
         tokens.truncate(index);
         let merge_stderr = tokens.last().map(operator) == Some(Some("2>&1"));
@@ -323,6 +342,7 @@ fn passthrough() -> ContainedOutput {
         success_label: None,
         failure_label: None,
         stages: Vec::new(),
+        file: None,
     }
 }
 
@@ -835,6 +855,9 @@ fn inline_program_index(tokens: &[Token]) -> Option<usize> {
 
 #[path = "sink_peel_report.rs"]
 mod report;
+
+#[path = "sink_peel_log.rs"]
+pub(in crate::pretool) mod scratch_log;
 
 use report::trailing_report;
 
