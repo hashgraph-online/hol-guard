@@ -13,7 +13,10 @@ const MAX_HELPERS: usize = 3;
 /// Section names, as `term_form` gives them, of a class's constructor.
 const CONSTRUCTORS: [&str; 3] = ["init", "constructor", "new"];
 /// File stems, as `term_form` gives them, that name no one subject.
-const GENERIC_STEMS: [&str; 6] = ["index", "mod", "main", "lib", "init", "setup"];
+const GENERIC_STEMS: [&str; 12] = [
+    "index", "mod", "main", "lib", "init", "setup", "util", "utility", "helper", "common",
+    "shared", "type",
+];
 
 pub(super) struct Pick {
     pub(super) file: usize,
@@ -295,9 +298,10 @@ fn written_as_code(line: &str) -> impl Iterator<Item = &str> {
 }
 
 /// For a prompt whose words are placed nowhere, the outline of the file it
-/// names, else of the one source file named for a word too common to place:
-/// "add metadata to route" is about `route.go`, though `route` is in every
-/// file of the project.
+/// names, else of the one source file named for one of its words: "add
+/// metadata to route" is about `route.go`, though `route` is in every file of
+/// the project, and "encoding a path gives %2520" about `encoding.ts`, though
+/// no line of code says `encoding`.
 pub(super) fn outlined(
     files: &[File],
     names: &[(&str, bool)],
@@ -317,7 +321,7 @@ pub(super) fn outlined(
         .filter(|(_, file)| {
             let stem = stem(file);
             !GENERIC_STEMS.contains(&stem.as_str())
-                && (sought.iter()).any(|item| item.common && !item.phrase && item.text == stem)
+                && (sought.iter()).any(|item| !item.phrase && item.text == stem)
         });
     match (matching.next(), matching.next()) {
         (Some((index, file)), None) => {
