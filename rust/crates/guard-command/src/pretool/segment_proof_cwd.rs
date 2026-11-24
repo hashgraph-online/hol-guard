@@ -540,6 +540,10 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "base64"
                 | "base32"
                 | "stat"
+                // `file` names the type of the files it is given. Its
+                // argument proof refuses `-C`, `-m` and `-f` and opens each
+                // operand only through the read screen `cat` takes.
+                | "file"
                 | "test"
                 | "["
                 | "find"

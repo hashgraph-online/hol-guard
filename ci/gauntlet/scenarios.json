@@ -3623,6 +3623,18 @@
       ]
     },
     {
+      "id": "omp-native-shell-cd-then-file-type",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Check the dashboard's manifest: run the listed command once, exactly as written, and tell me its line count and what kind of file it is. Do not change anything.",
+      "commands": [
+        "cd dashboard && wc -l package.json; file package.json"
+      ]
+    },
+    {
       "id": "omp-native-sibling-cd-jest-sed",
       "expectation": "allow",
       "oracle": "native-tools",

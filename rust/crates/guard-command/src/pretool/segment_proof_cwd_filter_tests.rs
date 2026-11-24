@@ -33,6 +33,15 @@ fn awk_and_numfmt_may_read_before_a_verified_cd() {
     }
 }
 
+/// `file` reports a file's type, the way `stat` reports its metadata, and
+/// its argument proof refuses the magic-compiling and name-list options, so
+/// `cd DIR && wc -l package.json; file package.json` reads in the new
+/// directory rather than being refused for the name.
+#[test]
+fn file_may_read_beside_a_verified_cd() {
+    assert!(cwd_read_executable(Some("file")));
+}
+
 /// Membership still narrows. A program that writes is refused by name before
 /// its arguments are read at all.
 #[test]
