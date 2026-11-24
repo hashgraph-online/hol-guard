@@ -358,7 +358,9 @@ fn verdict(
     // proof: no redirect, wrapper chain or `PATH` override, and only programs
     // with no option naming a file to write, by bare name (`./echo` is
     // local). Excluded: `cd`, moving the directory the checks above account
-    // for, and `rg`, running a caller-chosen program (`--pre`).
+    // for, and `rg`, running a caller-chosen program (`--pre`). A `find`
+    // whose expression holds no action walks its roots and prints names,
+    // wherever the roots are.
     let writes_nothing = |segment: &crate::CommandSegmentV1| {
         segment.executable.as_deref().is_some_and(|executable| {
             super::executable_basename(executable) == executable
@@ -366,7 +368,8 @@ fn verdict(
         }) && !segment.path_overridden
             && segment.wrapper_chain.is_empty()
             && segment.environment_names.is_empty()
-            && super::search::grep::creates_nothing(segment)
+            && (super::search::grep::creates_nothing(segment)
+                || super::write_free_steps::writes_nothing(segment, read_context))
     };
     let settled = |prior: usize, later: &crate::CommandSegmentV1| {
         let segment = segments[prior];

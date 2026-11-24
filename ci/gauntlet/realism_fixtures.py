@@ -15,6 +15,8 @@ sessions hit while the Gauntlet stayed green:
 * token-handling source (a redirect route, a link-building worker, an HMAC
   helper) names credential-like identifiers on every line (see
   ``source_output_fixtures``);
+* a publish workflow names its npm token only through ``${NPM_TOKEN}`` and
+  ``${{ secrets.NPM_TOKEN }}`` (see ``publish_workflow_fixtures``);
 * the worktree carries the ``.venv`` an ordinary Python project is worked in,
   whose generated ``bin/activate`` a test run sources before it starts;
 * a sign-in folder named ``auth`` holds a README and a session helper (see
@@ -36,6 +38,7 @@ from .extension_catalog_fixtures import CONTRIBUTIONS
 from .extension_catalog_fixtures import SOURCES as CATALOG_SOURCES
 from .feature_directory_fixtures import CONSOLE
 from .feature_directory_fixtures import SOURCES as FEATURE_SOURCES
+from .publish_workflow_fixtures import SOURCES as PUBLISH_SOURCES
 from .source_output_fixtures import EXAMPLE_SOURCES, FALLBACK_SOURCES, PORTAL, SCRIPT_SOURCES, SOURCES
 
 DASHBOARD = "dashboard"
@@ -384,6 +387,8 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
         **EXAMPLE_SOURCES,
         **SCRIPT_SOURCES,
     }.items():
+        _write(main / relative, text)
+    for relative, text in PUBLISH_SOURCES.items():
         _write(main / relative, text)
     _write(main / "scripts/check.sh", CHECK_SCRIPT, 0o755)
     _write(main / "scripts/release/deploy.sh", DEPLOY_SCRIPT, 0o755)

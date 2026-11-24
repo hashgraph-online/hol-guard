@@ -20,7 +20,7 @@ fn credential_assignment(text: &str) -> bool {
 }
 
 fn reference(value: &str) -> bool {
-    is_reference(&format!("token={value}"), "")
+    is_reference(&format!("token={value}"), "", "")
 }
 
 #[test]

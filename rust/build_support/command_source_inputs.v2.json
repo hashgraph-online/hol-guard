@@ -812,6 +812,7 @@
       "src/pretool/worktree_writes.rs",
       "src/pretool/wget_reads.rs",
       "src/pretool/wrangler_reads.rs",
+      "src/pretool/write_free_steps.rs",
       "src/pretool/yaml_query_reads.rs",
       "src/pretool/write_target_screens.rs",
       "src/prompt_analysis.rs",
