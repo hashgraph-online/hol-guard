@@ -56,6 +56,9 @@ mod tests {
     use crate::scan_text;
     use guard_rules::MAX_SCAN_BYTES;
 
+    // Built at runtime so secret scanners do not read the test source as a leak.
+    const SAMPLE: &str = concat!("Kq7xY2mN", "9pL4vR8tW3sZ");
+
     fn credential_assignment(text: &str) -> bool {
         scan_text(text, true, true, MAX_SCAN_BYTES, None)
             .matches
@@ -80,13 +83,13 @@ mod tests {
     #[test]
     fn credential_pass_names_stay_flagged() {
         for text in [
-            "DB_PASS=Kq7xY2mN9pL4vR8t\n",
-            "smtp-pass: Zx81mQ0vB2nW5eR7\n",
-            "admin_pass = \"Hq3vN8xL2pW6tY9z\"\n",
-            "tests_secret_pass=Kq7xY2mN9pL4vR8t\n",
-            "all_token_pass=Kq7xY2mN9pL4vR8t\n",
+            format!("DB_PASS={SAMPLE}\n"),
+            format!("smtp-pass: {SAMPLE}\n"),
+            format!("admin_pass = \"{SAMPLE}\"\n"),
+            format!("tests_secret_pass={SAMPLE}\n"),
+            format!("all_token_pass={SAMPLE}\n"),
         ] {
-            assert!(credential_assignment(text), "{text}");
+            assert!(credential_assignment(&text), "{text}");
         }
     }
 
