@@ -17,6 +17,17 @@ const REGISTRY_PACKAGE_CLI_PREFIX: &str = "local-cli.npm-";
 const PACKAGE_SCRIPT_SURFACE: &str = "package-scripts";
 const PACKAGE_SCRIPT_KINDS: [&str; 1] = ["bun-package-script"];
 const INLINE_KINDS: [&str; 4] = ["python-c", "python-m", "node-eval", "inline-script"];
+/// Entrypoint kinds of the JavaScript runtimes that run the same script file.
+/// A grant stored while one of them launched a file also covers the others:
+/// the grant binds the file's content and path, and which runtime an agent
+/// picks to run it says nothing new about the file.
+const JAVASCRIPT_SCRIPT_KINDS: [&str; 5] = [
+    "node-script",
+    "bun-script",
+    "bun.exe-script",
+    "deno-script",
+    "deno.exe-script",
+];
 
 pub(crate) fn local_cli_identity(
     source: &LocalCliIdentitySourceV1,
@@ -58,12 +69,7 @@ fn script_identity(entrypoint: &Value) -> Result<Option<LocalCliIdentityV1>, &'s
     };
     let name = python_path_name(path);
     let fingerprint = path_fingerprint(path);
-    let identity_hash = identity_digest(&[
-        ("kind", Value::from("script")),
-        ("entrypoint_kind", Value::from(kind)),
-        ("content_sha256", Value::from(digest)),
-        ("path_fingerprint", Value::from(fingerprint.as_str())),
-    ])?;
+    let identity_hash = script_identity_hash(kind, digest, &fingerprint)?;
     Ok(Some(LocalCliIdentityV1 {
         cli_id: format!(
             "local-cli.{}-{}",
@@ -74,6 +80,55 @@ fn script_identity(entrypoint: &Value) -> Result<Option<LocalCliIdentityV1>, &'s
         kind: "script".to_owned(),
         identity_hash,
     }))
+}
+
+fn script_identity_hash(
+    kind: &str,
+    digest: &str,
+    fingerprint: &str,
+) -> Result<String, &'static str> {
+    identity_digest(&[
+        ("kind", Value::from("script")),
+        ("entrypoint_kind", Value::from(kind)),
+        ("content_sha256", Value::from(digest)),
+        ("path_fingerprint", Value::from(fingerprint)),
+    ])
+}
+
+/// Every identity hash a stored grant for `source` may carry. A script one
+/// JavaScript runtime launches also matches the grant stored while another
+/// runtime ran the same file; every other source matches only its own hash.
+/// The result is empty when `source` names no grantable CLI.
+pub(crate) fn grant_identity_hashes(
+    source: &LocalCliIdentitySourceV1,
+) -> Result<Vec<String>, &'static str> {
+    let Some(identity) = local_cli_identity(source)? else {
+        return Ok(Vec::new());
+    };
+    let mut hashes = vec![identity.identity_hash];
+    let LocalCliIdentitySourceV1::Script { entrypoint } = source else {
+        return Ok(hashes);
+    };
+    let Some(entrypoint) = entrypoint.as_object() else {
+        return Ok(hashes);
+    };
+    if !JAVASCRIPT_SCRIPT_KINDS.contains(&string_field(entrypoint, "kind")) {
+        return Ok(hashes);
+    }
+    let (Some(digest), Some(path)) = (
+        sha256_hex(entrypoint.get("sha256")),
+        nonempty_string(entrypoint.get("path")),
+    ) else {
+        return Ok(hashes);
+    };
+    let fingerprint = path_fingerprint(path);
+    for kind in JAVASCRIPT_SCRIPT_KINDS {
+        let hash = script_identity_hash(kind, digest, &fingerprint)?;
+        if !hashes.contains(&hash) {
+            hashes.push(hash);
+        }
+    }
+    Ok(hashes)
 }
 
 fn executable_identity(
