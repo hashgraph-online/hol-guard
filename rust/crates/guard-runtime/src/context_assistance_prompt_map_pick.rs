@@ -307,7 +307,7 @@ pub(super) fn outlined(
     }
     let stem = |file: &File| {
         let name = file.path.rsplit('/').next().unwrap_or(file.path);
-        term_form(name.split('.').next().unwrap_or(name))
+        term_form(name.rsplit_once('.').map_or(name, |(stem, _)| stem))
     };
     let mut matching = (files.iter().enumerate())
         .filter(|(_, file)| file.kind == Kind::Source && !more::sample(file.path))

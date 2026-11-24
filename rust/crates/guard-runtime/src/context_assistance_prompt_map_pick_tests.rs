@@ -44,6 +44,12 @@ fn a_common_word_naming_one_source_file_maps_its_outline() {
     // Two files named for the word: neither is the one the prompt means.
     let both = map_of(&[("route.go", ROUTE), ("v2/route.go", ROUTE)], prompt);
     assert!(!both.contains("type Route struct"), "{both}");
+    // Only the last extension is dropped: `route.pb.go` is not `route.go`.
+    let generated = map_of(&[("route.go", ROUTE), ("route.pb.go", ROUTE)], prompt);
+    assert!(
+        generated.contains("route.go:4-7 type Route struct {"),
+        "{generated}"
+    );
     // A generic file name is no subject: `main` names nothing.
     let main = map_of(
         &[("main.go", ROUTE)],
