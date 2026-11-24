@@ -339,7 +339,10 @@ const CLIENT_AUTH_PAGE: &str =
 #[test]
 fn a_committed_key_named_document_clears_the_floor() {
     let repo = Repo::new();
-    repo.write("docs/auth-evidence/private-key-jwt-client-auth.md", CLIENT_AUTH_PAGE);
+    repo.write(
+        "docs/auth-evidence/private-key-jwt-client-auth.md",
+        CLIENT_AUTH_PAGE,
+    );
     repo.write("docs/wallet-key-rotation.yaml", "steps:\n  - rotate\n");
     repo.commit("document the client authentication method");
     assert!(!repo.sensitive("docs/auth-evidence/private-key-jwt-client-auth.md"));
@@ -352,7 +355,10 @@ fn a_committed_key_named_document_clears_the_floor() {
 #[test]
 fn an_unproven_key_named_document_keeps_its_floor() {
     let repo = Repo::new();
-    repo.write("docs/private-key-notes.md", "MODEL_GATEWAY=gsk_u8jzPde0IgxLd6GncfBAepfJBd0Kh8oOOL8dKLzdocJ2isAjIh\n");
+    repo.write(
+        "docs/private-key-notes.md",
+        "MODEL_GATEWAY=gsk_u8jzPde0IgxLd6GncfBAepfJBd0Kh8oOOL8dKLzdocJ2isAjIh\n",
+    );
     repo.write("deploy/private-key.txt", CLIENT_AUTH_PAGE);
     repo.write(".ssh/private-key-guide.md", CLIENT_AUTH_PAGE);
     repo.commit("add the files");
