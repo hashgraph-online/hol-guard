@@ -80,6 +80,28 @@ pub(super) fn safe_find_listing_arguments(
         && safe_expression(expression, &|reference| reference_file(reference, context))
 }
 
+/// Whether this `find` expression writes nothing, wherever its roots are.
+///
+/// It may hold only the matching, depth and print predicates
+/// [`safe_find_listing_arguments`] takes, never an action (`-exec*`, `-ok*`,
+/// `-delete`, `-fprint*`, `-fls`). This asks nothing about the roots, which
+/// `find` only walks, and a `-newer` reference is read for its time alone.
+/// The caller screens redirects and shell expansion
+/// (`write_free_steps::writes_nothing`).
+pub(super) fn expression_writes_nothing(arguments: &[String]) -> bool {
+    let arguments = arguments
+        .strip_prefix(&["-P".to_owned()])
+        .unwrap_or(arguments);
+    let roots_end = arguments
+        .iter()
+        .position(|argument| argument.starts_with('-') || matches!(argument.as_str(), "!" | "("))
+        .unwrap_or(arguments.len());
+    let (roots, expression) = arguments.split_at(roots_end);
+    !roots.is_empty()
+        && roots.len() <= MAX_FIND_ROOTS
+        && safe_expression(expression, &|reference| !reference.starts_with('-'))
+}
+
 /// Whether `find -newer FILE` may compare against `FILE`. The test reads
 /// only that file's modification time, never its bytes, so a file a plain
 /// read could open clears it. A missing file, a home dot-directory, a

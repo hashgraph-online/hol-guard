@@ -2,11 +2,11 @@
 //! words reach the program exactly as written, and which carry a glob the
 //! shell expands first.
 
-pub(super) struct Word {
+pub(in crate::pretool) struct Word {
     pub(super) value: String,
-    pub(super) unquoted_glob: bool,
+    pub(in crate::pretool) unquoted_glob: bool,
     pub(super) quoted_glob: bool,
-    unquoted_expansion: bool,
+    pub(in crate::pretool) unquoted_expansion: bool,
 }
 
 /// Split segment text into shell words, tracking where glob characters sit.
@@ -18,7 +18,7 @@ pub(super) struct Word {
 /// `$`, a backtick, `"`, `\` and a newline; before anything else it stays in
 /// the word, so `"a\|b"` hands the program `a\|b`, the alternation `grep`
 /// reads. A backslash outside quotes still yields `None`.
-pub(super) fn quoted_words(text: &str) -> Option<Vec<Word>> {
+pub(in crate::pretool) fn quoted_words(text: &str) -> Option<Vec<Word>> {
     let mut words = Vec::new();
     let mut current: Option<Word> = None;
     let mut quote: Option<char> = None;

@@ -12,7 +12,7 @@ use super::{safe_reads, search};
 #[path = "listing_words.rs"]
 mod words;
 pub(super) use words::literal_words;
-use words::quoted_words;
+pub(super) use words::quoted_words;
 
 enum Operand {
     Plain,
