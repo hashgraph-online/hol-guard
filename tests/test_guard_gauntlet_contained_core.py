@@ -228,6 +228,64 @@ def test_windows_sink_must_be_the_exact_bootstrap(fixture, tmp_path, old, new):
     assert assessment["reason"].startswith("contained wrapper")
 
 
+def _rewrite_wrapper(case, old, new):
+    for event in case["events"]:
+        for call in event.get("calls", []):
+            if call["id"] == CALL:
+                call["arguments"]["command"] = call["arguments"]["command"].replace(old, new)
+        if event.get("toolCallId") == CALL and "args" in event:
+            event["args"]["command"] = event["args"]["command"].replace(old, new)
+        details = (event.get("result") or {}).get("details") or {}
+        if event.get("toolCallId") == CALL and "holGuardContainedTest" in details:
+            presentation = details["holGuardContainedTest"]
+            presentation["command"] = presentation["command"].replace(old, new)
+    for row in case["guard_observations"]:
+        if row.get("tool_call_id") == CALL and row.get("event") == "PostToolUse":
+            row["input"]["command"] = row["input"]["command"].replace(old, new)
+
+
+def test_runtime_sink_run_passes_with_the_same_bindings(fixture, tmp_path):
+    """A call the bridge marks for the runtime's own sink is bound exactly like the launcher's."""
+    assessment = assess_case(SCENARIO, _contained(fixture, tmp_path, native=True))
+    assert assessment["outcome"] == "pass", assessment["reason"]
+    assert assessment["interruptions"]["events"] == []
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "reason"),
+    [
+        ("'--harness' 'omp'", "'--harness' 'codex'", "contained wrapper harness binding is malformed"),
+        ("'contained-workspace-sink'", "'execute-contained-test'", "contained wrapper is not an approved path"),
+        (
+            "/_native/hol-guard-runtime'",
+            "/_native/hol-guard'",
+            "contained wrapper is not bound to the case's Guard installation",
+        ),
+        (
+            "{{fixture}}/guard-home",
+            "{{fixture}}/other-home",
+            "contained wrapper is not bound to the case's Guard installation",
+        ),
+        (" '--home' '{{home}}'", "", "contained wrapper is not an approved path"),
+    ],
+)
+def test_runtime_sink_must_name_this_installation_and_case(fixture, tmp_path, old, new, reason):
+    case = _contained(fixture, tmp_path, native=True)
+    _rewrite_wrapper(case, old, new)
+    assessment = assess_case(SCENARIO, case)
+    assert (assessment["outcome"], assessment["reason"]) == ("harness-error", reason)
+
+
+def test_the_launcher_may_not_borrow_the_runtime_sink_name(fixture, tmp_path):
+    case = _contained(fixture, tmp_path)
+    _rewrite_wrapper(case, "'execute-contained-test'", "'contained-workspace-sink'")
+    assessment = assess_case(SCENARIO, case)
+    assert (assessment["outcome"], assessment["reason"]) == (
+        "harness-error",
+        "contained wrapper is not an approved path",
+    )
+
+
 def test_only_a_full_task_wrapper_may_omit_the_home_binding(fixture, tmp_path):
     """The adapter drops --home only in the account's own home, which only full tasks use."""
     case = _contained(fixture, tmp_path, home=None)

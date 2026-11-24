@@ -72,6 +72,9 @@ OPERATOR_HOME_WINDOWS_SINK = [
 ]
 
 
+NATIVE_RUNTIME = "/candidate/.venv/lib/python3.12/site-packages/codex_plugin_scanner/_native/hol-guard-runtime"
+
+
 def _wrapper(
     request_sha256: str,
     *,
@@ -79,12 +82,14 @@ def _wrapper(
     home: str | None = "{{home}}",
     windows: bool = False,
     operator_home: bool = False,
+    native: bool = False,
 ) -> str:
     sink = OPERATOR_HOME_WINDOWS_SINK if operator_home else WINDOWS_SINK
     temp = "{{operator_home}}" if operator_home else "C:\\Users\\agent"
+    # The runtime's own sink, for a call the bridge marked for it.
+    launcher = [*(sink if windows else ["/candidate/.venv/bin/hol-guard"]), "execute-contained-test"]
     argv = [
-        *(sink if windows else ["/candidate/.venv/bin/hol-guard"]),
-        "execute-contained-test",
+        *([NATIVE_RUNTIME, "contained-workspace-sink", "--harness", "omp"] if native else launcher),
         "--guard-home",
         guard_home,
         "--workspace",
