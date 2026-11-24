@@ -273,6 +273,8 @@ fn abbreviations_and_email_addresses_are_not_code() {
         "keep the list short, i.e. one line per item",
         "it shows someone@example.com as broken",
         "send it to first.last@mail.example.org, then retry",
+        "write to support_@example.com",
+        "alerts go to first_last+alerts@example.com",
     ] {
         assert!(
             spellings(prompt).is_empty(),
@@ -289,4 +291,15 @@ fn abbreviations_and_email_addresses_are_not_code() {
     assert!(spellings("Why does @app.route drop the slash?").contains(&"app.route".to_owned()));
     assert_eq!(named("Fix the import in @/lib/api.ts"), ["lib/api.ts"]);
     assert!(spellings("Call `e.g` on it").contains(&"e.g".to_owned()));
+    // A package and its version are not an address.
+    for (prompt, name) in [
+        ("bump lodash@4.17.21", "lodash"),
+        ("upgrade react-dom@18", "reactdom"),
+    ] {
+        let words = marked_terms(prompt);
+        assert!(
+            words.iter().any(|(word, _)| word == name),
+            "{prompt}: {words:?}"
+        );
+    }
 }
