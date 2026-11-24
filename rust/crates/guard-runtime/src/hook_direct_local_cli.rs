@@ -222,9 +222,39 @@ fn grant(launched: &Launched<'_>, home_dir: &str, guard_home: &str) -> Result<Ve
 /// leaves the review standing here, as the daemon's own lane does.
 pub(super) fn review_grant(check: &RuleCheck<'_>) -> Option<ReviewVerdict> {
     let payload = check.payload?;
-    let launched =
-        launch_for(payload, check.workspace, check.home_dir, check.launch_env).ok()??;
-    let answer = grant_answer(&launched, "review", check.home_dir, check.guard_home).ok()?;
+    match launch_for(payload, check.workspace, check.home_dir, check.launch_env).ok()? {
+        Some(launched) => review_read(&launched, check),
+        None => review_after_cd(payload, check),
+    }
+}
+
+/// `cd DIR && CLI ...` read as `CLI ...` launched from `DIR`, so a script
+/// the user allowed is not reviewed again only because the agent changed
+/// into its repository first. Any other compound shape launches nothing
+/// here, and the review stands.
+fn review_after_cd(payload: &Map<String, Value>, check: &RuleCheck<'_>) -> Option<ReviewVerdict> {
+    let command = pre_tool_command(payload).ok()??;
+    let cwd = launch_cwd(payload, check.workspace).ok()??;
+    let launch_env = check.launch_env?;
+    let (command, cwd) = crate::local_cli_hook_op::cd_then_launch(
+        command,
+        &cwd,
+        Some(check.home_dir),
+        launch_env.env,
+    )?;
+    let launch = local_launch(&command, &cwd, check.home_dir, Some(launch_env)).ok()??;
+    review_read(
+        &Launched {
+            launch,
+            command: &command,
+            cwd,
+        },
+        check,
+    )
+}
+
+fn review_read(launched: &Launched<'_>, check: &RuleCheck<'_>) -> Option<ReviewVerdict> {
+    let answer = grant_answer(launched, "review", check.home_dir, check.guard_home).ok()?;
     match block::review_verdict(&launched.launch, answer.as_ref()) {
         ReviewVerdict::Unchanged => None,
         verdict => Some(verdict),

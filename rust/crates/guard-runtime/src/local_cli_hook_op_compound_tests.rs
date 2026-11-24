@@ -1,4 +1,5 @@
-//! A compound command that runs a changed script names the script's connector.
+//! A compound command that launches one script: the grant read after a `cd`,
+//! and the changed-script connector.
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -85,7 +86,7 @@ fn a_compound_command_running_two_scripts_names_neither() {
 }
 
 #[test]
-fn a_compound_command_running_a_current_script_is_not_sent_to_setup() {
+fn an_allowed_script_after_cd_runs_with_any_arguments() {
     let fixture = Fixture::new("compound-current");
     let merge = script(&fixture, "approve-merge.sh", "#!/bin/sh\necho ready\n");
     let named = run_with_connector(&review(&fixture, &format!("{} go", merge.display())))
@@ -97,11 +98,111 @@ fn a_compound_command_running_a_current_script_is_not_sent_to_setup() {
         named["identity_hash"].as_str().unwrap(),
         "allowed",
     );
-    let compound = format!("cd {} && {} go", fixture.workspace, merge.display());
+    for arguments in ["go", "-m \"fix: first\"", "-m \"fix: second message\""] {
+        let compound = format!(
+            "cd {} && {} {arguments}",
+            fixture.workspace,
+            merge.display()
+        );
+        assert_eq!(
+            run_with_connector(&review(&fixture, &compound)).unwrap(),
+            ("allow".to_owned(), None),
+            "{compound}"
+        );
+    }
+    let relative = format!("cd {} && ./approve-merge.sh go", fixture.workspace);
     assert_eq!(
-        run_with_connector(&review(&fixture, &compound)).unwrap(),
+        run_with_connector(&review(&fixture, &relative)).unwrap(),
+        ("allow".to_owned(), None)
+    );
+
+    // Another command beside the pair is not read as the script alone.
+    for command in [
+        format!(
+            "cd {} && {} go | tail -5",
+            fixture.workspace,
+            merge.display()
+        ),
+        format!(
+            "cd {} && {} go && rm -rf build",
+            fixture.workspace,
+            merge.display()
+        ),
+        format!("cd {} ; {} go", fixture.workspace, merge.display()),
+        format!(
+            "cd {} && {} go > out.log",
+            fixture.workspace,
+            merge.display()
+        ),
+        format!("cd {} && {} \"$(id)\"", fixture.workspace, merge.display()),
+    ] {
+        assert_eq!(
+            run_with_connector(&review(&fixture, &command)).unwrap().0,
+            "review",
+            "{command}"
+        );
+    }
+
+    // A review that carries its own risk signal outlives the grant.
+    let mut sensitive = review(
+        &fixture,
+        &format!("cd {} && {} go", fixture.workspace, merge.display()),
+    );
+    sensitive.current_reason_code = Some("native_sensitive_access_review".to_owned());
+    assert_eq!(
+        run_with_connector(&sensitive).unwrap(),
         ("review".to_owned(), None)
     );
+
+    // Editing the script asks again, naming the new version.
+    fs::write(&merge, "#!/bin/sh\necho changed\n").unwrap();
+    let compound = format!("cd {} && {} go", fixture.workspace, merge.display());
+    let (action, connector) = run_with_connector(&review(&fixture, &compound)).unwrap();
+    assert_eq!(action, "review");
+    assert_eq!(
+        connector.expect("the changed script is named")["allowed_earlier_version"],
+        true
+    );
+}
+
+#[test]
+fn an_undecided_script_after_cd_names_its_connector() {
+    let fixture = Fixture::new("compound-undecided");
+    let merge = script(&fixture, "approve-merge.sh", "#!/bin/sh\necho ready\n");
+    let compound = format!(
+        "cd {} && {} -m \"fix: x\"",
+        fixture.workspace,
+        merge.display()
+    );
+    let (action, connector) = run_with_connector(&review(&fixture, &compound)).unwrap();
+    assert_eq!(action, "review");
+    let connector = connector.expect("the script is named");
+    assert_eq!(connector["name"], "approve-merge.sh");
+    assert!(connector.get("allowed_earlier_version").is_none());
+}
+
+#[test]
+fn a_blocked_script_after_cd_is_blocked() {
+    let fixture = Fixture::new("compound-blocked");
+    let merge = script(&fixture, "approve-merge.sh", "#!/bin/sh\necho ready\n");
+    let named = run_with_connector(&review(&fixture, &format!("{} go", merge.display())))
+        .unwrap()
+        .1
+        .unwrap();
+    fixture.grant(
+        named["cli_id"].as_str().unwrap(),
+        named["identity_hash"].as_str().unwrap(),
+        "blocked",
+    );
+    let compound = format!("cd {} && {} go", fixture.workspace, merge.display());
+    assert_eq!(
+        run_with_connector(&review(&fixture, &compound)).unwrap().0,
+        "block"
+    );
+    let mut allowed = review(&fixture, &compound);
+    allowed.current_action = "allow".to_owned();
+    allowed.current_reason_code = None;
+    assert_eq!(run_with_connector(&allowed).unwrap().0, "block");
 }
 
 #[test]
@@ -220,4 +321,23 @@ fn changed_script_cd_selection_must_not_guess_about_cdpath_or_parent_segments() 
     let (action, connector) = run_with_connector(&review(&fixture, hyphen)).unwrap();
     assert_eq!(action, "review");
     assert!(connector.is_none(), "cd - does not select cwd/nested");
+
+    // The shell expands these operands; a directory literally named after
+    // one must not name its script for whatever directory the shell selects.
+    for literal in ["$TARGET", "nest*", "{nested}"] {
+        let dir = std::path::Path::new(&fixture.workspace).join(literal);
+        fs::create_dir_all(&dir).unwrap();
+        script(
+            &fixture,
+            &format!("{literal}/approve-merge.sh"),
+            "#!/bin/sh\necho ready\n",
+        );
+        let expanded = format!("cd {literal} && ./approve-merge.sh --dry-run");
+        let (action, connector) = run_with_connector(&review(&fixture, &expanded)).unwrap();
+        assert_eq!(action, "review", "{expanded}");
+        assert!(
+            connector.is_none(),
+            "{expanded} must not name a literal directory"
+        );
+    }
 }
