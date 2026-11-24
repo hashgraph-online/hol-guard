@@ -48,7 +48,15 @@ pub(super) fn segment_without_messages(segment: &CommandSegmentV1) -> Option<Str
 fn message_positions(arguments: &[String]) -> Option<Vec<usize>> {
     let start = super::git_search_text::subcommand_position(arguments)?;
     let mut first = start + 1;
-    match arguments[start].as_str() {
+    let subcommand = arguments[start].as_str();
+    // `git merge -s` is `--strategy` and reads the next token; for commit
+    // and tag `-s` is a sign-off or signature flag that takes none.
+    let (flags_without_value, short_options_with_value) = if subcommand == "merge" {
+        (MERGE_FLAGS_WITHOUT_VALUE, MERGE_SHORT_OPTIONS_WITH_VALUE)
+    } else {
+        (FLAGS_WITHOUT_VALUE, SHORT_OPTIONS_WITH_VALUE)
+    };
+    match subcommand {
         "commit" | "tag" | "merge" => {}
         "stash" if arguments.get(first).map(String::as_str) == Some("push") => first += 1,
         _ => return Some(Vec::new()),
@@ -72,6 +80,16 @@ fn message_positions(arguments: &[String]) -> Option<Vec<usize>> {
             index += 2;
             continue;
         }
+        if value.starts_with("--")
+            && !value.contains('=')
+            && !LONG_FLAGS_WITHOUT_VALUE.contains(&value)
+        {
+            // Git accepts any unique prefix of a long option, so `--auth -m`
+            // gives `-m` to `--author`. An option this table does not name
+            // exactly may read the next token, and the message positions
+            // after it cannot be known.
+            return None;
+        }
         if value.starts_with("--message=") {
             positions.push(index);
         } else if let Some(cluster) = value
@@ -82,7 +100,7 @@ fn message_positions(arguments: &[String]) -> Option<Vec<usize>> {
             if let Some((before, after)) = cluster.split_once('m') {
                 if before
                     .chars()
-                    .all(|flag| FLAGS_WITHOUT_VALUE.contains(flag))
+                    .all(|flag| flags_without_value.contains(flag))
                 {
                     if after.is_empty() {
                         if index + 1 < arguments.len() {
@@ -98,8 +116,8 @@ fn message_positions(arguments: &[String]) -> Option<Vec<usize>> {
             let mut flags = cluster.chars();
             if flags
                 .next_back()
-                .is_some_and(|last| SHORT_OPTIONS_WITH_VALUE.contains(last))
-                && flags.all(|flag| FLAGS_WITHOUT_VALUE.contains(flag))
+                .is_some_and(|last| short_options_with_value.contains(last))
+                && flags.all(|flag| flags_without_value.contains(flag))
             {
                 index += 2;
                 continue;
@@ -122,6 +140,57 @@ const FLAGS_WITHOUT_VALUE: &str = "aefnqsv";
 
 /// Short options of those commands that read the next token as their value.
 const SHORT_OPTIONS_WITH_VALUE: &str = "CcFtuX";
+
+/// `git merge` reads `-s` as `--strategy`, which takes the next token.
+const MERGE_FLAGS_WITHOUT_VALUE: &str = "aefnqv";
+
+/// `git merge`'s short options that read the next token as their value.
+const MERGE_SHORT_OPTIONS_WITH_VALUE: &str = "CcFstuX";
+
+/// Long options of those commands, spelled in full, that take no value. A
+/// long option missing from both tables, an abbreviation included, leaves
+/// the message unknown.
+const LONG_FLAGS_WITHOUT_VALUE: &[&str] = &[
+    "--all",
+    "--allow-empty",
+    "--allow-empty-message",
+    "--amend",
+    "--annotate",
+    "--autostash",
+    "--dry-run",
+    "--edit",
+    "--ff",
+    "--ff-only",
+    "--force",
+    "--gpg-sign",
+    "--include",
+    "--include-untracked",
+    "--keep-index",
+    "--log",
+    "--no-autostash",
+    "--no-commit",
+    "--no-edit",
+    "--no-ff",
+    "--no-gpg-sign",
+    "--no-keep-index",
+    "--no-log",
+    "--no-post-rewrite",
+    "--no-signoff",
+    "--no-stat",
+    "--no-status",
+    "--no-verify",
+    "--only",
+    "--patch",
+    "--quiet",
+    "--reset-author",
+    "--sign",
+    "--signoff",
+    "--stat",
+    "--staged",
+    "--status",
+    "--verbose",
+    "--verify",
+];
 
 /// Long options of those commands that read the next token as their value
 /// when it is not attached with `=`.

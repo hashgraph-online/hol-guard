@@ -33,6 +33,27 @@ fn files_pathspecs_and_other_commands_are_not_messages() {
 }
 
 #[test]
+fn an_abbreviated_or_unknown_long_option_leaves_the_message_unknown() {
+    // Git expands `--auth` to `--author`, which takes `-m` as its value.
+    assert_eq!(positions("commit --auth -m .env"), None);
+    assert_eq!(positions("commit --no-veri -m note"), None);
+    assert_eq!(
+        positions("commit --amend --no-verify -m note"),
+        Some(vec![4])
+    );
+    assert_eq!(positions("commit --author=someone -m note"), Some(vec![3]));
+}
+
+#[test]
+fn merge_reads_s_as_a_strategy_that_takes_the_next_token() {
+    assert_eq!(positions("merge -s -m note"), Some(vec![]));
+    assert_eq!(positions("merge -sm note"), Some(vec![]));
+    assert_eq!(positions("merge -s ours -m note"), Some(vec![4]));
+    assert_eq!(positions("commit -sm note"), Some(vec![2]));
+    assert_eq!(positions("tag -sm note v1"), Some(vec![2]));
+}
+
+#[test]
 fn a_message_that_can_expand_is_not_set_aside() {
     assert_eq!(positions("commit -m $(cat)"), None);
     assert_eq!(positions("commit -m `cat`"), None);
