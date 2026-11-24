@@ -30,7 +30,7 @@ CATALOG = Path(__file__).with_name("scenarios.json")
 # The catalog's own bound. A run writes one case file per scenario, so `bundle`
 # derives the evidence inventory's bound from this one: raising it here raises
 # what an export and an import will carry.
-MAX_SCENARIOS = 448
+MAX_SCENARIOS = 480
 # Connector setup cases: an additive catalog, like the approve-then-retry lane's, so the omp
 # runner and the installed lane never meet an oracle they cannot judge.
 CONNECTOR_CATALOG = Path(__file__).with_name("connector_setup.json")
