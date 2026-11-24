@@ -246,3 +246,42 @@ class Cache:
         .unwrap_or_default();
     assert!(block.contains("pkg/cache.py:10-11"), "{text}");
 }
+
+/// In Python `//` divides and only a `#` outside quotes, triple quotes
+/// included, starts a comment: both lines here still call their helper.
+#[test]
+fn python_floor_division_and_triple_quotes_keep_their_calls() {
+    let source = "def page_count(total, limit):
+    pages = total // page_size(limit)
+    return pages or default_label(\"\"\"tag\"#\"\"\")
+
+
+def page_size(limit):
+    return max(limit, 1)
+
+
+def default_label(text):
+    return text.strip()
+";
+    let (home, _project, root) = project(ON, &[("pkg/pages.py", source)]);
+    let text = prompt_map(home.path(), &root, "Add a doctest to page_count").unwrap();
+    assert!(text.contains("return max(limit, 1)"), "{text}");
+    assert!(text.contains("return text.strip()"), "{text}");
+}
+
+/// A method that calls a module function of its own name calls a helper,
+/// not itself: `Cache.load` lists the module's `load`.
+#[test]
+fn a_method_calling_a_function_of_its_own_name_lists_it() {
+    let source = "def load(key):
+    return STORE.get(key)
+
+
+class Cache:
+    def load(self, key):
+        return self.items.get(key) or load(key)
+";
+    let (home, _project, root) = project(ON, &[("pkg/cache.py", source)]);
+    let text = prompt_map(home.path(), &root, "Add a doctest to Cache.load").unwrap();
+    assert!(text.contains("return STORE.get(key)"), "{text}");
+}

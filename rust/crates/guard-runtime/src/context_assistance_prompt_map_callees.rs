@@ -45,12 +45,18 @@ pub(in super::super) fn callees(
             .lines
             .get(section.start.checked_sub(1)?..section.end.min(file.lines.len()))?;
         let python = file.path.ends_with(".py");
+        let mut declared = false;
         for line in body {
             for (through, name) in called(line, python) {
-                // Its own name is a recursive call; another caller's name is
-                // a helper, left out below once it is found to be shown.
+                // The first use of its own name declares it. A later one may
+                // be a recursive call or a like-named helper: it is resolved
+                // below, and left out if it is a function already shown.
                 let own_name = section.name.as_deref() == Some(&*stored(name));
-                if name.len() < MIN_NAME_CHARS || own_name {
+                if own_name && !declared {
+                    declared = true;
+                    continue;
+                }
+                if name.len() < MIN_NAME_CHARS {
                     continue;
                 }
                 let sibling = match through {
@@ -118,14 +124,13 @@ pub(in super::super) fn callees(
 /// The names on `line` written right before an opening parenthesis, in
 /// order, each with the word it is called through: `withBase(` (none),
 /// `self.parse(` (`self`), `Self::new(` (`Self`). A call through anything
-/// else, such as `(a).b(`, comes with an empty word. A comment, `//` or a
-/// Python `#` outside quotes, holds no calls.
+/// else, such as `(a).b(`, comes with an empty word. A comment holds no
+/// calls: in Python a `#` outside quotes (`//` there divides), elsewhere `//`.
 fn called(line: &str, python: bool) -> Vec<(Option<&str>, &str)> {
-    let code = line.split("//").next().unwrap_or(line);
     let code = if python {
-        &code[..hash_comment(code)]
+        &line[..hash_comment(line)]
     } else {
-        code
+        line.split("//").next().unwrap_or(line)
     };
     let word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
     let bytes = code.as_bytes();
@@ -154,21 +159,31 @@ fn called(line: &str, python: bool) -> Vec<(Option<&str>, &str)> {
     names
 }
 
-/// Where a Python `#` comment starts on `code`, outside quoted text; its
-/// length when there is none.
+/// Where a Python `#` comment starts on `code`, outside quoted text (single,
+/// double or triple quotes); its length when there is none.
 fn hash_comment(code: &str) -> usize {
-    let mut quote = None;
-    let mut escaped = false;
-    for (at, c) in code.char_indices() {
-        match quote {
-            Some(_) if escaped => escaped = false,
-            Some(_) if c == '\\' => escaped = true,
-            Some(open) if c == open => quote = None,
-            Some(_) => {}
-            None if c == '"' || c == '\'' => quote = Some(c),
+    let mut quote: Option<&str> = None;
+    let mut at = 0;
+    while let Some(c) = code[at..].chars().next() {
+        let rest = &code[at..];
+        let step = match quote {
+            Some(_) if c == '\\' => 1 + rest[1..].chars().next().map_or(0, char::len_utf8),
+            Some(open) if rest.starts_with(open) => {
+                quote = None;
+                open.len()
+            }
             None if c == '#' => return at,
-            None => {}
-        }
+            None if c == '"' || c == '\'' => {
+                let open = ["\"\"\"", "'''"]
+                    .into_iter()
+                    .find(|triple| rest.starts_with(triple));
+                let open = open.unwrap_or(&rest[..1]);
+                quote = Some(open);
+                open.len()
+            }
+            _ => c.len_utf8(),
+        };
+        at += step;
     }
     code.len()
 }
