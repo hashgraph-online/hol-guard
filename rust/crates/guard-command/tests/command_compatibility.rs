@@ -457,6 +457,8 @@ fn a_search_pattern_beside_a_stderr_redirect_names_no_credential() {
         "grep -n token_budget README.md 2>/dev/null",
         "grep -rn -e api_token -e x src 2>/dev/null",
         "grep -rn password_hash src 2>/dev/null | head",
+        "rg --regexp=api_token src 2>/dev/null",
+        "grep -neapi_token src 2>/dev/null",
     ] {
         assert!(!writes_sensitive(command), "{command}");
     }
@@ -469,6 +471,9 @@ fn a_search_pattern_beside_a_stderr_redirect_names_no_credential() {
         "grep -n api_token api_token 2>/dev/null",
         "grep --frobnicate api_token src 2>/dev/null",
         "cat .env 2>/dev/null",
+        "grep --color api_token .env 2>/dev/null",
+        "grep --colour api_token .env 2>/dev/null",
+        "rg --files .env 2>/dev/null",
     ] {
         assert!(writes_sensitive(command), "{command}");
     }

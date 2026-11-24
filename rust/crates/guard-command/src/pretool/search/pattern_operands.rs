@@ -6,11 +6,15 @@
 
 use super::options;
 
-/// The pattern words of a `grep`, `egrep`, `fgrep` or `rg` argument list:
-/// every `-e`/`--regexp` value or, without one, the first positional.
+/// The arguments of a `grep`, `egrep`, `fgrep` or `rg` argument list that
+/// supply its pattern: every `-e`/`--regexp` argument or, without one, the
+/// first positional. An attached pattern, as in `-neword` or
+/// `--regexp=word`, is the whole argument that carries it.
 ///
 /// Returns `None` when any option is one this reading does not know, so a
-/// value-taking option can never shift a path into the pattern slot.
+/// value-taking option can never shift a path into the pattern slot, and for
+/// `rg --files`, which searches for no pattern and reads every positional as
+/// a path.
 pub(crate) fn search_pattern_words(executable: &str, arguments: &[String]) -> Option<Vec<String>> {
     let rg = match executable {
         "rg" => true,
@@ -40,6 +44,9 @@ pub(crate) fn search_pattern_words(executable: &str, arguments: &[String]) -> Op
             options_enabled = false;
             continue;
         }
+        if rg && argument == "--files" {
+            return None;
+        }
         if let Some(long) = argument.strip_prefix("--") {
             let (name, attached) = match long.split_once('=') {
                 Some((name, value)) => (format!("--{name}"), Some(value)),
@@ -51,9 +58,15 @@ pub(crate) fn search_pattern_words(executable: &str, arguments: &[String]) -> Op
                 options::grep_value_role(&name)
             };
             match role {
+                // grep's colour option takes only an attached `=WHEN`, so
+                // a bare `--color` leaves the next word where it was.
+                Some(_)
+                    if !rg
+                        && attached.is_none()
+                        && matches!(name.as_str(), "--color" | "--colour") => {}
                 Some(role) => {
                     let value = match attached {
-                        Some(value) => value.to_owned(),
+                        Some(_) => argument.clone(),
                         None => {
                             index += 1;
                             arguments.get(index - 1)?.clone()
@@ -79,7 +92,7 @@ pub(crate) fn search_pattern_words(executable: &str, arguments: &[String]) -> Op
                 index += 1;
                 arguments.get(index - 1)?.clone()
             } else {
-                attached.to_owned()
+                argument.clone()
             };
             if option == 'e' {
                 option_patterns.push(value);
@@ -97,7 +110,7 @@ pub(crate) fn search_pattern_words(executable: &str, arguments: &[String]) -> Op
 fn known_flag(rg: bool, name: &str) -> bool {
     if rg {
         return options::safe_rg_flag(name)
-            || matches!(name, "--hidden" | "--no-ignore" | "--follow" | "--files");
+            || matches!(name, "--hidden" | "--no-ignore" | "--follow");
     }
     options::safe_grep_flag(name)
         || matches!(
@@ -145,11 +158,11 @@ mod tests {
         );
         assert_eq!(
             words("grep", "-rnepassword .env"),
-            Some(vec!["password".into()])
+            Some(vec!["-rnepassword".into()])
         );
         assert_eq!(
             words("rg", "--regexp=api_token .env"),
-            Some(vec!["api_token".into()])
+            Some(vec!["--regexp=api_token".into()])
         );
         assert_eq!(words("grep", "-f patterns.txt .env"), Some(vec![]));
     }
@@ -160,5 +173,17 @@ mod tests {
         assert_eq!(words("rg", "--pre=cat x .env"), None);
         assert_eq!(words("cat", "x .env"), None);
         assert_eq!(words("grep", "-A"), None);
+        assert_eq!(words("rg", "--files .env"), None);
+    }
+
+    #[test]
+    fn a_bare_grep_colour_option_takes_no_value() {
+        assert_eq!(words("grep", "--color x .env"), Some(vec!["x".into()]));
+        assert_eq!(words("grep", "--colour x .env"), Some(vec!["x".into()]));
+        assert_eq!(
+            words("grep", "--color=always x .env"),
+            Some(vec!["x".into()])
+        );
+        assert_eq!(words("rg", "--color never x .env"), Some(vec!["x".into()]));
     }
 }
