@@ -156,8 +156,19 @@ pub(crate) fn cd_then_launch(
     // Do not infer the directory when the shell could select a different one
     // than the one canonicalized here. Logical cd handles '..' before
     // symlinks; searched operands can be redirected by CDPATH.
+    // The shell model keeps parameter expansions, globs, braces and tildes
+    // as written and drops quoting, so an operand that the shell could
+    // expand would be resolved here as a literal directory of that name.
     let operand = first.arguments[0].as_str();
-    if operand.starts_with('-') || operand.split('/').any(|part| part == "..") {
+    if operand.starts_with('-')
+        || operand.split('/').any(|part| part == "..")
+        || operand.chars().any(|character| {
+            matches!(
+                character,
+                '$' | '`' | '*' | '?' | '[' | '{' | '~' | '\\' | '\'' | '"'
+            )
+        })
+    {
         return None;
     }
     let searched = !operand.starts_with('/') && operand.split('/').next() != Some(".");

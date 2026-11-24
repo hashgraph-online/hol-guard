@@ -321,4 +321,23 @@ fn changed_script_cd_selection_must_not_guess_about_cdpath_or_parent_segments() 
     let (action, connector) = run_with_connector(&review(&fixture, hyphen)).unwrap();
     assert_eq!(action, "review");
     assert!(connector.is_none(), "cd - does not select cwd/nested");
+
+    // The shell expands these operands; a directory literally named after
+    // one must not name its script for whatever directory the shell selects.
+    for literal in ["$TARGET", "nest*", "{nested}"] {
+        let dir = std::path::Path::new(&fixture.workspace).join(literal);
+        fs::create_dir_all(&dir).unwrap();
+        script(
+            &fixture,
+            &format!("{literal}/approve-merge.sh"),
+            "#!/bin/sh\necho ready\n",
+        );
+        let expanded = format!("cd {literal} && ./approve-merge.sh --dry-run");
+        let (action, connector) = run_with_connector(&review(&fixture, &expanded)).unwrap();
+        assert_eq!(action, "review", "{expanded}");
+        assert!(
+            connector.is_none(),
+            "{expanded} must not name a literal directory"
+        );
+    }
 }
