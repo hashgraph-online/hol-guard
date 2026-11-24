@@ -61,6 +61,9 @@ def write_org_repos(org: Path, home: Path) -> None:
         _write(repository / ".dockerignore" / "notes.md", "# fixture\n")
         _write(repository / ".secrets" / "read.py", "TOKEN = 'fixture'\n")
         _write(repository / "src" / "index.ts", f"export const name = '{name}';\n")
+        # Sign-in helpers kept under a source directory named for the feature.
+        _write(repository / "src" / "lib" / "auth" / "session.ts", "export function useAuth() {}\n")
+        _write(repository / "src" / "lib" / "session" / "auth" / "button.tsx", "export function SignInButton() {}\n")
         _write(repository / "README.md", f"# {name}\n")
         _write(repository / "src" / "lib.rs", 'pub fn name() -> &\'static str {\n    "fixture"\n}\n')
         if name == "service-api":
