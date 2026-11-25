@@ -13,7 +13,7 @@ use crate::context_assistance_prompt_words::{marked_terms, spellings};
 use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
-use lookup::{anchored, lookup, points_nowhere, truncated, Miss, Request};
+use lookup::{anchored, lookup, points_nowhere, quote_unshown, truncated, Miss, Request};
 use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
@@ -380,7 +380,7 @@ fn attach(
         return;
     }
     // An excerpt holding only the quoted text is still about the request.
-    words.extend(quoted);
+    words.extend(quoted.iter().cloned());
     let request = Request {
         root: root.clone(),
         app: harness.to_owned(),
@@ -407,7 +407,10 @@ fn attach(
     // of the hook, and project context or CIGAR may be turned off meanwhile.
     let context = answered(lookup(service, home, request, deadline), own_read)
         .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness));
-    let Some(context) = context else {
+    let shown_quote = |context: &Rendered| {
+        !quote_unshown(prompt, &root, (&quoted, &searched.quoting), &context.text)
+    };
+    let Some(context) = context.filter(shown_quote) else {
         return;
     };
     seen::keep(session.as_ref(), &context.shown, shown);

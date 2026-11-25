@@ -323,14 +323,98 @@ pub(super) fn anchored(prompt: &str) -> bool {
 /// budget may have missed the file holding a quote, so its zero counts only
 /// mean "held nowhere" when it read every file.
 pub(super) fn points_nowhere(prompt: &str, root: &Path, quoting: &[usize], complete: bool) -> bool {
+    (quoting.is_empty() || (complete && quoting.iter().all(|&files| files == 0)))
+        && only_quoted(prompt, root)
+}
+
+/// True when only quoted text let the prompt through, no file the walk read
+/// holds it, and the note shows none of it either. Its excerpts were then
+/// ranked on the prompt's plain words alone, as a task title pasted in a
+/// project too big to read whole got: a config file and unrelated modules.
+/// CIGAR's own search can still find the quote in a file the walk did not
+/// reach, and a note that shows it is kept. Only what files hold counts:
+/// a quote such as "project" or "lines" that only Guard's own words in the
+/// note hold is not shown.
+pub(super) fn quote_unshown(
+    prompt: &str,
+    root: &Path,
+    (quoted, quoting): (&[String], &[usize]),
+    note: &str,
+) -> bool {
+    !quoted.is_empty()
+        && quoting.iter().all(|&files| files == 0)
+        && only_quoted(prompt, root)
+        && !crate::context_assistance_prompt_words::quoted(&file_text(note), quoted).contains(&true)
+}
+
+/// How the lines Guard writes between a note's excerpts start, lowercased.
+const GUARD_LEAD_INS: &[&str] = &[
+    "already shown earlier in this session:",
+    "other matching files:",
+];
+
+/// The fixed titles Guard writes on a line of their own, lowercased.
+const GUARD_TITLES: &[&str] = &[
+    "definitions this request names:",
+    "tests that use the changed definitions:",
+    "changed definitions as they read now:",
+    "changed definitions (current line numbers):",
+    "definitions this request names or quotes, in files guard keeps out of this context \
+     (open these lines yourself):",
+];
+
+/// A note's text without Guard's own words, lowercased: every note opens
+/// with Guard's paragraph and its excerpts follow a blank line. Lines inside
+/// a code fence are a file's and always kept. Outside one, an excerpt's
+/// label (its path and `(lines a-b)`), a list's lead-in and a title that is
+/// the whole line are Guard's.
+fn file_text(note: &str) -> String {
+    let note = note.to_lowercase();
+    let label = |line: &str| {
+        (line.strip_suffix(')'))
+            .and_then(|line| line.rsplit_once(" (lines "))
+            .is_some_and(|(_, range)| {
+                range.split_once('-').is_some_and(|(from, to)| {
+                    [from, to]
+                        .iter()
+                        .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+                })
+            })
+    };
+    let own = |line: &str| {
+        label(line)
+            || GUARD_TITLES.contains(&line.trim_end())
+            || GUARD_LEAD_INS.iter().any(|lead| line.starts_with(lead))
+    };
+    let body = note.split_once("\n\n").map_or("", |(_, body)| body);
+    // An excerpt's fence is longer than any backtick run inside it, so a
+    // fence closes only on a bare run at least as long as its opener.
+    let ticks = |line: &str| line.trim_start().bytes().take_while(|&b| b == b'`').count();
+    let mut fence = 0;
+    let mut kept = Vec::new();
+    for line in body.lines() {
+        let run = ticks(line);
+        if fence == 0 && run >= 3 {
+            fence = run;
+        } else if fence > 0 && run >= fence && line.trim().len() == run {
+            fence = 0;
+        } else if fence > 0 || !own(line) {
+            kept.push(line);
+        }
+    }
+    kept.join("\n")
+}
+
+/// True when the prompt writes no name as code and names no file in this
+/// project, so only quoted text, if any, points it at code.
+fn only_quoted(prompt: &str, root: &Path) -> bool {
     use crate::context_assistance_prompt_files::named;
     let elsewhere = |name: &String| {
         let mut tails =
             (0..=name.matches('/').count()).filter_map(|skip| name.splitn(skip + 1, '/').last());
         name.contains('/') && !tails.any(|tail| root.join(tail).is_file())
     };
-    (quoting.is_empty() || (complete && quoting.iter().all(|&files| files == 0)))
-        && named(prompt).iter().all(elsewhere)
+    named(prompt).iter().all(elsewhere)
         && crate::context_assistance_prompt_words::spellings(prompt).is_empty()
 }
 
