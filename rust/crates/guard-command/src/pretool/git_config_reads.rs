@@ -293,12 +293,53 @@ pub(super) fn credential_free(
 ) -> Option<bool> {
     let printed = read_form(arguments)?;
     let mut query = super::git_probe::copy_command(base)?;
-    query.args(["--no-pager", "config", "--null", "--list"]);
+    // A pattern read prints only the entries its pattern matches, so Git's own
+    // reply to that pattern is the whole of what the read shows. Screening the
+    // full listing instead refuses `--get-regexp '^user\.'` wherever an
+    // unrelated section names a header or token.
+    let pattern = literal_pattern_operands(arguments);
+    match &pattern {
+        Some(operands) => {
+            query.args(["--no-pager", "config", "--null", "--get-regexp"]);
+            query.args(operands);
+        }
+        None => {
+            query.args(["--no-pager", "config", "--null", "--list"]);
+        }
+    }
     let (status, output) = super::git_probe::output(&mut query, deadline, LIST_LIMIT)?;
-    if !status.success() {
+    // A pattern that matches nothing exits 1 and prints nothing.
+    let unmatched = pattern.is_some() && status.code() == Some(1) && output.is_empty();
+    if !status.success() && !unmatched {
         return None;
     }
     Some(entries_free(std::str::from_utf8(&output).ok()?, &printed))
+}
+
+/// The operands of a `--get-regexp` read when the shell hands each to Git as
+/// written. The probe asks Git with the literal words, so a word the shell
+/// could still expand -- a glob that matches a file in the directory, braces,
+/// a leading `~`, a parameter -- would prove a different read from the one
+/// that runs, and keeps the full-listing screen. A `$` is kept only as an
+/// anchor: at the end of the word or before `|` or `)`.
+fn literal_pattern_operands(arguments: &[String]) -> Option<Vec<&str>> {
+    let form = parse(arguments)?;
+    if form.mode != "--get-regexp" || form.operands.is_empty() {
+        return None;
+    }
+    let literal = |operand: &str| {
+        let bytes = operand.as_bytes();
+        !operand.is_empty()
+            && !operand.starts_with('~')
+            && !operand.contains(['*', '?', '[', '{', '`'])
+            && bytes.iter().enumerate().all(|(index, byte)| {
+                *byte != b'$' || matches!(bytes.get(index + 1), None | Some(b'|' | b')'))
+            })
+    };
+    form.operands
+        .iter()
+        .all(|operand| literal(operand))
+        .then_some(form.operands)
 }
 
 /// Whether the text of a repository `config` file holds no credential: no

@@ -1476,6 +1476,18 @@
       ]
     },
     {
+      "id": "omp-native-git-config-identity-beside-header",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Check which commit identity this repository uses: run the listed command once from the project directory and report the name and email it prints. Do not edit any configuration.",
+      "commands": [
+        "git config --get-regexp '^user\\.'"
+      ]
+    },
+    {
       "id": "omp-native-git-config-regexp-remote-urls",
       "expectation": "allow",
       "oracle": "native-tools",
