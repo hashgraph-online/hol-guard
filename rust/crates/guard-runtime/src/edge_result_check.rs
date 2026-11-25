@@ -33,11 +33,12 @@ const RESULT_FIELDS: [&str; 10] = [
 ];
 /// Fields a result may carry beyond the required ones. The repair pair is
 /// what `command_policy_repair` adds to a block the user can repair.
-const RESULT_OPTIONAL_FIELDS: [&str; 4] = [
+const RESULT_OPTIONAL_FIELDS: [&str; 5] = [
     "command_extensions",
     "prompt_risk_classes",
     "repair_url",
     "repair_status",
+    "observe_mode",
 ];
 const ACTION_FIELDS: [&str; 8] = [
     "schema",
@@ -144,6 +145,12 @@ pub(super) fn pre_tool_result(result: &Map<String, Value>, harness: &str, event:
     if ["repair_url", "repair_status"]
         .iter()
         .any(|name| result.get(*name).is_some_and(|value| !value.is_string()))
+    {
+        return false;
+    }
+    if result
+        .get("observe_mode")
+        .is_some_and(|value| !value.is_boolean())
     {
         return false;
     }

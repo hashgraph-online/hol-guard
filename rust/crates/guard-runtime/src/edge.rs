@@ -409,17 +409,16 @@ fn evaluate_validated_envelope<Lease>(
     let result_object = result
         .as_object()
         .ok_or_else(|| "native_hook_pre_tool_result_invalid".to_owned())?;
+    let recording_only =
+        envelope.recording_only || result_object.get("observe_mode") == Some(&Value::Bool(true));
     let requires_approval = edge_result_check::requires_approval(&event_name, result_object);
-    let recording_only_response = edge_result_check::recording_only_response(
-        &event_name,
-        envelope.recording_only,
-        result_object,
-    );
+    let recording_only_response =
+        edge_result_check::recording_only_response(&event_name, recording_only, result_object);
     let mut edge = GuardHookEdgeResultV2 {
         exact_command_block: None,
         review_evidence,
         // Every edge carries its route so no hook asks again; only PreToolUse is routed.
-        containment_route: Some(edge_route(&event_name, &result, envelope.recording_only)),
+        containment_route: Some(edge_route(&event_name, &result, recording_only)),
         containment_rewrite: None,
         local_cli_rule: local_cli_rule?,
         receipt_recorded: false,
