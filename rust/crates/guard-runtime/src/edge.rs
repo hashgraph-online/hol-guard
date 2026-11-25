@@ -416,6 +416,8 @@ fn evaluate_validated_envelope<Lease>(
         edge_result_check::recording_only_response(&event_name, recording_only, result_object);
     let local_cli_rule = local_cli_rule?;
     let local_cli_rule_blocked = local_cli_rule.as_ref().map(|rule| rule.blocked);
+    let receipt_value = serde_json::to_value(&receipt)
+        .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
     let mut edge = GuardHookEdgeResultV2 {
         exact_command_block: None,
         review_evidence,
@@ -425,6 +427,10 @@ fn evaluate_validated_envelope<Lease>(
         local_cli_rule,
         receipt_recorded: false,
         activity_recorded: false,
+        transition_hook_observation: crate::transition_hook_observation::observe(
+            &envelope.raw_payload,
+            &receipt_value,
+        ),
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
         authority: "rust".to_owned(),
         request_id: Some(request_id),

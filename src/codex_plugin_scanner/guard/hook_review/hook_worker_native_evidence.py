@@ -25,13 +25,8 @@ def _record_native_pre_activity(
     *,
     recorded: bool = False,
 ) -> dict[str, object]:
-    from ..runtime_transition_hook_probe import OBSERVATION_FIELD, transition_hook_observation
-
     # Bind diagnostics to this call's accepted receipt, never the worker's
     # shared last-receipt slot (other HTTP requests may run concurrently).
-    observation = transition_hook_observation(payload, receipt)
-    if observation is not None:
-        response = {**response, OBSERVATION_FIELD: observation}
     submit = getattr(host.activity_writer, "submit_pre_tool_activity", None)
     # An edge that queued this activity behind its receipt says so.
     if callable(submit) and not recorded:

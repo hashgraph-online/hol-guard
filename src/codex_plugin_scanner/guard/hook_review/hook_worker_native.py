@@ -38,7 +38,13 @@ def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
     rendered = edge["harness_response"]
     if not isinstance(rendered, dict):
         raise ValueError("native_hook_edge_invalid_response")
-    return {str(key): value for key, value in rendered.items()}
+    response = {str(key): value for key, value in rendered.items()}
+    transition = edge.get("transition_hook_observation")
+    if isinstance(transition, Mapping):
+        observation = transition.get("observation")
+        if isinstance(observation, Mapping):
+            response["guard_transition_observation"] = dict(observation)
+    return response
 
 
 # `containment_rewrite` answers the edge gives once it rewrote a sink route.

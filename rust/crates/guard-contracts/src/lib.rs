@@ -537,6 +537,10 @@ pub struct GuardHookEdgeResultV2 {
     /// not record it again.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub activity_recorded: bool,
+    /// The Rust-owned transition probe observation, when this answer carries
+    /// a valid diagnostic probe and receipt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition_hook_observation: Option<Value>,
     /// The retry binding and exact-action token of a reviewed `PreToolUse`,
     /// answered as a `HookReview` query would, when the daemon sent its
     /// extension-control digest.
