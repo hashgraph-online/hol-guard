@@ -13,10 +13,9 @@
 use super::super::map::rename::STUB_MARKS;
 use super::super::seen::Span;
 use super::super::Rendered;
-use super::{clean, commit_id, Git, GLOBAL};
+use super::{clean, commit_id, Git};
 use crate::context_assistance_engine::screened_texts;
 use crate::context_assistance_prompt_words::test_file;
-use crate::git_execution_safety_probe::Prober;
 use guard_contracts::GuardHookEnvelopeV2;
 use std::path::Path;
 use std::time::Instant;
@@ -166,13 +165,13 @@ pub(super) fn before(git: &Git, stub: &Stub, until: Instant) -> Option<String> {
         "--",
         stub.path.as_str(),
     ];
-    let blamed = Blamed::read(&git.run_by(&blame, until)?)?;
+    let blamed = Blamed::read(&git.run(&blame, until)?)?;
     // An edit not committed yet moved the line, or wrote it.
     if blamed.text != stub.text || !clean(&blamed.subject) {
         return None;
     }
     let blob = format!("{}:{}", blamed.parent, blamed.path);
-    let old = git.run_by(&["cat-file", "blob", blob.as_str()], until)?;
+    let old = git.run(&["cat-file", "blob", blob.as_str()], until)?;
     let old = definition(&old, &stub.header)?;
     if STUB_MARKS.iter().any(|mark| old.contains(mark)) || !clean(&old) {
         return None;
@@ -192,27 +191,6 @@ lines before it; `git show '{shown}'` shows the file then.",
         "Commit {short} (\"{subject}\") wrote the stub at {at}. Before it, in {parent}, \
 the definition read:\n{old}"
     ))
-}
-
-impl Git {
-    /// Like `Git::run`, but a call is stopped at `until`: this note is
-    /// optional and must not hold the hook past its wait.
-    fn run_by(&self, arguments: &[&str], until: Instant) -> Option<String> {
-        if Instant::now() >= until {
-            return None;
-        }
-        let all: Vec<&str> = GLOBAL.iter().chain(arguments).copied().collect();
-        let prober = Prober {
-            git: &self.path,
-            cwd: &self.root,
-            environment: &self.environment,
-        };
-        let output = prober.run_offline_until(&all, until)?;
-        output
-            .success()
-            .then(|| output.text().map(str::to_owned))
-            .flatten()
-    }
 }
 
 /// What `git blame --porcelain` says of one line.
