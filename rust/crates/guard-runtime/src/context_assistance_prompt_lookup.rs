@@ -314,6 +314,26 @@ pub(super) fn anchored(prompt: &str) -> bool {
         && crate::context_assistance_prompt_words::spellings(prompt).is_empty())
 }
 
+/// True when what points the prompt at code is not in this project: quoted
+/// text no file read holds, such as a pasted task title or a word quoted for
+/// emphasis (`use "password" to approve`), and paths to files outside it,
+/// such as a link to a guide in another folder. A quoted error message is
+/// held by the file that raises it, and a traceback's path from another
+/// machine ends with a file here. A walk cut short by its time or size
+/// budget may have missed the file holding a quote, so its zero counts only
+/// mean "held nowhere" when it read every file.
+pub(super) fn points_nowhere(prompt: &str, root: &Path, quoting: &[usize], complete: bool) -> bool {
+    use crate::context_assistance_prompt_files::named;
+    let elsewhere = |name: &String| {
+        let mut tails =
+            (0..=name.matches('/').count()).filter_map(|skip| name.splitn(skip + 1, '/').last());
+        name.contains('/') && !tails.any(|tail| root.join(tail).is_file())
+    };
+    (quoting.is_empty() || (complete && quoting.iter().all(|&files| files == 0)))
+        && named(prompt).iter().all(elsewhere)
+        && crate::context_assistance_prompt_words::spellings(prompt).is_empty()
+}
+
 pub(super) fn truncated(text: &str, max_bytes: usize) -> String {
     let mut end = text.len().min(max_bytes);
     while !text.is_char_boundary(end) {

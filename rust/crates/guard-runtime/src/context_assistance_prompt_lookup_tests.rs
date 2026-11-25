@@ -137,3 +137,55 @@ fn a_product_name_alone_does_not_point_at_code() {
         assert!(anchored(prompt), "{prompt}");
     }
 }
+
+/// Quoted text and file paths point at code only when the project has them.
+/// A pasted task title, a word quoted for emphasis and a link to a guide in
+/// another folder got excerpts of a manifest, build configs and an unrelated
+/// module; a quoted error message the code raises, a file here and a
+/// traceback's path from another machine still point at code.
+#[test]
+fn quoted_text_and_paths_outside_the_project_point_at_nothing() {
+    use crate::context_assistance_prompt_files::{named, phrases, walk_exact};
+    use crate::context_assistance_prompt_words::{spellings, terms};
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("app")).unwrap();
+    std::fs::write(
+        dir.path().join("app/cli.py"),
+        "def count(value):\n    raise BadParameter(\"Invalid value for count\")\n",
+    )
+    .unwrap();
+    let nowhere = |prompt: &str| {
+        let budget = Duration::from_secs(5);
+        let (words, quoted) = (terms(prompt), phrases(prompt));
+        let walk = walk_exact(
+            dir.path(),
+            &words,
+            &quoted,
+            &named(prompt),
+            &spellings(prompt),
+            budget,
+        );
+        assert!(walk.complete, "{prompt}");
+        points_nowhere(prompt, dir.path(), &walk.quoting, walk.complete)
+    };
+    for prompt in [
+        "Do this task here: \u{201c}lockfile marks run partial\u{201d}",
+        "you can use the word \"password\" to approve the count",
+        "merge it with [$review-loop](/home/someone/skills/review-loop/SKILL.md) and count",
+    ] {
+        assert!(anchored(prompt), "{prompt}");
+        assert!(nowhere(prompt), "{prompt}");
+    }
+    // A walk cut short may have missed the file that holds the quote.
+    let title = "Do this task here: \u{201c}lockfile marks run partial\u{201d}";
+    assert!(!points_nowhere(title, dir.path(), &[0], false));
+    for prompt in [
+        "the error says \"Invalid value for count\"",
+        "In cli.py the count says \"nope\"",
+        "Fix app/cli.py",
+        "File \"/ci/build/proj/app/cli.py\", line 2, in count",
+        "`BadParameter` says \"nope\"",
+    ] {
+        assert!(!nowhere(prompt), "{prompt}");
+    }
+}
