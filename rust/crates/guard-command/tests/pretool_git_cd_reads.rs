@@ -235,6 +235,9 @@ fn read_prefix_before_a_verified_cd_keeps_the_cd_compound_decision() {
              cd {repository} && git check-ignore README.md && echo ignored || echo tracked"
         ),
         format!("ls {root}/missing || echo none && cd {repository} && ls app"),
+        // Each `&&`-joined `cd` moves the reads after it, and every run of
+        // reads is proven in the folder it runs in.
+        format!("ls {root} && cd {repository} && git status && cd {root} && ls"),
     ] {
         let result = decide(&space, &space.root, &command);
         assert_eq!(
@@ -257,7 +260,10 @@ fn only_a_proven_read_prefix_before_a_single_cd_is_set_aside() {
         format!("cat {home}/.ssh/id_ed25519 && cd {repository} && git status"),
         format!("touch {root}/marker && cd {repository} && git status"),
         format!("ls {root} && cd {repository} && rm -rf app"),
-        format!("ls {root} && cd {repository} && git status && cd {root} && ls"),
+        // A later `cd` keeps each step's own answer in the folder it enters.
+        format!("ls {root} && cd {repository} && git status && cd {home} && cat .ssh/id_ed25519"),
+        format!("ls {root} && cd {repository} && git status && cd {root} && rm -rf repository"),
+        format!("ls {root} && cd {repository} && git status; cd {root} && ls"),
         format!("ls {root} || cd {repository} && git status"),
         format!("ls {root} | cd {repository} && git status"),
         // `a && b || cd <dir> && git status` groups as `(a && b || cd <dir>)

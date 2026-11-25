@@ -410,3 +410,47 @@ fn cd_compounds_run_every_search_spelling_their_segments_prove() {
         ],
     );
 }
+
+#[test]
+fn and_chained_cds_run_each_git_read_in_the_directory_it_entered() {
+    let (space, _cleanup) = space("multi-cd");
+    let sibling = space.sibling.display();
+    let project = space.project.display();
+    write(&space.project.join("README.md"), "# app-portal\n");
+    write(&space.project.join("src/index.ts"), "export {};\n");
+    let report = format!(
+        "cd {sibling} && git status --short && git log --oneline -3 && echo \"---\" && \
+         cd {project} && git status --short && git log --oneline -3 && cat README.md && \
+         find src -type f"
+    );
+    check(
+        &space,
+        &[
+            report.clone(),
+            format!("cd {sibling} && git status --short && cd {project} && git status --short"),
+            format!("git status && cd {sibling} && git log -1 && cd {project} && git log -1"),
+        ],
+        &[
+            // A step before a later `cd` that is not a proven read keeps the
+            // review: it may change what the next directory's reads run.
+            format!("cd {sibling} && git config core.pager id && cd {project} && git log -1"),
+            format!("cd {sibling} && git status && cd {project} && rm -rf src"),
+            format!("cd {sibling} && git status && cd {project} && cat .env"),
+            format!("cd {sibling} && git status; cd {project} && git status"),
+            format!("cd {sibling} && git status && cd $HOME/.ssh && cat id_rsa"),
+        ],
+    );
+    // With the hook's stamped environment the helper probe runs too, and
+    // each read is probed where it runs: a helper in either checkout keeps
+    // the review.
+    check_with(decide_stamped, &space, std::slice::from_ref(&report), &[]);
+    for directory in [&space.sibling, &space.project] {
+        git(
+            directory,
+            &["config", "core.fsmonitor", "./synthetic-never-execute"],
+        );
+        check(&space, &[], std::slice::from_ref(&report));
+        check_with(decide_stamped, &space, &[], std::slice::from_ref(&report));
+        git(directory, &["config", "--unset", "core.fsmonitor"]);
+    }
+}
