@@ -140,12 +140,15 @@ fn asks_the_same_question_each_pass(test: &[(String, &'static str)]) -> bool {
         return false;
     }
     // Every `|` starts a piece that may be a pipeline stage, so checking the
-    // head of each piece covers each stage the shell could run in place.
+    // head of each piece covers each stage the shell could run in place. A
+    // group such as `(read x)` hides its commands behind the parenthesis, so a
+    // list holding one is not read as the same question on every pass.
     joined.is_empty()
         || test.iter().all(|(probe, _)| {
-            probe
-                .split('|')
-                .all(|stage| !super::command_word_changes_shell_state(stage.trim()))
+            !probe.contains(['(', ')', '{', '}'])
+                && probe
+                    .split('|')
+                    .all(|stage| !super::command_word_changes_shell_state(stage.trim()))
         })
 }
 

@@ -442,6 +442,11 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         "until cd build && test -f done.txt; do sleep 1; done",
         "until test -f done.txt || cd build; do sleep 1; done",
         "until export READY=1 && nc -z localhost 5432; do sleep 1; done",
+        // A group hides the commands inside it, and `read` takes more input
+        // on every pass.
+        "until (read x) && grep -q ready a.log; do sleep 1; done",
+        "until { read x; } && grep -q ready a.log; do sleep 1; done",
+        "until grep -q ready a.log || (cd /tmp); do sleep 1; done",
         "until nc -z localhost 5432 && grep -q x a.log | cd build; do sleep 1; done",
         "until grep -q ready a.log; grep -q ready b.log; do sleep 1; done",
         // Each probe in the list opens nothing of its own.
