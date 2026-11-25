@@ -60,10 +60,40 @@ def test_page_names_and_hosts_are_synthetic() -> None:
         ("https://127.0.0.1:5173/", None),
         ("https://shop.example.test.evil.test/basket", None),
         ("not a url", None),
+        ("https://[", None),
     ],
 )
 def test_page_for_url(url: str, page: str | None) -> None:
     assert server.page_for_url(url) == page
+
+
+@pytest.mark.parametrize(
+    ("url", "origin"),
+    [
+        ("http://127.0.0.1:5173?mode=dev#items", "http://127.0.0.1:5173"),
+        ("https://shop.example.test/basket?coupon=1", "https://shop.example.test"),
+        ("about:blank", ""),
+        ("https://[", ""),
+    ],
+)
+def test_origin_of_keeps_only_scheme_and_authority(url: str, origin: str) -> None:
+    assert server.origin_of(url) == origin
+
+
+def test_malformed_navigation_is_an_error_not_a_crash(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    reply = server.handle(
+        state,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "browser_navigate", "arguments": {"url": "https://["}},
+        },
+    )
+    assert reply["result"]["isError"] is True
+    assert state.url == server.BLANK and state.history == []
+    assert read_journal(tmp_path / "calls.jsonl")[0]["outcome"] == "error"
 
 
 def test_navigate_click_type_and_back(tmp_path: Path) -> None:
@@ -159,6 +189,11 @@ def test_handle_answers_unknown_methods_and_lists_tools(tmp_path: Path) -> None:
     missing = server.handle(state, {"jsonrpc": "2.0", "id": 2, "method": "resources/list"})
     assert missing["error"]["code"] == -32601
     assert server.handle(state, {"jsonrpc": "2.0", "method": "ping"}) is None
+    assert server.handle(state, {"jsonrpc": "2.0", "id": 3, "method": "ping"}) == {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "result": {},
+    }
 
 
 def test_unprofiled_driver_routine_tools(tmp_path: Path) -> None:
@@ -230,6 +265,24 @@ def test_stage_merges_existing_claude_config(tmp_path: Path) -> None:
     assert merged["x"] == 1 and {"echo-mcp", REFERENCE_DRIVER, UNPROFILED_DRIVER} <= set(merged["mcpServers"])
     launch = json.loads(fixture.mcp_configs[0].read_text(encoding="utf-8"))
     assert set(launch["mcpServers"]) == {"echo-mcp", REFERENCE_DRIVER, UNPROFILED_DRIVER}
+
+
+def test_repeated_codex_staging_replaces_its_own_tables(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    config = home / ".codex" / "config.toml"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        'model = "fixture"\n\n[mcp_servers.echo-mcp]\ncommand = "node"\n\n'
+        f'[mcp_servers.{REFERENCE_DRIVER}]\ncommand = "stale"\n\n[mcp_servers.{REFERENCE_DRIVER}.env]\nX = "1"\n',
+        encoding="utf-8",
+    )
+    stage_browser_fixture(home, tmp_path / "output", "codex")
+    stage_browser_fixture(home, tmp_path / "output", "codex")
+    parsed = tomllib.loads(config.read_text(encoding="utf-8"))
+    assert parsed["model"] == "fixture"
+    assert set(parsed["mcp_servers"]) == {"echo-mcp", REFERENCE_DRIVER, UNPROFILED_DRIVER}
+    assert parsed["mcp_servers"][REFERENCE_DRIVER]["command"] != "stale"
+    assert "env" not in parsed["mcp_servers"][REFERENCE_DRIVER]
 
 
 def test_stage_rejects_unknown_harness(tmp_path: Path) -> None:

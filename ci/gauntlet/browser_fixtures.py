@@ -123,6 +123,27 @@ def _codex_toml(servers: dict[str, dict[str, Any]]) -> str:
     return "\n".join(blocks)
 
 
+def _without_codex_servers(text: str, servers: dict[str, dict[str, Any]]) -> str:
+    """Drop the tables for servers about to be rewritten, so repeated staging never declares one twice.
+
+    Removes ``[mcp_servers.<name>]`` and its subtables such as ``[mcp_servers.<name>.env]``, up to
+    the next table header. Everything else is kept as written.
+    """
+    owned = tuple(f"[mcp_servers.{name}" for name in servers)
+    kept: list[str] = []
+    skipping = False
+    for line in text.splitlines():
+        header = line.strip()
+        if header.startswith("["):
+            skipping = any(
+                header.startswith(prefix) and header[len(prefix) : len(prefix) + 1] in ("]", ".") for prefix in owned
+            )
+        if not skipping:
+            kept.append(line)
+    body = "\n".join(kept).rstrip()
+    return body + "\n\n" if body else ""
+
+
 def write_mcp_configs(home: Path, harness: str, servers: dict[str, dict[str, Any]]) -> tuple[Path, ...]:
     """Register the stand-ins in the harness's user-level MCP config, merging with any existing one.
 
@@ -141,7 +162,7 @@ def write_mcp_configs(home: Path, harness: str, servers: dict[str, dict[str, Any
         )
     if harness == "codex":
         path = home / ".codex" / "config.toml"
-        prefix = path.read_text(encoding="utf-8") + "\n" if path.is_file() else ""
+        prefix = _without_codex_servers(path.read_text(encoding="utf-8"), servers) if path.is_file() else ""
         return (_write(path, prefix + _codex_toml(servers)),)
     if harness == "cursor":
         path = home / ".cursor" / "mcp.json"

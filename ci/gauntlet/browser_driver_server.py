@@ -95,7 +95,10 @@ def page_for_url(url: str) -> str | None:
     Descendants must be slash-delimited, so ``/basketball`` is not under ``/basket``. The page with the
     longest matching path wins.
     """
-    scheme, authority, path = _url_parts(url)
+    try:
+        scheme, authority, path = _url_parts(url)
+    except ValueError:
+        return None
     if not scheme or not authority:
         return None
     best: tuple[int, str] | None = None
@@ -110,10 +113,14 @@ def page_for_url(url: str) -> str | None:
 
 
 def origin_of(url: str) -> str:
-    if "://" not in url:
+    """Scheme and authority only; empty for ``about:blank`` and anything unparseable."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
         return ""
-    scheme, rest = url.split("://", 1)
-    return f"{scheme}://{rest.split('/', 1)[0]}"
+    if not parts.scheme or not parts.netloc:
+        return ""
+    return f"{parts.scheme}://{parts.netloc}"
 
 
 def is_editable(element: dict[str, Any]) -> bool:
@@ -251,6 +258,8 @@ def handle(state: BrowserState, message: dict[str, Any]) -> dict[str, Any] | Non
             "capabilities": {"tools": {}},
             "serverInfo": {"name": state.server_name, "version": "0.0.0-fixture"},
         }
+    elif method == "ping":
+        result = {}
     elif method == "tools/list":
         result = {"tools": state.tools}
     elif method == "tools/call":
