@@ -495,6 +495,7 @@ fn parse_index(bytes: &[u8]) -> Option<HashSet<Vec<u8>>> {
 }
 
 // The fixture commits a link, so it builds where links do.
-#[cfg(all(test, unix))]
+#[cfg(test)]
+#[cfg(unix)]
 #[path = "sandbox_documents_tests.rs"]
 pub(crate) mod sandbox_documents_tests;
