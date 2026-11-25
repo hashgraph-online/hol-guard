@@ -28,7 +28,10 @@ fn a_loop_over_numbers_with_simple_arithmetic_reads_each_pass() {
                 r#"for n in 40 90; do sed -n "$n,$((n+6))p" logs/job.log | cut -c1-80; done"#,
                 true,
             ),
-            ("for n in 3 5; do head -n $(( n * 2 - 1 )) logs/job.log; done", true),
+            (
+                "for n in 3 5; do head -n $(( n * 2 - 1 )) logs/job.log; done",
+                true,
+            ),
             // The value still names the file each pass reads.
             ("for n in 0; do cat part$((n+1)).md; done", true),
             ("for n in 0; do cat .env$((n+1)); done", false),
