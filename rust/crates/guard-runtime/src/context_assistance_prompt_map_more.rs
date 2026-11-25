@@ -25,7 +25,7 @@ const MAX_OUTLINE: usize = 8;
 /// The most lines of a definition shown whole.
 const MAX_SHOWN_LINES: usize = 80;
 /// The most characters of code one map shows whole for their tests.
-const MAX_SHOWN_CHARS: usize = 1_600;
+const MAX_SHOWN_CHARS: usize = 3_200;
 /// The most characters of named definitions one map shows whole. The agent
 /// opens a named definition before editing it, and that read costs a whole
 /// request, so even a long one is cheaper to show.
