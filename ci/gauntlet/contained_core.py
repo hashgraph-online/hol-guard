@@ -1,9 +1,10 @@
 """Bind OMP's contained-test rewrite in core Gauntlet cases to the original call Guard reviewed.
 
 Rust denies some ordinary commands with ``sandbox-required`` and the generated OMP adapter
-re-runs them through ``hol-guard execute-contained-test``. That route is accepted only when the
-denial receipt, the canonical wrapper argv, the captured adapter request bytes, the post-tool
-observation, the result presentation and a successful host result all name the same call.
+re-runs them through ``hol-guard execute-contained-test``, or through the runtime's own
+``contained-workspace-sink`` when the bridge marks the call for it. Either route is accepted only
+when the denial receipt, the canonical wrapper argv, the captured adapter request bytes, the
+post-tool observation, the result presentation and a successful host result all name the same call.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from .input_evidence import Redaction, input_digest, input_matches, redact_value
 PROOF_SCHEMA = "guard-contained-test-request-proof.v1"
 PROOF_KEYS = frozenset({"schema", "tool_call_id", "workspace", "payload_sha256", "request_sha256"})
 CAPTURE_EVENT = "contained_request_capture"
+NATIVE_SINK = "contained-workspace-sink"
 _REQUEST_LIMIT = 1_048_576
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 # Mirrors the generated adapter: each containment reason admits exactly one execution profile.
@@ -85,7 +87,11 @@ def windows_sink(argv: list[str]) -> bool:
 
 
 def contained_wrapper_argv(command: object, expected_workspace: str) -> tuple[list[str] | None, str | None]:
-    """Validate the canonical ``execute-contained-test`` argv the adapter exports.
+    """Validate the canonical ``execute-contained-test`` or runtime-sink argv the adapter exports.
+
+    The runtime's own sink (``hol-guard-runtime contained-workspace-sink --harness omp ...``) runs a
+    call the bridge marked for it. Its argv is returned without the harness pair, so it is indexed
+    like the launcher's; ``argv[1]`` still names which sink ran.
 
     The adapter leaves out ``--home`` when Guard's home directory is the agent's own HOME, so a
     run in the account's real home has ten items instead of twelve. On Windows the adapter starts
@@ -111,10 +117,19 @@ def contained_wrapper_argv(command: object, expected_workspace: str) -> tuple[li
         return None, "contained wrapper command is not canonical"
     if windows:
         argv = [argv[0], *argv[5:]]
+    # The runtime's own sink names its harness; dropping that pair puts its bindings where the
+    # launcher's are. It always names its home, so it has twelve items, never ten.
+    native = not windows and len(argv) > 1 and argv[1] == NATIVE_SINK
+    if native:
+        if len(argv) != 14:
+            return None, "contained wrapper is not an approved path"
+        if argv[2:4] != ["--harness", "omp"]:
+            return None, "contained wrapper harness binding is malformed"
+        argv = [argv[0], argv[1], *argv[4:]]
     if len(argv) not in (10, 12) or not (windows or contained_public_path(argv[0])):
         return None, "contained wrapper is not an approved path"
     guard_home = argv[3].startswith("{{fixture}}\\") if windows else contained_public_path(argv[3])
-    if argv[1] != "execute-contained-test" or argv[2] != "--guard-home" or not guard_home:
+    if argv[1] != (NATIVE_SINK if native else "execute-contained-test") or argv[2] != "--guard-home" or not guard_home:
         return None, "contained wrapper guard-home binding is malformed"
     if argv[4:6] != ["--workspace", expected_workspace]:
         return None, "contained wrapper workspace binding differs from the reviewed caller"
@@ -292,7 +307,8 @@ def _binding_error(
     # Only a full task can run in the account's own home, where the adapter omits the binding.
     homes = ([], ["--home", "{{home}}"]) if own_exit_ok else (["--home", "{{home}}"],)
     windows = windows_sink(argv)
-    executable = windows or PurePosixPath(argv[0]).name == "hol-guard"
+    sink_executable = "hol-guard-runtime" if argv[1] == NATIVE_SINK else "hol-guard"
+    executable = windows or PurePosixPath(argv[0]).name == sink_executable
     guard_home = "{{fixture}}\\guard-home" if windows else "{{fixture}}/guard-home"
     if not executable or argv[3] != guard_home or argv[10:] not in homes:
         return "harness-error", "contained wrapper is not bound to the case's Guard installation"

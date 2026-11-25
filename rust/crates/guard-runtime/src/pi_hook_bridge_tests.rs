@@ -299,6 +299,61 @@ fn a_sandbox_requirement_the_runtime_sink_runs_is_marked_for_it() {
 }
 
 #[test]
+fn a_daemon_requirement_for_a_scratch_log_call_is_marked_for_the_runtime_sink() {
+    // The resident defers some calls to the daemon. An unmarked answer goes to
+    // the Python launcher, which refuses a plan that writes a scratch log, so
+    // a log-carrying call is marked for the runtime's sink on this path too.
+    let root = tempfile::Builder::new().tempdir_in("/tmp").unwrap();
+    let workspace = std::fs::canonicalize(root.path()).unwrap();
+    let query = format!(
+        "guard-home=%2Ftmp%2Fg&workspace={}&home=%2Ftmp%2Fh",
+        workspace.display()
+    );
+    let required = json!({
+        "decision": "deny",
+        "policy_action": "sandbox-required",
+        "reason_code": "native_workspace_containment_required",
+        "required_execution_profile": "workspace-contained-v1",
+    })
+    .to_string();
+    let call = |command: &str| {
+        json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "bash",
+            "tool_input": { "command": command },
+        })
+        .to_string()
+    };
+    let logged = call(
+        "node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit --pretty false \
+         > /tmp/hg-typecheck-scratch.log 2>&1 && echo TYPES_CLEAN || echo TYPES_FAILED",
+    );
+    let runs: NativeSink = |_, _, _, _| Some("/opt/hol guard/runtime".to_owned());
+    let answer: Value =
+        serde_json::from_str(&daemon_marked(&query, &logged, required.clone(), runs)).unwrap();
+    assert_eq!(answer[NATIVE_SINK_FIELD], json!(true));
+    assert_eq!(answer["policy_action"], json!("sandbox-required"));
+    // A call with no scratch log keeps the daemon's answer as sent, as does a
+    // log-carrying call the runtime's sink does not run, or any other answer.
+    let plain = call("node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit");
+    assert_eq!(
+        daemon_marked(&query, &plain, required.clone(), runs),
+        required
+    );
+    let declines: NativeSink = |_, _, _, _| None;
+    assert_eq!(
+        daemon_marked(&query, &logged, required.clone(), declines),
+        required
+    );
+    let allow = json!({ "decision": "allow", "policy_action": "allow" }).to_string();
+    assert_eq!(daemon_marked(&query, &logged, allow.clone(), runs), allow);
+    assert_eq!(
+        daemon_marked("guard-home=%2Ftmp%2Fg", &logged, required.clone(), runs),
+        required
+    );
+}
+
+#[test]
 fn an_oh_my_pi_directory_argument_is_judged_as_its_cd_form() {
     let root = tempfile::Builder::new().tempdir_in("/tmp").unwrap();
     let workspace = std::fs::canonicalize(root.path()).unwrap();

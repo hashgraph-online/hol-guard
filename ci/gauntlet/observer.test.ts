@@ -102,6 +102,33 @@ test("contained wrapper request bytes are captured beside the start event", () =
   ]);
 });
 
+test("the runtime sink's request is captured only for its exact argv", () => {
+  const handlers = new Map<string, (event: Record<string, unknown>) => void>();
+  install({ on: (name, callback) => { handlers.set(name, callback); } });
+  const folder = join(root, "hol-guard-contained-test-native");
+  mkdirSync(folder, { mode: 0o700, recursive: true });
+  const request = join(folder, "request.json");
+  writeFileSync(request, '{"schema":"guard-contained-test-request.v1"}', { mode: 0o600 });
+  const wrapper = (harness: string, home: string[]) => ["/venv/_native/hol-guard-runtime", "contained-workspace-sink",
+    "--harness", harness, "--guard-home", "/g", "--workspace", "/w", "--request-file", request,
+    "--request-sha256", "a".repeat(64), ...home]
+    .map(value => `'${value.replaceAll("'", "'\\''")}'`).join(" ");
+  const start = (id: string, command: string) =>
+    ({ type: "tool_execution_start", toolCallId: id, toolName: "bash", args: { command } });
+  const sink = wrapper("omp", ["--home", "/h"]);
+  handlers.get("tool_execution_start")!(start("native", sink));
+  handlers.get("tool_execution_start")!(start("other-harness", wrapper("codex", ["--home", "/h"])));
+  handlers.get("tool_execution_start")!(start("no-home", wrapper("omp", [])));
+  const events = readFileSync(log, "utf8").trim().split("\n").map(line => JSON.parse(line));
+  expect(events.slice(-4)).toEqual([
+    start("native", sink),
+    { type: "contained_request_capture", toolCallId: "native",
+      request: Buffer.from('{"schema":"guard-contained-test-request.v1"}').toString("base64") },
+    start("other-harness", wrapper("codex", ["--home", "/h"])),
+    start("no-home", wrapper("omp", [])),
+  ]);
+});
+
 test("the Windows sink's request is captured without POSIX owner bits", () => {
   const handlers = new Map<string, (event: Record<string, unknown>) => void>();
   install({ on: (name, callback) => { handlers.set(name, callback); } });
