@@ -142,7 +142,14 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
             "receipt",
         }
         if not required <= set(decoded) or set(decoded) - (
-            required | {"request_id", "harness_response", "containment_route"}
+            required
+            | {
+                "request_id",
+                "harness_response",
+                "containment_route",
+                "requires_approval",
+                "recording_only_response",
+            }
         ):
             return None
         # A PostToolUse answer is never routed into the containment sink.
@@ -157,6 +164,14 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
             or not harness
             or len(harness) > 64
             or not isinstance(decoded.get("result"), dict)
+            or (
+                "requires_approval" in decoded
+                and not isinstance(decoded["requires_approval"], bool)
+            )
+            or (
+                "recording_only_response" in decoded
+                and not isinstance(decoded["recording_only_response"], bool)
+            )
         ):
             return None
         request_id = decoded.get("request_id")
