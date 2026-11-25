@@ -283,14 +283,15 @@ def native_policy_bundle(
         # must not add load or another health failure to the resident.
         if error.code != UNAVAILABLE and error.retryable is not True:
             raise
-        retry_timeout = min(1.0, max(0.0, deadline - time.monotonic()))
+        retry_deadline = min(deadline, time.monotonic() + 1.0)
+        retry_timeout = retry_deadline - time.monotonic()
         if retry_timeout <= 0.0:
             raise
         return _native_policy_bundle_once(
             kind,
             request_input,
             timeout_seconds=retry_timeout,
-            deadline_monotonic=deadline,
+            deadline_monotonic=retry_deadline,
         )
 
 
