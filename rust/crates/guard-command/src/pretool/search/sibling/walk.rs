@@ -40,17 +40,20 @@ pub(super) fn walk(
         let Ok(entries) = std::fs::read_dir(&directory) else {
             return Err(Refused::Other);
         };
-        // Sorted, so the entry a refusal names is the same on every run.
+        // At most the entries left in the budget plus one are read, so a
+        // huge directory refuses before it is held or sorted. Sorted, so the
+        // entry a refusal names is the same on every run.
         let mut entries = entries
+            .take(MAX_ENTRIES - inspected + 1)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| Refused::Other)?;
+        inspected += entries.len();
+        if inspected > MAX_ENTRIES {
+            return Err(Refused::Other);
+        }
         entries.sort_by_key(std::fs::DirEntry::file_name);
         let mut below = Vec::new();
         for entry in entries {
-            inspected += 1;
-            if inspected > MAX_ENTRIES {
-                return Err(Refused::Other);
-            }
             let path = entry.path();
             let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
                 return Err(Refused::Other);

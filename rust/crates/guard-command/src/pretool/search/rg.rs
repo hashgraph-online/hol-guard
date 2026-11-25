@@ -231,22 +231,26 @@ fn rg_arguments_pass(
         }
         if options_enabled && argument.starts_with("--") {
             let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
-            if matches!(
-                name,
-                "--hidden"
-                    | "--unrestricted"
-                    | "--no-ignore"
-                    | "--no-ignore-vcs"
-                    | "--no-ignore-global"
-                    | "--no-ignore-parent"
-                    | "--no-ignore-dot"
-                    | "--no-ignore-exclude"
-                    | "--no-ignore-files"
-                    | "--follow"
-                    | "--pre"
-                    | "--pre-glob"
-                    | "--hostname-bin"
-            ) {
+            // rg reads `--glob=` as an empty value, so the next word stays an
+            // operand and must not be read as the value (an exclusion).
+            if argument.ends_with('=')
+                || matches!(
+                    name,
+                    "--hidden"
+                        | "--unrestricted"
+                        | "--no-ignore"
+                        | "--no-ignore-vcs"
+                        | "--no-ignore-global"
+                        | "--no-ignore-parent"
+                        | "--no-ignore-dot"
+                        | "--no-ignore-exclude"
+                        | "--no-ignore-files"
+                        | "--follow"
+                        | "--pre"
+                        | "--pre-glob"
+                        | "--hostname-bin"
+                )
+            {
                 return false;
             }
             // grep's file filters are not rg flags. rg stops at an

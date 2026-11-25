@@ -111,6 +111,9 @@ fn globs_that_could_still_reach_the_key_keep_the_review() {
         format!("rg -l scrollTo -g '!fix*' {tests}"),
         format!("rg -l scrollTo -g '!fixtures/' {tests}"),
         format!("rg -l scrollTo -g '!app' {tests}"),
+        // rg reads `--glob=` as an empty glob, so `!tls` is a path to it.
+        format!("rg -l scrollTo --glob= '!tls' {tests}"),
+        format!("rg --no-config --glob= '!tls' -e . {tests}"),
         // A pattern, not a glob.
         format!("rg -l -e '-g!fixtures' {tests}"),
         format!("rg -l scrollTo -- -g'!fixtures' {tests}"),
