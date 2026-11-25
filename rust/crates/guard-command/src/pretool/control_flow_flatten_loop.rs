@@ -141,7 +141,10 @@ fn opens_no_file(probe: &str) -> bool {
     let mut stripped = false;
     while let Some(start) = trailing_inert_redirect(&chars) {
         chars.truncate(start);
-        while chars.last().is_some_and(|value| matches!(value, ' ' | '\t')) {
+        while chars
+            .last()
+            .is_some_and(|value| matches!(value, ' ' | '\t'))
+        {
             chars.pop();
         }
         stripped = true;
