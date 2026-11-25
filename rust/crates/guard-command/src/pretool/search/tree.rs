@@ -250,6 +250,22 @@ pub(in crate::pretool) fn safe_glob_operand(
     })
 }
 
+/// Whether a glob operand with no directory part expands to a name that
+/// starts with `-`. The shell hands such a match over as a bare word, so a
+/// file called `--files0-from=x` would reach the command as an option.
+pub(in crate::pretool) fn glob_matches_option_word(value: &str, context: ReadContext<'_>) -> bool {
+    if value.contains('/') {
+        return false;
+    }
+    expand_listing_glob(value, context).is_none_or(|matches| {
+        matches.iter().any(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_none_or(|name| name.starts_with('-'))
+        })
+    })
+}
+
 /// An unquoted bracket operand that matches nothing. Bash passes such a word
 /// through literally, so `ls app/[slug]` lists the Next.js route directory
 /// named `[slug]`; zsh's `nomatch` fails the command instead. The literal

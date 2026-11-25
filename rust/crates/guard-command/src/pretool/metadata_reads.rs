@@ -58,11 +58,14 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
         Err(_) => false,
     };
     let mut operands = Vec::new();
+    // Operands before this index were not behind a `--`.
+    let mut options_end = usize::MAX;
     let mut values = arguments.iter();
     while let Some(argument) = values.next() {
         let option = argument.as_str();
         if option == "--" {
             // Every word after the end of the options is an operand.
+            options_end = operands.len();
             operands.extend(values.by_ref().map(String::as_str));
         } else if option == "-d" || option == "--max-depth" {
             match values.next() {
@@ -113,15 +116,20 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
     } else {
         depth.is_none_or(|level| level > 1)
     };
+    let options_end = options_end.min(operands.len());
     operands.len() <= MAX_OPERANDS
-        && operands.iter().all(|operand| {
+        && operands.iter().enumerate().all(|(index, operand)| {
             // A pattern such as `du -sh *` sizes the names the shell expands
             // it to, which are the names `ls` of the same pattern prints. Each
             // match takes that listing's proof, and a walk below a match takes
             // the recursive one. A pattern that matches nothing stays
             // reviewed, because the shell may hand over its literal spelling.
+            // Before a `--`, a match named like an option would be read as
+            // one, so such a match keeps the review.
             if operand.contains(['*', '?', '[']) {
-                return search::safe_glob_operand(operand, context, walks_tree)
+                return (index >= options_end
+                    || !search::glob_matches_option_word(operand, context))
+                    && search::safe_glob_operand(operand, context, walks_tree)
                     && search::listable_spelling(operand, context, walks_tree, false);
             }
             let present = if walks_tree {

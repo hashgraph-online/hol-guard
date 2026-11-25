@@ -181,6 +181,19 @@ fn unproven_size_and_comparison_reads_still_ask() {
     }
 }
 
+/// A bare pattern hands each match over as its own word, so a file named
+/// like an option would reach `du` as that option. After `--` it is an
+/// operand, and below a directory part it starts with that directory.
+#[test]
+fn a_glob_match_named_like_an_option_still_asks() {
+    let home = home();
+    write(home.join("project/--files0-from=notes.txt"), "x\n");
+    assert!(!shell(&home, "du -sh *").contains("allow"), "du -sh *");
+    for command in ["du -sh -- *", "du -sh src/*"] {
+        assert!(shell(&home, command).contains("allow"), "{command}");
+    }
+}
+
 /// `git show HEAD:a.ts | diff - a.ts` compares a committed copy against the
 /// working file. The dash reads only what the proven producer printed, so the
 /// file operand carries the whole proof.
