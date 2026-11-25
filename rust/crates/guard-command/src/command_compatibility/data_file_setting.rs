@@ -16,6 +16,13 @@
 //! redirect, credential, trust-anchor or endpoint marker. A search-path family
 //! that reads a single entry as a file of code stays refused by its stem:
 //! `LUA_PATH` holds templates, so `LUA_PATH=x.json` loads `x.json` as Lua.
+//!
+//! A suffix cannot tell data from code for a loader that opens one named file
+//! however it is spelled (`CORECLR_PROFILER_PATH` is handed to `dlopen`, a
+//! Vulkan layer manifest names a library), nor for a search path whose stem
+//! carries no marker (`GCONV_PATH`, `COMPILER_PATH`). So the stem must also
+//! say it names data: one of its words has to be a data word such as `LEDGER`
+//! or `REPORT`, and no part of it may name a loader, a plugin or a module.
 
 use super::environment::{
     code_or_redirect_environment_name, credential_routing_environment_name,
@@ -44,6 +51,32 @@ const SEARCH_PATH_STEMS: &[&str] = &[
     "SASS",
 ];
 
+/// Words of a stem that say the setting names records, logs or results. One
+/// of them must appear as a whole `_`-separated word.
+const DATA_WORDS: &[&str] = &[
+    "AUDIT", "BASELINE", "CSV", "DATA", "DATASET", "DUMP", "EVENTS", "EVIDENCE", "EXPORT",
+    "HISTORY", "JOURNAL", "JSON", "JSONL", "LEDGER", "LOG", "METRICS", "NDJSON", "OUT", "OUTPUT",
+    "RECORD", "RECORDS", "REPORT", "RESULT", "RESULTS", "SNAPSHOT", "STATS", "SUMMARY", "TSV",
+];
+
+/// Fragments of a stem that name something a runtime or loader opens as code
+/// from one file or folder, whatever its suffix. Any of them anywhere in the
+/// stem refuses it, even beside a data word.
+const LOADER_FRAGMENTS: &[&str] = &[
+    "AGENT",
+    "DRIVER",
+    "EXTENSION",
+    "GCONV",
+    "HOOK",
+    "ICD",
+    "LAYER",
+    "LOADER",
+    "MODULE",
+    "PLUGIN",
+    "PRELOAD",
+    "PROFILER",
+];
+
 const MAX_VALUE_CHARS: usize = 1024;
 
 /// Whether `name=value` is a `*_PATH` setting naming one data file.
@@ -59,6 +92,10 @@ pub(crate) fn data_file_path_setting(name: &str, value: &str) -> bool {
         && !stem.contains("PATH")
         && !stem.contains("INCLUDE")
         && !SEARCH_PATH_STEMS.contains(&stem)
+        && stem.split('_').any(|word| DATA_WORDS.contains(&word))
+        && !LOADER_FRAGMENTS
+            .iter()
+            .any(|fragment| stem.contains(fragment))
         && !code_or_redirect_environment_name(stem)
         && !credential_routing_environment_name(&upper)
         && !trust_anchor_environment_name(&upper)
@@ -134,6 +171,20 @@ mod tests {
             ("REPORT_URL_PATH", "a.json"),
             ("REPORT_PATH_PATH", "a.json"),
             ("REPORT-LEDGER_PATH", "a.json"),
+            // No data word: the stem does not say the file holds data.
+            ("GCONV_PATH", "out/ledger.json"),
+            ("COMPILER_PATH", "out/x.txt"),
+            ("GTK_PATH", "out/x.txt"),
+            ("WIDGET_PATH", "out/x.json"),
+            ("REPORTING_PATH", "out/x.json"),
+            // A loader word refuses the stem even beside a data word.
+            ("CORECLR_PROFILER_PATH", "out/p.json"),
+            ("COR_PROFILER_PATH", "out/p.json"),
+            ("PROFILER_LOG_PATH", "out/p.log"),
+            ("VK_LAYER_REPORT_PATH", "out/layer.json"),
+            ("REPORT_AGENT_PATH", "out/a.json"),
+            ("OUTPUT_MODULE_PATH", "out/m.json"),
+            ("DATA_DRIVER_PATH", "out/d.json"),
         ] {
             assert!(!data_file_path_setting(name, value), "{name}={value}");
         }

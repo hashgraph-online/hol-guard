@@ -460,6 +460,12 @@ fn a_path_setting_naming_one_data_file_reaches_the_ordinary_decision() {
         ),
         ("LUA_PATH=out/ledger.json ls", "LUA_PATH"),
         ("C_INCLUDE_PATH=out/ledger.json ls", "C_INCLUDE_PATH"),
+        ("GCONV_PATH=out/ledger.json ls", "GCONV_PATH"),
+        ("COMPILER_PATH=out/x.txt ls", "COMPILER_PATH"),
+        (
+            "CORECLR_ENABLE_PROFILING=1 CORECLR_PROFILER_PATH=out/p.json ls",
+            "CORECLR_PROFILER_PATH",
+        ),
         ("GIT_EXEC_PATH=out/ledger.json git status", "GIT_EXEC_PATH"),
     ] {
         let result = evaluate(&root, command);
