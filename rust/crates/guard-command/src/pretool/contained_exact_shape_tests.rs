@@ -245,4 +245,14 @@ fn a_python_heredoc_after_another_lead_does_not_plan() {
     ] {
         assert!(!shaped(&command, &ws), "{command}");
     }
+    // A logical `cd` drops `link` before `..` and lands in `other`, while
+    // canonicalizing follows the link into `pkg` and climbs to the root.
+    std::fs::create_dir_all(ws.join("other")).unwrap();
+    std::os::unix::fs::symlink(ws.join("pkg"), ws.join("other/link")).unwrap();
+    for command in [
+        format!("cd {}/other/link/.. && python3 - {local}", root.display()),
+        format!("cd {}/pkg/.. && python3 - {local}", root.display()),
+    ] {
+        assert!(!shaped(&command, &ws), "{command}");
+    }
 }

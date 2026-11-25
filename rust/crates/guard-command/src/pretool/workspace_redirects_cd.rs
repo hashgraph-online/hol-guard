@@ -58,11 +58,18 @@ fn split_cd(text: &str) -> Option<(&str, &str)> {
 /// Whether the leading `cd` of `projected` names `workspace` by its absolute
 /// path. The sandbox runs from the workspace root, so that `cd` changes
 /// nothing. A relative word could be moved by `CDPATH`, which the sandbox
-/// cannot see, so it is not taken.
+/// cannot see, so it is not taken. Neither is a word with `..`: the shell's
+/// logical `cd` drops the name before it, while canonicalizing first follows
+/// that name if it is a link, so the two could reach different directories.
 pub(super) fn enters_workspace(projected: &str, workspace: &Path) -> bool {
     split_cd(projected)
         .map(|(word, _)| Path::new(word))
-        .filter(|target| target.is_absolute())
+        .filter(|target| {
+            target.is_absolute()
+                && !target
+                    .components()
+                    .any(|part| part == std::path::Component::ParentDir)
+        })
         .and_then(|target| std::fs::canonicalize(target).ok())
         .zip(std::fs::canonicalize(workspace).ok())
         .is_some_and(|(target, root)| target == root)
