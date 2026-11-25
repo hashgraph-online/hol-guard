@@ -482,6 +482,7 @@ def test_a_custom_rule_check_gets_its_own_allowance_past_the_review_deadline(
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
             "edge-local-cli-rule-v1",
+            "edge-local-cli-rule-stamp-v1",
         ),
     )
     monkeypatch.setattr(
@@ -543,6 +544,7 @@ def test_a_review_evidence_request_needs_a_resident_that_proves_it(
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
             "edge-local-cli-rule-v1",
+            "edge-local-cli-rule-stamp-v1",
             *(["edge-review-evidence-v1"] if advertised else []),
         ),
     )
