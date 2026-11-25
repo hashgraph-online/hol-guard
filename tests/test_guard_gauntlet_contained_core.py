@@ -22,6 +22,7 @@ from tests.gauntlet_contained_helpers import (
     CALL,
     ORIGINAL,
     SCENARIO,
+    SINK_RECEIPTS,
     _capture_log,
     _contained,
     _end,
@@ -253,10 +254,11 @@ def test_runtime_sink_run_passes_with_the_same_bindings(fixture, tmp_path):
 
 def test_runtime_sink_receipt_routes_are_accounted_one_for_one(fixture, tmp_path):
     """The sink's receipt-only daemon routes leave the count only with a bound runtime-sink run."""
-    for name in ("native", "launcher", "extra"):
+    for name in ("native", "launcher", "extra", "stray"):
         (tmp_path / name).mkdir()
     native = _contained(fixture, tmp_path / "native", native=True)
     native["sink_receipt_routes"] = {}
+    native["sink_receipt_calls"] = {}
     assessment = assess_case(SCENARIO, native)
     assert assessment["outcome"] == "harness-error"
     assert assessment["reason"] == "a bound native sink run has no receipt-only route"
@@ -264,6 +266,7 @@ def test_runtime_sink_receipt_routes_are_accounted_one_for_one(fixture, tmp_path
     launcher = _contained(fixture, tmp_path / "launcher")
     launcher["native_routes"]["native_resident"] += 1
     launcher["sink_receipt_routes"] = {"native_resident": 1}
+    launcher["sink_receipt_calls"] = {CALL: 1}
     assessment = assess_case(SCENARIO, launcher)
     assert assessment["outcome"] == "harness-error"
     assert assessment["reason"] == "receipt-only routes have no bound native sink run"
@@ -273,6 +276,13 @@ def test_runtime_sink_receipt_routes_are_accounted_one_for_one(fixture, tmp_path
     assessment = assess_case(SCENARIO, extra)
     assert assessment["outcome"] == "harness-error"
     assert assessment["reason"] == "native route counts do not reconcile with observed Guard responses"
+
+    # Another call's receipts cannot stand in for the bound sink run's own.
+    stray = _contained(fixture, tmp_path / "stray", native=True)
+    stray["sink_receipt_calls"] = {"call-other": SINK_RECEIPTS}
+    assessment = assess_case(SCENARIO, stray)
+    assert assessment["outcome"] == "harness-error"
+    assert assessment["reason"] == "receipt-only routes have no bound native sink run"
 
 
 @pytest.mark.parametrize(

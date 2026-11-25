@@ -25,7 +25,7 @@ from __future__ import annotations
 import shlex
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 
 # The harness name the Oh My Pi extension and its bridge config carry.
@@ -104,27 +104,49 @@ def native_route_proof_error(routes: object, resident_direct: object, receipts: 
     return None if answers > 0 else "native Guard enforcement route was not proven"
 
 
+def _receipt_calls(value: object) -> dict[str, int] | str:
+    """Receipt-only routes by the tool call whose sink asked, or why they do not count."""
+
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        return "sink receipt call counts are malformed"
+    counted: dict[str, int] = {}
+    for call_id, count in value.items():
+        number = _count(count)
+        if not isinstance(call_id, str) or not call_id or number is None or number == 0:
+            return "sink receipt call counts are malformed"
+        counted[call_id] = number
+    return counted
+
+
 def native_route_error(
     routes: object,
     resident_direct: object,
     observed: int,
     receipts: object = None,
-    native_sink_calls: int = 0,
+    sink_calls: Collection[str] = (),
+    receipt_calls: object = None,
 ) -> str | None:
     """Why the observed answers do not reconcile with the native routes, or ``None``.
 
-    ``receipts`` are the case's sink receipt-only routes and ``native_sink_calls``
-    the bound contained calls that ran through the runtime's sink. Each such run
-    asks at least once; a receipt-only route with no bound run is unexplained.
+    ``receipts`` are the case's sink receipt-only routes, ``receipt_calls`` the
+    same routes by the tool call that asked, and ``sink_calls`` the bound
+    contained calls that ran through the runtime's sink. Every bound sink call
+    asks at least once, and every receipt-only route belongs to one of them.
     """
 
     if proof_error := native_route_proof_error(routes, resident_direct, receipts):
         return proof_error
     sink = _sink_receipts(routes, receipts) if isinstance(routes, Mapping) else {}
-    asked = sum(sink.values()) if isinstance(sink, dict) else 0
-    if asked and not native_sink_calls:
+    by_call = _receipt_calls(receipt_calls)
+    if isinstance(by_call, str):
+        return by_call
+    if not isinstance(sink, dict) or sum(sink.values()) != sum(by_call.values()):
+        return "sink receipt routes do not match the calls that asked"
+    if set(by_call) - set(sink_calls):
         return "receipt-only routes have no bound native sink run"
-    if asked < native_sink_calls:
+    if set(sink_calls) - set(by_call):
         return "a bound native sink run has no receipt-only route"
     answers = _native_answers(routes, resident_direct, receipts)
     if answers != observed:
@@ -132,25 +154,27 @@ def native_route_error(
     return None
 
 
-def native_sink_calls(calls: list[dict[str, Any]], contained: Mapping[str, Any] | frozenset[str]) -> int:
-    """How many bound contained calls the host ran through the runtime's native sink.
+def native_sink_calls(calls: list[dict[str, Any]], contained: Mapping[str, Any] | frozenset[str]) -> frozenset[str]:
+    """The bound contained calls the host ran through the runtime's native sink.
 
     ``calls`` are the host calls before ``effective_calls`` swaps in the reviewed
     input; ``contained_core`` has already bound each wrapper's exact argv.
     """
 
-    count = 0
+    native: set[str] = set()
     for call in calls:
         args = call.get("args")
         command = args.get("command") if isinstance(args, dict) else None
-        if call.get("id") not in contained or not isinstance(command, str):
+        call_id = call.get("id")
+        if call_id not in contained or not isinstance(call_id, str) or not isinstance(command, str):
             continue
         try:
             argv = shlex.split(command)
         except ValueError:
             continue
-        count += len(argv) > 1 and argv[1] == NATIVE_SINK
-    return count
+        if len(argv) > 1 and argv[1] == NATIVE_SINK:
+            native.add(call_id)
+    return frozenset(native)
 
 
 class SinkReceiptTally:
@@ -158,38 +182,48 @@ class SinkReceiptTally:
 
     Wraps this worker's own hook entry point and route recorder, so a route is
     tallied only when the payload the daemon reviewed carried the sink's
-    receipt-only field. The route is recorded before it is tallied: a tally read
-    before the route counts can never exceed them.
+    receipt-only field, under the tool call that payload names. The route is
+    recorded before it is tallied: a tally read before the route counts can
+    never exceed them.
     """
 
     def __init__(self, worker: Any) -> None:
         self._local = threading.local()
         self._lock = threading.Lock()
         self._routes: dict[str, int] = {}
+        self._calls: dict[str, int] = {}
         review = worker.review_http_payload
         record = worker.metrics.record_route
 
         def review_http_payload(*args: Any, **kwargs: Any) -> Any:
             payload = kwargs.get("payload")
-            prior = getattr(self._local, "receipt_only", False)
-            self._local.receipt_only = isinstance(payload, Mapping) and payload.get(RECEIPT_ONLY_FIELD) is True
+            prior = getattr(self._local, "receipt_call", None)
+            asked = isinstance(payload, Mapping) and payload.get(RECEIPT_ONLY_FIELD) is True
+            call_id = payload.get("tool_call_id") if asked else None
+            # A receipt-only payload with no call identity is tallied under ""
+            # so the judge sees it and cannot bind it to any call.
+            self._local.receipt_call = (call_id if isinstance(call_id, str) else "") if asked else None
             try:
                 return review(*args, **kwargs)
             finally:
-                self._local.receipt_only = prior
+                self._local.receipt_call = prior
 
         def record_route(route: str) -> None:
             record(route)
-            if getattr(self._local, "receipt_only", False):
+            call_id = getattr(self._local, "receipt_call", None)
+            if call_id is not None:
                 with self._lock:
                     self._routes[route] = self._routes.get(route, 0) + 1
+                    self._calls[call_id] = self._calls.get(call_id, 0) + 1
 
         worker.review_http_payload = review_http_payload
         worker.metrics.record_route = record_route
 
-    def snapshot(self) -> dict[str, int]:
+    def snapshot(self) -> dict[str, dict[str, int]]:
+        """The tallied routes and, for the same routes, the calls that asked."""
+
         with self._lock:
-            return dict(self._routes)
+            return {"routes": dict(self._routes), "calls": dict(self._calls)}
 
 
 def resident_direct_answers(worker: Any, harness: str = OMP_HARNESS) -> int:
@@ -216,7 +250,7 @@ def await_native_routes(
     *,
     timeout_seconds: float = _DRAIN_SECONDS,
     tally: SinkReceiptTally | None = None,
-) -> tuple[Any, int] | tuple[Any, int, dict[str, int]]:
+) -> tuple[Any, int] | tuple[Any, int, dict[str, dict[str, int]]]:
     """The case's route metrics and resident direct answers, once they reconcile.
 
     The resident reports its direct answers to the daemon on its own schedule,
@@ -229,12 +263,12 @@ def await_native_routes(
 
     deadline = time.monotonic() + timeout_seconds
     while True:
-        receipts = tally.snapshot() if tally is not None else None
+        tallied = tally.snapshot() if tally is not None else None
         routes = worker.metrics.snapshot().get("routes", {})
         direct = resident_direct_answers(worker)
-        answers = _native_answers(routes, direct, receipts)
+        answers = _native_answers(routes, direct, tallied["routes"] if tallied is not None else None)
         # Only a count still short of the observations can grow; anything else
         # is as final as it will get, and the judge reports it.
         if isinstance(answers, str) or answers >= observed or time.monotonic() >= deadline:
-            return (routes, direct) if receipts is None else (routes, direct, receipts)
+            return (routes, direct) if tallied is None else (routes, direct, tallied)
         time.sleep(_DRAIN_POLL)

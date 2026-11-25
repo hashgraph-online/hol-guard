@@ -190,6 +190,7 @@ def _contained(
         # The runtime sink asks the daemon again, receipt-only, before it runs.
         case["native_routes"]["native_resident"] += SINK_RECEIPTS
         case["sink_receipt_routes"] = {"native_resident": SINK_RECEIPTS}
+        case["sink_receipt_calls"] = {call_id: SINK_RECEIPTS}
     return case
 
 

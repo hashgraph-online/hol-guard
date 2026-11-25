@@ -184,6 +184,7 @@ def run_case(
         "native_routes": {},
         "resident_direct_answers": 0,
         "sink_receipt_routes": {},
+        "sink_receipt_calls": {},
         "inference": {"live_rounds": [], "canary_export_violations": 0},
         "filesystem": {},
         "egress_requests": [],
@@ -400,11 +401,10 @@ def run_case(
             # A bridged hook is answered either by a live resident, which counts
             # it itself, or by the daemon, which routes it; read both once the
             # case's observations say how many answers to account for.
-            (
-                case["native_routes"],
-                case["resident_direct_answers"],
-                case["sink_receipt_routes"],
-            ) = await_native_routes(worker, len(case["guard_observations"]), tally=receipt_tally)
+            case["native_routes"], case["resident_direct_answers"], tallied = await_native_routes(
+                worker, len(case["guard_observations"]), tally=receipt_tally
+            )
+            case["sink_receipt_routes"], case["sink_receipt_calls"] = tallied["routes"], tallied["calls"]
             if proofs := request_proofs(host_log, fixture.workspace, replacements):
                 case["contained_request_proofs"] = proofs
             if scenario.oracle == "blocked-extension":

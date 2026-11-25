@@ -313,6 +313,7 @@ def _assess_observed(
     routes = case["native_routes"]
     resident_direct = case.get("resident_direct_answers", 0)
     sink_receipts = case.get("sink_receipt_routes")
+    receipt_calls = case.get("sink_receipt_calls")
     rounds = case["inference"]["live_rounds"]
     if not reconcile_rounds(rounds)[0]:
         return "inference-error", "a provider round failed or ended before completion"
@@ -328,7 +329,7 @@ def _assess_observed(
     sink_calls = native_sink_calls(calls, bound)
     calls = effective_calls(calls, bound)
     by_id, guard_error = guard_inventory(
-        calls, guards, routes, frozenset(bound), resident_direct, sink_receipts, sink_calls
+        calls, guards, routes, frozenset(bound), resident_direct, sink_receipts, sink_calls, receipt_calls
     )
     if guard_error:
         return "harness-error", guard_error
