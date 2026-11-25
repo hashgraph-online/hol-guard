@@ -55,6 +55,11 @@ def test_page_names_and_hosts_are_synthetic() -> None:
         ("https://shop.example.test/basket?coupon=1#top", "shop-basket"),
         ("http://127.0.0.1:5173/items/sample", "local-dev"),
         ("https://unknown.example.test/", None),
+        ("https://shop.example.test/basketball", None),
+        ("http://127.0.0.1:51730/", None),
+        ("https://127.0.0.1:5173/", None),
+        ("https://shop.example.test.evil.test/basket", None),
+        ("not a url", None),
     ],
 )
 def test_page_for_url(url: str, page: str | None) -> None:
@@ -84,6 +89,35 @@ def test_download_upload_and_errors(tmp_path: Path) -> None:
     assert state.call("browser_click", {"element": "x", "ref": "e99"})[1] is True
     assert state.call("browser_navigate", {"url": "https://unlisted.example.test/"})[1] is True
     assert state.call("not_a_tool", {})[1] is True
+
+
+def test_failed_link_click_is_an_error(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    state.call("browser_navigate", {"url": "https://docs.example.test/guide/getting-started"})
+    text, error = state.call("browser_click", {"element": "Community forum", "ref": "e5"})
+    assert error and text.startswith("Navigation failed")
+    assert state.page == "docs-article"
+
+
+def test_typing_needs_an_editable_element(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    state.call("browser_navigate", {"url": "https://docs.example.test/guide/getting-started"})
+    assert state.call("browser_type", {"element": "Getting started", "ref": "e1", "text": "x"})[1] is True
+    assert state.call("browser_type", {"element": "Search the docs", "ref": "e2", "text": "abc"})[1] is False
+    assert state.typed == {"e2": 3}
+
+
+def test_fill_form_checks_every_field(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    state.call("browser_navigate", {"url": "https://shop.example.test/login"})
+    fields = [{"ref": "e1", "value": "user"}, {"ref": "e2", "value": "fixture-pass"}]
+    text, error = state.call("browser_fill_form", {"fields": fields})
+    assert not error and text == "Filled 2 fields"
+    assert state.typed == {"e1": 4, "e2": len("fixture-pass")}
+    for bad in ([{"ref": "e9", "value": "x"}], [{"ref": "e3", "value": "x"}], [], "e1"):
+        state.typed.clear()
+        assert state.call("browser_fill_form", {"fields": bad})[1] is True
+        assert state.typed == {}
 
 
 def test_journal_records_calls_without_argument_values(tmp_path: Path) -> None:
@@ -194,6 +228,8 @@ def test_stage_merges_existing_claude_config(tmp_path: Path) -> None:
     fixture = stage_browser_fixture(home, tmp_path / "output", "claude-code")
     merged = json.loads(fixture.mcp_configs[1].read_text(encoding="utf-8"))
     assert merged["x"] == 1 and {"echo-mcp", REFERENCE_DRIVER, UNPROFILED_DRIVER} <= set(merged["mcpServers"])
+    launch = json.loads(fixture.mcp_configs[0].read_text(encoding="utf-8"))
+    assert set(launch["mcpServers"]) == {"echo-mcp", REFERENCE_DRIVER, UNPROFILED_DRIVER}
 
 
 def test_stage_rejects_unknown_harness(tmp_path: Path) -> None:

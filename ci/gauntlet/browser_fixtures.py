@@ -127,7 +127,8 @@ def write_mcp_configs(home: Path, harness: str, servers: dict[str, dict[str, Any
     """Register the stand-ins in the harness's user-level MCP config, merging with any existing one.
 
     As for connector fixtures, Claude Code also gets a launch file for ``--mcp-config`` because it
-    runs with ``--strict-mcp-config``.
+    runs with ``--strict-mcp-config``. The launch file carries the merged server list, so servers a
+    case staged earlier stay reachable.
     """
     if harness == "claude-code":
         path = home / ".claude.json"
@@ -135,7 +136,7 @@ def write_mcp_configs(home: Path, harness: str, servers: dict[str, dict[str, Any
         existing["mcpServers"] = {**existing.get("mcpServers", {}), **servers}
         launch = home / ".claude" / "gauntlet-browser-mcp.json"
         return (
-            _write(launch, json.dumps({"mcpServers": servers}, indent=2) + "\n"),
+            _write(launch, json.dumps({"mcpServers": existing["mcpServers"]}, indent=2) + "\n"),
             _write(path, json.dumps(existing, indent=2) + "\n"),
         )
     if harness == "codex":

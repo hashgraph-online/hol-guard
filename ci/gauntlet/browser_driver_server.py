@@ -17,6 +17,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 PROTOCOL_VERSION = "2025-06-18"
 BLANK = "about:blank"
@@ -82,14 +83,30 @@ PAGES: dict[str, dict[str, Any]] = {
 }
 
 
+def _url_parts(url: str) -> tuple[str, str, str]:
+    """Scheme, authority and path without a trailing slash. Query and fragment are ignored."""
+    parts = urlsplit(url)
+    return parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/")
+
+
 def page_for_url(url: str) -> str | None:
-    """The named page a URL lands on: exact match first, then the longest matching prefix."""
-    stripped = url.split("#", 1)[0].split("?", 1)[0]
+    """The named page a URL lands on: same scheme and authority, then the same path or a descendant of it.
+
+    Descendants must be slash-delimited, so ``/basketball`` is not under ``/basket``. The page with the
+    longest matching path wins.
+    """
+    scheme, authority, path = _url_parts(url)
+    if not scheme or not authority:
+        return None
+    best: tuple[int, str] | None = None
     for name, page in PAGES.items():
-        if stripped == page["url"] or stripped.rstrip("/") == page["url"].rstrip("/"):
-            return name
-    candidates = [name for name, page in PAGES.items() if stripped.startswith(page["url"].rstrip("/"))]
-    return max(candidates, key=lambda name: len(PAGES[name]["url"]), default=None)
+        page_scheme, page_authority, page_path = _url_parts(page["url"])
+        if (scheme, authority) != (page_scheme, page_authority):
+            continue
+        under_page = path == page_path or path.startswith(page_path + "/")
+        if under_page and (best is None or len(page_path) > best[0]):
+            best = (len(page_path), name)
+    return best[1] if best else None
 
 
 def origin_of(url: str) -> str:
@@ -97,6 +114,10 @@ def origin_of(url: str) -> str:
         return ""
     scheme, rest = url.split("://", 1)
     return f"{scheme}://{rest.split('/', 1)[0]}"
+
+
+def is_editable(element: dict[str, Any]) -> bool:
+    return element.get("role") == "textbox"
 
 
 class BrowserState:
@@ -158,6 +179,22 @@ class BrowserState:
         self.url = url
         return self.snapshot()
 
+    def fill_form(self, fields: Any) -> tuple[str, bool]:
+        """Fill every field or none. Each field needs an editable ref on the current page."""
+        if not isinstance(fields, list) or not fields:
+            return "No fields to fill", True
+        lengths: dict[str, int] = {}
+        for field in fields:
+            ref = str(field.get("ref") or "") if isinstance(field, dict) else ""
+            element = self.element(ref) if ref else None
+            if element is None:
+                return f"Element {ref or '(missing ref)'} is not on this page", True
+            if not is_editable(element):
+                return f"{element['name']} is not editable", True
+            lengths[ref] = len(str(field.get("value") or ""))
+        self.typed.update(lengths)
+        return f"Filled {len(lengths)} fields", False
+
     def call(self, name: str, arguments: dict[str, Any]) -> tuple[str, bool]:
         """Run one tool. Returns the text result and whether it is an error."""
         if name not in self.tool_names:
@@ -177,17 +214,19 @@ class BrowserState:
             return f"Element {ref} is not on this page", True
         if name.endswith("click") and element is not None:
             if "href" in element:
-                return self.navigate(element["href"]), False
+                text = self.navigate(element["href"])
+                return text, text.startswith("Navigation failed")
             if "download" in element:
                 self.downloads.append(element["download"])
                 return f"Downloaded {element['download']}", False
             return f"Clicked {element['name']}", False
         if name.endswith("type") and element is not None:
+            if not is_editable(element):
+                return f"{element['name']} is not editable", True
             self.typed[ref] = len(str(arguments.get("text") or ""))
             return f"Typed {self.typed[ref]} characters into {element['name']}", False
         if name.endswith("fill_form"):
-            fields = arguments.get("fields") or []
-            return f"Filled {len(fields)} fields", False
+            return self.fill_form(arguments.get("fields"))
         if name.endswith("file_upload"):
             paths = [Path(str(path)).name for path in arguments.get("paths") or []]
             self.uploads.extend(paths)
