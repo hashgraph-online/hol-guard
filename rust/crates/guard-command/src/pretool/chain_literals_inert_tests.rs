@@ -573,3 +573,68 @@ fn a_slot_this_scan_cannot_place_stays_opaque() {
         assert_eq!(projected(command), None, "{command}");
     }
 }
+
+#[test]
+fn a_literal_printf_commit_message_becomes_its_own_text() {
+    for (command, expected) in [
+        (
+            "git commit -q -m \"$(printf 'Add host audit\\n\\nCo-Authored-By: A Model <noreply@example.com>')\"",
+            "git commit -q -m \"Add host audit\n\nCo-Authored-By: A Model <noreply@example.com>\"",
+        ),
+        (
+            "git add -A && git commit -m \"$(printf 'fix(x): 100%% done\\n')\"",
+            "git add -A && git commit -m \"fix(x): 100% done\"",
+        ),
+        // Characters the message may not carry are written as `_`, as the
+        // heredoc form writes them.
+        (
+            "git commit --message \"$(printf 'use a[key] \u{2014} now')\"",
+            "git commit --message \"use a_key_ _ now\"",
+        ),
+    ] {
+        assert_eq!(projected(command).as_deref(), Some(expected), "{command}");
+    }
+    let seen = RefCell::new(Vec::new());
+    let opened = project("git commit -m \"$(printf 'subject')\"", |body| {
+        seen.borrow_mut().push(body.to_owned());
+        true
+    });
+    assert!(opened.is_some());
+    // The format is the whole of what `printf` reads, so the command judged
+    // is the bare `printf`.
+    assert_eq!(*seen.borrow(), ["printf"]);
+    assert_eq!(
+        project("git commit -m \"$(printf 'subject')\"", |_| false),
+        None
+    );
+}
+
+#[test]
+fn a_printf_that_computes_its_output_or_runs_elsewhere_stays_opaque() {
+    for command in [
+        // Conversions and escapes other than `\n` and `%%`.
+        "git commit -m \"$(printf '%s' x)\"",
+        "git commit -m \"$(printf 'a %s b')\"",
+        "git commit -m \"$(printf '\\x41')\"",
+        "git commit -m \"$(printf '\\101')\"",
+        "git commit -m \"$(printf 'a\\c')\"",
+        "git commit -m \"$(printf 'trailing\\')\"",
+        "git commit -m \"$(printf 'trailing%')\"",
+        // A format the shell expands, or more than one word.
+        "git commit -m \"$(printf \"$X\")\"",
+        "git commit -m \"$(printf \"subject\")\"",
+        "git commit -m \"$(printf 'a' 'b')\"",
+        "git commit -m \"$(printf 'a'; rm -rf build)\"",
+        "git commit -m \"$(printf 'a' > out)\"",
+        "git commit -m \"$(printf -v X 'a')\"",
+        "git commit -m \"$(printf '-a')\"",
+        // Not the value of `git commit -m`, or not a whole double-quoted word.
+        "$(printf rm) -rf build",
+        "$(printf 'rm') -rf build",
+        "git commit -m $(printf 'subject')",
+        "git commit -m \"x$(printf 'subject')\"",
+        "git tag -m \"$(printf 'subject')\" v1",
+    ] {
+        assert_eq!(projected(command), None, "{command}");
+    }
+}

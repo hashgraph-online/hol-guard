@@ -192,3 +192,42 @@ fn heredoc_bodies_inside_substitutions_are_data_unless_a_shell_reads_them() {
         );
     }
 }
+
+#[test]
+fn a_literal_printf_commit_message_plans_as_the_message_itself() {
+    let (root, _cleanup) = workspace("printf");
+    let controls = git_github_controls("default", "default");
+    // Agents also hand a multi-line message to `git commit -m` through a
+    // single-quoted `printf` format. With no arguments and only `\n` in it,
+    // the format is the message, so the command plans as the commit that
+    // passes the same message directly.
+    let literal = evaluate(&root, &controls, "git commit -q -m \"Add notes\"");
+    for command in [
+        "git commit -q -m \"$(printf 'Add notes\\n\\nCo-Authored-By: A Model <noreply@example.com>')\"",
+        "git commit -q -m \"$(printf 'Add notes')\"",
+    ] {
+        let result = evaluate(&root, &controls, command);
+        assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
+        assert_eq!(
+            result.minimum_action, literal.minimum_action,
+            "{command}: {}",
+            result.reason
+        );
+    }
+    // A format `printf` has to compute, one the shell expands, or a `printf`
+    // that names the program to run is still not a literal.
+    for command in [
+        "$(printf rm) -rf build",
+        "$(printf 'rm') -rf /",
+        "git commit -m \"$(printf '%s' \"$(cat ~/.ssh/id_rsa)\")\"",
+        "git commit -m \"$(printf \"$(cat ~/.ssh/id_rsa)\")\"",
+        "git commit -m \"$(printf 'x'; rm -rf /)\"",
+    ] {
+        let result = evaluate(&root, &controls, command);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason
+        );
+    }
+}
