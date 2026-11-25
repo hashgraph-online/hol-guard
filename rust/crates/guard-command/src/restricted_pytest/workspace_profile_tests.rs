@@ -537,12 +537,81 @@ fn a_committed_key_named_page_is_reopened_for_reading_only() {
         .rposition(|line| line.starts_with("(deny file-read* file-write* (regex"))
         .unwrap();
     let page = workspace.join(PAGE).to_string_lossy().into_owned();
+    let pin = |name: &str| {
+        let path = workspace.join(name).to_string_lossy().into_owned();
+        format!("(deny file-write* (literal \"{path}\"))")
+    };
     let reopened = format!("(allow file-read* (literal \"{page}\"))");
-    // The page is reopened after every denial, for reading only.
-    assert_eq!(&lines[denial + 1..], [reopened.as_str()]);
+    // After every denial, each directory on the way to the page is pinned
+    // and the page is reopened for reading only.
+    assert_eq!(
+        &lines[denial + 1..],
+        [
+            pin("docs").as_str(),
+            pin("docs/auth-evidence").as_str(),
+            reopened.as_str()
+        ]
+    );
     for name in HIDDEN {
         let path = workspace.join(name).to_string_lossy().into_owned();
         assert!(!profile.contains(&format!("\"{path}\"")), "{name}");
     }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Runs `script` under the composed profile in `workspace`.
+#[cfg(target_os = "macos")]
+fn contained(workspace: &Path, profile: &str, script: &str) -> bool {
+    std::process::Command::new("/usr/bin/sandbox-exec")
+        .arg("-p")
+        .arg(profile)
+        .args(["/bin/sh", "-c", script])
+        .current_dir(workspace)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .unwrap()
+        .status
+        .success()
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn the_reopened_page_cannot_be_swapped_for_another_file() {
+    use crate::pretool::search_scope_tracked::sandbox_documents_tests::{populate, HIDDEN, PAGE};
+    let root = std::env::temp_dir().join(format!("guard-wp-swap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let workspace = root.canonicalize().unwrap();
+    populate(&workspace);
+    // A key-bearing file with the page's name, ready to be moved into place.
+    std::fs::create_dir_all(workspace.join("notes")).unwrap();
+    std::fs::copy(
+        workspace.join(HIDDEN[1]),
+        workspace.join("notes/private-key-jwt-client-auth.md"),
+    )
+    .unwrap();
+    let mut value = input(workspace.to_str().unwrap());
+    value.private_root = workspace.join("../guard-wp-swap-private");
+    let profile =
+        workspace_profile::compose(&value, &existing(MAC_ROOTS), &existing(MAC_FILES)).unwrap();
+    assert!(contained(&workspace, &profile, &format!("cat {PAGE}")));
+    assert!(contained(
+        &workspace,
+        &profile,
+        "echo ok > docs/auth-evidence/notes.txt"
+    ));
+    for script in [
+        format!("echo x > {PAGE}"),
+        format!("rm {PAGE}"),
+        format!("cat {}", HIDDEN[0]),
+        "cat notes/private-key-jwt-client-auth.md".to_owned(),
+        "mv docs/auth-evidence docs/moved".to_owned(),
+        "mv docs elsewhere".to_owned(),
+        "rm -rf docs".to_owned(),
+    ] {
+        assert!(!contained(&workspace, &profile, &script), "{script}");
+    }
+    assert!(workspace.join(PAGE).is_file());
     let _ = std::fs::remove_dir_all(&root);
 }
