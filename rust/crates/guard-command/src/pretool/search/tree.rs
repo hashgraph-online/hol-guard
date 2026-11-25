@@ -158,9 +158,8 @@ pub(super) fn safe_recursive_target_cleared(
         )
 }
 
-pub(in crate::pretool) use super::roots::{
-    listing_root_below_home, parent_root_inside_repository, rg_root_inside_cwd,
-};
+pub(in crate::pretool) use super::roots::parent_root_inside_repository;
+pub(in crate::pretool) use super::roots::{listing_root_below_home, rg_root_inside_cwd};
 
 pub(super) fn inside_agent_state(path: &std::path::Path, context: ReadContext<'_>) -> bool {
     std::fs::canonicalize(path).is_ok_and(|canonical| {
