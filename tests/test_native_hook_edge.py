@@ -106,6 +106,7 @@ def _edge_result() -> dict[str, object]:
         "payload_kind": "inline",
         "harness_response": {"continue": True},
         "requires_approval": False,
+        "recording_only_response": False,
         "containment_route": "none",
         "result": {
             "schema": "guard-pre-tool-result.v1",
@@ -181,6 +182,16 @@ def test_edge_decoder_requires_rust_approval_classification(value: object) -> No
         edge.pop("requires_approval")
     else:
         edge["requires_approval"] = value
+    assert _decode_edge(edge) is None
+
+
+@pytest.mark.parametrize("value", (None, "yes", 1))
+def test_edge_decoder_requires_rust_recording_only_classification(value: object) -> None:
+    edge = _edge_result()
+    if value is None:
+        edge.pop("recording_only_response")
+    else:
+        edge["recording_only_response"] = value
     assert _decode_edge(edge) is None
 
 

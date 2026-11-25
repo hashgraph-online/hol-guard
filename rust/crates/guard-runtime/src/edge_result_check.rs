@@ -121,6 +121,8 @@ fn checked(edge: &GuardHookEdgeResultV2) -> Option<bool> {
     Some(
         shaped
             && edge.requires_approval == requires_approval(event, result)
+            && (!edge.recording_only_response
+                || recording_only_response("PreToolUse", true, result))
             && receipt_agrees(edge, kind, result, &receipt),
     )
 }
@@ -209,6 +211,19 @@ pub(super) fn requires_approval(event: &str, result: &Map<String, Value>) -> boo
             .get("minimum_action")
             .and_then(Value::as_str)
             .is_some_and(|action| matches!(action, "review" | "require-reapproval"))
+}
+
+/// Whether a checked edge answer is the Watch response the adapter returns
+/// without running approval, saved-block or containment control.
+pub(super) fn recording_only_response(
+    event: &str,
+    recording_only: bool,
+    result: &Map<String, Value>,
+) -> bool {
+    recording_only
+        && event == "PreToolUse"
+        && !(result.get("minimum_action").and_then(Value::as_str) == Some("allow")
+            && result.get("decision").and_then(Value::as_str) == Some("allow"))
 }
 
 fn pre_tool_action(action: &Value, harness: &str, event: &str) -> bool {

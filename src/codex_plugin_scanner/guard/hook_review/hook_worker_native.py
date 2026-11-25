@@ -319,22 +319,20 @@ class HookWorkerNativeMixin:
             # The edge queues the activity only for an answer returned as it
             # rendered it: recorded only, a custom block, or the final one.
             recorded = edge.get("activity_recorded") is True
-            if recording_only:
-                action = str(native_result.get("minimum_action") or "")
-                if action != "allow" or native_result.get("decision") != "allow":
-                    return (
-                        _edge_harness_response(edge)
-                        if defer_accepted_recording
-                        else _record_native_pre_activity(
-                            self,
-                            native_harness,
-                            payload,
-                            _edge_harness_response(edge),
-                            accepted_receipt,
-                            recorded=recorded,
-                        ),
-                        True,
-                    )
+            if edge.get("recording_only_response") is True:
+                return (
+                    _edge_harness_response(edge)
+                    if defer_accepted_recording
+                    else _record_native_pre_activity(
+                        self,
+                        native_harness,
+                        payload,
+                        _edge_harness_response(edge),
+                        accepted_receipt,
+                        recorded=recorded,
+                    ),
+                    True,
+                )
             # The resident stamped its route on the edge answer, and the decoder
             # refuses an unstamped one; Python never picks a route.
             containment = edge.get("containment_route", "none")

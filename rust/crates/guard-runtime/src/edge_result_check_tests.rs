@@ -96,6 +96,39 @@ fn the_edge_stamps_approval_classification_from_its_minimum_action() {
 }
 
 #[test]
+fn the_edge_stamps_recording_only_denials_without_reclassifying_the_result() {
+    let mut envelope = envelope(
+        "PreToolUse",
+        serde_json::json!({"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}}),
+    );
+    envelope.recording_only = true;
+    let edge: GuardHookEdgeResultV2 =
+        serde_json::from_slice(&evaluate_isolated(envelope).unwrap()).unwrap();
+    let result = edge.result.as_object().unwrap();
+    assert_eq!(
+        edge.recording_only_response,
+        edge_result_check::recording_only_response("PreToolUse", true, result)
+    );
+    assert!(edge.recording_only_response);
+    assert!(!edge_result_check::recording_only_response(
+        "PreToolUse",
+        true,
+        &serde_json::json!({"minimum_action": "allow", "decision": "allow"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+    assert!(!edge_result_check::recording_only_response(
+        "PostToolUse",
+        true,
+        result
+    ));
+    let mut tampered = pre_tool();
+    tampered.recording_only_response = true;
+    assert!(edge_result_check::check(&tampered).is_err());
+}
+
+#[test]
 fn a_repaired_block_keeps_its_repair_link() {
     // `command_policy_repair` adds the link and its status to a block the
     // user can repair; the hook client used to refuse the whole answer.
