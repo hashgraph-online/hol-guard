@@ -73,10 +73,33 @@ pub(super) fn evaluate_pre_tool_chain(
     let evaluated =
         crate::native_exact_action_op::require_bash_owner(envelope, policy_snapshot, evaluated);
     let evaluated = crate::network_protection::apply_to_envelope(envelope, evaluated);
-    let evaluated = runtime_risk::apply_to_envelope(envelope, policy_snapshot, evaluated);
-    let evaluated = git_rules::after_exact_review(envelope, policy_snapshot, evaluated);
+    let evaluated = rule_reviews_then_runtime(
+        envelope,
+        policy_snapshot,
+        evaluated,
+        runtime_risk::apply_to_envelope,
+    );
     let evaluated = crate::policy_enforcement::deferred_prompt_review(evaluated);
     Ok(evaluated)
+}
+
+type Overlay =
+    fn(&GuardHookEnvelopeV2, Option<&AdmittedPolicySnapshot>, PreToolResultV1) -> PreToolResultV1;
+
+/// The saved exact-command and git rule reviews, then the known-vulnerable
+/// runtime overlay. The rule reviews act only on a call nothing holds yet, and
+/// the runtime overlay records a finding over a review that is already there
+/// with a code a script grant cannot lift. In the other order the runtime
+/// finding would hold the call first, the rule reviews would add nothing, and
+/// a script grant that answers the finding would clear the rule's review too.
+fn rule_reviews_then_runtime(
+    envelope: &GuardHookEnvelopeV2,
+    policy_snapshot: Option<&AdmittedPolicySnapshot>,
+    evaluated: PreToolResultV1,
+    runtime: Overlay,
+) -> PreToolResultV1 {
+    let evaluated = git_rules::after_exact_review(envelope, policy_snapshot, evaluated);
+    runtime(envelope, policy_snapshot, evaluated)
 }
 
 /// One step of a chained command, judged as a command of its own: the hook's

@@ -50,7 +50,7 @@ pub(super) fn lifts(
     step: &Step<'_>,
     deadline: Instant,
 ) -> bool {
-    if !crate::connector_setup::is_non_recognition(
+    if !crate::connector_setup::grant_answers_review(
         result.get("reason_code").and_then(Value::as_str),
     ) || !crate::hook_direct::saved_decision::overridable(result)
     {

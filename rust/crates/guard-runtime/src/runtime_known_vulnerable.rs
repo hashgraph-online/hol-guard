@@ -24,6 +24,9 @@ use crate::runtime_known_vulnerable_source as source;
 
 pub(crate) const RISK_KEY: &str = "runtime_known_vulnerable";
 const FINDING: &str = "native_runtime_known_vulnerable";
+/// The finding over a call already held for review for another reason, which
+/// a saved script grant does not answer.
+const FINDING_WITH_REVIEW: &str = "native_runtime_known_vulnerable_with_review";
 const OBSERVED: &str = "native_runtime_known_vulnerable_observed";
 const RUNTIME_NAMES: &[&str] = &["node", "nodejs"];
 /// Launches checked per command; a command naming more is checked up to here.
@@ -32,6 +35,15 @@ const MAX_LAUNCHES: usize = 8;
 /// Whether `reason_code` is this overlay's review finding. It matched the
 /// verified bundle, so it holds the hook verdict at review before execution.
 pub(crate) fn is_review_finding(reason_code: &str) -> bool {
+    reason_code == FINDING || reason_code == FINDING_WITH_REVIEW
+}
+
+/// Whether a saved grant for the script the runtime launches answers this
+/// review: the finding is the only risk on the call, apart from Guard not
+/// recognizing the launch. The user allowed that script under every runtime
+/// that runs it, so the grant settles it as it settles the non-recognition
+/// review. A finding over another review keeps that review's risk signal.
+pub(crate) fn grant_answers(reason_code: &str) -> bool {
     reason_code == FINDING
 }
 
@@ -43,6 +55,21 @@ pub(crate) struct Finding {
     version: String,
     resolved_path: String,
     expired_at: Option<f64>,
+}
+
+#[cfg(test)]
+impl Finding {
+    /// A high-severity finding for a Node.js build, for overlay order tests.
+    pub(crate) fn for_tests(advisory_id: &str) -> Self {
+        Self {
+            advisory_id: advisory_id.into(),
+            severity: "high".into(),
+            known_exploited: false,
+            version: "22.1.0".into(),
+            resolved_path: "/opt/node/bin/node".into(),
+            expired_at: None,
+        }
+    }
 }
 
 impl Finding {
@@ -417,6 +444,14 @@ pub(crate) fn raise(
     };
     let (floor, floor_action, reason_code) = if observe || configured <= ActionFloor::Warn {
         (ActionFloor::Warn, "warn", OBSERVED)
+    } else if minimum >= ActionFloor::Review
+        && configured < ActionFloor::Block
+        && !crate::connector_setup::is_non_recognition(Some(&result.reason_code))
+        && !is_review_finding(&result.reason_code)
+    {
+        // A call already held for its own risk keeps that apart from the
+        // finding, so a script grant cannot lift it with the finding.
+        (configured, action, FINDING_WITH_REVIEW)
     } else {
         (configured, action, FINDING)
     };

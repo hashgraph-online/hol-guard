@@ -98,6 +98,40 @@ fn a_known_affected_build_is_held_for_review_with_both_choices() {
 }
 
 #[test]
+fn a_script_grant_answers_the_finding_only_over_non_recognition() {
+    let found = finding("22.1.0", json!([rule("CVE-1", "high", "22.5.0")])).unwrap();
+    for (start, configured) in [
+        ("review", "review"),
+        ("review", "require-reapproval"),
+        ("require-reapproval", "require-reapproval"),
+    ] {
+        for unrecognised in [
+            "native_command_review_required",
+            "native_workspace_containment_executable_outside_roots",
+        ] {
+            let mut prior = result(start);
+            prior.reason_code = unrecognised.into();
+            let raised = raise(prior, &found, configured, false);
+            assert_eq!(raised.reason_code, FINDING, "{start} {configured}");
+            assert!(grant_answers(&raised.reason_code));
+        }
+        let raised = raise(result(start), &found, configured, false);
+        assert_eq!(
+            raised.reason_code, FINDING_WITH_REVIEW,
+            "{start} {configured}"
+        );
+        assert!(is_review_finding(&raised.reason_code));
+        assert!(!grant_answers(&raised.reason_code));
+    }
+    // Raised over an allowed or warned call, the finding is the only review.
+    for start in ["allow", "warn"] {
+        let raised = raise(result(start), &found, "require-reapproval", false);
+        assert_eq!(raised.reason_code, FINDING);
+        assert!(grant_answers(&raised.reason_code));
+    }
+}
+
+#[test]
 fn patched_unknown_and_low_severity_builds_stay_quiet() {
     let rules = json!([rule("CVE-1", "high", "22.5.0")]);
     assert_eq!(finding("22.5.0", rules.clone()), None);
@@ -213,7 +247,11 @@ fn strict_blocks_and_a_stronger_result_keeps_its_own_reason() {
         "require-reapproval",
         false,
     );
-    assert_eq!(held.reason_code, FINDING);
+    // Held already for its own risk: the finding keeps that apart, so a
+    // script grant does not lift both.
+    assert_eq!(held.reason_code, FINDING_WITH_REVIEW);
+    assert!(is_review_finding(&held.reason_code));
+    assert!(!grant_answers(&held.reason_code));
     assert!(held.reason.contains("CVE-1"));
     assert!(
         held.reason.ends_with("Also: native test"),
