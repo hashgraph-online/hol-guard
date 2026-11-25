@@ -323,14 +323,39 @@ pub(super) fn anchored(prompt: &str) -> bool {
 /// budget may have missed the file holding a quote, so its zero counts only
 /// mean "held nowhere" when it read every file.
 pub(super) fn points_nowhere(prompt: &str, root: &Path, quoting: &[usize], complete: bool) -> bool {
+    (quoting.is_empty() || (complete && quoting.iter().all(|&files| files == 0)))
+        && only_quoted(prompt, root)
+}
+
+/// True when only quoted text let the prompt through, no file the walk read
+/// holds it, and the note shows none of it either. Its excerpts were then
+/// ranked on the prompt's plain words alone, as a task title pasted in a
+/// project too big to read whole got: a config file and unrelated modules.
+/// CIGAR's own search can still find the quote in a file the walk did not
+/// reach, and a note that shows it is kept.
+pub(super) fn quote_unshown(
+    prompt: &str,
+    root: &Path,
+    (quoted, quoting): (&[String], &[usize]),
+    note: &str,
+) -> bool {
+    !quoted.is_empty()
+        && quoting.iter().all(|&files| files == 0)
+        && only_quoted(prompt, root)
+        && !crate::context_assistance_prompt_words::quoted(&note.to_lowercase(), quoted)
+            .contains(&true)
+}
+
+/// True when the prompt writes no name as code and names no file in this
+/// project, so only quoted text, if any, points it at code.
+fn only_quoted(prompt: &str, root: &Path) -> bool {
     use crate::context_assistance_prompt_files::named;
     let elsewhere = |name: &String| {
         let mut tails =
             (0..=name.matches('/').count()).filter_map(|skip| name.splitn(skip + 1, '/').last());
         name.contains('/') && !tails.any(|tail| root.join(tail).is_file())
     };
-    (quoting.is_empty() || (complete && quoting.iter().all(|&files| files == 0)))
-        && named(prompt).iter().all(elsewhere)
+    named(prompt).iter().all(elsewhere)
         && crate::context_assistance_prompt_words::spellings(prompt).is_empty()
 }
 

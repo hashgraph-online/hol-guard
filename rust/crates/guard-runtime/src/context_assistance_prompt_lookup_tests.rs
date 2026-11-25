@@ -189,3 +189,52 @@ fn quoted_text_and_paths_outside_the_project_point_at_nothing() {
         assert!(!nowhere(prompt), "{prompt}");
     }
 }
+
+/// In a project too big to read whole, a pasted task title or a word quoted
+/// for emphasis no file the walk read holds still let excerpts ranked on the
+/// prompt's plain words through: a TypeScript config for "CWV follow-up" and
+/// an unrelated module for "password". A note that shows the quote, on one
+/// line or wrapped in a comment, is kept, and so is one for a prompt that
+/// writes code or a file here.
+#[test]
+fn a_note_showing_no_quote_the_walk_missed_is_dropped() {
+    use crate::context_assistance_prompt_files::phrases;
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cli.py"), "def count():\n    pass\n").unwrap();
+    let title = "Do this task here: \u{201c}CWV follow-up: rail fallback\u{201d}";
+    let config = "tsconfig.followup.json (lines 1-3)\n{ \"extends\": \"./tsconfig.json\" }\n";
+    let unshown = |prompt: &str, quoting: &[usize], note: &str| {
+        quote_unshown(prompt, dir.path(), (&phrases(prompt), quoting), note)
+    };
+    assert!(unshown(title, &[0], config));
+    assert!(unshown(
+        "use the word \"password\" to approve",
+        &[0],
+        config
+    ));
+    // The note shows the quote CIGAR found beyond the walk.
+    assert!(!unshown(
+        title,
+        &[0],
+        "app/vitals.ts\n// CWV follow-up: rail fallback\n"
+    ));
+    assert!(!unshown(
+        title,
+        &[0],
+        "app/vitals.ts\n# Track the CWV follow-up:\n# rail fallback here.\n"
+    ));
+    // The walk read a file holding it, the prompt writes code or names a
+    // file here, or it quotes nothing.
+    assert!(!unshown(title, &[1], config));
+    assert!(!unshown(
+        "\u{201c}rail fallback\u{201d} in `parse_args`",
+        &[0],
+        config
+    ));
+    assert!(!unshown(
+        "\u{201c}rail fallback\u{201d} in cli.py",
+        &[0],
+        config
+    ));
+    assert!(!unshown("fix the rail fallback", &[], config));
+}
