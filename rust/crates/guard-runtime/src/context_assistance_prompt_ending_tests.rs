@@ -76,6 +76,17 @@ fn the_codex_hint_asks_for_the_edit_and_the_test_as_two_tool_calls() {
     assert!(!ACT_ON_IT.contains("apply the patch and run the tests)"));
 }
 
+/// Codex also ran the whole suite and printed its own diff after the focused
+/// check had passed, unasked. The hint says that check finishes the change,
+/// and that it has to run first: told only that a passing check ends the
+/// change, Codex once finished a fix without running any test.
+#[test]
+fn the_codex_hint_says_the_passing_check_finishes_the_change() {
+    assert!(ACT_ON_IT.contains("Run the test that covers the change before you finish."));
+    assert!(ACT_ON_IT.contains("Once it passes, the change is done"));
+    assert!(ACT_ON_IT.contains("a full test run, or a diff of your own edits, that nobody asked for"));
+}
+
 /// Claude Code ran the whole suite and committed after the doctest or test a
 /// note named had passed, a turn each. The hint says that check finishes the
 /// change.
