@@ -717,13 +717,13 @@ fn escaped_find_operators_in_a_substitution_are_words_not_subshells() {
         bounded.programs.into_iter().collect::<Vec<_>>(),
         ["find", "for", "sort"]
     );
-    for command in [
-        "echo $(find . \\( -name x \\); printf ok)",
-        "echo $(find . \\( -name x \\)|sort)",
+    for (command, receiver) in [
+        ("echo $(find . \\( -name x \\); printf ok)", "printf"),
+        ("echo $(find . \\( -name x \\)|sort)", "sort"),
     ] {
         let bounded = bounded_substitutions(command).unwrap();
         assert!(bounded.programs.contains("find"), "{command}");
-        assert!(bounded.programs.contains("printf") || bounded.programs.contains("sort"));
+        assert!(bounded.programs.contains(receiver), "{command}");
     }
     let controls = controls(serde_json::json!([]), false);
     for command in [
