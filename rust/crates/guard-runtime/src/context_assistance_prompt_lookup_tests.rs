@@ -229,6 +229,17 @@ fn a_note_showing_no_quote_the_walk_missed_is_dropped() {
         "docs/auth.md (lines 1-2)\n```markdown\nChanged definitions require password checks.\n```";
     let password = "use the word \"password\" to approve";
     assert!(!unshown(password, &[0], fenced));
+    // A file holding its own ``` sits in a longer fence; its inner fence
+    // lines neither end the excerpt nor make Guard's later lines a file's.
+    let nested = "docs/auth.md (lines 1-3)\n````markdown\n```text\n\
+Reset the password (lines 1-2)\n````\n\
+Already shown earlier in this session: approve.py (lines 1-2)";
+    assert!(!unshown(password, &[0], nested));
+    assert!(unshown(
+        "use the word \"already shown\" to approve",
+        &[0],
+        nested
+    ));
     assert!(!unshown(
         password,
         &[0],

@@ -387,12 +387,18 @@ fn file_text(note: &str) -> String {
             || GUARD_LEAD_INS.iter().any(|lead| line.starts_with(lead))
     };
     let body = note.split_once("\n\n").map_or("", |(_, body)| body);
-    let mut fenced = false;
+    // An excerpt's fence is longer than any backtick run inside it, so a
+    // fence closes only on a bare run at least as long as its opener.
+    let ticks = |line: &str| line.trim_start().bytes().take_while(|&b| b == b'`').count();
+    let mut fence = 0;
     let mut kept = Vec::new();
     for line in body.lines() {
-        if line.trim_start().starts_with("```") {
-            fenced = !fenced;
-        } else if fenced || !own(line) {
+        let run = ticks(line);
+        if fence == 0 && run >= 3 {
+            fence = run;
+        } else if fence > 0 && run >= fence && line.trim().len() == run {
+            fence = 0;
+        } else if fence > 0 || !own(line) {
             kept.push(line);
         }
     }
