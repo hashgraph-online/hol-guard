@@ -1,5 +1,6 @@
-//! Absolute paths in a prompt, whose folders name the machine the prompt was
-//! written on rather than the code it asks about.
+//! Absolute paths and web addresses in a prompt. A path's folders name the
+//! machine the prompt was written on, and a web address's host, path and query
+//! name a page, rather than the code the prompt asks about.
 
 /// Top folders of a POSIX machine path, matched with their case: macOS
 /// writes `/Users`, so a web route such as `/users/{id}` or
@@ -27,9 +28,14 @@ const OPENERS: &[char] = &['=', '(', '[', '{', '<', '>', '"', '\'', '`', ',', ':
 /// What ends a path outside quotes, such as the `:` of `/tmp/a.py:parse` or
 /// the `<` of a closing tag.
 const CLOSERS: &[char] = &[')', ']', '}', '<', '>', '"', '\'', '`', ',', ';', ':'];
+/// What ends a web address: as `CLOSERS`, but a port's or query's `:` stays
+/// inside it.
+const URL_CLOSERS: &[char] = &[')', ']', '}', '<', '>', '"', '\'', '`', ',', ';'];
 
 /// `prompt` with each absolute machine path blanked: `/tmp/run-1/out.log`,
-/// `~/work`, `C:\Users\me`, `C:/Users/me` and `\\server\share`. A path inside
+/// `~/work`, `C:\Users\me`, `C:/Users/me` and `\\server\share`, and each web
+/// address (`https://example.com/a?workspaceId=1`), which runs to a space or
+/// a closing mark such as the `)` of a Markdown link. A path inside
 /// quotes runs to the closing quote, spaces and all; any other path ends at a
 /// space or a closing mark, so `/tmp/a.py:parse()` keeps `parse`. A `/`
 /// stays where each path was, so a backticked `cat /tmp/out.log` still reads
@@ -40,8 +46,17 @@ pub(super) fn without_paths(prompt: &str) -> String {
     let mut before: Option<char> = None;
     while let Some(c) = rest.chars().next() {
         let opens = before.is_none_or(|b| b.is_whitespace() || OPENERS.contains(&b));
-        if opens && starts_path(rest) {
-            let end = path_end(rest, before);
+        let end = if !opens {
+            0
+        } else if starts_url(rest) {
+            rest.find(|c: char| c.is_whitespace() || URL_CLOSERS.contains(&c))
+                .unwrap_or(rest.len())
+        } else if starts_path(rest) {
+            path_end(rest, before)
+        } else {
+            0
+        };
+        if end > 0 {
             let width = rest[..end].chars().count();
             out.push('/');
             out.extend(std::iter::repeat_n(' ', width.saturating_sub(1)));
@@ -54,6 +69,17 @@ pub(super) fn without_paths(prompt: &str) -> String {
         rest = &rest[c.len_utf8()..];
     }
     out
+}
+
+/// True at a web address: a scheme (`https`, `git+ssh`), `://` and more.
+fn starts_url(text: &str) -> bool {
+    let scheme = text
+        .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-')))
+        .unwrap_or(text.len());
+    text.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+        && text[scheme..].starts_with("://")
+        && (text[scheme + 3..].chars().next())
+            .is_some_and(|c| !c.is_whitespace() && !URL_CLOSERS.contains(&c))
 }
 
 fn starts_path(text: &str) -> bool {
