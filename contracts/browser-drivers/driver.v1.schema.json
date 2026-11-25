@@ -20,7 +20,7 @@
     },
     "id": {
       "type": "string",
-      "pattern": "^browser\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+      "pattern": "^browser\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?![\\s\\S])"
     },
     "name": {
       "type": "string",
@@ -74,7 +74,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
           },
           "maxItems": 32,
           "uniqueItems": true
@@ -83,7 +83,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^(@[a-z0-9][a-z0-9._-]{0,63}/)?[a-z0-9][a-z0-9._-]{0,63}$"
+            "pattern": "^(@[a-z0-9][a-z0-9._-]{0,63}/)?[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
           },
           "maxItems": 32,
           "uniqueItems": true
@@ -92,7 +92,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}__$"
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}__(?![\\s\\S])"
           },
           "maxItems": 32,
           "uniqueItems": true
@@ -101,7 +101,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
           },
           "maxItems": 32,
           "uniqueItems": true
@@ -162,7 +162,7 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}$"
+                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}(?![\\s\\S])"
               },
               "maxItems": 8,
               "uniqueItems": true
@@ -171,7 +171,7 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}$"
+                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}(?![\\s\\S])"
               },
               "maxItems": 8,
               "uniqueItems": true
@@ -180,7 +180,7 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}$"
+                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}(?![\\s\\S])"
               },
               "maxItems": 8,
               "uniqueItems": true
@@ -189,7 +189,7 @@
               "type": "array",
               "items": {
                 "type": "string",
-                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}$"
+                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}(?![\\s\\S])"
               },
               "maxItems": 8,
               "uniqueItems": true
@@ -210,7 +210,7 @@
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}(?![\\s\\S])"
       },
       "maxItems": 32,
       "uniqueItems": true
@@ -237,70 +237,28 @@
           "mcpServerNames": {
             "items": {
               "not": {
-                "enum": [
-                  "browser",
-                  "browsers",
-                  "chrome",
-                  "chromium",
-                  "playwright",
-                  "puppeteer",
-                  "firefox",
-                  "webkit",
-                  "safari",
-                  "edge",
-                  "devtools",
-                  "chrome-devtools",
-                  "mcp",
-                  "bash",
-                  "sh",
-                  "zsh",
-                  "fish",
-                  "pwsh",
-                  "powershell",
-                  "cmd",
-                  "node",
-                  "deno",
-                  "bun",
-                  "python",
-                  "python3",
-                  "ruby",
-                  "perl"
-                ]
+                "$ref": "#/$defs/reservedName"
               }
             }
           },
           "harnessTools": {
             "items": {
               "not": {
-                "enum": [
-                  "browser",
-                  "browsers",
-                  "chrome",
-                  "chromium",
-                  "playwright",
-                  "puppeteer",
-                  "firefox",
-                  "webkit",
-                  "safari",
-                  "edge",
-                  "devtools",
-                  "chrome-devtools",
-                  "mcp",
-                  "bash",
-                  "sh",
-                  "zsh",
-                  "fish",
-                  "pwsh",
-                  "powershell",
-                  "cmd",
-                  "node",
-                  "deno",
-                  "bun",
-                  "python",
-                  "python3",
-                  "ruby",
-                  "perl"
-                ]
+                "$ref": "#/$defs/reservedName"
+              }
+            }
+          },
+          "toolNamespaces": {
+            "items": {
+              "not": {
+                "pattern": "^(mcp__)?(browser|browsers|chrome|chromium|playwright|puppeteer|firefox|webkit|safari|edge|devtools|chrome\\-devtools|mcp|bash|sh|zsh|fish|pwsh|powershell|cmd|node|deno|bun|python|python3|ruby|perl)__(?![\\s\\S])"
+              }
+            }
+          },
+          "packages": {
+            "items": {
+              "not": {
+                "pattern": "^(@(browser|browsers|chrome|chromium|playwright|puppeteer|firefox|webkit|safari|edge|devtools|chrome\\-devtools|mcp|bash|sh|zsh|fish|pwsh|powershell|cmd|node|deno|bun|python|python3|ruby|perl)/.*|(@[^/]+/)?(browser|browsers|chrome|chromium|playwright|puppeteer|firefox|webkit|safari|edge|devtools|chrome\\-devtools|mcp|bash|sh|zsh|fish|pwsh|powershell|cmd|node|deno|bun|python|python3|ruby|perl))(?![\\s\\S])"
               }
             }
           }
@@ -337,7 +295,7 @@
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}(?![\\s\\S])"
       },
       "minItems": 1,
       "maxItems": 8,
@@ -345,12 +303,12 @@
     },
     "httpsUrl": {
       "type": "string",
-      "pattern": "^https://[a-z0-9.-]+(/[^\\s?#]*)?$",
+      "pattern": "^https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?(/[^\\s?#]*)?(?![\\s\\S])",
       "maxLength": 256
     },
     "icon": {
       "type": "string",
-      "pattern": "^(none|[A-Z][A-Za-z0-9]{1,63})$"
+      "pattern": "^(none|[A-Z][A-Za-z0-9]{1,63})(?![\\s\\S])"
     },
     "tool": {
       "oneOf": [
@@ -364,7 +322,7 @@
           "properties": {
             "name": {
               "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
             },
             "verb": {
               "$ref": "#/$defs/verb"
@@ -406,18 +364,18 @@
           "properties": {
             "name": {
               "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
             },
             "discriminator": {
               "type": "string",
-              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}(?![\\s\\S])"
             },
             "cases": {
               "type": "object",
               "minProperties": 1,
               "maxProperties": 64,
               "propertyNames": {
-                "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+                "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}(?![\\s\\S])"
               },
               "additionalProperties": {
                 "type": "object",
@@ -468,7 +426,7 @@
           "properties": {
             "name": {
               "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
             },
             "cdpPassthrough": {
               "type": "object",
@@ -487,6 +445,37 @@
             }
           }
         }
+      ]
+    },
+    "reservedName": {
+      "enum": [
+        "browser",
+        "browsers",
+        "chrome",
+        "chromium",
+        "playwright",
+        "puppeteer",
+        "firefox",
+        "webkit",
+        "safari",
+        "edge",
+        "devtools",
+        "chrome-devtools",
+        "mcp",
+        "bash",
+        "sh",
+        "zsh",
+        "fish",
+        "pwsh",
+        "powershell",
+        "cmd",
+        "node",
+        "deno",
+        "bun",
+        "python",
+        "python3",
+        "ruby",
+        "perl"
       ]
     }
   }

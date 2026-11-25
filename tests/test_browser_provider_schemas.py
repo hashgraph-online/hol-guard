@@ -136,8 +136,19 @@ def test_provider_example_is_valid() -> None:
 def test_first_party_profile_may_claim_a_reserved_name() -> None:
     document = _mutated(DRIVER_EXAMPLE, lambda d: d.update(id="browser.playwright-mcp"))
     document["publisher"]["verified"] = True
+    document["publisher"]["url"] = "https://example.com/docs"
     document["match"]["mcpServerNames"] = ["playwright"]
-    assert DRIVER.is_valid(document)
+    document["match"]["toolNamespaces"] = ["mcp__playwright__"]
+    document["match"]["packages"] = ["@playwright/mcp"]
+    assert list(DRIVER.iter_errors(document)) == []
+
+
+def test_unverified_profile_may_use_names_that_only_contain_a_reserved_word() -> None:
+    document = _mutated(
+        DRIVER_EXAMPLE,
+        lambda d: d["match"].update(toolNamespaces=["mcp__pilot-browser__"], packages=["@example-org/chrome-pilot"]),
+    )
+    assert list(DRIVER.iter_errors(document)) == []
 
 
 @pytest.mark.parametrize(
@@ -151,6 +162,14 @@ def test_first_party_profile_may_claim_a_reserved_name() -> None:
         pytest.param(lambda d: d["match"].update(mcpServerNames=["chrome"]), id="reserved-chrome"),
         pytest.param(lambda d: d["match"].update(harnessTools=["bash"]), id="reserved-shell"),
         pytest.param(lambda d: d["match"].update(harnessTools=["python3"]), id="reserved-interpreter"),
+        pytest.param(lambda d: d["match"].update(toolNamespaces=["mcp__playwright__"]), id="reserved-namespace"),
+        pytest.param(lambda d: d["match"].update(toolNamespaces=["chrome-devtools__"]), id="reserved-bare-namespace"),
+        pytest.param(lambda d: d["match"].update(packages=["puppeteer"]), id="reserved-package"),
+        pytest.param(lambda d: d["match"].update(packages=["@example-org/playwright"]), id="reserved-scoped-package"),
+        pytest.param(lambda d: d["match"].update(packages=["@playwright/mcp"]), id="reserved-package-scope"),
+        pytest.param(lambda d: d["match"].update(mcpServerNames=["chrome\n"]), id="reserved-name-trailing-newline"),
+        pytest.param(lambda d: d["match"].update(mcpServerNames=["example-pilot\n"]), id="name-trailing-newline"),
+        pytest.param(lambda d: d["publisher"].update(url="https://256.0.0.1/docs"), id="ip-publisher-url"),
         pytest.param(
             lambda d: d["match"].update(mcpServerNames=[], packages=[], toolNamespaces=[]), id="matches-nothing"
         ),
@@ -186,6 +205,12 @@ def _first_capability(document: dict[str, Any]) -> dict[str, Any]:
             id="query-credential-in-path",
         ),
         pytest.param(lambda d: d["verify"].update(path="/v1/guard/key?" + "k=v"), id="query-credential-verify"),
+        pytest.param(lambda d: _first_capability(d)["request"].update(path="//status"), id="authority-path"),
+        pytest.param(lambda d: d["verify"].update(path="//"), id="authority-verify-path"),
+        pytest.param(lambda d: d["verify"].update(path="/status\n"), id="path-trailing-newline"),
+        pytest.param(lambda d: d.update(summary="Checks scripts.\n"), id="summary-trailing-newline"),
+        pytest.param(lambda d: d.update(hosts=["api.exampleshield.example\n"]), id="host-trailing-newline"),
+        pytest.param(lambda d: d.update(privacyUrl="https://256.0.0.1/privacy"), id="ip-privacy-url"),
         pytest.param(lambda d: d["auth"].update({"in": "query"}), id="query-credential-auth"),
         pytest.param(lambda d: d["auth"].update(header="cookie"), id="cookie-header"),
         pytest.param(lambda d: d["auth"].update(kind="oauth"), id="auth-kind-outside-list"),
@@ -221,6 +246,12 @@ def test_provider_schema_rejects(edit) -> None:
 def test_provider_icon_accepts_react_icon_names_and_none() -> None:
     for icon in ("FiShield", "none"):
         assert PROVIDER.is_valid(_mutated(PROVIDER_EXAMPLE, lambda d, icon=icon: d.update(icon=icon)))
+
+
+def test_provider_accepts_root_and_plain_paths_and_urls() -> None:
+    document = _mutated(PROVIDER_EXAMPLE, lambda d: d["verify"].update(path="/"))
+    document["termsUrl"] = "https://example.com/terms"
+    assert list(PROVIDER.iter_errors(document)) == []
 
 
 def test_signed_enrollment_is_a_closed_shape() -> None:

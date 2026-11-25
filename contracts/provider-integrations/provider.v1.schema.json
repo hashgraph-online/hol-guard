@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hol.org/schemas/guard/provider-integration.v1.schema.json",
   "title": "HOL Guard provider integration manifest",
-  "description": "Declares how Guard asks a provider a closed-list question about closed-list facts. Provider answers are evidence: they can tighten a decision, never approve or grant. Cross-field rules (shares equal the facts used, fixture prefix outside tests) are enforced by the native compiler.",
+  "description": "Declares how Guard asks a provider a closed-list question about closed-list facts. Provider answers are evidence: they can tighten a decision, never approve or grant. Cross-field rules (shares equal the facts used, fixture prefix outside tests) must be enforced by the native compiler before a manifest is admitted; this schema alone does not check them.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -26,7 +26,7 @@
     },
     "id": {
       "type": "string",
-      "pattern": "^provider\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+      "pattern": "^provider\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?![\\s\\S])"
     },
     "name": {
       "type": "string",
@@ -59,7 +59,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 200,
-      "pattern": "^[^<>\\u0000-\\u001f]*$"
+      "pattern": "^[^<>\\u0000-\\u001f]*(?![\\s\\S])"
     },
     "surfaces": {
       "type": "array",
@@ -88,7 +88,7 @@
             },
             "header": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9-]{0,63}$",
+              "pattern": "^[a-z][a-z0-9-]{0,63}(?![\\s\\S])",
               "not": {
                 "enum": [
                   "cookie",
@@ -160,7 +160,7 @@
       "items": {
         "type": "string",
         "maxLength": 253,
-        "pattern": "^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$",
+        "pattern": "^(?=.{1,253}(?![\\s\\S]))(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?(?![\\s\\S])",
         "not": {
           "pattern": "(^|\\.)(localhost|local|localdomain|internal|invalid|onion|home\\.arpa)$"
         }
@@ -193,7 +193,7 @@
         },
         "path": {
           "type": "string",
-          "pattern": "^/[A-Za-z0-9._~/-]{0,255}$"
+          "pattern": "^/(?!/)[A-Za-z0-9._~/-]{0,255}(?![\\s\\S])"
         }
       }
     },
@@ -231,13 +231,13 @@
     },
     "icon": {
       "type": "string",
-      "pattern": "^(none|[A-Z][A-Za-z0-9]{1,63})$"
+      "pattern": "^(none|[A-Z][A-Za-z0-9]{1,63})(?![\\s\\S])"
     }
   },
   "$defs": {
     "httpsUrl": {
       "type": "string",
-      "pattern": "^https://[a-z0-9.-]+(/[^\\s?#]*)?$",
+      "pattern": "^https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?(/[^\\s?#]*)?(?![\\s\\S])",
       "maxLength": 256
     },
     "capability": {
@@ -275,13 +275,13 @@
             },
             "path": {
               "type": "string",
-              "pattern": "^/[A-Za-z0-9._~/-]{0,255}$"
+              "pattern": "^/(?!/)[A-Za-z0-9._~/-]{0,255}(?![\\s\\S])"
             },
             "body": {
               "type": "object",
               "maxProperties": 8,
               "propertyNames": {
-                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}(?![\\s\\S])"
               },
               "additionalProperties": {
                 "type": "object",
@@ -330,7 +330,7 @@
                   "minProperties": 1,
                   "maxProperties": 16,
                   "propertyNames": {
-                    "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+                    "pattern": "^[A-Za-z0-9_.-]{1,64}(?![\\s\\S])"
                   },
                   "additionalProperties": {
                     "enum": [
@@ -360,7 +360,7 @@
                   "uniqueItems": true,
                   "items": {
                     "type": "string",
-                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                    "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
                   }
                 }
               }
@@ -369,13 +369,13 @@
               "type": "object",
               "maxProperties": 64,
               "propertyNames": {
-                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                "pattern": "^[a-z][a-z0-9_]{0,63}(?![\\s\\S])"
               },
               "additionalProperties": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 80,
-                "pattern": "^[A-Za-z0-9 ,.'()-]+$"
+                "pattern": "^[A-Za-z0-9 ,.'()-]+(?![\\s\\S])"
               }
             },
             "ttlSeconds": {
@@ -424,7 +424,7 @@
     },
     "pointer": {
       "type": "string",
-      "pattern": "^(/[A-Za-z0-9_.-]{1,64}){1,6}$"
+      "pattern": "^(/[A-Za-z0-9_.-]{1,64}){1,6}(?![\\s\\S])"
     }
   }
 }
