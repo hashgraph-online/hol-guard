@@ -37,6 +37,12 @@ fn a_quoted_bracket_word_the_shell_would_expand_keeps_its_review() {
         "for d in \"[x]/../..\"; do ls \"$d\"; done",
         "for d in \"-[x]\"; do ls \"$d\"; done",
         "for d in \"[x\"; do ls \"$d\"; done",
+        // Brackets outside the quotes are still a pattern the shell expands:
+        // `.en[v]""` names `.env`.
+        "for f in .en[v]\"\"; do cat \"$f\"; done",
+        "for f in \"\".en[v]; do cat \"$f\"; done",
+        "for f in \"src/\"[ab].ts; do cat \"$f\"; done",
+        "for f in \"[x]\"*; do cat \"$f\"; done",
     ] {
         assert_eq!(unroll(looped), None, "{looped}");
     }

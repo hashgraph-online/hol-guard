@@ -53,6 +53,8 @@ fn a_loop_over_a_quoted_bracket_directory_reads_each_directory() {
             ),
             // The words still name what the body reads.
             ("for f in \"[x]\" .env; do cat \"$f\"; done", false),
+            // Brackets outside the quotes still expand to `.env`.
+            ("for f in .en[v]\"\"; do cat \"$f\"; done", false),
             // A bare reference hands the shell the brackets as a pattern.
             ("for d in \"[slug]\"; do ls app/items/$d; done", false),
             // One part of the compound that is not read-only reviews it all.

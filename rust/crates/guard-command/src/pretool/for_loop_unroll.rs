@@ -405,45 +405,53 @@ fn names_a_file_type(value: &str) -> bool {
 /// pattern the loop never expanded. Its text may hold the separators the
 /// quotes protect, which [`spaced_value`] admits.
 fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, bool, &'a str)> {
-    let mut words: Vec<(String, bool)> = Vec::new();
+    // Each word with whether any of it was quoted and whether it is a quoted
+    // bracket word: one whose brackets all stood inside quotes.
+    let mut words: Vec<(String, bool, bool)> = Vec::new();
     let mut current = String::new();
     let mut in_word = false;
     let mut quoted = false;
+    // Whether a pattern character in the word stands outside quotes, as in
+    // `.en[v]""`, where the shell still expands the bare brackets.
+    let mut bare_pattern = false;
     let mut chars = text.char_indices().peekable();
     while let Some((index, c)) = chars.next() {
         match c {
             ' ' | '\t' => {
                 if in_word {
-                    words.push((std::mem::take(&mut current), quoted));
+                    let word = std::mem::take(&mut current);
+                    let brackets = quoted && !bare_pattern && bracket_value(&word);
+                    words.push((word, quoted, brackets));
                     in_word = false;
                     quoted = false;
+                    bare_pattern = false;
                 }
             }
             ';' | '\n' => {
                 if in_word {
-                    words.push((current, quoted));
+                    let brackets = quoted && !bare_pattern && bracket_value(&current);
+                    words.push((current, quoted, brackets));
                 }
-                let literal_brackets = words
-                    .iter()
-                    .any(|(word, quoted)| *quoted && bracket_value(word));
+                let literal_brackets = words.iter().any(|(_, _, brackets)| *brackets);
                 // A pattern beside a quoted bracket word has no written form
                 // that keeps one a pattern and the other its text.
                 let patterned = words
                     .iter()
-                    .any(|(word, quoted)| !quoted && pattern_value(word));
+                    .any(|(word, quoted, _)| !quoted && pattern_value(word));
                 if literal_brackets && patterned {
                     return None;
                 }
                 return words
                     .iter()
-                    .all(|(word, quoted)| {
+                    .all(|(word, quoted, brackets)| {
                         safe_value(word)
-                            || (*quoted && (spaced_value(word) || bracket_value(word)))
+                            || *brackets
+                            || (*quoted && spaced_value(word))
                             || (!quoted && pattern_value(word))
                     })
                     .then(|| {
                         (
-                            words.into_iter().map(|(word, _)| word).collect(),
+                            words.into_iter().map(|(word, _, _)| word).collect(),
                             literal_brackets,
                             &text[index..],
                         )
@@ -479,7 +487,7 @@ fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, b
             // writes out as its numbers before the loop runs.
             '{' if !in_word => {
                 let (numbers, length) = sequence(&text[index..])?;
-                words.extend(numbers.into_iter().map(|number| (number, false)));
+                words.extend(numbers.into_iter().map(|number| (number, false, false)));
                 for _ in 1..length {
                     chars.next();
                 }
@@ -489,6 +497,7 @@ fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, b
             }
             other => {
                 in_word = true;
+                bare_pattern |= matches!(other, '*' | '?' | '[' | ']');
                 current.push(other);
             }
         }
