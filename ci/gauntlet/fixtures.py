@@ -493,6 +493,7 @@ LFS_GITCONFIG = (
 
 ALIAS_ESCAPES_CASE = "omp-native-git-global-alias-escapes"
 LARGE_GITCONFIG_CASE = "omp-native-git-large-global-config"
+HEADER_GITCONFIG_CASE = "omp-native-git-config-identity-beside-header"
 # Extra global gitconfig text per scenario, appended to the LFS baseline. Each is ordinary
 # developer configuration that real sessions carry; none runs code or names a credential.
 INSTEAD_OF_GITCONFIG = (
@@ -503,6 +504,10 @@ ALIAS_ESCAPES_GITCONFIG = (
     '[alias]\n\tlg = "log --format=\\"%h %s\\""\n\tst = status --short --branch\n'
     '\tsubject = "log -1 --format=\\"%s\\""\n'
 )
+# A per-host request header: the kind of entry a whole-listing credential screen
+# refuses, set beside the user identity a pattern read prints. The value names
+# nothing secret.
+HEADER_GITCONFIG = '[http "https://git.example.test/"]\n\textraHeader = X-Trace: fixture\n'
 LARGE_GITCONFIG_MIN_BYTES = 256 * 1024 + 4096
 
 
@@ -525,6 +530,7 @@ def gitconfig_variant(scenario_id: str | None) -> str:
         ALIAS_ESCAPES_CASE: ALIAS_ESCAPES_GITCONFIG,
         INSTEAD_OF_CASE: INSTEAD_OF_GITCONFIG,
         LARGE_GITCONFIG_CASE: _large_gitconfig(),
+        HEADER_GITCONFIG_CASE: HEADER_GITCONFIG,
     }
     return LFS_GITCONFIG + extras.get(scenario_id or "", "")
 

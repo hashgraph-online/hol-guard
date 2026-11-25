@@ -385,3 +385,34 @@ fn gnu_stat_short_flags_do_not_hide_the_next_file_operand() {
         assert!(!shell(&home, &command).contains("allow"), "{command}");
     }
 }
+
+/// A pattern read prints only the entries its pattern matches. A header or
+/// token in an unrelated section of the user's global configuration does not
+/// stop `git config --get-regexp '^user\.'`, while a pattern that reaches that
+/// entry, a whole listing, and a pattern the shell could still expand keep
+/// their review.
+#[test]
+fn pattern_reads_screen_only_the_entries_they_print() {
+    let home = home();
+    let config = home.join(".gitconfig");
+    let mut text = std::fs::read_to_string(&config).unwrap();
+    text.push_str("[http \"https://git.example.test/\"]\n\textraHeader = X-Trace: fixture\n");
+    std::fs::write(&config, text).unwrap();
+    for command in [
+        "git config --get-regexp '^user\\.'",
+        "git config --get-regexp '^(user\\.|commit\\.gpgsign$|gpg\\.format$)'",
+        "git config --get-regexp '^core\\.editor$'",
+        "git config get --regexp '^user\\.'",
+    ] {
+        assert_eq!(shell(&home, command), "allow", "{command}");
+    }
+    for command in [
+        "git config --get-regexp '^http\\.'",
+        "git config --get-regexp 'header'",
+        "git config --get-regexp 'http.*header'",
+        "git config --get-regexp '^user\\.' && git config --list",
+        "git config --list",
+    ] {
+        assert_ne!(shell(&home, command), "allow", "{command}");
+    }
+}
