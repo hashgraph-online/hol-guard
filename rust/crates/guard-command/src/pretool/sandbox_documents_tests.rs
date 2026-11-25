@@ -28,6 +28,9 @@ fn git(workspace: &Path, args: &[&str]) {
     let status = Command::new("git")
         .args(args)
         .current_dir(workspace)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .status()
@@ -57,20 +60,17 @@ pub(crate) fn populate(workspace: &Path) {
     git(workspace, &add);
 }
 
-fn repository(name: &str) -> PathBuf {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target")
-        .join(format!("guard-sandbox-docs-{}-{name}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).unwrap();
-    let root = root.canonicalize().unwrap();
+/// A temporary repository from [`populate`], removed when the guard drops.
+fn repository() -> (tempfile::TempDir, PathBuf) {
+    let owner = tempfile::tempdir().unwrap();
+    let root = owner.path().canonicalize().unwrap();
     populate(&root);
-    root
+    (owner, root)
 }
 
 #[test]
 fn only_the_committed_secret_free_page_is_reopened() {
-    let workspace = repository("only");
+    let (_owner, workspace) = repository();
     assert_eq!(
         sandbox_readable_documents(&workspace),
         [workspace.join(PAGE)]
@@ -84,10 +84,8 @@ fn only_the_committed_secret_free_page_is_reopened() {
 
 #[test]
 fn outside_a_repository_nothing_is_reopened() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target")
-        .join(format!("guard-sandbox-docs-{}-bare", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
+    let owner = tempfile::tempdir().unwrap();
+    let root = owner.path().canonicalize().unwrap();
     write(&root.join(PAGE), "# private_key_jwt\n");
     assert!(sandbox_readable_documents(&root).is_empty());
     assert!(sandbox_readable_documents(Path::new("/nonexistent/guard")).is_empty());
