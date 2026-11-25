@@ -269,6 +269,23 @@ return step\n";
     assert!(named.is_some_and(|text| text.contains("src/termui.py:")));
 }
 
+/// Plain words that no one definition holds two of place nothing either:
+/// "pause this and restart it later" is not about a `pause` call in one
+/// function and a `restart` call in another. One function holding both
+/// still places them.
+#[test]
+fn plain_words_spread_over_definitions_place_nothing() {
+    let jobs = "def hold_job(job):\n    job.pause()\n    return job.pause()\n\n\n\
+def rerun_job(job):\n    job.restart()\n    return job.restart()\n";
+    let (home, _project, root) = project(ON, &[("src/jobs.py", jobs)]);
+    let prompt = "pause all of this and restart it later";
+    assert_eq!(prompt_map(home.path(), &root, prompt), None);
+    let cycle = format!("{jobs}\n\ndef cycle_job(job):\n    job.pause()\n    job.restart()\n");
+    let (home, _project, root) = project(ON, &[("src/jobs.py", cycle.as_str())]);
+    let map = prompt_map(home.path(), &root, prompt);
+    assert!(map.is_some_and(|text| text.contains("cycle_job")));
+}
+
 /// Many uses of one plain word cannot crowd out the one use that holds two
 /// prompt words: "the step and plan interaction" keeps its list.
 #[test]
