@@ -717,6 +717,14 @@ fn escaped_find_operators_in_a_substitution_are_words_not_subshells() {
         bounded.programs.into_iter().collect::<Vec<_>>(),
         ["find", "for", "sort"]
     );
+    for command in [
+        "echo $(find . \\( -name x \\); printf ok)",
+        "echo $(find . \\( -name x \\)|sort)",
+    ] {
+        let bounded = bounded_substitutions(command).unwrap();
+        assert!(bounded.programs.contains("find"), "{command}");
+        assert!(bounded.programs.contains("printf") || bounded.programs.contains("sort"));
+    }
     let controls = controls(serde_json::json!([]), false);
     for command in [
         "for f in $(find . -type f \\( -name '*.js' -o -name '*.ts' \\) -print); do cat \"$f\"; done",
@@ -727,6 +735,13 @@ fn escaped_find_operators_in_a_substitution_are_words_not_subshells() {
         assert_ne!(code, FAILED, "{command}");
         assert_ne!(action, "block", "{command}: {code}");
     }
+}
+
+#[test]
+fn quoted_find_text_does_not_make_a_substitution_a_walk() {
+    let command = "echo $(printf '%s' 'x; find' \\( x \\))";
+    assert!(bounded_substitutions(command).is_none(), "{command}");
+    assert!(reviewable_substitutions(command).is_none(), "{command}");
 }
 
 /// Only a whole unquoted operator word beside a `find` walk changes. A

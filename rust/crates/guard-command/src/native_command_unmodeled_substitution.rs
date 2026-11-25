@@ -796,21 +796,89 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
 
 /// Whether a command in the substitution's text is a `find` walk.
 fn runs_a_find_walk(inner: &str) -> bool {
-    inner
-        .split(['\n', ';', '&', '|', '(', ')', '`'])
-        .any(|piece| {
-            let words: Vec<&str> = piece.split_whitespace().collect();
-            super::xargs::command_index(&words).is_some_and(|index| {
-                // `"find"` and `fi\nd` run the same walk, so the quoting
-                // comes off before the name is read, exactly as
-                // `named_words` reads the rest of the text.
-                let unquoted: String = words[index]
-                    .chars()
-                    .filter(|character| !matches!(character, '\'' | '"' | '\\'))
-                    .collect();
-                super::command_basename(&unquoted).ends_with("find")
-            })
+    split_find_commands(inner).into_iter().any(|piece| {
+        let words: Vec<&str> = piece.split_whitespace().collect();
+        super::xargs::command_index(&words).is_some_and(|index| {
+            // `"find"` and `fi\nd` run the same walk, so the quoting
+            // comes off before the name is read, exactly as
+            // `named_words` reads the rest of the text.
+            let unquoted: String = words[index]
+                .chars()
+                .filter(|character| !matches!(character, '\'' | '"' | '\\'))
+                .collect();
+            super::command_basename(&unquoted).ends_with("find")
         })
+    })
+}
+
+/// Split shell command positions without treating separators inside quotes or
+/// escaped separators as command boundaries. This keeps text such as
+/// `printf '%s' 'x; find'` from making `find` look like a walker.
+fn split_find_commands(inner: &str) -> Vec<String> {
+    let chars: Vec<char> = inner.chars().collect();
+    let mut commands = vec![String::new()];
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    for character in chars {
+        if escaped {
+            escaped = false;
+            commands
+                .last_mut()
+                .expect("command segment")
+                .push(character);
+            continue;
+        }
+        if single {
+            single = character != '\'';
+            commands
+                .last_mut()
+                .expect("command segment")
+                .push(character);
+            continue;
+        }
+        if double {
+            if character == '"' {
+                double = false;
+            } else if character == '\\' {
+                escaped = true;
+            }
+            commands
+                .last_mut()
+                .expect("command segment")
+                .push(character);
+            continue;
+        }
+        match character {
+            '\\' => {
+                escaped = true;
+                commands
+                    .last_mut()
+                    .expect("command segment")
+                    .push(character);
+            }
+            '\'' => {
+                single = true;
+                commands
+                    .last_mut()
+                    .expect("command segment")
+                    .push(character);
+            }
+            '"' => {
+                double = true;
+                commands
+                    .last_mut()
+                    .expect("command segment")
+                    .push(character);
+            }
+            '\n' | ';' | '&' | '|' | '(' | ')' | '`' => {
+                commands.push(String::new());
+            }
+            _ => commands
+                .last_mut()
+                .expect("command segment")
+                .push(character),
+        }
+    }
+    commands
 }
 
 /// The text with each whole unquoted `\(`, `\)` and `\!` word read as a
@@ -825,7 +893,9 @@ fn with_find_operators_as_words(inner: &str) -> String {
     while index < chars.len() {
         let character = chars[index];
         let word_start = index == 0 || chars[index - 1].is_whitespace();
-        let word_end = chars.get(index + 2).is_none_or(|next| next.is_whitespace());
+        let word_end = chars
+            .get(index + 2)
+            .is_none_or(|next| next.is_whitespace() || matches!(next, ';' | '&' | '|'));
         if !single
             && !double
             && !command_start
