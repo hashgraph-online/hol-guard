@@ -111,6 +111,11 @@ TSC_SCRATCH_LOG_LABEL = "TYPES_CLEAN"
 # in YAML rather than JSON, so the pin the verdict reads is the same fact
 # written in another dialect.
 WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
+# The same checker in a workspace npm installed that still commits the pnpm
+# lockfile from before its last upgrade, pinning an older release. `--no-install`
+# forbids fetching anything, so the run either reaches the installed checker or
+# fails; the stale file has no say in what runs.
+WORKSPACE_TSC_STALE_LOCKFILE_CASE = "omp-native-workspace-npx-no-install-tsc-stale-lockfile"
 # The same checker in a workspace whose packages read their type-check settings
 # from a base at the checkout root. The run starts inside the package, so the
 # base the project extends sits one directory above it.
@@ -180,6 +185,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_TSC_SCRATCH_LOG_CASE,
         WORKSPACE_TSC_NAMED_DIRECTORY_CASE,
         WORKSPACE_PNPM_TSC_CASE,
+        WORKSPACE_TSC_STALE_LOCKFILE_CASE,
         WORKSPACE_SHARED_BASE_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
@@ -644,6 +650,13 @@ _PNPM_TYPESCRIPT_FILES = {
 }
 _PNPM_TYPESCRIPT_FILES["pnpm-lock.yaml"] = _PNPM_LOCK
 
+# The release pnpm pinned before the project moved to npm and upgraded.
+_STALE_TYPESCRIPT_VERSION = "5.4.5"
+_STALE_LOCKFILE_TYPESCRIPT_FILES = {
+    **_TYPESCRIPT_FILES,
+    "pnpm-lock.yaml": _PNPM_LOCK.replace(_TYPESCRIPT_VERSION, _STALE_TYPESCRIPT_VERSION),
+}
+
 
 _VITEST_VERSION = "3.2.4"
 # The test file the scenario names. Vitest resolves a plain operand as a filter
@@ -915,6 +928,13 @@ _INSTALLS = {
     WORKSPACE_PNPM_TSC_CASE: _Install(
         "tsc",
         _PNPM_TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_TSC_STALE_LOCKFILE_CASE: _Install(
+        "tsc",
+        _STALE_LOCKFILE_TYPESCRIPT_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",

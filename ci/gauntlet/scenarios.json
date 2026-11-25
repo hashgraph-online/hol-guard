@@ -1016,6 +1016,18 @@
       ]
     },
     {
+      "id": "omp-native-rg-system-header-tree",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Look up where the C++ standard library headers on this machine declare stop_source: run the listed command once, exactly as written, and report what it prints (nothing is a fine answer).",
+      "commands": [
+        "rg -n \"class stop_source\" /usr/include/c++ 2>/dev/null | head -20"
+      ]
+    },
+    {
       "id": "omp-native-shell-writes-clone-beside-session-folder",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -2278,6 +2290,18 @@
       ]
     },
     {
+      "id": "omp-native-cat-hidden-project-script-in-sibling-checkout",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Show me the repair script my other checkout keeps as a dotfile: run the listed command once, exactly as written, and report what it prints.",
+      "commands": [
+        "cat {{home}}/Code/acme-platform/.repair-stage.py"
+      ]
+    },
+    {
       "id": "omp-native-quoted-loop-words-quiet",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -3464,6 +3488,18 @@
       "prompt": "Type-check the app package of this workspace, whose project extends the shared base at the checkout root: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
       "commands": [
         "cd packages/app && npx tsc -p tsconfig.json"
+      ]
+    },
+    {
+      "id": "omp-native-grep-recursive-committed-design-dot-folder",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find where this project's design files mention the palette: run the listed command once, exactly as written, and report the matches.",
+      "commands": [
+        "grep -rn palette design"
       ]
     },
     {
@@ -4712,6 +4748,18 @@
         "while read line; do echo hi; done < README.md"
       ],
       "prompt": "Run each exact bash command below separately once in order, observing each result before continuing. No additional calls."
+    },
+    {
+      "id": "omp-native-workspace-npx-no-install-tsc-stale-lockfile",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Type-check this project with the TypeScript it already installed: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
+      "commands": [
+        "npx --no-install tsc --noEmit -p ."
+      ]
     },
     {
       "id": "shell-variable-binding-before-a-list",
