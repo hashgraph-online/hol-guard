@@ -20,13 +20,13 @@ from typing import Literal, cast
 
 from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_request
-from codex_plugin_scanner.guard.native_transport_error import native_error
 from codex_plugin_scanner.guard.native_route_receipt import record_native_hook_result
 from codex_plugin_scanner.guard.native_runtime_resilience import (
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
 )
+from codex_plugin_scanner.guard.native_transport_error import native_error
 
 ModelOutputAction = Literal[
     "allow_original",
