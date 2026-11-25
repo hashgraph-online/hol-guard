@@ -324,3 +324,22 @@ def configure_git_allow_controls(daemon: object, guard_home: Path) -> dict[str, 
         "enabled_permissions": permissions,
         "control_revision": revision,
     }
+
+
+# Stages an edit to a tracked source file, then reads the status back.
+GIT_STAGE_THEN_STATUS_CASE = "omp-native-git-stage-then-status-trailing-report"
+STAGED_SOURCE_FILE = "src/one.ts"
+STAGED_SOURCE_LINE = "export const staged = true;\n"
+
+
+def add_unstaged_source_edit(workspace: Path, scenario_id: str | None) -> None:
+    """Leave one tracked source file edited after the baseline commit.
+
+    Without an edit, ``git add`` on the unchanged file stages nothing and the
+    case could pass without ever adding a change to the index.
+    """
+    if scenario_id != GIT_STAGE_THEN_STATUS_CASE:
+        return
+    target = workspace / STAGED_SOURCE_FILE
+    with target.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(STAGED_SOURCE_LINE)
