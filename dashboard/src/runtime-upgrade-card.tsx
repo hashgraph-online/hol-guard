@@ -7,7 +7,11 @@ import {
   HiMiniShieldExclamation,
 } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
-import { type GuardRuntimeUpgradeAdvice, runtimeUpgradeTarget } from "./runtime-upgrade-advice";
+import {
+  currentRuntimeUpgradeAdvice,
+  type GuardRuntimeUpgradeAdvice,
+  runtimeUpgradeTarget,
+} from "./runtime-upgrade-advice";
 import { switchRuntimeDefault } from "./runtime-upgrade-api";
 
 type SwitchState =
@@ -28,8 +32,14 @@ export function RuntimeUpgradeCard(props: {
   advice: GuardRuntimeUpgradeAdvice | undefined;
   switchDefault?: typeof switchRuntimeDefault;
 }) {
-  const [advice, setAdvice] = useState(props.advice);
+  const [reply, setReply] = useState<{
+    readonly answered: GuardRuntimeUpgradeAdvice | undefined;
+    readonly advice: GuardRuntimeUpgradeAdvice;
+  } | null>(null);
   const [state, setState] = useState<SwitchState>({ kind: "idle" });
+  // A queue refresh replaces the review's advice; the switch's reply stands
+  // only until then.
+  const advice = currentRuntimeUpgradeAdvice(props.advice, reply);
   if (!advice) return null;
   const switchDefault = props.switchDefault ?? switchRuntimeDefault;
   const target = runtimeUpgradeTarget(advice);
@@ -38,8 +48,9 @@ export function RuntimeUpgradeCard(props: {
   const runSwitch = async (version: string) => {
     setState({ kind: "switching" });
     try {
+      const answered = props.advice;
       const next = await switchDefault(props.requestId, version);
-      if (next) setAdvice(next);
+      if (next) setReply({ answered, advice: next });
       setState({ kind: "done", version });
     } catch (error) {
       setState({ kind: "failed", message: error instanceof Error ? error.message : "Guard could not switch the Node.js version." });
@@ -89,6 +100,7 @@ export function RuntimeUpgradeCard(props: {
             </p>
           )}
           {!switched && advice.command !== null && <CopyCommand command={advice.command} />}
+          {!switched && <p className="mt-2 text-xs text-brand-dark/70">After you update, {RESTART_NOTE.charAt(0).toLowerCase()}{RESTART_NOTE.slice(1)}</p>}
           {!switched && (
             <a
               href={advice.download_url}

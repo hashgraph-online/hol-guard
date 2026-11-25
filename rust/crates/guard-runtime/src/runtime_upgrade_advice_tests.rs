@@ -135,6 +135,22 @@ fn homebrew_and_unknown_installs_get_a_command_or_a_download_but_no_switch() {
     assert_eq!(shown["switch_version"], Value::Null);
     assert_eq!(advice.switch("26.12.1"), Err("runtime_upgrade_unavailable"));
 
+    // A versioned formula is upgraded by its own name; `node` would leave it.
+    let pinned = Path::new("/usr/local/Cellar/node@22/22.22.2/bin/node");
+    let advice = advise(finding("22.22.2", pinned), &advisories(), |_| true);
+    assert_eq!(advice.manager, Manager::Homebrew("node@22".to_owned()));
+    assert_eq!(advice.to_json()["command"], "brew upgrade node@22");
+    for other in [
+        "/opt/homebrew/Cellar/nodenv/1.0.0/bin/node",
+        "/opt/homebrew/Cellar/node@/22.22.2/bin/node",
+        "/opt/homebrew/Formula/node/22.22.2/bin/node",
+    ] {
+        let advice = advise(finding("22.22.2", Path::new(other)), &advisories(), |_| {
+            true
+        });
+        assert_eq!(advice.manager, Manager::Other, "{other}");
+    }
+
     // A versions/node layout without nvm.sh beside it is not nvm.
     let root = tempfile::tempdir().expect("tempdir");
     let loose = root.path().join("versions/node/v25.2.1/bin/node");
@@ -178,4 +194,42 @@ fn only_a_pending_known_vulnerable_review_gets_advice() {
         super::reason_code(&row("pending", stored)).as_deref(),
         Some("native_runtime_known_vulnerable")
     );
+}
+
+#[test]
+fn a_runtime_guard_cannot_identify_is_never_a_clean_candidate() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let missing = root.path().join("versions/node/v24.22.1/bin/node");
+    assert!(!super::assessed_clean(&missing, &advisories()));
+    let unreadable = root.path().join("node");
+    fs::write(&unreadable, b"not an executable").expect("write");
+    assert!(!super::assessed_clean(&unreadable, &advisories()));
+}
+
+#[test]
+fn overlapping_switches_each_stage_their_own_file() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let alias = root.path().join("alias");
+    // A stray staged file from another writer is left alone.
+    fs::create_dir_all(&alias).expect("alias dir");
+    let stray = alias.join(format!(".default.guard-{}", std::process::id()));
+    fs::write(&stray, b"18.0.0").expect("stray");
+    super::write_alias(&alias, "24.22.1").expect("first switch");
+    super::write_alias(&alias, "24.22.1").expect("second switch");
+    assert_eq!(
+        fs::read_to_string(alias.join("default")).expect("default"),
+        "24.22.1"
+    );
+    assert!(stray.exists());
+    let staged: Vec<_> = fs::read_dir(&alias)
+        .expect("read alias")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".default.guard-")
+        })
+        .collect();
+    assert_eq!(staged.len(), 1, "only the stray file remains");
 }

@@ -20,6 +20,9 @@ function runtimeUpgradeErrorMessage(code: string | null, status: number): string
     case "runtime_upgrade_failed":
       return "Guard could not update nvm's default version. Run the command below in a terminal instead.";
     default:
+      if (status === 401 || status === 403) {
+        return "This review link cannot change nvm's default. Open the review from Guard, or run the command below in a terminal.";
+      }
       return `Guard could not switch the Node.js version (${status}).`;
   }
 }

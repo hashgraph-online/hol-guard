@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { normalizeApprovalRequest } from "./guard-api";
-import { normalizeRuntimeUpgradeAdvice, RUNTIME_UPGRADE_ADVICE_SCHEMA } from "./runtime-upgrade-advice";
+import {
+  currentRuntimeUpgradeAdvice,
+  normalizeRuntimeUpgradeAdvice,
+  RUNTIME_UPGRADE_ADVICE_SCHEMA,
+} from "./runtime-upgrade-advice";
 import { RuntimeUpgradeError } from "./runtime-upgrade-api";
 import { RuntimeUpgradeCard } from "./runtime-upgrade-card";
 
@@ -62,7 +66,9 @@ const nvmAdvice = {
   assert(markup.includes("Node.js 25.2.1") && markup.includes("CVE-0000-0001"), "the card names the version and advisory");
   assert(markup.includes("Use Node.js 24.22.1"), "nvm with a clean version installed gets the one-click switch");
   assert(markup.includes("nvm alias default 24.22.1"), "the card shows the matching terminal command");
-  assert(markup.includes("https://nodejs.org/en/download"), "the card links the official download page");
+  const href = /<a [^>]*href="([^"]+)"/.exec(markup)?.[1];
+  assert(href === "https://nodejs.org/en/download", "the card links the official download page");
+  assert(markup.includes("Restart the agent"), "manual updates also say running agents need a restart");
 }
 
 {
@@ -85,7 +91,8 @@ const nvmAdvice = {
   const markup = renderToStaticMarkup(<RuntimeUpgradeCard requestId="r1" advice={advice} />);
   assert(!markup.includes("Use Node.js"), "Homebrew gets no one-click switch");
   assert(markup.includes("brew upgrade node"), "Homebrew gets its upgrade command");
-  assert(markup.includes("Node.js 26.12.1 or later fixes it."), "without an installed version the card names the fix");
+  assert(markup.includes("Node.js 26.12.1 fixes it."), "without an installed version the card names the fix");
+  assert(!markup.includes("or later"), "the card promises nothing about later releases");
 }
 
 {
@@ -97,6 +104,25 @@ const nvmAdvice = {
   assert(stale.message.includes("Reload the review"), "a stale card asks for a reload");
   const failed = new RuntimeUpgradeError(409, "runtime_upgrade_failed");
   assert(failed.message.includes("terminal"), "a failed write points at the terminal command");
+  for (const status of [401, 403]) {
+    const refused = new RuntimeUpgradeError(status, null);
+    assert(refused.message.includes("review link") && refused.message.includes("terminal"), "a link session is told why and what to do");
+  }
+}
+
+{
+  const first = normalizeRuntimeUpgradeAdvice(nvmAdvice) ?? undefined;
+  const switched = normalizeRuntimeUpgradeAdvice({ ...nvmAdvice, switch_version: null, switched: true });
+  assert(first !== undefined && switched !== null, "fixtures normalize");
+  if (first !== undefined && switched !== null) {
+    const reply = { answered: first, advice: switched };
+    assert(currentRuntimeUpgradeAdvice(first, reply) === switched, "the switch reply shows until the review refreshes");
+    const refreshed = normalizeRuntimeUpgradeAdvice({ ...nvmAdvice, installed_version: "24.23.0", switch_version: "24.23.0" }) ?? undefined;
+    assert(currentRuntimeUpgradeAdvice(refreshed, reply) === refreshed, "a refreshed review replaces the reply");
+    assert(currentRuntimeUpgradeAdvice(undefined, null) === undefined, "no advice stays empty");
+    const late = currentRuntimeUpgradeAdvice(first, { answered: undefined, advice: switched });
+    assert(late === first, "advice that arrives after an empty review is shown");
+  }
 }
 
 console.log("runtime-upgrade-advice tests passed");

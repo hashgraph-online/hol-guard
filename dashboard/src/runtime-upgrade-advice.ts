@@ -16,7 +16,8 @@ export type GuardRuntimeUpgradeAdvice = {
   readonly severity: string;
   readonly known_exploited: boolean;
   readonly manager: GuardRuntimeUpgradeManager;
-  /** The first release the advisories leave clean, when they name one. */
+  /** The first release at or above the affected one that the advisories leave
+   * clean. A later release is not promised to be clean. */
   readonly patched_version: string | null;
   /** A clean version nvm already has installed. */
   readonly installed_version: string | null;
@@ -70,7 +71,16 @@ export function runtimeUpgradeTarget(advice: GuardRuntimeUpgradeAdvice): string 
     return `Node.js ${advice.installed_version} is already installed and is not affected.`;
   }
   if (advice.patched_version !== null) {
-    return `Node.js ${advice.patched_version} or later fixes it.`;
+    return `Node.js ${advice.patched_version} fixes it.`;
   }
   return null;
+}
+
+/** The advice the card shows: the switch's own reply while the review still
+ * carries the advice it answered, else the review's latest advice. */
+export function currentRuntimeUpgradeAdvice(
+  latest: GuardRuntimeUpgradeAdvice | undefined,
+  reply: { readonly answered: GuardRuntimeUpgradeAdvice | undefined; readonly advice: GuardRuntimeUpgradeAdvice } | null,
+): GuardRuntimeUpgradeAdvice | undefined {
+  return reply !== null && reply.answered === latest ? reply.advice : latest;
 }

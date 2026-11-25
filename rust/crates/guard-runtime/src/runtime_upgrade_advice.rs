@@ -15,12 +15,13 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde_json::{json, Map, Value};
 
 use crate::runtime_identity::LaunchAdvisories;
 use crate::runtime_identity_range::SemVer;
-use crate::runtime_known_vulnerable::{affected, is_review_finding, Finding};
+use crate::runtime_known_vulnerable::{affected, assessed, is_review_finding, Finding};
 use crate::runtime_known_vulnerable_source as source;
 
 pub(crate) const SCHEMA: &str = "guard.runtime-upgrade-advice.v1";
@@ -34,7 +35,8 @@ const MAX_ALIAS_BYTES: u64 = 256;
 pub(crate) enum Manager {
     /// The nvm directory the runtime was installed under.
     Nvm(PathBuf),
-    Homebrew,
+    /// The Homebrew formula, `node` or a versioned one such as `node@22`.
+    Homebrew(String),
     Other,
 }
 
@@ -62,7 +64,7 @@ pub(crate) fn for_approval(approval: &Map<String, Value>, guard_home: &Path) -> 
     let advisories = source::advisories(guard_home)?;
     let finding = affected(Path::new(checked), &advisories)?;
     Some(advise(finding, &advisories, |binary| {
-        source::probe(binary).is_some() && affected(binary, &advisories).is_none()
+        assessed_clean(binary, &advisories)
     }))
 }
 
@@ -121,7 +123,7 @@ impl Advice {
                 )),
                 (None, None) => None,
             },
-            Manager::Homebrew => Some("brew upgrade node".to_owned()),
+            Manager::Homebrew(formula) => Some(format!("brew upgrade {formula}")),
             Manager::Other => None,
         }
     }
@@ -138,7 +140,7 @@ impl Advice {
             "known_exploited": finding.known_exploited,
             "manager": match self.manager {
                 Manager::Nvm(_) => "nvm",
-                Manager::Homebrew => "homebrew",
+                Manager::Homebrew(_) => "homebrew",
                 Manager::Other => "other",
             },
             "patched_version": self.patched_version,
@@ -187,7 +189,8 @@ pub(crate) fn checked_path(reason: &str) -> Option<&str> {
 }
 
 /// nvm keeps each version at `{nvm}/versions/node/v{version}/bin/node`, and
-/// Homebrew keeps its formula under a `Cellar/node` directory.
+/// Homebrew keeps each formula at `Cellar/{formula}/{version}/bin/node`, where
+/// the formula is `node` or a versioned one such as `node@22`.
 fn manager(resolved: &Path) -> Manager {
     let names: Vec<_> = resolved
         .ancestors()
@@ -207,11 +210,26 @@ fn manager(resolved: &Path) -> Manager {
             return Manager::Nvm(nvm.to_path_buf());
         }
     }
-    let text = resolved.to_string_lossy();
-    if text.contains("/Cellar/node/") || text.contains("/Cellar/node@") {
-        return Manager::Homebrew;
+    if let ([bin, _version, formula], Some(cellar)) = (
+        names.get(..3).unwrap_or_default(),
+        resolved.ancestors().nth(4),
+    ) {
+        if *bin == "bin"
+            && cellar.file_name().and_then(|name| name.to_str()) == Some("Cellar")
+            && homebrew_node_formula(formula)
+        {
+            return Manager::Homebrew((*formula).to_owned());
+        }
     }
     Manager::Other
+}
+
+/// `node`, or `node@{major}`.
+fn homebrew_node_formula(name: &str) -> bool {
+    name == "node"
+        || name.strip_prefix("node@").is_some_and(|major| {
+            !major.is_empty() && major.bytes().all(|byte| byte.is_ascii_digit())
+        })
 }
 
 /// The best clean version nvm has installed: the newest on the affected
@@ -271,23 +289,38 @@ fn default_alias(directory: &Path) -> Option<String> {
 }
 
 /// Replaces `{alias}/default` in one rename, so nvm never reads a partial
-/// file.
+/// file. Each call stages under its own name, so two overlapping switches
+/// cannot remove each other's file, and a call removes only what it created.
 fn write_alias(alias: &Path, version: &str) -> std::io::Result<()> {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
     fs::create_dir_all(alias)?;
-    let staged = alias.join(format!(".default.guard-{}", std::process::id()));
-    let written = (|| {
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&staged)?;
-        file.write_all(version.as_bytes())?;
-        file.sync_all()?;
-        fs::rename(&staged, alias.join("default"))
-    })();
+    let staged = alias.join(format!(
+        ".default.guard-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&staged)?;
+    let written = file
+        .write_all(version.as_bytes())
+        .and_then(|()| file.sync_all())
+        .and_then(|()| fs::rename(&staged, alias.join("default")));
     if written.is_err() {
         let _ = fs::remove_file(&staged);
     }
     written
+}
+
+/// Whether the runtime at `path` is a Node.js version Guard identified and
+/// assessed with no high or critical advisory. A failed probe, an unknown
+/// version or a failed assessment is not clean.
+pub(crate) fn assessed_clean(path: &Path, advisories: &LaunchAdvisories) -> bool {
+    source::probe(path).is_some_and(|(resolved, artifact)| {
+        artifact["version"].as_str().is_some()
+            && matches!(assessed(resolved, &artifact, advisories), Ok(None))
+    })
 }
 
 #[cfg(test)]
