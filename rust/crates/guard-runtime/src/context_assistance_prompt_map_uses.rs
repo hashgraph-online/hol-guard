@@ -154,6 +154,10 @@ const MAX_USES: usize = 8;
 const MAX_USE_LINES: usize = 3;
 /// The most lines quoted text wraps over and is still found.
 const WRAPPED_LINES: usize = 3;
+/// The longest definition plain words place. Opening a longer one costs the
+/// agent more than the note saves, and plain words in one are page copy,
+/// data or configuration far more often than the code a prompt is about.
+const MAX_PLAIN_SPAN: usize = 200;
 
 /// The functions in source that hold the prompt's rarer words in code, or
 /// quoted text anywhere, each with the lines that hold them: those holding
@@ -221,6 +225,10 @@ pub(super) fn uses<'a>(
         // For a rename, a name written as code is a lead on a single line
         // too: a call to `_import_common` is where it has to change.
         .filter(|item| item.phrase || (everywhere && item.named) || item.lines.len() >= 2)
+        .filter(|item| {
+            let section = &files[item.file].sections[item.at];
+            item.phrase || item.named || section.end - section.start < MAX_PLAIN_SPAN
+        })
         .collect();
     // With `lone`, a use holding two prompt words outranks many uses of
     // one, so the cut below cannot drop the only match that places the list.
