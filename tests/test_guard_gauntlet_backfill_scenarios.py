@@ -39,6 +39,9 @@ BACKFILLED_CASES = (
     "omp-native-grep-recursive-screens-folder-with-capture",
     "omp-native-report-script-pass-names-output",
     "python-heredoc-accented-text-in-strings-and-comments",
+    "omp-native-rg-system-header-tree",
+    "omp-native-cat-hidden-project-script-in-sibling-checkout",
+    "omp-native-grep-recursive-committed-design-dot-folder",
 )
 
 
@@ -107,3 +110,22 @@ def test_the_backfill_shapes_stay_out_of_other_cases(tmp_path: Path) -> None:
     fixture = create_fixture(tmp_path / "fixture", realistic=True, scenario_id="omp-native-todo-plan")
     assert not (fixture.workspace / "docs/screens").exists()
     assert not (fixture.workspace / "tools/report.py").exists()
+    assert not (fixture.workspace / "design").exists()
+    assert not (fixture.home / "Code" / "acme-platform").exists()
+
+
+def test_the_hidden_script_case_reads_a_committed_dotfile(tmp_path: Path) -> None:
+    scenario_id = "omp-native-cat-hidden-project-script-in-sibling-checkout"
+    fixture = create_fixture(tmp_path / "fixture root", realistic=True, scenario_id=scenario_id)
+    checkout = fixture.home / "Code" / "acme-platform"
+    tracked = _run("git ls-files", checkout, fixture.home).stdout.split()
+    assert sorted(tracked) == [".repair-stage.py", "README.md"]
+
+
+def test_the_design_folder_case_commits_the_tool_dot_folder(tmp_path: Path) -> None:
+    scenario_id = "omp-native-grep-recursive-committed-design-dot-folder"
+    fixture = create_fixture(tmp_path / "fixture root", realistic=True, scenario_id=scenario_id)
+    tracked = _run("git ls-files design", fixture.workspace, fixture.home).stdout.split()
+    assert sorted(tracked) == ["design/.designtool/design.json", "design/README.md"]
+    found = _run("grep -rn palette design", fixture.workspace, fixture.home).stdout
+    assert "design/.designtool/design.json" in found
