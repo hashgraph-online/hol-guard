@@ -226,6 +226,7 @@ def _native_policy_bundle_once(
     if refusal is not None:
         # A framed resident refusal (``{"error": code, "retryable": bool}``) is an outage with a
         # known cause; keep that code instead of reporting a schema mismatch.
+        assert envelope is not None
         native_record_resident_failure(status.identity.sha256, guard_home, reason=refusal)
         error = PolicyBundleNativeUnavailableError(refusal)
         error.retryable = envelope.get("retryable") is True
