@@ -363,8 +363,10 @@ fn printf_value(
         .get(substitution.body_start..substitution.body_end)?
         .iter()
         .collect();
+    // Only the shell's own blanks may surround the command: a no-break space
+    // after the closing quote is part of the word and `printf` prints it.
     let format = inner
-        .trim()
+        .trim_matches([' ', '\t', '\n'])
         .strip_prefix("printf")?
         // Only blanks: a newline here ends `printf` and starts a command.
         .strip_prefix([' ', '\t'])?

@@ -591,6 +591,11 @@ fn a_literal_printf_commit_message_becomes_its_own_text() {
             "git commit --message \"$(printf 'use a[key] \u{2014} now')\"",
             "git commit --message \"use a_key_ _ now\"",
         ),
+        // Shell blanks around the command are not part of it.
+        (
+            "git commit -m \"$( printf 'subject'\t)\"",
+            "git commit -m \"subject\"",
+        ),
     ] {
         assert_eq!(projected(command).as_deref(), Some(expected), "{command}");
     }
@@ -631,6 +636,10 @@ fn a_printf_that_computes_its_output_or_runs_elsewhere_stays_opaque() {
         "git commit -m \"$(printf \n'./payload')\"",
         "git commit -m \"$(printf \t\n'./payload')\"",
         "git commit -m \"$(printf '-a')\"",
+        // A no-break space is not a shell blank: it joins the format word, so
+        // `printf` prints it too.
+        "git commit -m \"$(printf 'x'\u{a0})\"",
+        "git commit -m \"$(\u{a0}printf 'x')\"",
         // Not the value of `git commit -m`, or not a whole double-quoted word.
         "$(printf rm) -rf build",
         "$(printf 'rm') -rf build",
