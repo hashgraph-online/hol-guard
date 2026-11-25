@@ -453,7 +453,7 @@ class HookWorker(HookWorkerNativeMixin):
         event = native_hook_event(payload, self.store.guard_home, deadline=deadline)
         if event is not None:
             return event
-        from .hook_availability_policy import canonical_hook_event_name
+        from ..native_hook_render import canonical_hook_event_name
 
         return canonical_hook_event_name(payload, guard_home=self.store.guard_home, deadline=deadline)
 

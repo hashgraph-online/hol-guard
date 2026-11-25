@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
+from codex_plugin_scanner.guard.native_hook_render import (
     availability_harness_response,
     canonical_hook_event_name,
     hook_event_pauses_when_unavailable,
@@ -144,7 +144,7 @@ def test_availability_blocks_grok_prompt_and_tools_but_continues_passive_lifecyc
 
 
 def test_availability_wrapper_uses_the_native_posture(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+    from codex_plugin_scanner.guard import native_hook_availability as policy
 
     monkeypatch.setattr(
         policy,
@@ -155,7 +155,7 @@ def test_availability_wrapper_uses_the_native_posture(monkeypatch) -> None:
 
 
 def test_complete_native_outage_preserves_wire_event_and_safe_fallback(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+    from codex_plugin_scanner.guard import native_hook_availability as policy
 
     monkeypatch.setattr(policy, "_runtime_availability", lambda *_args, **_kwargs: None)
     assert canonical_hook_event_name({"hook_event_name": "PostToolUse"}) == "PostToolUse"
@@ -170,7 +170,7 @@ def test_complete_native_outage_preserves_wire_event_and_safe_fallback(monkeypat
 
 
 def test_prompt_alias_stays_blocked_when_rust_is_unavailable(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+    from codex_plugin_scanner.guard import native_hook_availability as policy
 
     monkeypatch.setattr(policy, "_runtime_availability", lambda *_args, **_kwargs: None)
     event_name = canonical_hook_event_name({"hook_event_name": "prompt"})

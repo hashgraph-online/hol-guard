@@ -1,4 +1,4 @@
-"""Transport bridge for the Rust-owned hook availability projection."""
+"""Rust-owned hook availability transport and bounded outage responses."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _wire_event_name(payload: Mapping[str, object]) -> str:
 def _runtime_availability(payload: Mapping[str, object], *, deadline: float | None = None) -> dict[str, object] | None:
     """Decode the standalone Rust availability projection."""
 
-    from ..mdm.runtime_request import runtime_answer
+    from .mdm.runtime_request import runtime_answer
 
     request = {key: payload[key] for key in _EVENT_FIELDS if key in payload}
     cache_key = tuple((key, value) for key, value in request.items() if isinstance(value, str))
@@ -74,7 +74,7 @@ def _native_availability(
 ) -> dict[str, object] | None:
     """Ask Rust for availability, using the resident before standalone transport."""
 
-    from ..native_hook_render import native_hook_availability
+    from .native_hook_render import native_hook_availability
 
     if guard_home is not None:
         resident = native_hook_availability(payload, guard_home=guard_home, deadline=deadline)
@@ -92,8 +92,6 @@ def canonical_hook_event_name(
     event = native.get("event_name") if native is not None else None
     if isinstance(event, str) and event:
         return event
-    # A missing runtime cannot provide a trusted alias projection. Preserve
-    # only the caller's wire label rather than interpreting aliases here.
     return _wire_event_name(payload)
 
 
@@ -136,7 +134,7 @@ def availability_harness_response(
 ) -> dict[str, object]:
     """Render the fail-closed response through Rust, with the existing envelope fallback."""
 
-    from ..native_hook_render import native_render_cli
+    from .native_hook_render import native_render_cli
 
     rendered = native_render_cli(
         "availability_response",
@@ -153,7 +151,7 @@ def availability_harness_response(
     if rendered is not None and rendered[0] == "document" and rendered[1] is not None:
         return rendered[1]
 
-    from .hook_fail_closed import fail_closed_response
+    from .hook_review.hook_fail_closed import fail_closed_response
 
     return fail_closed_response(
         harness,
