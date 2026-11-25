@@ -538,6 +538,9 @@ def _reads_only(command: str, planted: set[str]) -> bool:
             return False
         program, rest = step[0], step[1:]
         operands = [word for word in rest if not word.startswith("-") and not word.isdigit()]
+        # cat takes no numeric option arguments; a bare number is a filename.
+        if program == "cat":
+            operands = [word for word in rest if not word.startswith("-")]
         if program in FILE_PRINTERS or program in SCRIPT_PRINTERS:
             # An option can name a file of its own (`--file=/x`, `grep -f ~/list`).
             if any(mark in word for word in rest if word.startswith("-") for mark in "/~$"):
