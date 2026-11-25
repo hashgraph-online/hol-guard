@@ -205,6 +205,7 @@ pub mod pretool_github_metadata;
 pub mod pretool_github_reads;
 pub mod pretool_glob_file_predicates;
 pub mod pretool_glob_word_listings;
+pub mod pretool_go_toolchain_xdg_default;
 pub mod pretool_grep_committed_hidden_folder;
 pub mod pretool_grep_committed_screenshot;
 pub mod pretool_grep_escaped_alternatives;

@@ -53,6 +53,7 @@ from .review_fixtures import (
 )
 from .runtime_cases import runtime_case_checks
 from .script_cases import script_case_checks
+from .search_diff_fixtures import add_search_and_diff_content
 from .session_folder import session_folder_checks
 from .package_store_fixtures import add_package_store_checkout
 from .sibling_runner_fixtures import add_sibling_test_runner
@@ -390,6 +391,7 @@ def create_fixture(
     add_home_bun_runtime(home, scenario_id)
     add_design_token_documents(workspace, scenario_id)
     add_cargo_package(workspace, scenario_id)
+    add_search_and_diff_content(workspace, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)
