@@ -43,38 +43,38 @@ fn named_nowhere(query: &GitQuery<'_>, deadline: Instant) -> Option<bool> {
     // process, and on a busy machine starting one takes long enough that
     // asking them one after another spent most of a hook's budget before the
     // first attributes file was read, so they run side by side. The index
-    // is listed from where the command runs too: Git limits that listing to
-    // the prefix `--show-prefix` reports, so an empty prefix means it already
-    // holds every tracked path. Otherwise it is listed again from the root.
-    // (A pathspec naming the top instead would turn literal under a caller's
-    // `--literal-pathspecs` and list nothing.)
-    let [locations, attributes_file, attr_tree, global, system, index] =
-        std::thread::scope(|scope| {
-            let questions: [&[&str]; 6] = [
-                &[
-                    "rev-parse",
-                    "--path-format=absolute",
-                    "--git-dir",
-                    "--git-common-dir",
-                    "--show-toplevel",
-                    "--show-prefix",
-                ],
-                &["config", "--default=", "--get", "core.attributesfile"],
-                &["config", "--default=", "--get", "attr.tree"],
-                &["var", "GIT_ATTR_GLOBAL"],
-                &["var", "GIT_ATTR_SYSTEM"],
-                &["ls-files", "--stage", "-z"],
-            ];
-            let answers =
-                questions.map(|arguments| scope.spawn(move || query(arguments, None, None)));
-            answers.map(|answer| answer.join().ok().flatten())
-        });
+    // listing waits until the checks that can settle without it have
+    // passed: when one of them sends the command to the full proof, that
+    // proof lists the index itself under the same deadline. It is listed
+    // from the root, so a command run from a subfolder still sees every
+    // tracked path. (A pathspec naming the top instead would turn literal
+    // under a caller's `--literal-pathspecs` and list nothing.)
+    let [locations, attributes_file, attr_tree, global, system] = std::thread::scope(|scope| {
+        let questions: [&[&str]; 5] = [
+            &[
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-dir",
+                "--git-common-dir",
+                "--show-toplevel",
+                "--show-prefix",
+            ],
+            &["config", "--default=", "--get", "core.attributesfile"],
+            &["config", "--default=", "--get", "attr.tree"],
+            &["var", "GIT_ATTR_GLOBAL"],
+            &["var", "GIT_ATTR_SYSTEM"],
+        ];
+        let answers = questions.map(|arguments| scope.spawn(move || query(arguments, None, None)));
+        answers.map(|answer| answer.join().ok().flatten())
+    });
     let [locations, attributes_file, attr_tree, global, system] =
         [locations, attributes_file, attr_tree, global, system].map(|answer| answer.and_then(text));
     let locations = locations?;
     let mut lines = locations.lines();
     let (git_dir, common_dir, root) = (lines.next()?, lines.next()?, lines.next()?);
-    let at_top = lines.next()?.is_empty();
+    // The prefix line must be present even though the listing below is
+    // taken from the root.
+    lines.next()?;
     if lines.next().is_some() {
         return None;
     }
@@ -114,10 +114,7 @@ fn named_nowhere(query: &GitQuery<'_>, deadline: Instant) -> Option<bool> {
             return Some(false);
         }
     }
-    let index = match index {
-        Some(index) if at_top => index,
-        _ => query(&["ls-files", "--stage", "-z"], None, Some(&root))?,
-    };
+    let index = query(&["ls-files", "--stage", "-z"], None, Some(&root))?;
     let mut directories = BTreeSet::new();
     let mut tracked_attributes = BTreeSet::new();
     for entry in index

@@ -8,6 +8,7 @@ fixture could never pass on any build.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -35,6 +36,9 @@ BACKFILLED_CASES = (
     "omp-native-shell-brace-sequence-loops",
     "omp-native-cd-folder-grep-unmatched-glob",
     "omp-native-tool-version-banners",
+    "omp-native-grep-recursive-screens-folder-with-capture",
+    "omp-native-report-script-pass-names-output",
+    "python-heredoc-accented-text-in-strings-and-comments",
 )
 
 
@@ -86,3 +90,37 @@ def test_the_stage_case_leaves_its_edit_in_the_index(tmp_path: Path) -> None:
     lines = completed.stdout.splitlines()
     assert "M  src/one.ts" in lines
     assert lines[-1] == "check exit: 0"
+
+
+def _gate_case(case_id: str) -> dict:
+    gate = Path(__file__).parent / "fixtures" / "benign_false_positive_gate.json"
+    (case,) = [case for case in json.loads(gate.read_text(encoding="utf-8"))["cases"] if case["id"] == case_id]
+    return case
+
+
+@pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None, reason="needs bash")
+def test_the_report_case_prints_what_its_gate_case_scans(tmp_path: Path) -> None:
+    scenario_id = "omp-native-report-script-pass-names-output"
+    fixture = create_fixture(tmp_path / "fixture root", realistic=True, scenario_id=scenario_id)
+    completed = _run("python3 tools/report.py", fixture.workspace, fixture.home)
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout == _gate_case("post-tool-report-test-result-pass-names")["tool_response"]["stdout"]
+
+
+def test_the_screens_case_commits_a_full_size_capture(tmp_path: Path) -> None:
+    scenario_id = "omp-native-grep-recursive-screens-folder-with-capture"
+    fixture = create_fixture(tmp_path / "fixture root", realistic=True, scenario_id=scenario_id)
+    capture = fixture.workspace / "docs/screens/auth-desktop-policy-review.png"
+    assert capture.stat().st_size > 3 * 1024 * 1024
+    tracked = _run("git ls-files docs/screens", fixture.workspace, fixture.home).stdout.split()
+    assert sorted(tracked) == [
+        "docs/screens/README.md",
+        "docs/screens/auth-desktop-login.png",
+        "docs/screens/auth-desktop-policy-review.png",
+    ]
+
+
+def test_the_backfill_shapes_stay_out_of_other_cases(tmp_path: Path) -> None:
+    fixture = create_fixture(tmp_path / "fixture", realistic=True, scenario_id="omp-native-todo-plan")
+    assert not (fixture.workspace / "docs/screens").exists()
+    assert not (fixture.workspace / "tools/report.py").exists()

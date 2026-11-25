@@ -130,7 +130,7 @@ fn a_global_filter_no_attributes_file_names_needs_no_per_path_check() {
 }
 
 /// Git queries the quick check asks side by side.
-const SIDE_BY_SIDE: usize = 6;
+const SIDE_BY_SIDE: usize = 5;
 
 /// Runs the quick check from `folder` and returns its answer, the most Git
 /// queries that were waiting at once, and how many were asked in all.
@@ -172,19 +172,24 @@ fn the_independent_git_questions_are_asked_side_by_side() {
     // On a loaded machine every Git process takes a noticeable time to
     // start. Asked one after another, the location, configuration,
     // attributes-file and index questions used up a hook's budget in a large
-    // checkout and sent a plain `git status` to review.
+    // checkout and sent a plain `git status` to review. The index listing
+    // follows them once nothing has settled the answer.
     let fixture = Fixture::new("side-by-side");
     let supported = fixture.external_attribute_variables_supported();
     assert_eq!(
         observed(&fixture, ""),
-        (supported, SIDE_BY_SIDE, SIDE_BY_SIDE)
+        (
+            supported,
+            SIDE_BY_SIDE,
+            SIDE_BY_SIDE + usize::from(supported)
+        )
     );
 }
 
 #[test]
-fn from_a_subfolder_the_index_is_listed_again_from_the_root() {
-    // Below the root the first listing holds only that folder's paths, so
-    // the check must not read the rest of the work tree as untracked.
+fn from_a_subfolder_the_index_is_listed_from_the_root() {
+    // Below the root a listing holds only that folder's paths, so the check
+    // must not read the rest of the work tree as untracked.
     let fixture = Fixture::new("subfolder");
     fixture.write("other/.gitattributes", "*.dat filter=lfs\n");
     fixture.write("other/blob.dat", "bytes\n");
@@ -193,13 +198,17 @@ fn from_a_subfolder_the_index_is_listed_again_from_the_root() {
     assert!(!answer);
     assert_eq!(most, SIDE_BY_SIDE);
     let supported = fixture.external_attribute_variables_supported();
-    assert_eq!(asked, if supported { 7 } else { 6 });
+    assert_eq!(asked, SIDE_BY_SIDE + usize::from(supported));
     // The same tree passes once the filter line is gone.
     fixture.write("other/.gitattributes", "*.dat binary\n");
     fixture.git(&["add", "."]);
     assert_eq!(
         observed(&fixture, "src"),
-        (supported, 6, if supported { 7 } else { 6 })
+        (
+            supported,
+            SIDE_BY_SIDE,
+            SIDE_BY_SIDE + usize::from(supported)
+        )
     );
 }
 
@@ -296,4 +305,16 @@ fn a_custom_attributes_file_uses_the_full_proof() {
     let custom = Fixture::new("custom-attributes");
     custom.git(&["config", "core.attributesFile", "../external/attrs"]);
     assert!(!custom.none_named());
+}
+
+#[test]
+fn a_setting_that_settles_the_answer_never_lists_the_index() {
+    // The full proof lists the index itself under the same deadline, so the
+    // quick check must not spend that time on a listing it will not read.
+    let tree = Fixture::new("settled-tree");
+    tree.git(&["config", "attr.tree", "HEAD"]);
+    assert_eq!(observed(&tree, ""), (false, SIDE_BY_SIDE, SIDE_BY_SIDE));
+    let custom = Fixture::new("settled-custom");
+    custom.git(&["config", "core.attributesFile", "../external/attrs"]);
+    assert_eq!(observed(&custom, ""), (false, SIDE_BY_SIDE, SIDE_BY_SIDE));
 }
