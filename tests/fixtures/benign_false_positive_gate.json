@@ -1454,7 +1454,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls -la '${PARENT}/app/items/[slug]'"
+        "command": "ls -la ${PARENT}/app/items/\\[slug\\]"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -33605,6 +33605,142 @@
         "command": "doctl databases list --format ID,Name,Engine,Status,Region --no-header 2>&1 | head -20"
       },
       "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-git-stage-then-status-trailing-report",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${PARENT} && git add -- src/one.ts && git status --short; echo \"check exit: $?\""
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-git-commit-message-credential-word",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -q --allow-empty -m 'fix: redact the secret field in the retry report' && git log -1 --oneline"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-sed-counted-print-range-sibling-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n '1,+2p' ${HOME}/other-project/notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-ls-missing-name-in-sibling-hidden-folder",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/other-project/.github/workflows/check.yml 2>/dev/null || echo \"no workflow\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-missing-file-fallback-then-cd-subfolder-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${PARENT}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; cd ${PARENT}/src && git status --short"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-cd-package-rg-parent-folder",
+      "fix_area": "search",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd packages/app && rg -n \"ready\" .."
+      },
+      "cwd": "workspace_monorepo",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-cd-package-grep-recursive-parent-file",
+      "fix_area": "search",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd packages/app && grep -rn \"strict\" ../../tsconfig.base.json"
+      },
+      "cwd": "workspace_monorepo",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-cd-package-grep-recursive-list-parent-file",
+      "fix_area": "search",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd packages/app && grep -rl workspaces ../../package.json | head -3"
+      },
+      "cwd": "workspace_monorepo",
       "expect": "allow"
     },
     {

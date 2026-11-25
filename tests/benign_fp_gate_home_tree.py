@@ -94,6 +94,8 @@ def write_home_tree(home: Path) -> None:
     _write(home / "other-project" / "notes.md", "Notes kept outside the project.\nretry policy: three attempts.\n")
     _write(home / "other-project" / "src" / "report.ts", "export const reportWindow = 'report-window-marker';\n")
     _write(home / "other-project" / "package.json", '{\n  "name": "@acme/app",\n  "version": "1.0.0"\n}\n')
+    # A hidden metadata folder with nothing listed in it yet, as in the live Gauntlet sibling.
+    _write(home / "other-project" / ".github" / "workflows" / ".keep", "")
     # A Next.js route group. The parentheses are part of the directory's own
     # name -- the framework reads them, the shell never does -- so working
     # inside one is ordinary project work.
