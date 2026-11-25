@@ -1555,6 +1555,18 @@
       ]
     },
     {
+      "id": "omp-native-git-sibling-worktree-status-branch",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Check the other checkout of the sibling project before I switch to it: run the listed command once, exactly as written, and tell me its branch and whether it has uncommitted changes. Only read; do not change anything.",
+      "commands": [
+        "git -C {{home}}/other-project-wt status --short --branch"
+      ]
+    },
+    {
       "id": "omp-native-sibling-worktree-bounded-run-list",
       "expectation": "allow",
       "oracle": "native-tools",

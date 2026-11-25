@@ -86,14 +86,22 @@ impl Fixture {
 
     /// The quick check, run the way the filter proof runs Git.
     fn none_named(&self) -> bool {
+        self.none_named_observed("", || {})
+    }
+
+    /// The quick check run from `folder` of the repository, with `before`
+    /// run ahead of every Git query.
+    fn none_named_observed(&self, folder: &str, before: impl Fn() + Sync) -> bool {
         let git = git_binary();
+        let directory = self.repository.join(folder);
         let query = |arguments: &[&str], input: Option<Vec<u8>>, root: Option<&Path>| {
             assert!(input.is_none());
+            before();
             let mut command = Command::new(&git);
             command
                 .env_clear()
                 .env("HOME", &self.home)
-                .current_dir(&self.repository);
+                .current_dir(&directory);
             if let Some(root) = root {
                 command.arg("-C").arg(root);
             }
@@ -118,6 +126,80 @@ fn a_global_filter_no_attributes_file_names_needs_no_per_path_check() {
     assert_eq!(
         fixture.none_named(),
         fixture.external_attribute_variables_supported()
+    );
+}
+
+/// Git queries the quick check asks side by side.
+const SIDE_BY_SIDE: usize = 6;
+
+/// Runs the quick check from `folder` and returns its answer, the most Git
+/// queries that were waiting at once, and how many were asked in all.
+///
+/// Each of the first [`SIDE_BY_SIDE`] queries holds until all of them have
+/// started, so `most` reaches that count only when they really run at once,
+/// however the threads are scheduled. Queried one after another, the first
+/// gives up after the timeout and `most` stays at one.
+fn observed(fixture: &Fixture, folder: &str) -> (bool, usize, usize) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Condvar, Mutex};
+    let (asked, waiting, most) = (
+        AtomicUsize::new(0),
+        AtomicUsize::new(0),
+        AtomicUsize::new(0),
+    );
+    let (started, all_started) = (Mutex::new(0usize), Condvar::new());
+    let answer = fixture.none_named_observed(folder, || {
+        asked.fetch_add(1, Ordering::SeqCst);
+        let now = waiting.fetch_add(1, Ordering::SeqCst) + 1;
+        most.fetch_max(now, Ordering::SeqCst);
+        let mut count = started.lock().unwrap();
+        *count += 1;
+        all_started.notify_all();
+        drop(
+            all_started
+                .wait_timeout_while(count, Duration::from_secs(10), |count| {
+                    *count < SIDE_BY_SIDE
+                })
+                .unwrap(),
+        );
+        waiting.fetch_sub(1, Ordering::SeqCst);
+    });
+    (answer, most.into_inner(), asked.into_inner())
+}
+
+#[test]
+fn the_independent_git_questions_are_asked_side_by_side() {
+    // On a loaded machine every Git process takes a noticeable time to
+    // start. Asked one after another, the location, configuration,
+    // attributes-file and index questions used up a hook's budget in a large
+    // checkout and sent a plain `git status` to review.
+    let fixture = Fixture::new("side-by-side");
+    let supported = fixture.external_attribute_variables_supported();
+    assert_eq!(
+        observed(&fixture, ""),
+        (supported, SIDE_BY_SIDE, SIDE_BY_SIDE)
+    );
+}
+
+#[test]
+fn from_a_subfolder_the_index_is_listed_again_from_the_root() {
+    // Below the root the first listing holds only that folder's paths, so
+    // the check must not read the rest of the work tree as untracked.
+    let fixture = Fixture::new("subfolder");
+    fixture.write("other/.gitattributes", "*.dat filter=lfs\n");
+    fixture.write("other/blob.dat", "bytes\n");
+    fixture.git(&["add", "."]);
+    let (answer, most, asked) = observed(&fixture, "src");
+    assert!(!answer);
+    assert_eq!(most, SIDE_BY_SIDE);
+    let supported = fixture.external_attribute_variables_supported();
+    assert_eq!(asked, if supported { 7 } else { 6 });
+    // The same tree passes once the filter line is gone.
+    fixture.write("other/.gitattributes", "*.dat binary\n");
+    fixture.git(&["add", "."]);
+    assert_eq!(
+        observed(&fixture, "src"),
+        (supported, 6, if supported { 7 } else { 6 })
     );
 }
 
