@@ -291,9 +291,18 @@ fn default_alias(directory: &Path) -> Option<String> {
 /// Replaces `{alias}/default` in one rename, so nvm never reads a partial
 /// file. Each call stages under its own name, so two overlapping switches
 /// cannot remove each other's file, and a call removes only what it created.
+/// The nvm directory comes from a canonical path, so only `alias` itself can
+/// be a link; a link or any other non-directory there is refused, so the
+/// write never lands outside the nvm directory.
 fn write_alias(alias: &Path, version: &str) -> std::io::Result<()> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    fs::create_dir_all(alias)?;
+    match fs::create_dir(alias) {
+        Err(error) if error.kind() != std::io::ErrorKind::AlreadyExists => return Err(error),
+        _ => {}
+    }
+    if !fs::symlink_metadata(alias)?.file_type().is_dir() {
+        return Err(std::io::Error::other("nvm alias is not a directory"));
+    }
     let staged = alias.join(format!(
         ".default.guard-{}-{}",
         std::process::id(),

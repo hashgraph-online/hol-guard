@@ -233,3 +233,36 @@ fn overlapping_switches_each_stage_their_own_file() {
         .collect();
     assert_eq!(staged.len(), 1, "only the stray file remains");
 }
+
+#[cfg(unix)]
+#[test]
+fn a_switch_never_writes_through_a_linked_alias_directory() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let elsewhere = root.path().join("elsewhere");
+    fs::create_dir_all(&elsewhere).expect("target dir");
+    fs::write(elsewhere.join("default"), b"keep").expect("target file");
+    let alias = root.path().join("nvm/alias");
+    fs::create_dir_all(root.path().join("nvm")).expect("nvm dir");
+    std::os::unix::fs::symlink(&elsewhere, &alias).expect("link");
+    assert!(super::write_alias(&alias, "24.22.1").is_err());
+    assert_eq!(
+        fs::read_to_string(elsewhere.join("default")).expect("target file"),
+        "keep"
+    );
+    assert_eq!(fs::read_dir(&elsewhere).expect("read").count(), 1, "nothing staged there");
+    let file = root.path().join("other/alias");
+    fs::create_dir_all(root.path().join("other")).expect("other dir");
+    fs::write(&file, b"").expect("plain file");
+    assert!(super::write_alias(&file, "24.22.1").is_err());
+}
+
+#[test]
+fn a_switch_creates_a_missing_alias_directory() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let alias = root.path().join("alias");
+    super::write_alias(&alias, "24.22.1").expect("switch");
+    assert_eq!(
+        fs::read_to_string(alias.join("default")).expect("default"),
+        "24.22.1"
+    );
+}
