@@ -76,6 +76,23 @@ def test_request_ids_are_unique_across_threads() -> None:
     assert len(set(seen)) == 4000
 
 
+def test_policy_bundle_retries_one_transient_native_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def flaky(*_args: object, **_kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise PolicyBundleNativeUnavailableError(bridge.UNAVAILABLE)
+        return {"error": "invalid_receipt_redaction_level"}
+
+    monkeypatch.setattr(bridge, "_native_policy_bundle_once", flaky)
+    assert bridge.native_policy_bundle("validate_v1", {}) == {
+        "error": "invalid_receipt_redaction_level"
+    }
+    assert calls == 2
+
+
 def test_self_referential_input_is_rejected_not_followed() -> None:
     cyclic_list: list[object] = []
     cyclic_list.append(cyclic_list)

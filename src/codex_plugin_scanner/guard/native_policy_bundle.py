@@ -144,7 +144,7 @@ def _next_request_id() -> str:
     return f"pba-{os.getpid()}-{next(_request_counter)}"
 
 
-def native_policy_bundle(
+def _native_policy_bundle_once(
     kind: str,
     request_input: dict[str, object],
     *,
@@ -245,6 +245,30 @@ def native_policy_bundle(
         # the resident failing to serve the op, not a verdict about the bundle.
         raise PolicyBundleNativeUnavailableError(code if isinstance(code, str) else UNAVAILABLE)
     return cast("dict[str, object]", result)
+
+
+def native_policy_bundle(
+    kind: str,
+    request_input: dict[str, object],
+    *,
+    timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
+) -> dict[str, object]:
+    """Ask the resident for a policy-bundle verdict, retrying one outage.
+
+    A compatibility worker can briefly lose the resident between the status
+    probe and its request while another test case is tearing the process down.
+    One bounded retry keeps that transport race from turning a policy verdict
+    into an outage while preserving the fail-closed result when the resident
+    remains unavailable.
+    """
+
+    try:
+        return _native_policy_bundle_once(kind, request_input, timeout_seconds=timeout_seconds)
+    except PolicyBundleNativeUnavailableError:
+        retry_timeout = min(1.0, max(0.0, timeout_seconds / 2.0))
+        if retry_timeout <= 0.0:
+            raise
+        return _native_policy_bundle_once(kind, request_input, timeout_seconds=retry_timeout)
 
 
 def policy_bundle_verdict(kind: str, request_input: dict[str, object]) -> dict[str, object]:
