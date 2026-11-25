@@ -24,7 +24,7 @@ from .extension_allow_fixtures import extension_allow_checks
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
 from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .fixture_remotes import INSTEAD_OF_CASE, add_checkout_origin
-from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
+from .git_allow_fixtures import add_git_allow_shape, add_unstaged_source_edit, git_allow_checks
 from .git_rules_cases import git_rules_checks
 from .heredoc_commit_fixtures import add_heredoc_commit_change, heredoc_commit_checks
 from .output_cases import add_output_fixture
@@ -388,6 +388,7 @@ def create_fixture(
     add_workspace_test_runner(workspace, scenario_id)
     add_output_fixture(workspace, scenario_id)
     add_route_group_directory(workspace, scenario_id)
+    add_unstaged_source_edit(workspace, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
     add_home_bun_runtime(home, scenario_id)
     add_design_token_documents(workspace, scenario_id)
