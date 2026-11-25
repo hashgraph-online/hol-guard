@@ -1,19 +1,18 @@
 //! Finds the project files a typed prompt is about, before CIGAR ranks them.
 //!
 //! This runs on every opted-in prompt, so it is bounded in files, bytes and
-//! time, never follows a link, and never starts a program in the project
-//! (a repository's own config can run code, so no `git` either). It only
-//! proposes paths: each one is read again through the CIGAR source screen,
-//! which refuses secrets, keys and credential files on its own.
-use crate::context_assistance_engine::prose;
+//! time, never follows a link, and starts no program itself. Files that Git's
+//! search found holding the prompt's code names (the trusted Git, hardened as
+//! for the change lists) are read after it, through the walk's own checks. It
+//! only proposes paths: each one is read again through the CIGAR source
+//! screen, which refuses secrets, keys and credential files on its own.
 use crate::context_assistance_prompt_ignore::{extend, ignored, root_chain};
-use crate::context_assistance_prompt_words::quoted;
 #[cfg(test)]
 pub(crate) use crate::context_assistance_prompt_words::terms;
 pub(crate) use crate::context_assistance_prompt_words::{
     asks_for_tests, named, phrases, test_file,
 };
-use crate::context_assistance_prompt_words::{in_path, spelled, whole_word, MAX_NAMED, TEST_DIRS};
+use crate::context_assistance_prompt_words::{MAX_NAMED, TEST_DIRS};
 use guard_secure_fs::{credential_directory_path, credential_named_path};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,18 +21,17 @@ use std::time::{Duration, Instant, SystemTime};
 /// Files offered to CIGAR for one prompt.
 pub(crate) const MAX_CANDIDATES: usize = 24;
 const MAX_VISITED: usize = 6_000;
-const MAX_SCANNED_BYTES: u64 = 12 * 1024 * 1024;
 /// Big enough for a project's main module, such as a CLI library's core file;
 /// the scanned-bytes cap still bounds the walk.
-const MAX_FILE_BYTES: u64 = 262_144;
-const MAX_DEPTH: usize = 10;
+pub(super) const MAX_FILE_BYTES: u64 = 262_144;
+pub(super) const MAX_DEPTH: usize = 10;
 /// Files kept per name the prompt gives.
 const MAX_NAMED_MATCHES: usize = 2;
 /// Test files kept aside for the map's list of where a new test goes.
 const MAX_KEPT_TESTS: usize = 6;
 const WALK_BUDGET: Duration = Duration::from_millis(350);
 
-const SKIPPED_DIRS: &[&str] = &[
+pub(super) const SKIPPED_DIRS: &[&str] = &[
     "node_modules",
     "target",
     "dist",
@@ -175,16 +173,18 @@ pub(crate) fn walk(
     named: &[String],
     budget: Duration,
 ) -> Walk {
-    walk_exact(root, terms, phrases, named, &[], budget)
+    walk_exact(root, terms, phrases, named, (&[], &Vec::new), budget)
 }
 
-/// `walk`, also counting the files holding each of `exact` as a word.
+/// `walk`, also counting the files holding each of `exact` as a word. Once
+/// it stops, it reads the files `searched` gives, Git's list of the files
+/// holding them, that it did not reach.
 pub(crate) fn walk_exact(
     root: &Path,
     terms: &[String],
     phrases: &[String],
     named: &[String],
-    exact: &[String],
+    (exact, searched): (&[String], &dyn Fn() -> Vec<String>),
     budget: Duration,
 ) -> Walk {
     let budget = budget.min(WALK_BUDGET);
@@ -195,22 +195,12 @@ pub(crate) fn walk_exact(
     let Ok(rules) = root_chain(root) else {
         return Walk::default();
     };
-    let mut stack = vec![(root.to_path_buf(), String::new(), 0_usize, rules)];
-    let mut visited = 0_usize;
-    let mut scanned = 0_u64;
-    let mut files = 0_usize;
-    let mut seen = Vec::new();
-    let mut complete = true;
-    let mut spelled_in = vec![0_usize; terms.len()];
-    let mut held: Vec<(String, usize)> = Vec::new();
-    for word in exact.iter().filter(|word| !word.is_empty()) {
-        if !held.iter().any(|(known, _)| known == word) {
-            held.push((word.clone(), 0));
-        }
-    }
-    while let Some((dir, prefix, depth, rules)) = stack.pop() {
+    let mut reading = Reading::new(terms, phrases, named, exact);
+    let mut stack = vec![(root.to_path_buf(), String::new(), 0_usize, rules.clone())];
+    let (mut visited, mut stopped) = (0_usize, false);
+    'walk: while let Some((dir, prefix, depth, rules)) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
-            complete = false;
+            reading.complete = false;
             continue;
         };
         // Test folders go deepest in the stack, so source is read first when
@@ -219,12 +209,13 @@ pub(crate) fn walk_exact(
         for entry in entries.flatten() {
             visited += 1;
             if visited > MAX_VISITED || started.elapsed() >= budget {
-                return finish(seen, files, terms, phrases, (spelled_in, held, false));
+                stopped = true;
+                break 'walk;
             }
             let name = entry.file_name().to_string_lossy().into_owned();
             // `file_type` never follows a link, so a linked folder or file is skipped.
             let Ok(kind) = entry.file_type() else {
-                complete = false;
+                reading.complete = false;
                 continue;
             };
             if name.starts_with('.') {
@@ -239,7 +230,7 @@ pub(crate) fn walk_exact(
                 continue;
             }
             if kind.is_dir() {
-                complete &= depth < MAX_DEPTH;
+                reading.complete &= depth < MAX_DEPTH;
                 if depth < MAX_DEPTH
                     && !SKIPPED_DIRS.contains(&name.as_str())
                     && !credential_directory_path(Path::new(&relative))
@@ -250,7 +241,7 @@ pub(crate) fn walk_exact(
                         let tests = TEST_DIRS.contains(&name.as_str());
                         inside.push((tests, (path, relative, depth + 1, inner)));
                     } else {
-                        complete = false;
+                        reading.complete = false;
                     }
                 }
                 continue;
@@ -259,63 +250,13 @@ pub(crate) fn walk_exact(
             {
                 continue;
             }
-            let metadata = entry.metadata().ok();
-            let size = metadata.as_ref().map_or(u64::MAX, fs::Metadata::len);
-            if size == 0 || size > MAX_FILE_BYTES {
-                complete &= size == 0;
-                continue;
-            }
-            files += 1;
-            let in_path = in_path(&relative, terms);
-            let mut text = None;
-            complete &= scanned + size <= MAX_SCANNED_BYTES;
-            if scanned + size <= MAX_SCANNED_BYTES {
-                scanned += size;
-                text = guard_secure_fs::read_bounded(&entry.path(), MAX_FILE_BYTES as usize)
-                    .ok()
-                    .and_then(|read| String::from_utf8(read.bytes).ok());
-                complete &= text.is_some();
-            }
-            // Read as written, as the rename list reads each file it lists.
-            let text = text.unwrap_or_default();
-            for (word, count) in &mut held {
-                *count += usize::from(holds_word(&text, word));
-            }
-            let text = text.to_lowercase();
-            let hits: Vec<u8> = terms
-                .iter()
-                .map(|term| text.matches(term.as_str()).take(8).count() as u8)
-                .collect();
-            let code = !prose(Path::new(&name));
-            let whole: Vec<bool> = (terms.iter().zip(&hits))
-                .map(|(term, &n)| code && n > 0 && whole_word(&text, term))
-                .collect();
-            for (count, holds) in spelled_in.iter_mut().zip(spelled(&text, terms, &hits)) {
-                *count += usize::from(holds);
-            }
-            let quoted = quoted(&text, phrases);
-            let named = named_as(&relative, named);
-            if in_path.contains(&true)
-                || hits.iter().any(|&n| n > 0)
-                || quoted.contains(&true)
-                || named.is_some()
-            {
-                seen.push(Seen {
-                    relative,
-                    modified: (metadata.and_then(|m| m.modified().ok()))
-                        .unwrap_or(SystemTime::UNIX_EPOCH),
-                    in_path,
-                    hits,
-                    whole,
-                    quoted,
-                    named,
-                });
-            }
+            reading.file(&entry.path(), relative, entry.metadata().ok());
         }
         inside.sort_by_key(|(tests, _)| !tests);
         stack.extend(inside.into_iter().map(|(_, dir)| dir));
     }
-    finish(seen, files, terms, phrases, (spelled_in, held, complete))
+    reading.searched(root, &rules, &searched());
+    reading.finish(stopped)
 }
 
 /// A word counts for more the fewer files contain it, so a name like
@@ -488,7 +429,9 @@ pub(crate) fn plain(path: PathBuf) -> PathBuf {
 
 #[path = "context_assistance_prompt_files_finish.rs"]
 mod finish;
-use finish::{finish, holds_word};
+#[path = "context_assistance_prompt_files_read.rs"]
+mod read;
+use read::Reading;
 
 #[cfg(test)]
 #[path = "context_assistance_prompt_files_tests.rs"]

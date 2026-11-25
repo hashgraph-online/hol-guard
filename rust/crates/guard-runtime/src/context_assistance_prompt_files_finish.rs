@@ -92,7 +92,7 @@ mod tests {
         let (terms, name) = (["cache".to_owned()], "_cache".to_owned());
         let budget = std::time::Duration::from_secs(5);
         let exact = [name.clone(), name.clone()];
-        let walk = super::super::walk_exact(&root, &terms, &[], &[], &exact, budget);
+        let walk = super::super::walk_exact(&root, &terms, &[], &[], (&exact, &Vec::new), budget);
         assert!(walk.complete);
         assert_eq!(walk.exact, [(name, 1)]);
         assert_eq!(walk.spelled, [3]);
