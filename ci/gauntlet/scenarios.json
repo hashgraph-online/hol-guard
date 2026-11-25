@@ -680,6 +680,15 @@
       "prompt": "I want the first line of the skill doc at {{home}}/.agent/skills/x/SKILL.md. Use the eval tool for this, with code that calls the tool.read helper on that whole file and prints it with print(), then tell me the first line. Do not use any other tool."
     },
     {
+      "id": "omp-native-eval-reads-help-docs",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "eval"
+      ],
+      "prompt": "I want the list of doc topics the eval tool offers. Use the eval tool for this, with code that returns await read(\"help://eval\"), then tell me the topic names it printed. Do not use any other tool."
+    },
+    {
       "id": "omp-native-eval-commit-draft",
       "expectation": "allow",
       "oracle": "native-tools",

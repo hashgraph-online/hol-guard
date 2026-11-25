@@ -9538,6 +9538,49 @@
       "mirror_pi": false
     },
     {
+      "id": "omp-eval-commit-prelude-help-docs",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "return await read(\"help://eval/commit\");",
+        "language": "js",
+        "title": "Read the commit prelude docs"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-tool-help-doc-raw",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "help://eval/commit:raw"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "mirror_pi": false
+    },
+    {
+      "id": "neg-omp-read-tool-help-parent-escape",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "help://../.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
+      "mirror_pi": false
+    },
+    {
       "id": "omp-read-tool-device-docs",
       "fix_area": "omp",
       "harnesses": [
