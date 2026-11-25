@@ -375,6 +375,26 @@ fn a_wait_flattens_to_the_question_it_asks() {
             "until nc -z localhost 5432 2>&1 >/dev/null; do sleep 1; done",
             "nc -z localhost 5432 2>&1 >/dev/null; sleep 1",
         ),
+        // Quoted words are literal: the `>` in `'=> ready'` is a character
+        // grep searches for, and the sink after the closing quote is the
+        // whole of what the test opens.
+        (
+            "until grep -q 'exit status:' deploy.log 2>/dev/null; do sleep 30; done",
+            "grep -q 'exit status:' deploy.log 2>/dev/null; sleep 30",
+        ),
+        (
+            "until grep -q '=> ready' server.log; do sleep 5; done",
+            "grep -q '=> ready' server.log; sleep 5",
+        ),
+        // A sink spelled inside the quotes is part of the pattern.
+        (
+            "until grep -q 'ready 2>/dev/null' server.log; do sleep 1; done",
+            "grep -q 'ready 2>/dev/null' server.log; sleep 1",
+        ),
+        (
+            "until grep -q \"listening on\" server.log >/dev/null 2>&1; do sleep 5; done",
+            "grep -q \"listening on\" server.log >/dev/null 2>&1; sleep 5",
+        ),
         // A list written after `done` runs once, when the wait is over.
         (
             "while kill -0 4821 2>/dev/null; do sleep 15; done; echo \"build finished\"; date -u +%H:%M:%SZ",
@@ -419,6 +439,14 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         "until nc -z localhost 5432 2>&1 > wait.log; do sleep 1; done",
         "until nc -z localhost 5432 >/dev/null 2>&3; do sleep 1; done",
         "until nc -z localhost 5432 </dev/tty 2>&1; do sleep 1; done",
+        // Quoting hides nothing: a redirection outside the quotes still
+        // opens a file, and an escape or a quote left open could put the
+        // trailing sink inside a string.
+        "until grep -q 'ready' server.log > wait.log 2>/dev/null; do sleep 1; done",
+        "until grep -q 'ready' server.log 2>wait.log; do sleep 1; done",
+        "until grep -q \"ready\" < server.log 2>/dev/null; do sleep 1; done",
+        "until grep -q 'ready' server\\ log 2>/dev/null; do sleep 1; done",
+        "until grep -q \"ready' server.log 2>/dev/null; do sleep 1; done",
         // A redirection after `done` is opened once and written through on
         // every pass, and an input device need never end.
         "until nc -z localhost 5432; do sleep 1; done > wait.log",

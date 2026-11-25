@@ -67233,6 +67233,38 @@
       "expect": "allow"
     },
     {
+      "id": "readiness-wait-quoted-log-line-silenced",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "until grep -q 'Retry limit' README.md 2>/dev/null; do sleep 15; done; echo \"settings documented\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "readiness-wait-after-a-pause-quoted-log-line",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sleep 1; until grep -q 'Retry limit' README.md 2>/dev/null; do sleep 15; done; echo \"settings documented\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "readiness-wait-port-then-reports",
       "fix_area": "shell",
       "harnesses": [
