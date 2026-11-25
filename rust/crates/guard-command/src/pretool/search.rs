@@ -17,6 +17,7 @@ pub(crate) use pattern_operands::search_pattern_words;
 #[cfg(test)]
 mod repeat_walk_tests;
 mod rg;
+mod rg_exclusions;
 mod rg_whitelist;
 mod rg_whitelist_file;
 mod roots;
@@ -29,6 +30,7 @@ pub(super) use agent_root::{
 pub(super) use git_metadata::safe_git_entry;
 use options::unsafe_search_value;
 pub(super) use rg::{rg_hidden_whitelist_reason, safe_rg_stdin_arguments};
+pub(super) use rg_exclusions::rg_sensitive_reach_reason;
 pub(super) use sibling::named_path as sibling_repository_named_file;
 pub(super) use tree::{
     glob_matches_nothing, glob_matches_option_word, key_file_name, listable_spelling,

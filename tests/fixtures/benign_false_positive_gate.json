@@ -32421,6 +32421,118 @@
       "expect": "allow"
     },
     {
+      "id": "home-rg-sibling-tests-excluding-key-folder",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l scrollTo -g '!tls' ${HOME}/Code/ui-kit/__tests__"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "home-rg-sibling-tests-glob-excluding-fixtures",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l scrollTo --glob '!fixtures' ${HOME}/Code/ui-kit/__tests__"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "home-rg-sibling-tests-excluding-key-file-head",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n scrollTo ${HOME}/Code/ui-kit/__tests__ -g '!loopback-server.key' | head -5"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-home-rg-sibling-tests-reaching-key",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l scrollTo ${HOME}/Code/ui-kit/__tests__"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-rg-sibling-tests-exclusion-reincluded",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l scrollTo -g '!fixtures' -g fixtures ${HOME}/Code/ui-kit/__tests__"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-rg-sibling-tests-wildcard-exclusion",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l scrollTo -g '!fix*' ${HOME}/Code/ui-kit/__tests__"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-rg-sibling-tests-empty-glob-value",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l scrollTo --glob= '!tls' ${HOME}/Code/ui-kit/__tests__"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "ls-absent-file-in-sibling-repo-hidden-folder",
       "fix_area": "shell",
       "harnesses": [

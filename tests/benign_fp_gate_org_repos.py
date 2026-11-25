@@ -1,7 +1,8 @@
 """Repositories below the fixture home whose shared parent is not a repository.
 
 ``~/Code/org`` holds ``app-portal``, ``service-api`` and ``docs-site``;
-``~/Code/ignore-rules`` holds checkouts whose ``.gitignore`` re-includes paths.
+``~/Code/ignore-rules`` holds checkouts whose ``.gitignore`` re-includes paths;
+``~/Code/ui-kit`` keeps a test TLS key below its test folder.
 """
 
 from __future__ import annotations
@@ -140,3 +141,17 @@ def write_ignore_rule_repos(home: Path) -> None:
             # Untracked, gitignored synthetic secret for rg glob override controls.
             # Plain source globs cannot reach it; an explicit -g "**" can.
             _write(repository / ".env", "TOKEN=SYNTHETIC_MARKER_ONLY\n")
+    write_test_key_repo(home)
+
+
+def write_test_key_repo(home: Path) -> None:
+    # A web client whose tests start a loopback TLS server from a committed
+    # key fixture. A search of the whole test folder reaches the key and is
+    # held; one that leaves out its folder with `-g '!NAME'` does not.
+    repository = home / "Code" / "ui-kit"
+    _write(repository / "__tests__" / "scroll.test.ts", "test('scrollTo', () => {});\n")
+    _write(repository / "app" / "page.tsx", "export const scrollTo = () => null;\n")
+    _write(repository / "__tests__" / "fixtures" / "tls" / "loopback-server.key", "synthetic-test-key\n")
+    _git(repository, "init", "--quiet", "--initial-branch=main", home=home)
+    _git(repository, "add", "-A", home=home)
+    _git(repository, "commit", "--quiet", "-m", "ui-kit base", home=home)
