@@ -366,6 +366,15 @@ fn a_wait_flattens_to_the_question_it_asks() {
             "until nc -z localhost 5432 >/dev/null; do sleep 1; done",
             "nc -z localhost 5432 >/dev/null; sleep 1",
         ),
+        // Copying stderr onto stdout opens nothing of its own.
+        (
+            "until nc -z localhost 5432 >/dev/null 2>&1; do sleep 1; done",
+            "nc -z localhost 5432 >/dev/null 2>&1; sleep 1",
+        ),
+        (
+            "until nc -z localhost 5432 2>&1 >/dev/null; do sleep 1; done",
+            "nc -z localhost 5432 2>&1 >/dev/null; sleep 1",
+        ),
         // A list written after `done` runs once, when the wait is over.
         (
             "while kill -0 4821 2>/dev/null; do sleep 15; done; echo \"build finished\"; date -u +%H:%M:%SZ",
@@ -404,9 +413,12 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         "until nc -z localhost 5432 > wait.log; do sleep 1; done",
         "until nc -z localhost 5432 2> wait.log; do sleep 1; done",
         // A sink that is not the whole of what the test opens, and a
-        // descriptor copy that is no sink at all.
+        // descriptor copy that reaches a real file or another descriptor.
         "until nc -z localhost 5432 2>/dev/null > wait.log; do sleep 1; done",
-        "until nc -z localhost 5432 >/dev/null 2>&1; do sleep 1; done",
+        "until nc -z localhost 5432 > wait.log 2>&1; do sleep 1; done",
+        "until nc -z localhost 5432 2>&1 > wait.log; do sleep 1; done",
+        "until nc -z localhost 5432 >/dev/null 2>&3; do sleep 1; done",
+        "until nc -z localhost 5432 </dev/tty 2>&1; do sleep 1; done",
         // A redirection after `done` is opened once and written through on
         // every pass, and an input device need never end.
         "until nc -z localhost 5432; do sleep 1; done > wait.log",
