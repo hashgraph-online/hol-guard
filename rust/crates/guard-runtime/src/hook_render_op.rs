@@ -202,6 +202,7 @@ fn render(
                 reason_code,
                 None,
             )
+            .map(Value::Object)
             .map_err(|_| "native_hook_render_invalid")?
         };
         let activity_recorded = if params.get("record_post_tool_activity")
