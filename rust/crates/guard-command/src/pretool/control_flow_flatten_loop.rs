@@ -2,8 +2,8 @@
 //!
 //! A loop is the same shape as a conditional only when one pass stands for
 //! every iteration it could run. Two loops are: a `read` that empties a
-//! redirected file, which ends at that file's end, and a wait that asks one
-//! question until it succeeds, whose body only sleeps. Every other loop keeps
+//! redirected file, which ends at that file's end, and a wait that asks the same
+//! questions until they succeed, whose body only sleeps. Every other loop keeps
 //! its review, and the reasons each shape is taken are written beside it.
 
 use super::super::for_loop_unroll::body::{
@@ -91,10 +91,7 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
     }
     let (test, _, after_test) = body_items(rest, "", &["do"])?;
     let (body, _, tail) = body_items(after_test, "", &["done"])?;
-    let [(probe, _)] = test.as_slice() else {
-        return None;
-    };
-    if !opens_no_file(probe) {
+    if !asks_the_same_question_each_pass(&test) {
         return None;
     }
     if !body.iter().all(|(text, _)| only_waits(text)) {
@@ -114,6 +111,42 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
         collect(&mut parts, after, "")?;
     }
     assemble(&parts, "")
+}
+
+/// Whether every pass of the loop's test asks the same thing.
+///
+/// A single probe is the common wait. Two or more joined by `&&` or `||`
+/// (`until grep -q ready a.log && grep -q ready b.log`) wait for several
+/// conditions at once: each pass runs the same probes on the same outcomes,
+/// so the flat list, which keeps the `&&` and `||`, describes every pass. Two
+/// things would make a later pass differ from the first. A probe that opens a
+/// file reaches it again, which [`opens_no_file`] already refuses for each
+/// probe. A probe that changes shell state changes it again before the next
+/// probe runs: `until cd build && test -f done.txt` moves one directory
+/// deeper each time `test` fails, so a list whose probe changes shell state
+/// keeps its review. A `;` between probes is not taken either: the loop then
+/// runs commands whose outcome nothing reads, which is not a question.
+fn asks_the_same_question_each_pass(test: &[(String, &'static str)]) -> bool {
+    let Some((_, joined)) = test.split_last() else {
+        return false;
+    };
+    if !joined
+        .iter()
+        .all(|(_, separator)| matches!(*separator, " && " | " || "))
+    {
+        return false;
+    }
+    if !test.iter().all(|(probe, _)| opens_no_file(probe)) {
+        return false;
+    }
+    // Every `|` starts a piece that may be a pipeline stage, so checking the
+    // head of each piece covers each stage the shell could run in place.
+    joined.is_empty()
+        || test.iter().all(|(probe, _)| {
+            probe
+                .split('|')
+                .all(|stage| !super::command_word_changes_shell_state(stage.trim()))
+        })
 }
 
 /// Whether the loop's test opens nothing of its own.

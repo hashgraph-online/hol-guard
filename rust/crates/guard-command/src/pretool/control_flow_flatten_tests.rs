@@ -404,13 +404,23 @@ fn a_wait_flattens_to_the_question_it_asks() {
             "until nc -z localhost 5432; do sleep 1; done; npm test",
             "nc -z localhost 5432; sleep 1; npm test",
         ),
+        // A wait for several conditions keeps the `&&` and `||` between them.
+        (
+            "until grep -q done a.log && grep -q done b.log; do sleep 5; done; echo ready",
+            "grep -q done a.log && grep -q done b.log; sleep 5; echo ready",
+        ),
+        (
+            "until nc -z localhost 5432 || ! kill -0 4821 2>/dev/null; do sleep 1; done",
+            "nc -z localhost 5432 || kill -0 4821 2>/dev/null; sleep 1",
+        ),
     ] {
         assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
     }
 }
 
-/// A wait whose body does more than pause, or whose test is a list, a
-/// redirection or an expansion, is a loop this reading does not describe.
+/// A wait whose body does more than pause, whose test list can change from
+/// pass to pass, or whose test holds a redirection or an expansion, is a loop
+/// this reading does not describe.
 #[test]
 fn a_wait_that_builds_up_across_passes_keeps_its_review() {
     for command in [
@@ -426,9 +436,17 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         "until nc -z localhost 5432; do sleep 1.2.3; done",
         // An empty body is a loop that asks without pausing.
         "until nc -z localhost 5432; do done",
-        // The test is a list, so a later command runs on an earlier outcome.
-        "until nc -z localhost 5432 && redis-cli ping; do sleep 1; done",
+        // A test list whose probes change shell state, or that runs a command
+        // whose outcome nothing reads, can differ from pass to pass.
         "until cd build; ls; do sleep 1; done",
+        "until cd build && test -f done.txt; do sleep 1; done",
+        "until test -f done.txt || cd build; do sleep 1; done",
+        "until export READY=1 && nc -z localhost 5432; do sleep 1; done",
+        "until nc -z localhost 5432 && grep -q x a.log | cd build; do sleep 1; done",
+        "until grep -q ready a.log; grep -q ready b.log; do sleep 1; done",
+        // Each probe in the list opens nothing of its own.
+        "until grep -q ready a.log && grep -q ready b.log > wait.log; do sleep 1; done",
+        "until grep -q ready a.log > wait.log || nc -z localhost 5432; do sleep 1; done",
         // The test opens a file the next pass would reach again.
         "until nc -z localhost 5432 > wait.log; do sleep 1; done",
         "until nc -z localhost 5432 2> wait.log; do sleep 1; done",
