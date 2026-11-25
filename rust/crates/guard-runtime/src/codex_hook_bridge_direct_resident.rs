@@ -5,10 +5,27 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use crate::claude_hook_bridge_http::remaining;
+use crate::context_assistance_prompt::PROMPT_HOOK_WAIT;
 
 /// Below this the round trip cannot finish, so the daemon path starts now
 /// rather than after a connect that is already out of time.
 const MINIMUM_DIRECT_TIMEOUT: Duration = Duration::from_millis(50);
+
+/// A resident answers an allow well inside this. A slower resident leaves
+/// the daemon most of the hook's budget.
+pub(crate) const DIRECT_TIMEOUT: Duration = Duration::from_millis(1_000);
+
+/// How long a resident gets to answer `event_name`. A prompt hook waits for
+/// its CIGAR note: cut to [`DIRECT_TIMEOUT`], the note came back empty or the
+/// bridge asked the daemon to build it again, which took longer than the
+/// full wait. Prompt hooks keep seconds of budget after this for the daemon.
+pub(crate) fn direct_timeout(event_name: &str) -> Duration {
+    if event_name == "UserPromptSubmit" {
+        PROMPT_HOOK_WAIT
+    } else {
+        DIRECT_TIMEOUT
+    }
+}
 
 /// Why a bridge took a hook to the daemon without a resident answer. The
 /// bridge names it to the daemon, which counts it beside the hook; nothing
@@ -127,4 +144,19 @@ pub(crate) fn send_to_live_resident_reporting(
         .map_err(|_| DirectMiss::Send);
     }
     Err(DirectMiss::NoResident)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{direct_timeout, DIRECT_TIMEOUT, PROMPT_HOOK_WAIT};
+    use std::time::Duration;
+
+    #[test]
+    fn a_prompt_gets_the_whole_note_wait_and_other_hooks_do_not() {
+        assert_eq!(direct_timeout("UserPromptSubmit"), PROMPT_HOOK_WAIT);
+        assert!(PROMPT_HOOK_WAIT >= Duration::from_millis(2_750));
+        for event in ["PreToolUse", "PostToolUse", "PermissionRequest", "Stop"] {
+            assert_eq!(direct_timeout(event), DIRECT_TIMEOUT, "{event}");
+        }
+    }
 }

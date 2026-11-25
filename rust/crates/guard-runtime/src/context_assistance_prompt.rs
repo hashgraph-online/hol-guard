@@ -50,6 +50,10 @@ pub(crate) mod seen;
 const MAX_WAIT: Duration = Duration::from_millis(2_500);
 const DEFAULT_WAIT: Duration = Duration::from_millis(2_000);
 const HOOK_MARGIN: Duration = Duration::from_millis(250);
+/// The longest a prompt hook waits for its note, margin included. A bridge
+/// asking a resident about a prompt gives it this long, so the note gets the
+/// wait it was built for rather than a shorter one and then a second try.
+pub(crate) const PROMPT_HOOK_WAIT: Duration = MAX_WAIT.saturating_add(HOOK_MARGIN);
 const MIN_WAIT: Duration = Duration::from_millis(300);
 const MIN_PROMPT_CHARS: usize = 8;
 const MAX_QUERY_BYTES: usize = 4_096;

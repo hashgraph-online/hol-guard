@@ -468,3 +468,31 @@ fn a_note_about_many_files_stays_bounded() {
     assert!(text.contains("more changes left out"), "{text}");
     assert!(text.contains("change modules"), "{text}");
 }
+
+/// A Git call still running when the note's share of the wait ends is
+/// stopped then, not left to Git's own timeout: in a large project the
+/// change lists ran past the share and left the prompt no time to search.
+#[cfg(unix)]
+#[test]
+fn a_git_call_stops_when_the_share_ends() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = TempDir::new().unwrap();
+    let slow = dir.path().join("git");
+    fs::write(&slow, "#!/bin/sh\nexec sleep 5\n").unwrap();
+    fs::set_permissions(&slow, fs::Permissions::from_mode(0o755)).unwrap();
+    let git = Git {
+        path: slow,
+        root: dir.path().to_path_buf(),
+        environment: Environment::new(),
+    };
+    let started = Instant::now();
+    assert_eq!(
+        git.run(&["status"], started + Duration::from_millis(100)),
+        None
+    );
+    assert!(
+        started.elapsed() < Duration::from_millis(600),
+        "{:?}",
+        started.elapsed()
+    );
+}
