@@ -57,6 +57,21 @@ pub(crate) struct Finding {
     expired_at: Option<f64>,
 }
 
+#[cfg(test)]
+impl Finding {
+    /// A high-severity finding for a Node.js build, for overlay order tests.
+    pub(crate) fn for_tests(advisory_id: &str) -> Self {
+        Self {
+            advisory_id: advisory_id.into(),
+            severity: "high".into(),
+            known_exploited: false,
+            version: "22.1.0".into(),
+            resolved_path: "/opt/node/bin/node".into(),
+            expired_at: None,
+        }
+    }
+}
+
 impl Finding {
     fn describe(&self) -> String {
         let mut text = format!(
