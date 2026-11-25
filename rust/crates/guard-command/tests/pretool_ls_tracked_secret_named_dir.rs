@@ -133,7 +133,7 @@ fn listing_that_could_show_more_than_committed_names_keeps_its_review() {
     for command in [
         "ls ~/.ssh".to_string(),
         "ls \"$HOME/.ssh\"".to_string(),
-        "ls app/{secrets,keys}".to_string(),
+        "ls app/{secrets,.secret-feature}".to_string(),
         "ls 'app/(group)/topics/secret-*'".to_string(),
         format!("ls \"{w}/app/(group)/topics/.secret-cache\""),
         format!("ls \"{w}/scratch/secret-notes\""),
