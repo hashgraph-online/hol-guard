@@ -1,0 +1,257 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.maidan-stdio",
+  "version": "1.0.0",
+  "name": "Maidan (local stdio)",
+  "description": "Maidan served over stdio by the maidan binary (maidan mcp-stdio) against a local database. Same policy as the hosted endpoint: gates, removals, outside delivery and authority changes need review, reading a secret's value is blocked, and everything else follows your own Guard policy.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.david-engelmann",
+    "displayName": "Maidan",
+    "url": "https://github.com/david-engelmann/maidan"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#1F2937"
+  },
+  "homepage": "https://github.com/david-engelmann/maidan",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "maidan"
+  },
+  "riskClasses": [
+    "maidan-authority",
+    "maidan-external",
+    "maidan-gate",
+    "maidan-remove",
+    "maidan-secret"
+  ],
+  "tools": [
+    {
+      "name": "add_channel_member",
+      "state": "review"
+    },
+    {
+      "name": "add_reviewer",
+      "state": "review"
+    },
+    {
+      "name": "allow_secret_egress_host",
+      "state": "review"
+    },
+    {
+      "name": "approval_decide",
+      "state": "review"
+    },
+    {
+      "name": "attenuate_token",
+      "state": "review"
+    },
+    {
+      "name": "cancel_thread",
+      "state": "review"
+    },
+    {
+      "name": "clear_land_gate",
+      "state": "review"
+    },
+    {
+      "name": "clear_review_requirement",
+      "state": "review"
+    },
+    {
+      "name": "close_abandoned_thread",
+      "state": "review"
+    },
+    {
+      "name": "create_delegation_grant",
+      "state": "review"
+    },
+    {
+      "name": "create_secret",
+      "state": "review"
+    },
+    {
+      "name": "create_share_ticket",
+      "state": "review"
+    },
+    {
+      "name": "delegate_token",
+      "state": "review"
+    },
+    {
+      "name": "delete_glossary_term",
+      "state": "review"
+    },
+    {
+      "name": "delete_member_email",
+      "state": "review"
+    },
+    {
+      "name": "delete_memory_block",
+      "state": "review"
+    },
+    {
+      "name": "delete_recipe",
+      "state": "review"
+    },
+    {
+      "name": "delete_secret",
+      "state": "review"
+    },
+    {
+      "name": "delete_task_schedule",
+      "state": "review"
+    },
+    {
+      "name": "export_workspace",
+      "state": "review"
+    },
+    {
+      "name": "freeze_member",
+      "state": "review"
+    },
+    {
+      "name": "import_workspace",
+      "state": "review"
+    },
+    {
+      "name": "link_github_issue",
+      "state": "review"
+    },
+    {
+      "name": "link_slack_channel",
+      "state": "review"
+    },
+    {
+      "name": "register_fsm_hook",
+      "state": "review"
+    },
+    {
+      "name": "register_slash_command",
+      "state": "review"
+    },
+    {
+      "name": "remove_channel_member",
+      "state": "review"
+    },
+    {
+      "name": "remove_reviewer",
+      "state": "review"
+    },
+    {
+      "name": "replay_result_delivery",
+      "state": "review"
+    },
+    {
+      "name": "resolve_secret",
+      "state": "block"
+    },
+    {
+      "name": "revoke_delegation_grant",
+      "state": "review"
+    },
+    {
+      "name": "revoke_fsm_hook",
+      "state": "review"
+    },
+    {
+      "name": "revoke_secret_egress_host",
+      "state": "review"
+    },
+    {
+      "name": "revoke_share_ticket",
+      "state": "review"
+    },
+    {
+      "name": "revoke_slash_command",
+      "state": "review"
+    },
+    {
+      "name": "rotate_token",
+      "state": "review"
+    },
+    {
+      "name": "set_delegation_policy",
+      "state": "review"
+    },
+    {
+      "name": "set_land_gate",
+      "state": "review"
+    },
+    {
+      "name": "set_member_email",
+      "state": "review"
+    },
+    {
+      "name": "set_retention_policy",
+      "state": "review"
+    },
+    {
+      "name": "set_review_requirement",
+      "state": "review"
+    },
+    {
+      "name": "set_spawn_budget",
+      "state": "review"
+    },
+    {
+      "name": "set_thread_owner",
+      "state": "review"
+    },
+    {
+      "name": "set_thread_result",
+      "state": "review"
+    },
+    {
+      "name": "set_wip_limit",
+      "state": "review"
+    },
+    {
+      "name": "set_workspace_handle",
+      "state": "review"
+    },
+    {
+      "name": "submit_review",
+      "state": "review"
+    },
+    {
+      "name": "tombstone_message",
+      "state": "review"
+    },
+    {
+      "name": "transition_thread",
+      "state": "review"
+    },
+    {
+      "name": "unfreeze_member",
+      "state": "review"
+    },
+    {
+      "name": "unlink_github_issue",
+      "state": "review"
+    },
+    {
+      "name": "unlink_slack_channel",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/david-engelmann/maidan/blob/main/listings/hol-guard/README.md",
+    "https://github.com/david-engelmann/maidan/blob/main/listings/hol-guard/policy.json",
+    "https://github.com/david-engelmann/maidan/blob/main/crates/maidan-mcp/tests/fixtures/tool-annotations.json",
+    "https://github.com/david-engelmann/maidan/blob/main/docs/Integration.md"
+  ],
+  "saferAlternatives": [
+    "Connect agents that only work or review tasks to the /mcp/worker or /mcp/reviewer profile endpoints, which list only that loop's tools.",
+    "Give each agent its own seat token holding maidan.agent.worker, never an admin token.",
+    "Name secrets as secret:// references in payloads so their values never enter a model's context."
+  ]
+}
