@@ -80,6 +80,68 @@ pub(crate) fn git_reads_after_allowed_steps(
     benign: &BTreeSet<usize>,
     covered: &BTreeSet<usize>,
 ) -> Vec<usize> {
+    after_leading_cd(model, context, benign, covered)
+        .unwrap_or_else(|| reads_after_allowed_steps(model, context, benign, covered))
+}
+
+/// The reads carried after a leading `cd` whose remainder runs in more than
+/// one directory, judged the way the Git floor judges them.
+///
+/// After `cd <dir>;` the rest runs in `<dir>` or, when the `cd` failed, where
+/// the command started, so a read is carried only when it is carried in both.
+/// After `cd <dir> && <head>; <tail>` the head runs only in `<dir>`, and the
+/// tail runs there after the head or alone where the command started, so a
+/// head read must be carried in `<dir>` and a tail read in both: in `<dir>`
+/// behind every step before it, and in the starting directory behind the
+/// tail's own earlier steps. `None` for any other shape.
+fn after_leading_cd(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+    benign: &BTreeSet<usize>,
+    covered: &BTreeSet<usize>,
+) -> Option<Vec<usize>> {
+    if read_directory(model, context).is_some() {
+        return None;
+    }
+    let part = |part: &CanonicalCommandV1, offset: usize, cwd: Option<&str>| {
+        let shift = |indexes: &BTreeSet<usize>| -> BTreeSet<usize> {
+            indexes
+                .iter()
+                .filter_map(|index| index.checked_sub(offset))
+                .collect()
+        };
+        let part_context = PathContext {
+            cwd: cwd.or(context.cwd),
+            ..context
+        };
+        reads_after_allowed_steps(part, part_context, &shift(benign), &shift(covered))
+            .into_iter()
+            .map(|index| index + offset)
+            .collect::<BTreeSet<usize>>()
+    };
+    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd(model, context) {
+        let moved = part(&rest, 1, Some(&cwd));
+        let stayed = part(&rest, 1, None);
+        return Some(moved.intersection(&stayed).copied().collect());
+    }
+    let (cwd, rest, tail) = super::safe_reads::leading_and_cd(model, context)?;
+    let start = model.segments.len() - tail.segments.len();
+    let moved = part(&rest, 1, Some(&cwd));
+    let stayed = part(&tail, start, None);
+    Some(
+        moved
+            .into_iter()
+            .filter(|index| *index < start || stayed.contains(index))
+            .collect(),
+    )
+}
+
+fn reads_after_allowed_steps(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+    benign: &BTreeSet<usize>,
+    covered: &BTreeSet<usize>,
+) -> Vec<usize> {
     if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
         return Vec::new();
     }
@@ -102,7 +164,9 @@ pub(crate) fn git_reads_after_allowed_steps(
     for (index, segment) in model.segments.iter().enumerate() {
         let git = git_segment(segment);
         if covered.contains(&index) {
-            if benign.contains(&index) {
+            if benign.contains(&index)
+                || git && carried_read(model, segment, proof_context, &routes)
+            {
                 continue;
             }
             if let Some(route) = git
@@ -115,9 +179,7 @@ pub(crate) fn git_reads_after_allowed_steps(
             break;
         }
         let read = if git {
-            ref_read(model, segment, proof_context)
-                && routed_checkout(segment, proof_context)
-                    .is_some_and(|route| routes.iter().all(|carried| *carried == route))
+            carried_read(model, segment, proof_context, &routes)
         } else {
             // A Docker listing reads no checkout, so where a Git step before
             // it worked changes nothing it looks at.
@@ -129,6 +191,20 @@ pub(crate) fn git_reads_after_allowed_steps(
         added.push(index);
     }
     added
+}
+
+/// Whether `segment` is a ref read in the checkout every carried step worked
+/// in. A covered read changes nothing the next read runs under, so it neither
+/// ends the run nor adds a checkout to it.
+fn carried_read(
+    model: &CanonicalCommandV1,
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+    routes: &[std::path::PathBuf],
+) -> bool {
+    ref_read(model, segment, context)
+        && routed_checkout(segment, context)
+            .is_some_and(|route| routes.iter().all(|carried| *carried == route))
 }
 
 /// The checkout a Git segment works in, when its leading options only route

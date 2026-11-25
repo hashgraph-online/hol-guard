@@ -547,9 +547,18 @@ impl CompiledNativeCommandControls {
             environment,
             &permitted_action,
         ));
+        // A step that passes as a command of its own changes nothing a later
+        // Git read runs under, so a read after one keeps the carry the steps
+        // before it gave, as it does after a benign step.
+        let alone: BTreeSet<usize> =
+            crate::pretool::segments_safe_alone(command, context, environment)
+                .into_iter()
+                .collect();
+        let passing: BTreeSet<usize> = benign.union(&alone).copied().collect();
+        let passed: BTreeSet<usize> = covered.union(&alone).copied().collect();
         // A Git ref read after covered steps keeps the proof it has alone.
         covered.extend(crate::pretool::git_reads_after_allowed_steps(
-            command, context, &benign, &covered,
+            command, context, &passing, &passed,
         ));
         // Without the entered directory the rules the user enabled cover
         // every program in `cd <dir> && gh pr merge 1; gh pr view 1` and the
@@ -566,11 +575,7 @@ impl CompiledNativeCommandControls {
         // whose other steps the user allowed: each step is judged alone, and
         // the compound passes when every step does. The check below that a
         // Git step's output stays clear of `.git` still applies to it.
-        covered.extend(crate::pretool::segments_safe_alone(
-            command,
-            context,
-            environment,
-        ));
+        covered.extend(alone);
         // A Git step that points its own output over `.git` or out of the
         // workspace writes whichever route covered it: a `git log` rule the
         // user enabled reads the verb, not the `--output=.git/config` that

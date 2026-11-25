@@ -64,6 +64,23 @@ fn tracked_target(value: &str, leading: &[String], context: super::PathContext<'
         && super::search_scope_tracked::names::resolves_to_tracked(value, context.cwd)
 }
 
+/// A plain exclusion pathspec after `--`: `:!name`, `:^name` or
+/// `:(exclude)name`. An exclusion only removes paths from what the read
+/// prints. With no other pathspec Git reads as if none were given, so the
+/// read never covers more than it would without the exclusion, and the path
+/// it names is never opened. Any further magic (`:!/name`, `:(exclude,glob)`)
+/// and a value before `--`, where Git may read it as an index object name,
+/// keep the review.
+fn exclusion_pathspec(arguments: &[String], index: usize) -> bool {
+    let value = arguments[index].as_str();
+    let path = value
+        .strip_prefix(":!")
+        .or_else(|| value.strip_prefix(":^"))
+        .or_else(|| value.strip_prefix(":(exclude)"));
+    arguments[..index].iter().any(|argument| argument == "--")
+        && path.is_some_and(|path| !path.is_empty() && !path.starts_with([':', '/', '!', '^', '(']))
+}
+
 pub(super) fn safe_git_arguments(
     arguments: &[String],
     allow_helper_context: bool,
@@ -148,6 +165,7 @@ pub(super) fn safe_git_arguments(
     if arguments.iter().enumerate().any(|(index, value)| {
         !search_text.contains(&index)
             && replacement != Some(index)
+            && !exclusion_pathspec(arguments, index)
             && ((value.starts_with(':') && !index_objects.contains(&index))
                 || (super::sensitive_read_path_argument(value)
                     && listed.is_none_or(|start| index < start)))

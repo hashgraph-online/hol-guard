@@ -183,63 +183,50 @@ fn verdict(
     {
         return Verdict::Clear;
     }
-    // A proven read prefix holds no Git segment and changes nothing a later
-    // read depends on, so the floor judges the command from its `cd` onward.
-    if let Some(rest) = super::segment_proof::after_read_prefix(model, context) {
-        return Verdict::from_parts([verdict(&rest, context, deadline, execution_environment)]);
-    }
-    if let Some(rest) = after_git_read_prefix(model, context, deadline, execution_environment) {
-        return Verdict::from_parts([verdict(&rest, context, deadline, execution_environment)]);
-    }
-    // After `cd <dir>;` the rest runs in either directory, so each Git read
-    // must be helper-free in both.
-    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd(model, context) {
-        let moved = super::PathContext {
-            cwd: Some(&cwd),
-            ..context
-        };
-        return Verdict::from_parts([
-            verdict(&rest, moved, deadline, execution_environment),
-            verdict(&rest, context, deadline, execution_environment),
-        ]);
-    }
-    // `cd <dir> && <head>; <tail>`: the head runs only in `<dir>`, the tail
-    // after it there or alone in the original directory when the `cd` failed.
-    if let Some((cwd, rest, tail)) = super::safe_reads::leading_and_cd(model, context) {
-        let moved = super::PathContext {
-            cwd: Some(&cwd),
-            ..context
-        };
-        let head = verdict(&rest, moved, deadline, execution_environment);
-        let after = verdict(&tail, context, deadline, execution_environment);
-        // `cd <dir> && git add <file> && git status; echo "exit $?"`: when
-        // the whole tail is the trailing report, only the head's earlier
-        // steps keep its reads under the floor. The head holds every segment
-        // after the `cd`, so its step indexes name this model's segments one
-        // place later, and an allow is asked the same question it would be
-        // asked without the tail. Any other tail keeps the review: the read
-        // directory an allow settles in resolves through the `cd` only when
-        // the tail is that report.
-        let reported = super::contained_wrapper::trailing_report_steps(model, &model.segments, 1);
-        if matches!(after, Verdict::Clear)
-            && reported > 0
-            && reported == tail.segments.len()
-            && !tail
-                .segments
-                .iter()
-                .any(super::git_read_after_allow::git_segment)
-        {
-            match head {
-                Verdict::Unsettled(steps) => {
-                    return Verdict::Unsettled(shifted_past_cd(steps));
+    if let Some(split) = split(model, context, deadline, execution_environment) {
+        let mut verdicts: Vec<Verdict> = split
+            .parts
+            .iter()
+            .map(|(part, cwd)| {
+                let part_context = super::PathContext {
+                    cwd: cwd.as_deref().or(context.cwd),
+                    ..context
+                };
+                verdict(part, part_context, deadline, execution_environment)
+            })
+            .collect();
+        if split.reported_tail {
+            // `cd <dir> && git add <file> && git status; echo "exit $?"`:
+            // when the whole tail is the trailing report, only the head's
+            // earlier steps keep its reads under the floor. The head holds
+            // every segment after the `cd`, so its step indexes name this
+            // model's segments one place later, and an allow is asked the
+            // same question it would be asked without the tail. Any other
+            // tail keeps the review: the read directory an allow settles in
+            // resolves through the `cd` only when the tail is that report.
+            let tail = &split.parts[1].0;
+            let reported =
+                super::contained_wrapper::trailing_report_steps(model, &model.segments, 1);
+            if matches!(verdicts[1], Verdict::Clear)
+                && reported > 0
+                && reported == tail.segments.len()
+                && !tail
+                    .segments
+                    .iter()
+                    .any(super::git_read_after_allow::git_segment)
+            {
+                match verdicts.swap_remove(0) {
+                    Verdict::Unsettled(steps) => {
+                        return Verdict::Unsettled(shifted_past_cd(steps));
+                    }
+                    Verdict::UnansweredProbe(steps) if !steps.is_empty() => {
+                        return Verdict::UnansweredProbe(shifted_past_cd(steps));
+                    }
+                    head => verdicts.insert(0, head),
                 }
-                Verdict::UnansweredProbe(steps) if !steps.is_empty() => {
-                    return Verdict::UnansweredProbe(shifted_past_cd(steps));
-                }
-                _ => {}
             }
         }
-        return Verdict::from_parts([head, after]);
+        return Verdict::from_parts(verdicts);
     }
     // Past this point every Git read is probed in one directory, so a later
     // `cd` moves reads somewhere this probe never looked. The exception is
@@ -530,6 +517,10 @@ fn verdict(
 #[path = "git_read_floor_prefix.rs"]
 mod prefix;
 use prefix::{after_git_read_prefix, git_after_later_cd};
+#[path = "git_read_floor_split.rs"]
+mod split;
+pub(super) use split::allow_answers;
+use split::split;
 
 /// `dir=/tmp/work` or `dir="$HOME/work"` on its own: a plain shell variable
 /// the command sets for its own later words.

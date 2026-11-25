@@ -1581,25 +1581,7 @@ fn git_read_settled_by_allow(
     {
         return false;
     }
-    let answerable = match super::git_read_floor::allowable_review(
-        model,
-        context,
-        deadline,
-        execution_environment,
-    ) {
-        super::git_read_floor::AllowableReview::None => false,
-        super::git_read_floor::AllowableReview::EarlierSteps(steps)
-        | super::git_read_floor::AllowableReview::UnansweredProbe(steps) => {
-            super::git_read_after_allow::allow_settles_read_order(
-                model,
-                &steps,
-                context,
-                deadline,
-                execution_environment,
-            )
-        }
-    };
-    answerable
+    super::git_read_floor::allow_answers(model, context, deadline, execution_environment)
         && controls.explicit_allow_covers_command(
             model,
             observations,
