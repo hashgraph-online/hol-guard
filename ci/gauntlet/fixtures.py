@@ -56,6 +56,7 @@ from .runtime_cases import runtime_case_checks
 from .script_cases import script_case_checks
 from .search_diff_fixtures import add_search_and_diff_content
 from .session_folder import session_folder_checks
+from .git_exclude_fixtures import add_own_exclude_setting
 from .package_store_fixtures import add_package_store_checkout
 from .backfill_fixtures import add_backfill_shapes, add_hidden_script_checkout
 from .nested_package_fixtures import add_nested_workspace_package
@@ -392,6 +393,7 @@ def create_fixture(
     add_output_fixture(workspace, scenario_id)
     add_route_group_directory(workspace, scenario_id)
     add_unstaged_source_edit(workspace, scenario_id)
+    add_own_exclude_setting(workspace, environment, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
     add_home_bun_runtime(home, scenario_id)
     add_design_token_documents(workspace, scenario_id)

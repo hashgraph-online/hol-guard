@@ -60461,6 +60461,38 @@
       "expect": "allow"
     },
     {
+      "id": "signed-checkout-git-check-ignore-own-exclude-directory",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-ignore -v src"
+      },
+      "cwd": "signed_app",
+      "expect": "allow"
+    },
+    {
+      "id": "signed-checkout-git-check-ignore-own-exclude-file",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-ignore -v README.md"
+      },
+      "cwd": "signed_app",
+      "expect": "allow"
+    },
+    {
       "id": "signed-checkout-git-pull-then-log-status",
       "fix_area": "git",
       "harnesses": [
