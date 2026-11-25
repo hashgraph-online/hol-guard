@@ -60,6 +60,7 @@ def test_acknowledged_watch_does_not_queue_unsupported_pi_tools(
         "reason": "HOL Guard recorded this action under Watch.",
         "policy_action": "warn",
     }
+    edge["recording_only_response"] = True
     worker, store = _worker(tmp_path, monkeypatch, edge)
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"mode": "observe"})
     response = worker.review_http_payload(

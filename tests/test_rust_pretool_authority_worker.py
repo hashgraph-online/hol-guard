@@ -116,7 +116,18 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
 
     def review_with_resident_receipt(*_args: object, **kwargs: Any) -> dict[str, Any]:
         record_native_hook_route("native_resident")
-        edge = {"event_name": "PreToolUse", "harness": "codex", "result": native_review}
+        edge = {
+            "event_name": "PreToolUse",
+            "harness": "codex",
+            "result": native_review,
+            "harness_response": {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                },
+                "policy_action": "review",
+            },
+        }
         return with_review_evidence(edge, **kwargs)
 
     monkeypatch.setattr(
