@@ -451,7 +451,7 @@ fn a_large_daemon_reply_still_fits_the_bridge_budget() {
     // valid large reply would turn an allow the daemon already reached into a
     // fail-closed refusal of a permitted call, so the kinds carry a budget of
     // their own.
-    for kind in ["hermes_bridge", "muse_bridge"] {
+    for kind in ["hermes_bridge", "muse_bridge", "unavailable_event"] {
         let mut req = request(kind);
         req.harness = kind.trim_end_matches("_bridge").to_owned();
         req.cli = Some(json!({
