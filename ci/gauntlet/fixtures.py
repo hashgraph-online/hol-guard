@@ -792,7 +792,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     ):
         _git(args, sibling, environment)
     add_home_tools(home)
-    add_sibling_test_runner(home, scenario_id)
+    add_sibling_test_runner(home, scenario_id, environment)
     add_package_store_checkout(home, scenario_id)
     # A clone with ignored local configuration files beside its code.
     write_edge_clone(home, environment)

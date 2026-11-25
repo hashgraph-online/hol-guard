@@ -197,8 +197,19 @@ fn rg_arguments_pass(
     let mut config_disabled = false;
     let mut roots: Vec<&str> = Vec::new();
     let mut unproven_roots: Vec<&str> = Vec::new();
+    // Every `-g`/`--glob` value, and whether any glob was spelled in a form
+    // this pass does not read one by one (`--iglob`, a short cluster).
+    let mut globs: Vec<&str> = Vec::new();
+    let mut globs_unread = false;
     for argument in arguments {
         if let Some(role) = pending_value.take() {
+            if matches!(role, SearchValueRole::RgGlob) {
+                if pending_glob {
+                    globs.push(argument);
+                } else {
+                    globs_unread = true;
+                }
+            }
             if unsafe_search_value(role, argument, context) {
                 if !std::mem::take(&mut pending_glob) || stdin_only {
                     return false;
@@ -260,6 +271,13 @@ fn rg_arguments_pass(
                     return false;
                 }
                 let glob = name == "--glob";
+                if matches!(role, SearchValueRole::RgGlob) && !attached.is_empty() {
+                    if glob {
+                        globs.push(attached);
+                    } else {
+                        globs_unread = true;
+                    }
+                }
                 if attached.is_empty() {
                     pending_value = Some(role);
                     pending_glob = glob;
@@ -290,6 +308,7 @@ fn rg_arguments_pass(
                 return false;
             }
             if let Some(glob) = argument.strip_prefix("-g").filter(|glob| !glob.is_empty()) {
+                globs.push(glob);
                 if unsafe_search_value(SearchValueRole::RgGlob, glob, context) {
                     if stdin_only {
                         return false;
@@ -298,6 +317,7 @@ fn rg_arguments_pass(
                 }
                 continue;
             }
+            globs_unread |= argument != "-g" && argument[1..].contains('g');
             let parsed = short_search_option(
                 argument,
                 &['u', '.', 'L'],
@@ -360,18 +380,7 @@ fn rg_arguments_pass(
             // listing proof screens the nearest existing ancestor and every
             // missing name, and `allow_absent` keeps it to commands whose
             // other steps cannot put a file, directory or link there first.
-            if unsafe_search_value(SearchValueRole::Path, argument, context)
-                && !tree::rg_root_inside_cwd(argument, context)
-                && !sibling::rg_sibling_repository_root(argument, context)
-                && !sibling::named_path(argument, context, allow_absent)
-                && !proven_absent_root(argument, context, allow_absent)
-                && !tree::safe_recursive_search_target(argument, context)
-                && !tree::safe_literal_bracket_search_target(argument, context)
-                && (!argument.contains(['*', '?', '['])
-                    || !tree::safe_glob_search_operand(argument, context))
-            {
-                unproven_roots.push(argument);
-            }
+            // Screened once every glob is known, below.
         } else {
             // The first positional is the pattern, screened the way a `-e`
             // pattern is: a word the shell can still expand into a credential
@@ -398,6 +407,26 @@ fn rg_arguments_pass(
             true,
             allow_absent,
         );
+    }
+    // A glob may follow the roots it narrows, so roots are screened only now.
+    let excluded = if globs_unread {
+        Vec::new()
+    } else {
+        super::rg_exclusions::excluded_names(&globs)
+    };
+    for &argument in &roots {
+        if unsafe_search_value(SearchValueRole::Path, argument, context)
+            && !tree::rg_root_inside_cwd(argument, context)
+            && !sibling::rg_sibling_repository_root(argument, context, &excluded)
+            && !sibling::named_path(argument, context, allow_absent)
+            && !proven_absent_root(argument, context, allow_absent)
+            && !tree::safe_recursive_search_target(argument, context)
+            && !tree::safe_literal_bracket_search_target(argument, context)
+            && (!argument.contains(['*', '?', '['])
+                || !tree::safe_glob_search_operand(argument, context))
+        {
+            unproven_roots.push(argument);
+        }
     }
     // An inherited RIPGREP_CONFIG_PATH prepends its lines to these
     // arguments, so `--pre`, `--hidden` or `--no-ignore` there would undo

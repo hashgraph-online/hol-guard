@@ -22,11 +22,13 @@
 //! subtree the walk never screened. A rule at the repository root therefore
 //! holds only the searches that can reach the file it names.
 mod negations;
+mod walk;
 
 use super::{tree, ReadContext};
 use negations::Whitelist;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use walk::{walk, Refused};
 
 /// The same `rg` call is screened by this walk and by the negation walk in
 /// `rg_whitelist`, which bounds itself at the same number. A lower bound here
@@ -45,11 +47,36 @@ const FD_GLOBAL_IGNORE: &str = ".config/fd/ignore";
 
 /// True when `value` names a directory of a git working tree strictly below
 /// home and every file `rg` would search there clears the descendant screen.
+///
+/// `excluded` holds the names the command's `-g '!NAME'` overrides leave out.
 pub(in crate::pretool) fn rg_sibling_repository_root(
     value: &str,
     context: ReadContext<'_>,
+    excluded: &[String],
 ) -> bool {
-    sibling_repository_root(value, context, &WHITELISTING_FILES)
+    sibling_repository_root(value, context, &WHITELISTING_FILES, excluded).is_ok()
+}
+
+/// The entry below `value`, as `rg` would reach it, that the descendant screen
+/// refuses by its name or place, when that entry is what holds the search.
+/// `None` when the search is proven or held for anything else.
+/// The entry is spelled below `value`, with `/`, as the command line spells it.
+pub(in crate::pretool) fn rg_sibling_sensitive_entry(
+    value: &str,
+    context: ReadContext<'_>,
+    excluded: &[String],
+) -> Option<String> {
+    let Err(Refused::Sensitive(path)) =
+        sibling_repository_root(value, context, &WHITELISTING_FILES, excluded)
+    else {
+        return None;
+    };
+    let operand =
+        tree::expanded_operand(value, context).and_then(|path| std::fs::canonicalize(path).ok())?;
+    let parts = (path.strip_prefix(&operand).ok()?.components())
+        .map(|part| part.as_os_str().to_str())
+        .collect::<Option<Vec<_>>>()?;
+    Some(parts.join("/"))
 }
 
 /// [`rg_sibling_repository_root`] for `fd`, which reads its own ignore files.
@@ -62,10 +89,15 @@ pub(in crate::pretool) fn fd_sibling_repository_root(
 ) -> bool {
     context.home_dir.is_some_and(|home| {
         std::fs::symlink_metadata(Path::new(home).join(FD_GLOBAL_IGNORE)).is_err()
-    }) && sibling_repository_root(value, context, &FD_WHITELISTING_FILES)
+    }) && sibling_repository_root(value, context, &FD_WHITELISTING_FILES, &[]).is_ok()
 }
 
-fn sibling_repository_root(value: &str, context: ReadContext<'_>, whitelisting: &[&str]) -> bool {
+fn sibling_repository_root(
+    value: &str,
+    context: ReadContext<'_>,
+    whitelisting: &[&str],
+    excluded: &[String],
+) -> Result<(), Refused> {
     if value.is_empty()
         || value.len() > 4096
         || value.contains(tree::HAZARDS)
@@ -74,29 +106,32 @@ fn sibling_repository_root(value: &str, context: ReadContext<'_>, whitelisting: 
         || (value.starts_with('~') && value != "~" && !value.starts_with("~/"))
         || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
-        return false;
+        return Err(Refused::Other);
     }
     let Some(operand) =
         tree::expanded_operand(value, context).and_then(|path| std::fs::canonicalize(path).ok())
     else {
-        return false;
+        return Err(Refused::Other);
     };
     let Some(root) = operand
         .ancestors()
         .find(|path| std::fs::symlink_metadata(path.join(".git")).is_ok())
     else {
-        return false;
+        return Err(Refused::Other);
     };
-    operand.is_dir()
+    let screened = operand.is_dir()
         && super::super::git_routes::repository_below_home(root, context)
-        && no_whitelisting_ancestor(&operand, context, whitelisting)
-        && match ignored_names(root) {
-            Some(mut ignored) => {
-                reachable_by_default(root, &operand, &mut ignored)
-                    && walk(root, &operand, &mut ignored, whitelisting)
-            }
-            None => false,
-        }
+        && no_whitelisting_ancestor(&operand, context, whitelisting);
+    if !screened {
+        return Err(Refused::Other);
+    }
+    let Some(mut ignored) = ignored_names(root) else {
+        return Err(Refused::Other);
+    };
+    if !reachable_by_default(root, &operand, &mut ignored) {
+        return Err(Refused::Other);
+    }
+    walk(root, &operand, &mut ignored, whitelisting, excluded)
 }
 
 /// `rg` searches a named directory even when it is ignored or hidden, and
@@ -306,64 +341,6 @@ fn ignore_lines(path: &Path) -> Option<Vec<String>> {
         lines.push(line.to_owned());
     }
     Some(lines)
-}
-
-fn walk(root: &Path, operand: &Path, ignored: &mut Ignored, whitelisting: &[&str]) -> bool {
-    let mut pending: Vec<(PathBuf, usize)> = vec![(operand.to_path_buf(), 0)];
-    let mut inspected = 0_usize;
-    let _documents = crate::pretool::search_scope_tracked::names::document_walk();
-    while let Some((directory, depth)) = pending.pop() {
-        if depth > MAX_DEPTH {
-            return false;
-        }
-        // The directory's own `.gitignore` applies to its entries, so its
-        // negations are admitted before any entry is screened.
-        if directory != root && !ignored.admit_ignore_file(&directory) {
-            return false;
-        }
-        let Ok(entries) = std::fs::read_dir(&directory) else {
-            return false;
-        };
-        for entry in entries {
-            let Ok(entry) = entry else { return false };
-            inspected += 1;
-            if inspected > MAX_ENTRIES {
-                return false;
-            }
-            let path = entry.path();
-            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-                return false;
-            };
-            if whitelisting.contains(&name) {
-                return false;
-            }
-            // `rg` skips hidden entries unless a negated pattern re-includes
-            // them; ignore files themselves were read above.
-            if name == ".gitignore" || (name.starts_with('.') && !ignored.whitelists(&path)) {
-                continue;
-            }
-            if ignored.prunes(name, directory == root) {
-                continue;
-            }
-            // The listing already carries each entry's kind here, so this reads
-            // it instead of spending an `lstat` per entry, falling back to one
-            // only where the filesystem leaves the kind unknown. Like `lstat`,
-            // it describes a link itself, so a symlink is neither a directory
-            // nor a file and still refuses the proof below.
-            let Ok(kind) = entry.file_type() else {
-                return false;
-            };
-            if !tree::descendant_allowed(&path, root, kind.is_file()) {
-                return false;
-            }
-            if kind.is_dir() {
-                pending.push((path, depth + 1));
-            } else if !kind.is_file() {
-                return false;
-            }
-        }
-    }
-    true
 }
 
 /// True when `value` names one file inside a git working tree below home, or

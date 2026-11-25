@@ -1661,6 +1661,7 @@ fn evaluate_single_command(
         .or_else(|| fanout_reads::whitespace_split_reason(&model))
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
         .or_else(|| search::grep::sensitive_reach_reason(&model, context))
+        .or_else(|| search::rg_sensitive_reach_reason(&model, context))
         .or_else(|| inplace_edit_reason::inplace_edit_reason(&model))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
