@@ -2921,15 +2921,15 @@
       ]
     },
     {
-      "id": "omp-native-missing-file-fallback-then-cd-sibling-status",
+      "id": "omp-native-missing-file-fallback-then-cd-subfolder-status",
       "expectation": "allow",
       "oracle": "native-tools",
       "required_tools": [
         "bash"
       ],
-      "prompt": "Check for a stale build-info file here, then look at my sibling project's status: run the listed command once, exactly as written, and report what it printed.",
+      "prompt": "Check for a stale build-info file here, then look at the status from the src folder: run the listed command once, exactly as written, and report what it printed.",
       "commands": [
-        "ls {{workspace}}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; cd {{home}}/other-project && git status --short"
+        "ls {{workspace}}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; cd {{workspace}}/src && git status --short"
       ]
     },
     {

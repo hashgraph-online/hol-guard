@@ -25,7 +25,7 @@ BACKFILLED_CASES = (
     "omp-native-git-commit-message-credential-word",
     "omp-native-sed-counted-print-range-sibling-file",
     "omp-native-ls-missing-name-in-sibling-hidden-folder",
-    "omp-native-missing-file-fallback-then-cd-sibling-status",
+    "omp-native-missing-file-fallback-then-cd-subfolder-status",
     "omp-native-route-folder-bracket-name-reads",
     *NESTED_PACKAGE_CASES,
     "omp-native-git-worktree-prune-then-list",

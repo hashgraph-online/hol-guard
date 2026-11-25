@@ -33676,7 +33676,7 @@
       "expect": "allow"
     },
     {
-      "id": "gauntlet-missing-file-fallback-then-cd-sibling-status",
+      "id": "gauntlet-missing-file-fallback-then-cd-subfolder-status",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -33687,9 +33687,9 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls ${PARENT}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; cd ${HOME}/other-project && git status --short"
+        "command": "ls ${PARENT}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; cd ${PARENT}/src && git status --short"
       },
-      "cwd": "worktree",
+      "cwd": "parent",
       "expect": "allow"
     },
     {
