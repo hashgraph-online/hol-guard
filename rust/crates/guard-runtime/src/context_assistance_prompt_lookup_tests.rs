@@ -162,7 +162,7 @@ fn quoted_text_and_paths_outside_the_project_point_at_nothing() {
             &words,
             &quoted,
             &named(prompt),
-            &spellings(prompt),
+            (&spellings(prompt), &Vec::new),
             budget,
         );
         assert!(walk.complete, "{prompt}");

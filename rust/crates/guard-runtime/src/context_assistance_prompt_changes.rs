@@ -456,6 +456,8 @@ mod asked;
 mod code;
 #[path = "context_assistance_prompt_changes_fix.rs"]
 mod fix;
+#[path = "context_assistance_prompt_changes_grep.rs"]
+pub(super) mod grep;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
 #[path = "context_assistance_prompt_changes_removed.rs"]

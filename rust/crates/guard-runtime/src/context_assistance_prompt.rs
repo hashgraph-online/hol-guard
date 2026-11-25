@@ -8,8 +8,8 @@
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts};
-use crate::context_assistance_prompt_files::{named, phrases, project_root, walk_exact};
-use crate::context_assistance_prompt_words::{marked_terms, spellings};
+use crate::context_assistance_prompt_files::{named, phrases, project_root};
+use crate::context_assistance_prompt_words::marked_terms;
 use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
@@ -337,8 +337,7 @@ fn attach(
         changes::used::add_tests(response, at, changed, &earlier, budget, context_on, shown);
         return;
     }
-    let (names, exact) = (named(prompt), spellings(prompt));
-    let searched = walk_exact(&root, &words, &quoted, &names, &exact, budget);
+    let searched = changes::grep::walk(home, &root, prompt, (&words, &quoted), budget, &context_on);
     let found = searched.found(&words);
     let held = held_names(prompt, &words, &searched.spelled);
     if found.is_empty() {

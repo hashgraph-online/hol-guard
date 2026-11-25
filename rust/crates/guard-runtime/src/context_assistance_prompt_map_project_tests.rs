@@ -39,7 +39,7 @@ fn changes_map(home: &Path, root: &Path, prompt: &str, about_changes: bool) -> O
     let quoted = crate::context_assistance_prompt_files::phrases(prompt);
     let (named, exact) = (named(prompt), spellings(prompt));
     let budget = Duration::from_secs(5);
-    let found = walk_exact(root, &words, &quoted, &named, &exact, budget);
+    let found = walk_exact(root, &words, &quoted, &named, (&exact, &Vec::new), budget);
     let until = Instant::now() + Duration::from_secs(5);
     let map = mapped(
         home,
