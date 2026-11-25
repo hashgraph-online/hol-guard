@@ -220,5 +220,14 @@ fn a_glob_with_a_pattern_folder_that_could_reach_a_secret_keeps_its_review() {
                 "{harness}: {command}"
             );
         }
+        // Under `nullglob` the lone empty glob vanishes, so the command walks
+        // the repository root, which holds `.env.local` and the `vault` link.
+        for command in ["ls -aR s*/legacy/*.py", "grep -rn synthetic s*/legacy/*.py"] {
+            assert_ne!(
+                action(harness, command, &home),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
     }
 }
