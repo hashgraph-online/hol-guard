@@ -118,6 +118,33 @@ def shares_match_request(manifest: dict[str, Any]) -> bool:
     )
 
 
+def provider_cross_field_errors(manifest: dict[str, Any]) -> list[str]:
+    """Rules a JSON schema cannot express. The native compiler must apply each before admission."""
+    errors = [] if shares_match_request(manifest) else ["shares differ from the facts the request uses"]
+    ids = [capability["id"] for capability in manifest["capabilities"]]
+    if len(ids) != len(set(ids)):
+        errors.append("capability ids repeat")
+    key_format = manifest["auth"].get("keyFormat")
+    if key_format and key_format["minLength"] > key_format["maxLength"]:
+        errors.append("keyFormat minLength exceeds maxLength")
+    for capability in manifest["capabilities"]:
+        ttl = capability["response"].get("ttlSeconds")
+        if ttl and ttl["min"] > ttl["max"]:
+            errors.append("ttlSeconds min exceeds max")
+    return errors
+
+
+def driver_cross_field_errors(profile: dict[str, Any], verified_publishers: frozenset[str]) -> list[str]:
+    """Rules a JSON schema cannot express. ``verified_publishers`` is the maintainer-owned list."""
+    errors = []
+    names = [tool["name"] for tool in profile["tools"]]
+    if len(names) != len(set(names)):
+        errors.append("tool names repeat")
+    if profile["publisher"]["verified"] and profile["publisher"]["name"] not in verified_publishers:
+        errors.append("publisher claims verification it does not have")
+    return errors
+
+
 def _mutated(example: dict[str, Any], edit) -> dict[str, Any]:
     document = copy.deepcopy(example)
     edit(document)
@@ -126,11 +153,12 @@ def _mutated(example: dict[str, Any], edit) -> dict[str, Any]:
 
 def test_driver_example_is_valid() -> None:
     assert list(DRIVER.iter_errors(DRIVER_EXAMPLE)) == []
+    assert driver_cross_field_errors(DRIVER_EXAMPLE, frozenset()) == []
 
 
 def test_provider_example_is_valid() -> None:
     assert list(PROVIDER.iter_errors(PROVIDER_EXAMPLE)) == []
-    assert shares_match_request(PROVIDER_EXAMPLE)
+    assert provider_cross_field_errors(PROVIDER_EXAMPLE) == []
 
 
 def test_first_party_profile_may_claim_a_reserved_name() -> None:
@@ -206,6 +234,10 @@ def _first_capability(document: dict[str, Any]) -> dict[str, Any]:
         ),
         pytest.param(lambda d: d["verify"].update(path="/v1/guard/key?" + "k=v"), id="query-credential-verify"),
         pytest.param(lambda d: _first_capability(d)["request"].update(path="//status"), id="authority-path"),
+        pytest.param(lambda d: _first_capability(d)["request"].update(path="/v1/guard/../admin"), id="dot-dot-segment"),
+        pytest.param(lambda d: _first_capability(d)["request"].update(path="/v1/./guard"), id="dot-segment"),
+        pytest.param(lambda d: _first_capability(d)["request"].update(path="/v1//guard"), id="empty-segment"),
+        pytest.param(lambda d: d["verify"].update(path="/v1/guard/.."), id="trailing-dot-dot"),
         pytest.param(lambda d: d["verify"].update(path="//"), id="authority-verify-path"),
         pytest.param(lambda d: d["verify"].update(path="/status\n"), id="path-trailing-newline"),
         pytest.param(lambda d: d.update(summary="Checks scripts.\n"), id="summary-trailing-newline"),
@@ -282,3 +314,49 @@ def test_shares_rule_catches_an_unlisted_body_fact() -> None:
     )
     assert PROVIDER.is_valid(document)
     assert not shares_match_request(document)
+
+
+def test_paths_may_contain_dots_inside_a_segment() -> None:
+    document = _mutated(PROVIDER_EXAMPLE, lambda d: d["verify"].update(path="/v1.2/guard/.well-known/key"))
+    assert list(PROVIDER.iter_errors(document)) == []
+
+
+def test_a_self_declared_verified_publisher_is_not_trusted() -> None:
+    document = _mutated(DRIVER_EXAMPLE, lambda d: d["match"].update(mcpServerNames=["playwright"]))
+    document["publisher"]["verified"] = True
+    # The schema accepts the shape; only the maintainer-owned list can make the claim true.
+    assert DRIVER.is_valid(document)
+    assert driver_cross_field_errors(document, frozenset()) == ["publisher claims verification it does not have"]
+    assert driver_cross_field_errors(document, frozenset({"Example Org"})) == []
+
+
+@pytest.mark.parametrize(
+    ("edit", "error"),
+    [
+        pytest.param(
+            lambda d: d["capabilities"].append(copy.deepcopy(d["capabilities"][0])),
+            "capability ids repeat",
+            id="duplicate-capability",
+        ),
+        pytest.param(
+            lambda d: d["auth"]["keyFormat"].update(minLength=128, maxLength=24),
+            "keyFormat minLength exceeds maxLength",
+            id="inverted-key-length",
+        ),
+        pytest.param(
+            lambda d: _first_capability(d)["response"]["ttlSeconds"].update(min=86400, max=60),
+            "ttlSeconds min exceeds max",
+            id="inverted-ttl",
+        ),
+    ],
+)
+def test_provider_cross_field_rules(edit, error: str) -> None:
+    document = _mutated(PROVIDER_EXAMPLE, edit)
+    assert PROVIDER.is_valid(document)
+    assert provider_cross_field_errors(document) == [error]
+
+
+def test_driver_tool_names_must_be_unique() -> None:
+    document = _mutated(DRIVER_EXAMPLE, lambda d: d["tools"].append({"name": "press", "verb": "Type"}))
+    assert DRIVER.is_valid(document)
+    assert driver_cross_field_errors(document, frozenset()) == ["tool names repeat"]

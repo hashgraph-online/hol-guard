@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hol.org/schemas/guard/browser-driver.v1.schema.json",
   "title": "HOL Guard browser driver profile",
-  "description": "Maps a browser driver's tools to Guard's closed browser verbs. Evidence only: a profile cannot clear a sensitive surface, approve, or grant.",
+  "description": "Maps a browser driver's tools to Guard's closed browser verbs. Evidence only: a profile cannot clear a sensitive surface, approve, or grant. Cross-field rules (tool names are unique; publisher.verified is true only for publishers on the maintainer-owned verified list) must be enforced by the native compiler before a profile is admitted; this schema alone does not check them.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -44,7 +44,8 @@
           "$ref": "#/$defs/httpsUrl"
         },
         "verified": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "Contributor files set this to false. A true value is honored only when the compiler finds the publisher on the maintainer-owned verified list; the manifest's own value is never proof."
         }
       }
     },

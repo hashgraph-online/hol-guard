@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hol.org/schemas/guard/provider-integration.v1.schema.json",
   "title": "HOL Guard provider integration manifest",
-  "description": "Declares how Guard asks a provider a closed-list question about closed-list facts. Provider answers are evidence: they can tighten a decision, never approve or grant. Cross-field rules (shares equal the facts used, fixture prefix outside tests) must be enforced by the native compiler before a manifest is admitted; this schema alone does not check them.",
+  "description": "Declares how Guard asks a provider a closed-list question about closed-list facts. Provider answers are evidence: they can tighten a decision, never approve or grant. Cross-field rules (shares equal the facts used, capability ids are unique, keyFormat.minLength is at most maxLength, ttlSeconds.min is at most max, fixture prefix outside tests) must be enforced by the native compiler before a manifest is admitted; this schema alone does not check them.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -193,7 +193,7 @@
         },
         "path": {
           "type": "string",
-          "pattern": "^/(?!/)[A-Za-z0-9._~/-]{0,255}(?![\\s\\S])"
+          "pattern": "^(?!.*//)(?!.*/\\.{1,2}(?:/|(?![\\s\\S])))/[A-Za-z0-9._~/-]{0,255}(?![\\s\\S])"
         }
       }
     },
@@ -275,7 +275,7 @@
             },
             "path": {
               "type": "string",
-              "pattern": "^/(?!/)[A-Za-z0-9._~/-]{0,255}(?![\\s\\S])"
+              "pattern": "^(?!.*//)(?!.*/\\.{1,2}(?:/|(?![\\s\\S])))/[A-Za-z0-9._~/-]{0,255}(?![\\s\\S])"
             },
             "body": {
               "type": "object",
