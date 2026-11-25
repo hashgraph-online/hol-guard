@@ -34,6 +34,9 @@ use pre_tool_chain::evaluate_pre_tool_chain;
 #[path = "edge_result_check.rs"]
 mod edge_result_check;
 pub(crate) use edge_result_check::standalone_receipt;
+#[path = "edge_snapshot.rs"]
+mod edge_snapshot;
+pub(crate) use edge_snapshot::evaluate_envelope_with_snapshot;
 
 /// Bind the exact validated tool intent without policy-generation identity.
 /// Policy evaluation remains bound by `request_identity`; this commitment is
@@ -403,11 +406,19 @@ fn evaluate_validated_envelope<Lease>(
         origin_store,
         started,
     );
+    let result_object = result
+        .as_object()
+        .ok_or_else(|| "native_hook_pre_tool_result_invalid".to_owned())?;
+    let recording_only =
+        envelope.recording_only || result_object.get("observe_mode") == Some(&Value::Bool(true));
+    let requires_approval = edge_result_check::requires_approval(&event_name, result_object);
+    let recording_only_response =
+        edge_result_check::recording_only_response(&event_name, recording_only, result_object);
     let mut edge = GuardHookEdgeResultV2 {
         exact_command_block: None,
         review_evidence,
         // Every edge carries its route so no hook asks again; only PreToolUse is routed.
-        containment_route: Some(edge_route(&event_name, &result, envelope.recording_only)),
+        containment_route: Some(edge_route(&event_name, &result, recording_only)),
         containment_rewrite: None,
         local_cli_rule: local_cli_rule?,
         receipt_recorded: false,
@@ -419,6 +430,8 @@ fn evaluate_validated_envelope<Lease>(
         event_name,
         payload_kind: kind,
         result,
+        requires_approval,
+        recording_only_response,
         harness_response,
         receipt,
     };
@@ -470,17 +483,6 @@ pub(crate) fn evaluate_cursor_probe(
     let lease = policy_store.command_authority_lease(snapshot)?;
     evaluate_validated_envelope(envelope, Some(admitted.as_ref()), Some(policy_store), lease)
         .map(Some)
-}
-
-/// Evaluate against a snapshot while the policy store's request fence is
-/// held. Approval challenge creation uses this entry point so the action,
-/// snapshot, and derived bindings describe one coherent state.
-pub(crate) fn evaluate_envelope_with_snapshot(
-    envelope: GuardHookEnvelopeV2,
-    snapshot: &AdmittedPolicySnapshot,
-) -> Result<Vec<u8>, String> {
-    validate_envelope_shape(&envelope)?;
-    evaluate_validated_envelope(envelope, Some(snapshot), None, ())
 }
 
 #[cfg(test)]

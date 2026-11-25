@@ -20,13 +20,13 @@ from typing import Literal, cast
 
 from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.native_resident_client import native_resident_client_request
-from codex_plugin_scanner.guard.native_transport_error import native_error
 from codex_plugin_scanner.guard.native_route_receipt import record_native_hook_result
 from codex_plugin_scanner.guard.native_runtime_resilience import (
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
 )
+from codex_plugin_scanner.guard.native_transport_error import native_error
 
 ModelOutputAction = Literal[
     "allow_original",
@@ -142,7 +142,14 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
             "receipt",
         }
         if not required <= set(decoded) or set(decoded) - (
-            required | {"request_id", "harness_response", "containment_route"}
+            required
+            | {
+                "request_id",
+                "harness_response",
+                "containment_route",
+                "requires_approval",
+                "recording_only_response",
+            }
         ):
             return None
         # A PostToolUse answer is never routed into the containment sink.
@@ -157,6 +164,14 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
             or not harness
             or len(harness) > 64
             or not isinstance(decoded.get("result"), dict)
+            or (
+                "requires_approval" in decoded
+                and not isinstance(decoded["requires_approval"], bool)
+            )
+            or (
+                "recording_only_response" in decoded
+                and not isinstance(decoded["recording_only_response"], bool)
+            )
         ):
             return None
         request_id = decoded.get("request_id")

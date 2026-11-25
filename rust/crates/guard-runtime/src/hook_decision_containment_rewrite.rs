@@ -152,7 +152,12 @@ fn rewrite(inputs: &ContainmentRewriteInputsV1, native: Option<NativeSink>) -> O
         discard(&request);
         return None;
     };
-    Some(routed_response(original, joined))
+    let response = routed_response(original, joined);
+    if !routed_shape(&response, original) {
+        discard(&request);
+        return None;
+    }
+    Some(response)
 }
 
 /// The sink command line as the harness's shell reads it.
@@ -175,6 +180,41 @@ fn routed_response(original: &Map<String, Value>, joined: String) -> Value {
             "updatedInput": updated,
         },
     })
+}
+
+/// Prove the harness response keeps every input field and only replaces the
+/// command with the contained sink invocation. This is the semantic proof
+/// consumed by the hook edge. Python transports the already-proven response.
+pub(crate) fn routed_shape(routed: &Value, original: &Map<String, Value>) -> bool {
+    let Some(routed) = routed.as_object() else {
+        return false;
+    };
+    if routed.len() != 3
+        || routed.get("policy_action").and_then(Value::as_str) != Some("allow")
+        || routed.get("reason_code").and_then(Value::as_str) != Some(ROUTED_REASON)
+    {
+        return false;
+    }
+    let Some(output) = routed.get("hookSpecificOutput").and_then(Value::as_object) else {
+        return false;
+    };
+    if output.len() != 3
+        || output.get("hookEventName").and_then(Value::as_str) != Some("PreToolUse")
+        || output.get("permissionDecision").and_then(Value::as_str) != Some("allow")
+    {
+        return false;
+    }
+    let Some(updated) = output.get("updatedInput").and_then(Value::as_object) else {
+        return false;
+    };
+    if !updated.get("command").is_some_and(Value::is_string) {
+        return false;
+    }
+    let mut normalized = updated.clone();
+    normalized.insert("command".to_owned(), Value::Null);
+    let mut expected = original.clone();
+    expected.insert("command".to_owned(), Value::Null);
+    normalized == expected
 }
 
 #[cfg(all(test, unix))]

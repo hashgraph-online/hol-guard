@@ -98,6 +98,8 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
     allowed = required | {
         "request_id",
         "harness_response",
+        "requires_approval",
+        "recording_only_response",
         "containment_route",
         "containment_rewrite",
         "local_cli_rule",
@@ -122,6 +124,8 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or len(payload["harness"]) > 64
         or not isinstance(payload.get("result"), dict)
         or not isinstance(payload.get("harness_response"), dict)
+        or not isinstance(payload.get("requires_approval"), bool)
+        or not isinstance(payload.get("recording_only_response"), bool)
         or not isinstance(payload.get("receipt_recorded", False), bool)
         or not isinstance(payload.get("activity_recorded", False), bool)
         or not isinstance(payload.get("exact_command_block", False), bool)
