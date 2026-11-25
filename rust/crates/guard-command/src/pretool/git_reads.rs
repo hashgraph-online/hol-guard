@@ -99,7 +99,8 @@ fn feature_pathspec(arguments: &[String], index: usize, context: super::PathCont
     // The feature-directory exemption only covers tracked repository reads.
     let filesystem_comparison = arguments[separator + 1..].iter().any(|argument| {
         let path = std::path::Path::new(argument);
-        path.is_absolute()
+        argument.starts_with('~')
+            || path.is_absolute()
             || path
                 .components()
                 .any(|component| component == std::path::Component::ParentDir)
@@ -567,6 +568,13 @@ mod feature_pathspec_tests {
     fn feature_pathspec_refuses_an_implicit_no_index_sibling_comparison() {
         let fixture = Fixture::new();
         let arguments = ["diff", "--", "src/lib/auth", "../reference"].map(str::to_owned);
+        assert!(!feature_pathspec(&arguments, 2, context(&fixture.0)));
+    }
+
+    #[test]
+    fn feature_pathspec_refuses_a_shell_home_sibling_comparison() {
+        let fixture = Fixture::new();
+        let arguments = ["diff", "--", "src/lib/auth", "~/scratch"].map(str::to_owned);
         assert!(!feature_pathspec(&arguments, 2, context(&fixture.0)));
     }
 
