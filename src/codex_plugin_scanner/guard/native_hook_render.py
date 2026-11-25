@@ -99,6 +99,44 @@ def native_hook_availability(
     return dict(response) if isinstance(response, dict) else None
 
 
+def native_unavailable_event_response(
+    payload: Mapping[str, object],
+    harness: str,
+    *,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
+    record_post_tool_activity: bool = False,
+) -> dict[str, object] | None:
+    """Ask Rust for the canonical event and its outage response.
+
+    The resident owns event aliases, permission passthrough and post-tool
+    evidence admission. Python only decodes this transport envelope.
+    """
+
+    rendered = native_render_cli(
+        "unavailable_event",
+        harness,
+        {
+            "payload": dict(payload),
+            "record_post_tool_activity": record_post_tool_activity,
+        },
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    if rendered is None or rendered[0] != "document" or not isinstance(rendered[1], Mapping):
+        return None
+    document = rendered[1]
+    event_name = document.get("event_name")
+    response = document.get("response")
+    if not isinstance(event_name, str) or not event_name or not isinstance(response, Mapping):
+        return None
+    return {
+        "event_name": event_name,
+        "response": {str(key): value for key, value in response.items()},
+        "activity_recorded": document.get("activity_recorded") is True,
+    }
+
+
 def native_render_cli(
     kind: str,
     harness: str,
@@ -129,7 +167,14 @@ def native_render_cli(
         )
     elif kind in {"cursor_shell_route", "binding_recording_only"}:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
-    elif kind in {"hermes_bridge", "muse_bridge", "saved_approval", "package_review_settle", "review_reuse"}:
+    elif kind in {
+        "hermes_bridge",
+        "muse_bridge",
+        "saved_approval",
+        "package_review_settle",
+        "review_reuse",
+        "unavailable_event",
+    }:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
     elif kind in {"availability_response", "fail_closed_verdict"}:
         payload = _render_payload(

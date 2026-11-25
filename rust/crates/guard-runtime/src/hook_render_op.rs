@@ -160,6 +160,79 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
         .map_err(|_| "native_hook_render_invalid")?;
         return Ok(cli_payload(CliOutcome::Document(response)));
     }
+    if request.kind == "unavailable_event" {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let payload = object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;
+        let availability = crate::hook_payload_facts_op::availability_response(payload);
+        let event = availability
+            .get("event_name")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let reason = "HOL Guard could not identify this hook event safely.";
+        let permission = availability
+            .get("permission_request")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let normalized_harness = harness.to_lowercase().replace('_', "-");
+        let response = if permission && normalized_harness == "claude-code" {
+            json!({
+                "guard_permission_passthrough": true,
+                "hookSpecificOutput": {"hookEventName": "PermissionRequest"},
+            })
+        } else if permission
+            && matches!(
+                normalized_harness.as_str(),
+                "codex" | "copilot" | "devin" | "zcode" | "muse"
+            )
+        {
+            json!({"hookSpecificOutput": {"hookEventName": "PermissionRequest"}})
+        } else {
+            let reason_code = match event {
+                "PreToolUse" => "native_pre_tool_unavailable",
+                "PostToolUse" => "native_post_tool_unavailable",
+                _ => "native_hook_event_unavailable",
+            };
+            guard_command::hook_responses::fail_closed::response(
+                harness,
+                event,
+                reason,
+                reason_code,
+                None,
+            )
+            .map_err(|_| "native_hook_render_invalid")?
+        };
+        let activity_recorded = if params.get("record_post_tool_activity")
+            == Some(&Value::Bool(true))
+            && matches!(event, "PostToolUse" | "PostToolUseFailure")
+        {
+            if let (Some(store), Some(event_payload)) = (store, payload.as_object()) {
+                if let Ok(home) =
+                    crate::resident_state::private_root_for_state_base(store.state_base())
+                {
+                    crate::hook_evidence_writer_op::record_direct(&home, |writer| {
+                        crate::edge_receipt::queue_post_tool_activity(
+                            writer,
+                            harness,
+                            event,
+                            event_payload,
+                        )
+                    })
+                    .unwrap_or(false)
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        let mut document = Object::new();
+        document.insert("event_name".into(), Value::String(event.to_owned()));
+        document.insert("response".into(), response);
+        document.insert("activity_recorded".into(), Value::Bool(activity_recorded));
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
     if request.kind == "fail_closed_verdict" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         let verdict = object_of(params.get("verdict")).ok_or("native_hook_render_invalid")?;
