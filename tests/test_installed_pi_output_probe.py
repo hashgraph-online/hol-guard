@@ -758,23 +758,28 @@ def test_native_cleanup_gives_one_stop_more_than_the_runtime_stop_deadline(
     # The launcher obeys `deadline_monotonic` and ignores `timeout_seconds`
     # when both are given, so the attempt is read from the deadline.
     runtime_stop_deadline = 2.0
-    now = 100.0
+    clock = [100.0]
     stop_budgets: list[float] = []
     state_file = tmp_path / "generation.json"
     stopped = False
 
-    monkeypatch.setattr(probe.time, "monotonic", lambda: now)
+    monkeypatch.setattr(probe.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(native_resident_client, "close_native_residents", lambda *_args, **_kwargs: True)
 
     def stop(*, deadline_monotonic: float, **_kwargs: object) -> bool:
         nonlocal stopped
-        stop_budgets.append(deadline_monotonic - now)
-        stopped = deadline_monotonic - now > runtime_stop_deadline + 1.0
+        stop_budgets.append(deadline_monotonic - clock[0])
+        stopped = deadline_monotonic - clock[0] > runtime_stop_deadline + 1.0
         return stopped
+
+    def sleep(seconds: float) -> None:
+        # Waiting moves the fake clock, so a budget that is too short reaches
+        # the cleanup deadline and fails instead of retrying forever.
+        clock[0] += max(seconds, 0.1)
 
     monkeypatch.setattr(native_resident_client, "stop_native_resident", stop)
     monkeypatch.setattr(probe, "_native_state_files", lambda _guard_home: () if stopped else (state_file,))
-    monkeypatch.setattr(probe.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(probe.time, "sleep", sleep)
 
     class Identity:
         path = Path("/bin/false")
