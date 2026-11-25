@@ -198,6 +198,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Concurrent isolated cases (default: half the host CPUs, bounded to 1-8)",
     )
     qualify.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Stop scheduling cases after the first product failure (default: run the whole catalog "
+        "so one round reports every failure)",
+    )
+    qualify.add_argument(
         "--case-retries",
         type=int,
         default=2,
