@@ -332,7 +332,9 @@ pub(super) fn points_nowhere(prompt: &str, root: &Path, quoting: &[usize], compl
 /// ranked on the prompt's plain words alone, as a task title pasted in a
 /// project too big to read whole got: a config file and unrelated modules.
 /// CIGAR's own search can still find the quote in a file the walk did not
-/// reach, and a note that shows it is kept.
+/// reach, and a note that shows it is kept. Only what files hold counts:
+/// a quote such as "project" or "lines" that only Guard's own words in the
+/// note hold is not shown.
 pub(super) fn quote_unshown(
     prompt: &str,
     root: &Path,
@@ -342,8 +344,40 @@ pub(super) fn quote_unshown(
     !quoted.is_empty()
         && quoting.iter().all(|&files| files == 0)
         && only_quoted(prompt, root)
-        && !crate::context_assistance_prompt_words::quoted(&note.to_lowercase(), quoted)
-            .contains(&true)
+        && !crate::context_assistance_prompt_words::quoted(&file_text(note), quoted).contains(&true)
+}
+
+/// Lines Guard writes between a note's excerpts, lowercased, by how they
+/// start: the lead-ins of its lists and the map's titles.
+const GUARD_LINES: &[&str] = &[
+    "already shown earlier in this session:",
+    "other matching files:",
+    "definitions this request",
+    "tests that use the changed definitions:",
+    "changed definitions",
+];
+
+/// A note's text without Guard's own words, lowercased: every note opens
+/// with Guard's paragraph, its excerpts follow a blank line, and each
+/// excerpt's label is its path and `(lines a-b)`.
+fn file_text(note: &str) -> String {
+    let note = note.to_lowercase();
+    let label = |line: &str| {
+        (line.strip_suffix(')'))
+            .and_then(|line| line.rsplit_once(" (lines "))
+            .is_some_and(|(_, range)| {
+                range.split_once('-').is_some_and(|(from, to)| {
+                    [from, to]
+                        .iter()
+                        .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+                })
+            })
+    };
+    let body = note.split_once("\n\n").map_or("", |(_, body)| body);
+    let lines = body
+        .lines()
+        .filter(|line| !label(line) && !GUARD_LINES.iter().any(|own| line.starts_with(own)));
+    lines.collect::<Vec<_>>().join("\n")
 }
 
 /// True when the prompt writes no name as code and names no file in this

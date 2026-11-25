@@ -203,14 +203,26 @@ fn a_note_showing_no_quote_the_walk_missed_is_dropped() {
     std::fs::write(dir.path().join("cli.py"), "def count():\n    pass\n").unwrap();
     let title = "Do this task here: \u{201c}CWV follow-up: rail fallback\u{201d}";
     let config = "tsconfig.followup.json (lines 1-3)\n{ \"extends\": \"./tsconfig.json\" }\n";
-    let unshown = |prompt: &str, quoting: &[usize], note: &str| {
-        quote_unshown(prompt, dir.path(), (&phrases(prompt), quoting), note)
+    let unshown = |prompt: &str, quoting: &[usize], body: &str| {
+        let note = format!("{}\n\n{body}", super::super::HEADER);
+        quote_unshown(prompt, dir.path(), (&phrases(prompt), quoting), &note)
     };
     assert!(unshown(title, &[0], config));
     assert!(unshown(
         "use the word \"password\" to approve",
         &[0],
         config
+    ));
+    // Only Guard's own words in the note hold the quote: its opening
+    // paragraph, an excerpt's label, a list's lead-in.
+    for word in ["project", "request", "lines", "already shown"] {
+        let prompt = format!("use the word \"{word}\" to approve");
+        assert!(unshown(&prompt, &[0], config), "{word}");
+    }
+    assert!(unshown(
+        "use the word \"already shown\" to approve",
+        &[0],
+        "Already shown earlier in this session: cli.py (lines 1-2)"
     ));
     // The note shows the quote CIGAR found beyond the walk.
     assert!(!unshown(
