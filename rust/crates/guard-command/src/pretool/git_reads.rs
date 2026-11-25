@@ -81,6 +81,26 @@ fn exclusion_pathspec(arguments: &[String], index: usize) -> bool {
         && path.is_some_and(|path| !path.is_empty() && !path.starts_with([':', '/', '!', '^', '(']))
 }
 
+/// A pathspec after `--` that names a sign-in or token feature directory
+/// inside the repository, such as `src/api/auth`, or a directory or document
+/// below one. Git filters the read to that part of the tree, which an
+/// unfiltered read already covers, and the credential-name screen refused it
+/// only for the directory's name. `--no-index` compares files on disk rather
+/// than tracked content, so it keeps the review.
+fn feature_pathspec(arguments: &[String], index: usize, context: super::PathContext<'_>) -> bool {
+    arguments[..index].iter().any(|argument| argument == "--")
+        && !arguments.iter().any(|argument| argument == "--no-index")
+        && crate::command_compatibility::git_operand_directory(arguments, context).is_some_and(
+            |directory| {
+                super::read_paths::feature_directories::feature_pathspec(
+                    &directory,
+                    &arguments[index],
+                    context.home_dir,
+                )
+            },
+        )
+}
+
 pub(super) fn safe_git_arguments(
     arguments: &[String],
     allow_helper_context: bool,
@@ -168,7 +188,8 @@ pub(super) fn safe_git_arguments(
             && !exclusion_pathspec(arguments, index)
             && ((value.starts_with(':') && !index_objects.contains(&index))
                 || (super::sensitive_read_path_argument(value)
-                    && listed.is_none_or(|start| index < start)))
+                    && listed.is_none_or(|start| index < start)
+                    && !feature_pathspec(arguments, index, context)))
     }) {
         return false;
     }

@@ -182,6 +182,15 @@ fn operand_directory(cwd: Option<&str>, route: Option<&str>) -> Option<std::path
     cwd.map(|cwd| std::path::Path::new(cwd).join(route))
 }
 
+/// Where an admitted read's bare operands resolve.
+pub(super) fn read_operand_directory(
+    arguments: &[String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    let (_, route) = routed_with_route(arguments, context, true)?;
+    operand_directory(context.cwd, route.as_deref())
+}
+
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
 /// ordinary diff proof already admits. The staged content is no more private
 /// than the working tree beside it, so the shared read proof (configuration

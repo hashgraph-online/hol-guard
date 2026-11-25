@@ -71,6 +71,54 @@ pub(in crate::pretool) fn feature_only_credential_name(
     renamed && !guard_secure_fs::credential_named_path(&neutral)
 }
 
+/// A Git pathspec, resolved against `directory`, that names a feature
+/// directory inside a repository or a directory or document below one.
+///
+/// Only a plain relative path qualifies: no magic, glob, parent step or
+/// symbolic link on the way, so the path Git filters by is the one proven
+/// here. Every other path screen still runs on the spelling with each feature
+/// directory renamed, so `src/auth/.env` and `src/auth/secrets` keep their
+/// review.
+pub(in crate::pretool) fn feature_pathspec(
+    directory: &Path,
+    pathspec: &str,
+    home_dir: Option<&str>,
+) -> bool {
+    let relative = pathspec.strip_prefix("./").unwrap_or(pathspec);
+    let relative = relative.trim_end_matches('/');
+    if relative.is_empty()
+        || relative.starts_with(['/', ':', '~', '-'])
+        || relative.contains(['*', '?', '[', '\\', '$', '`'])
+        || relative
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return false;
+    }
+    let (Ok(base), Ok(canonical)) = (
+        std::fs::canonicalize(directory),
+        std::fs::canonicalize(directory.join(relative)),
+    ) else {
+        return false;
+    };
+    if canonical != base.join(relative) {
+        return false;
+    }
+    let neutral = relative
+        .split('/')
+        .map(|part| {
+            if FEATURE_DIRECTORIES.contains(&part.to_ascii_lowercase().as_str()) {
+                "feature"
+            } else {
+                part
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    feature_only_credential_name(&canonical, home_dir)
+        && !crate::pretool::sensitive_read_path_argument(&neutral)
+}
+
 fn document_or_manifest(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
@@ -119,7 +167,7 @@ fn gitdir_pointer(marker: &Path) -> bool {
 
 #[cfg(all(test, unix))]
 mod tests {
-    use super::feature_only_credential_name;
+    use super::{feature_only_credential_name, feature_pathspec};
     use std::path::{Path, PathBuf};
 
     struct Repository {
@@ -331,5 +379,81 @@ mod tests {
         let verdict = feature_only_credential_name(&root.join("auth/README.md"), None);
         let _ = std::fs::remove_dir_all(&root);
         assert!(verdict);
+    }
+
+    /// `git diff --stat main -- src/api/auth` and `git log --oneline --
+    /// src/api/auth/session` filter a read to the sign-in code. The directory
+    /// name is the only reason the credential screen refused them.
+    #[test]
+    fn git_pathspecs_into_a_feature_directory_are_code() {
+        let repo = repository(
+            "pathspec",
+            &[
+                "src/api/auth/session/route.ts",
+                "src/api/auth/README.md",
+                "src/api/auth/.env",
+                "src/api/auth/secrets/key.json",
+                "src/api/auth/config.json",
+                "src/token/index.ts",
+            ],
+        );
+        std::os::unix::fs::symlink(repo.root.join("src/api/auth"), repo.root.join("src/auth"))
+            .unwrap();
+        for pathspec in [
+            "src/api/auth",
+            "src/api/auth/",
+            "./src/api/auth/session",
+            "src/api/auth/README.md",
+            "src/token",
+        ] {
+            assert!(feature_pathspec(&repo.root, pathspec, None), "{pathspec}");
+        }
+        for pathspec in [
+            "src/api/auth/.env",
+            "src/api/auth/secrets",
+            "src/api/auth/config.json",
+            "src/api/auth/*",
+            ":(glob)src/api/auth",
+            "src/../src/api/auth",
+            "src//api/auth",
+            "src/api/missing/auth",
+            "/src/api/auth",
+            "src/auth",
+        ] {
+            assert!(!feature_pathspec(&repo.root, pathspec, None), "{pathspec}");
+        }
+    }
+
+    /// The whole read proof takes the exemption only for a pathspec after
+    /// `--`, and never for `--no-index`, which compares files on disk.
+    #[test]
+    fn git_reads_filtered_to_a_feature_directory_are_proven() {
+        let repo = repository(
+            "git-read",
+            &["src/api/auth/session/route.ts", "src/api/auth/.env"],
+        );
+        let cwd = repo.root.to_string_lossy().into_owned();
+        let context = crate::pretool::PathContext {
+            cwd: Some(&cwd),
+            ..crate::pretool::PathContext::default()
+        };
+        let proven = |text: &str| {
+            let arguments: Vec<String> = text.split_whitespace().map(str::to_owned).collect();
+            crate::pretool::safe_git_arguments(&arguments, true, context)
+        };
+        for text in [
+            "diff --stat main HEAD -- src/api/auth",
+            "log --oneline -- src/api/auth/session",
+            "diff main -- src/api/auth/session",
+        ] {
+            assert!(proven(text), "{text}");
+        }
+        for text in [
+            "diff --stat main HEAD -- src/api/auth/.env",
+            "diff --no-index -- src/api/auth src/api",
+            "diff --stat src/api/auth",
+        ] {
+            assert!(!proven(text), "{text}");
+        }
     }
 }

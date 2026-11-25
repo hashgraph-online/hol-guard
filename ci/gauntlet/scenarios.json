@@ -3582,6 +3582,19 @@
       ]
     },
     {
+      "id": "omp-native-git-reads-filtered-to-sign-in-folder",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Look at the history of the sign-in code under src/lib/auth: run each listed command once, in order, exactly as written, and summarize what they printed.",
+      "commands": [
+        "git log --oneline -- src/lib/auth",
+        "git diff --stat HEAD -- src/lib/auth"
+      ]
+    },
+    {
       "id": "omp-native-line-range-reads-tmp-copy",
       "expectation": "allow",
       "oracle": "native-tools",

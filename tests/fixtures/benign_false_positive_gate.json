@@ -26088,6 +26088,57 @@
       "expect": "allow"
     },
     {
+      "id": "git-log-filtered-to-sign-in-source-folder",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -- src/lib/auth"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "git-diff-stat-filtered-to-sign-in-source-folder",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --stat HEAD -- src/lib/auth"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "git-routed-diff-stat-filtered-to-nested-sign-in-folder",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C src diff --stat HEAD HEAD -- lib/session/auth"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "queue-cd-ls-or-echo-fallback",
       "fix_area": "queue",
       "harnesses": [
