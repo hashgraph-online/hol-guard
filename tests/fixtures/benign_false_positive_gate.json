@@ -1409,6 +1409,23 @@
       "expect": "allow"
     },
     {
+      "id": "loop-over-quoted-bracket-route-dirs",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for d in . \"[slug]\"; do ls \"app/items/$d\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "ls-escaped-slug-dir-by-full-path",
       "fix_area": "shell",
       "harnesses": [

@@ -109,7 +109,7 @@ fn unrolled<'a>(
         return None;
     }
     let rest = keyword(rest, "in")?;
-    let (mut words, rest) = header_words(rest, home)?;
+    let (mut words, literal_brackets, rest) = header_words(rest, home)?;
     if words.is_empty() {
         return None;
     }
@@ -185,8 +185,12 @@ fn unrolled<'a>(
     // Taking those quotes off is only faithful while every word is a single
     // field, so a header that mixes a pattern with a word holding separators
     // has no written form that is both and keeps its review.
-    let patterned = words.iter().any(|word| word.contains(['*', '?', '[']));
-    let spaced = words.iter().any(|word| word.contains([' ', '\t']));
+    // A quoted word holding `[` and `]`, such as the `"[slug]"` of a route
+    // directory, is that text and no pattern. It is written back the way a
+    // spaced word is: only where the body quotes every reference, so the
+    // brackets stay as literal in the unrolled text as they were in the loop.
+    let patterned = !literal_brackets && words.iter().any(|word| word.contains(['*', '?', '[']));
+    let spaced = literal_brackets || words.iter().any(|word| word.contains([' ', '\t']));
     if patterned && spaced {
         return None;
     }
@@ -306,6 +310,27 @@ fn spaced_value(value: &str) -> bool {
             .all(|field| field.is_empty() || safe_value(field))
 }
 
+/// A quoted word that names a directory or file with square brackets in its
+/// name, such as `"[slug]"`, `"[...slug]"` or `"app/items/[id]/page.tsx"`.
+///
+/// Inside quotes the brackets are text, not a pattern. Only the characters a
+/// plain word may hold and the brackets themselves are taken, so the word
+/// written back inside the body's quotes reads as the same text.
+fn bracket_value(value: &str) -> bool {
+    value.len() <= MAX_WORD_BYTES
+        && value.contains('[')
+        && value.contains(']')
+        && !value.starts_with('-')
+        && !value.split('/').any(|segment| segment == "..")
+        && value.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || matches!(
+                    c,
+                    '_' | '.' | '/' | '@' | '%' | '+' | '=' | ':' | ',' | '-' | '[' | ']'
+                )
+        })
+}
+
 /// A glob pattern the shell expands against the directory the loop runs in,
 /// such as `*.ts`, `src/*.ts` or `packages/*/`.
 ///
@@ -379,7 +404,7 @@ fn names_a_file_type(value: &str) -> bool {
 /// literal rule: writing it back out unquoted would otherwise hand the body a
 /// pattern the loop never expanded. Its text may hold the separators the
 /// quotes protect, which [`spaced_value`] admits.
-fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &'a str)> {
+fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, bool, &'a str)> {
     let mut words: Vec<(String, bool)> = Vec::new();
     let mut current = String::new();
     let mut in_word = false;
@@ -398,16 +423,28 @@ fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &
                 if in_word {
                     words.push((current, quoted));
                 }
+                let literal_brackets = words
+                    .iter()
+                    .any(|(word, quoted)| *quoted && bracket_value(word));
+                // A pattern beside a quoted bracket word has no written form
+                // that keeps one a pattern and the other its text.
+                let patterned = words
+                    .iter()
+                    .any(|(word, quoted)| !quoted && pattern_value(word));
+                if literal_brackets && patterned {
+                    return None;
+                }
                 return words
                     .iter()
                     .all(|(word, quoted)| {
                         safe_value(word)
-                            || (*quoted && spaced_value(word))
+                            || (*quoted && (spaced_value(word) || bracket_value(word)))
                             || (!quoted && pattern_value(word))
                     })
                     .then(|| {
                         (
                             words.into_iter().map(|(word, _)| word).collect(),
+                            literal_brackets,
                             &text[index..],
                         )
                     });
