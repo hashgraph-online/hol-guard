@@ -347,19 +347,27 @@ pub(super) fn quote_unshown(
         && !crate::context_assistance_prompt_words::quoted(&file_text(note), quoted).contains(&true)
 }
 
-/// Lines Guard writes between a note's excerpts, lowercased, by how they
-/// start: the lead-ins of its lists and the map's titles.
-const GUARD_LINES: &[&str] = &[
+/// How the lines Guard writes between a note's excerpts start, lowercased.
+const GUARD_LEAD_INS: &[&str] = &[
     "already shown earlier in this session:",
     "other matching files:",
-    "definitions this request",
+];
+
+/// The fixed titles Guard writes on a line of their own, lowercased.
+const GUARD_TITLES: &[&str] = &[
+    "definitions this request names:",
     "tests that use the changed definitions:",
-    "changed definitions",
+    "changed definitions as they read now:",
+    "changed definitions (current line numbers):",
+    "definitions this request names or quotes, in files guard keeps out of this context \
+     (open these lines yourself):",
 ];
 
 /// A note's text without Guard's own words, lowercased: every note opens
-/// with Guard's paragraph, its excerpts follow a blank line, and each
-/// excerpt's label is its path and `(lines a-b)`.
+/// with Guard's paragraph and its excerpts follow a blank line. Lines inside
+/// a code fence are a file's and always kept. Outside one, an excerpt's
+/// label (its path and `(lines a-b)`), a list's lead-in and a title that is
+/// the whole line are Guard's.
 fn file_text(note: &str) -> String {
     let note = note.to_lowercase();
     let label = |line: &str| {
@@ -373,11 +381,22 @@ fn file_text(note: &str) -> String {
                 })
             })
     };
+    let own = |line: &str| {
+        label(line)
+            || GUARD_TITLES.contains(&line.trim_end())
+            || GUARD_LEAD_INS.iter().any(|lead| line.starts_with(lead))
+    };
     let body = note.split_once("\n\n").map_or("", |(_, body)| body);
-    let lines = body
-        .lines()
-        .filter(|line| !label(line) && !GUARD_LINES.iter().any(|own| line.starts_with(own)));
-    lines.collect::<Vec<_>>().join("\n")
+    let mut fenced = false;
+    let mut kept = Vec::new();
+    for line in body.lines() {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+        } else if fenced || !own(line) {
+            kept.push(line);
+        }
+    }
+    kept.join("\n")
 }
 
 /// True when the prompt writes no name as code and names no file in this

@@ -224,6 +224,16 @@ fn a_note_showing_no_quote_the_walk_missed_is_dropped() {
         &[0],
         "Already shown earlier in this session: cli.py (lines 1-2)"
     ));
+    // A file's line that starts like one of Guard's still shows the quote.
+    let fenced =
+        "docs/auth.md (lines 1-2)\n```markdown\nChanged definitions require password checks.\n```";
+    let password = "use the word \"password\" to approve";
+    assert!(!unshown(password, &[0], fenced));
+    assert!(!unshown(
+        password,
+        &[0],
+        "Definitions this request names:\nChanged definitions require password checks."
+    ));
     // The note shows the quote CIGAR found beyond the walk.
     assert!(!unshown(
         title,
