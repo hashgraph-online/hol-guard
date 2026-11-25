@@ -2,8 +2,8 @@
 //! refresh work. A plain rebase rewrites commits and the index; it never
 //! writes the configuration the read was proven against. The forms that can
 //! run arbitrary commands between picks (`--exec`, `-x`, `--interactive`,
-//! `-i`, `--edit-todo`, `--continue`, `--skip`) could, so they keep the read
-//! under review.
+//! `-i`, `--edit-todo`, `--continue`, `--skip`, `--strategy`, `-s`) could, so
+//! they keep the read under review.
 
 use crate::git_helper_fixture as fixture;
 use fixture::FixtureCleanup;
@@ -145,6 +145,10 @@ const REBASE_THAT_RUNS_COMMANDS: &[&str] = &[
     "git rebase --cont && git log --oneline -3",
     "git rebase --skip && git status --short",
     "git rebase --ski && git status --short",
+    "git rebase --strategy=ours origin/main && git log --oneline -1",
+    "git rebase --strat=ours origin/main && git status --short",
+    "git rebase -s ours origin/main && git log --oneline -1",
+    "git rebase -qs ours origin/main && git status --short",
 ];
 
 #[test]

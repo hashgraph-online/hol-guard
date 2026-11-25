@@ -102,9 +102,11 @@ pub(super) fn preserves_configuration(arguments: &[String]) -> bool {
 /// rebase (`-i`, `--edit-todo`) hands the todo list to an editor that can add
 /// such commands. Resuming a stopped rebase (`--continue`, `--skip`) also runs
 /// any `exec` lines left in its todo, so any of these options could write the
-/// configuration the next read obeys. Git accepts a unique prefix of a long
-/// option and bundles short ones, so every spelling that could reach those
-/// options keeps the review.
+/// configuration the next read obeys. A non-default merge strategy can invoke
+/// an external `git-merge-<strategy>` command, so `--strategy` and `-s` keep
+/// the review as well. Git accepts a unique prefix of a long option and
+/// bundles short ones, so every spelling that could reach those options keeps
+/// the review.
 pub(super) fn config_stable_step(operation: &str, rest: &[String]) -> bool {
     CONFIG_STABLE_STEPS.contains(&operation)
         || (operation == "rebase" && !rest.iter().any(|word| rebase_runs_commands(word)))
@@ -115,12 +117,19 @@ fn rebase_runs_commands(word: &str) -> bool {
     if let Some(long) = word.strip_prefix("--") {
         let name = long.split_once('=').map_or(long, |(name, _)| name);
         return !name.is_empty()
-            && ["exec", "interactive", "edit-todo", "continue", "skip"]
-                .iter()
-                .any(|option| option.starts_with(name));
+            && [
+                "exec",
+                "interactive",
+                "edit-todo",
+                "continue",
+                "skip",
+                "strategy",
+            ]
+            .iter()
+            .any(|option| option.starts_with(name));
     }
     word.strip_prefix('-')
-        .is_some_and(|letters| letters.contains(['i', 'x']))
+        .is_some_and(|letters| letters.contains(['i', 'x', 's']))
 }
 
 /// Whether a Git step, wherever its global options route it, rewrites no

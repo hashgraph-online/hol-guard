@@ -38,6 +38,10 @@ fn a_rebase_that_can_run_commands_keeps_the_review() {
         "--cont",
         "--skip",
         "--ski",
+        "--strategy=ours origin/main",
+        "--strat=ours origin/main",
+        "-s ours origin/main",
+        "-qs ours origin/main",
     ] {
         assert!(!config_stable_step("rebase", &words(text)), "{text}");
     }
