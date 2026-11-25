@@ -314,6 +314,8 @@ fn a_web_address_gives_no_search_words() {
         "Page https://example.com/guard/fleet?workspaceId=7&tab=usage looks off",
         "See [the run](https://ci.example.org/runs/42) and <http://localhost:3000/a_b>.",
         "Clone git+ssh://git@example.com/acme/tool.git, then retry",
+        "Review **https://example.com/a?workspaceId=7** and _https://example.com/b_c_",
+        "Open http://[::1]:3000/a?workspaceId=7 now",
     ] {
         assert!(
             spellings(prompt).is_empty(),

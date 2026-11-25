@@ -46,12 +46,13 @@ pub(super) fn without_paths(prompt: &str) -> String {
     let mut before: Option<char> = None;
     while let Some(c) = rest.chars().next() {
         let opens = before.is_none_or(|b| b.is_whitespace() || OPENERS.contains(&b));
-        let end = if !opens {
-            0
-        } else if starts_url(rest) {
-            rest.find(|c: char| c.is_whitespace() || URL_CLOSERS.contains(&c))
-                .unwrap_or(rest.len())
-        } else if starts_path(rest) {
+        // A web address starts wherever a word does, so `**https://...**`
+        // in Markdown bold is one too.
+        let word_starts =
+            before.is_none_or(|b| !(b.is_alphanumeric() || matches!(b, '+' | '.' | '-')));
+        let end = if word_starts && starts_url(rest) {
+            url_end(rest)
+        } else if opens && starts_path(rest) {
             path_end(rest, before)
         } else {
             0
@@ -80,6 +81,19 @@ fn starts_url(text: &str) -> bool {
         && text[scheme..].starts_with("://")
         && (text[scheme + 3..].chars().next())
             .is_some_and(|c| !c.is_whitespace() && !URL_CLOSERS.contains(&c))
+}
+
+/// Where the web address at the start of `text` ends: at a space or a
+/// closing mark, past an IPv6 host's brackets (`http://[::1]:3000/a`).
+fn url_end(text: &str) -> usize {
+    let host = text.find("://").map_or(0, |at| at + 3);
+    let bracket = (text[host..].strip_prefix('['))
+        .and_then(|inside| inside.find(|c: char| c == ']' || c.is_whitespace()))
+        .filter(|&end| text[host + 1 + end..].starts_with(']'));
+    let from = bracket.map_or(host, |end| host + end + 2);
+    text[from..]
+        .find(|c: char| c.is_whitespace() || URL_CLOSERS.contains(&c))
+        .map_or(text.len(), |end| from + end)
 }
 
 fn starts_path(text: &str) -> bool {

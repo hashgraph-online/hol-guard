@@ -113,7 +113,8 @@ fn words(prompt: &str) -> Vec<(String, bool)> {
     for (span, ticked) in spans(prompt) {
         for written in tokens(span) {
             let token = written.trim_matches(['.', '-', '/']);
-            if file_name(token).is_some() {
+            // A mark left by itself, such as the `_` of `_https://..._`, is no word.
+            if file_name(token).is_some() || !token.contains(char::is_alphanumeric) {
                 continue;
             }
             let end = written.as_ptr() as usize - span.as_ptr() as usize + written.len();
