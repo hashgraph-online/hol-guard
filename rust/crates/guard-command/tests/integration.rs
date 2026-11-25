@@ -67,6 +67,7 @@ pub mod pretool_archive_listing;
 pub mod pretool_arithmetic_own_lookup;
 pub mod pretool_bare_assignment_lists;
 pub mod pretool_blank_structured_field;
+pub mod pretool_brace_operands;
 pub mod pretool_brew_reads;
 pub mod pretool_bun_eval;
 pub mod pretool_cd_canonical_workspace;

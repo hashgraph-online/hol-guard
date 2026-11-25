@@ -130,6 +130,7 @@ pub(crate) use directory_targets::safe_directory_target;
 mod archive_listing;
 mod awk_reads;
 mod base64_reads;
+mod brace_operands;
 mod brace_words;
 mod brew_reads;
 mod bun_eval;
@@ -1209,6 +1210,7 @@ fn rewritten_command_list_at(command: &str, home_dir: Option<&str>) -> Option<St
         .or_else(|| control_flow_flatten::flatten(command))
         .or_else(|| control_flow_chain::spliced(command, home_dir))
         .or_else(|| list_wrapper::unwrapped(command))
+        .or_else(|| brace_operands::expanded(command))
 }
 
 fn evaluate_rewritten(

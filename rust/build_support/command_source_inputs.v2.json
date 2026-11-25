@@ -315,6 +315,7 @@
       "src/pretool/awk_reads.rs",
       "src/pretool/base64_reads.rs",
       "src/pretool/brace_group.rs",
+      "src/pretool/brace_operands.rs",
       "src/pretool/brace_words.rs",
       "src/pretool/brew_reads.rs",
       "src/pretool/bun_eval.rs",
