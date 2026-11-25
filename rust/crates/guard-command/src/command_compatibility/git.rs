@@ -182,12 +182,21 @@ fn operand_directory(cwd: Option<&str>, route: Option<&str>) -> Option<std::path
     cwd.map(|cwd| std::path::Path::new(cwd).join(route))
 }
 
-/// Where an admitted read's bare operands resolve.
+/// Where an admitted read's bare operands resolve. A `--git-dir` route
+/// reads a repository that need not be the one around that directory, so it
+/// has no operand directory a pathspec proof can rely on.
 pub(super) fn read_operand_directory(
     arguments: &[String],
     context: crate::pretool::PathContext<'_>,
 ) -> Option<std::path::PathBuf> {
-    let (_, route) = routed_with_route(arguments, context, true)?;
+    let (rest, route) = routed_with_route(arguments, context, true)?;
+    let global = &arguments[..arguments.len() - rest.len()];
+    if global
+        .iter()
+        .any(|argument| argument == "--git-dir" || argument.starts_with("--git-dir="))
+    {
+        return None;
+    }
     operand_directory(context.cwd, route.as_deref())
 }
 

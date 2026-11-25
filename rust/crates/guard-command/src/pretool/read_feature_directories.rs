@@ -456,4 +456,27 @@ mod tests {
             assert!(!proven(text), "{text}");
         }
     }
+
+    /// `--git-dir` picks the repository Git reads, which need not be the one
+    /// the pathspec was proven in, so a routed read keeps its review.
+    #[test]
+    fn git_dir_routed_reads_keep_the_directory_review() {
+        let repo = repository("git-dir-read", &["src/api/auth/session/route.ts"]);
+        let cwd = repo.root.to_string_lossy().into_owned();
+        let context = crate::pretool::PathContext {
+            cwd: Some(&cwd),
+            ..crate::pretool::PathContext::default()
+        };
+        let proven = |text: &str| {
+            let arguments: Vec<String> = text.split_whitespace().map(str::to_owned).collect();
+            crate::pretool::safe_git_arguments(&arguments, true, context)
+        };
+        assert!(proven("-C . diff --stat main HEAD -- src/api/auth"));
+        for text in [
+            "--git-dir=.git diff --stat main HEAD -- src/api/auth",
+            "--git-dir .git log --oneline -- src/api/auth",
+        ] {
+            assert!(!proven(text), "{text}");
+        }
+    }
 }
