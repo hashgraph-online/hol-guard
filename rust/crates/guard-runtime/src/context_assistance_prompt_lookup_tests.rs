@@ -165,7 +165,8 @@ fn quoted_text_and_paths_outside_the_project_point_at_nothing() {
             &spellings(prompt),
             budget,
         );
-        points_nowhere(prompt, dir.path(), &walk.quoting)
+        assert!(walk.complete, "{prompt}");
+        points_nowhere(prompt, dir.path(), &walk.quoting, walk.complete)
     };
     for prompt in [
         "Do this task here: \u{201c}lockfile marks run partial\u{201d}",
@@ -175,6 +176,9 @@ fn quoted_text_and_paths_outside_the_project_point_at_nothing() {
         assert!(anchored(prompt), "{prompt}");
         assert!(nowhere(prompt), "{prompt}");
     }
+    // A walk cut short may have missed the file that holds the quote.
+    let title = "Do this task here: \u{201c}lockfile marks run partial\u{201d}";
+    assert!(!points_nowhere(title, dir.path(), &[0], false));
     for prompt in [
         "the error says \"Invalid value for count\"",
         "In cli.py the count says \"nope\"",

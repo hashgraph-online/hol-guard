@@ -376,7 +376,7 @@ fn attach(
     // With nothing mapped, excerpts ranked on plain words alone ("keep
     // going", "so is it fixed?") are a guess: mostly a README or changelog.
     // They need the prompt to name a file, a quoted phrase or code by name.
-    if !anchored(prompt) || points_nowhere(prompt, &root, &searched.quoting) {
+    if !anchored(prompt) || points_nowhere(prompt, &root, &searched.quoting, searched.complete) {
         return;
     }
     // An excerpt holding only the quoted text is still about the request.
