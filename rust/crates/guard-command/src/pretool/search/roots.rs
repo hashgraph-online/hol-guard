@@ -18,6 +18,44 @@ pub(in crate::pretool) fn rg_root_inside_cwd(value: &str, context: ReadContext<'
         .is_some_and(|cwd| root_below(value, context, &cwd, false))
 }
 
+/// `rg PATTERN ..` run from a folder inside a repository searches a folder of
+/// that same repository; from `src/` it is the whole checkout, the same search
+/// `rg PATTERN .` makes from the root. Only a parent spelling that climbs above
+/// the repository root reaches unrelated sibling projects, which the
+/// broad-parent rule keeps at review. A root admitted here still has to clear
+/// the ordinary reading proofs; this only stops the blanket refusal.
+pub(in crate::pretool) fn parent_root_inside_repository(
+    value: &str,
+    context: ReadContext<'_>,
+) -> bool {
+    if value.len() > 4096
+        || !value
+            .split('/')
+            .all(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return false;
+    }
+    let canonical = |path: &Path| crate::runtime_read_paths::canonicalize_text(path).ok();
+    let Some(cwd) = home_relative(context.cwd.unwrap_or_default(), context.home_dir)
+        .and_then(|cwd| canonical(&cwd))
+    else {
+        return false;
+    };
+    let Some(target) = expanded_operand(value, context).and_then(|root| canonical(&root)) else {
+        return false;
+    };
+    let home = context.home_dir.and_then(|home| canonical(Path::new(home)));
+    cwd.ancestors()
+        .take(64)
+        .find(|directory| std::fs::symlink_metadata(directory.join(".git")).is_ok())
+        .is_some_and(|repository| {
+            repository.parent().is_some()
+                && home.as_deref() != Some(repository)
+                && target.is_dir()
+                && target.starts_with(repository)
+        })
+}
+
 /// `fd` prints names, never contents, and skips hidden and ignored entries
 /// without following links. A names-only listing may therefore start at any
 /// non-hidden directory strictly below home, such as the parent that holds the
