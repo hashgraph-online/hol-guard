@@ -75,6 +75,23 @@ def test_the_package_layout_is_only_added_for_its_own_cases(tmp_path: Path) -> N
     assert not (fixture.workspace / "tsconfig.base.json").exists()
 
 
+@pytest.mark.skipif(os.name == "nt" or shutil.which("bash") is None, reason="needs bash")
+def test_the_stage_case_leaves_its_edit_in_the_index(tmp_path: Path) -> None:
+    scenario_id = "omp-native-git-stage-then-status-trailing-report"
+    fixture = create_fixture(tmp_path / "fixture root", realistic=True, scenario_id=scenario_id)
+    before = _run("git status --short", fixture.workspace, fixture.home)
+    assert " M src/one.ts" in before.stdout.splitlines()
+    scenario = SCENARIOS[scenario_id].render(
+        {"home": str(fixture.home), "workspace": str(fixture.workspace), "root": str(fixture.root)}
+    )
+    (command,) = scenario.commands
+    completed = _run(command, fixture.workspace, fixture.home)
+    assert completed.returncode == 0, completed.stderr
+    lines = completed.stdout.splitlines()
+    assert "M  src/one.ts" in lines
+    assert lines[-1] == "check exit: 0"
+
+
 def _gate_case(case_id: str) -> dict:
     gate = Path(__file__).parent / "fixtures" / "benign_false_positive_gate.json"
     (case,) = [case for case in json.loads(gate.read_text(encoding="utf-8"))["cases"] if case["id"] == case_id]
