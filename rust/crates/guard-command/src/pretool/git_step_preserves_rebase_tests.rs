@@ -10,8 +10,8 @@ fn a_rebase_that_runs_no_command_keeps_the_configuration() {
         "origin/main",
         "-q origin/main",
         "--onto main feature~2 feature",
-        "--continue",
         "--abort",
+        "--quit",
         "--autostash -q origin/main",
         "-X theirs origin/main",
     ] {
@@ -34,6 +34,10 @@ fn a_rebase_that_can_run_commands_keeps_the_review() {
         "--interactive origin/main",
         "--inter origin/main",
         "--edit-todo",
+        "--continue",
+        "--cont",
+        "--skip",
+        "--ski",
     ] {
         assert!(!config_stable_step("rebase", &words(text)), "{text}");
     }

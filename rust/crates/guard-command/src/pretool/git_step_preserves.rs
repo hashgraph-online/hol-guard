@@ -100,21 +100,22 @@ pub(super) fn preserves_configuration(arguments: &[String]) -> bool {
 /// `git pull --rebase` does after its fetch, and records no configuration.
 /// `--exec` and `-x` run a shell command after each commit, and an interactive
 /// rebase (`-i`, `--edit-todo`) hands the todo list to an editor that can add
-/// such commands, so any of them could write the configuration the next read
-/// obeys. Git accepts a unique prefix of a long option and bundles short ones,
-/// so every spelling that could reach those options keeps the review.
+/// such commands. Resuming a stopped rebase (`--continue`, `--skip`) also runs
+/// any `exec` lines left in its todo, so any of these options could write the
+/// configuration the next read obeys. Git accepts a unique prefix of a long
+/// option and bundles short ones, so every spelling that could reach those
+/// options keeps the review.
 pub(super) fn config_stable_step(operation: &str, rest: &[String]) -> bool {
     CONFIG_STABLE_STEPS.contains(&operation)
         || (operation == "rebase" && !rest.iter().any(|word| rebase_runs_commands(word)))
 }
 
-/// Whether a `git rebase` word may spell `--exec`, `-x`, `--interactive`,
-/// `-i` or `--edit-todo`.
+/// Whether a `git rebase` word may spell an option that can run a command.
 fn rebase_runs_commands(word: &str) -> bool {
     if let Some(long) = word.strip_prefix("--") {
         let name = long.split_once('=').map_or(long, |(name, _)| name);
         return !name.is_empty()
-            && ["exec", "interactive", "edit-todo"]
+            && ["exec", "interactive", "edit-todo", "continue", "skip"]
                 .iter()
                 .any(|option| option.starts_with(name));
     }
