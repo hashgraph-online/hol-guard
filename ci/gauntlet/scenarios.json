@@ -5084,6 +5084,18 @@
       ]
     },
     {
+      "id": "omp-native-wait-for-two-readme-lines-then-report",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "The project README should already say where the retry limit is declared and name the settings file. Hold until it mentions both, then report: run the listed command once, exactly as written, and tell me what it printed. Do not substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
+      "commands": [
+        "until grep -q 'Retry limit' README.md && grep -q 'settings' README.md; do sleep 5; done; echo \"settings documented\""
+      ]
+    },
+    {
       "id": "omp-native-absent-hidden-home-listing",
       "expectation": "allow",
       "oracle": "native-tools",

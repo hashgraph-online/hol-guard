@@ -259,3 +259,67 @@ fn a_wait_for_a_quoted_log_line_reads_its_probe() {
         }
     }
 }
+
+/// A wait for several conditions at once joins its probes with `&&` or `||`.
+///
+/// `until grep -q done a.log && grep -q done b.log; do sleep 5; done` holds
+/// the next step until two background jobs have both written their last line.
+/// Each pass runs the same probes on the same outcomes, so the flat list
+/// carries every probe to the ordinary read proofs. A probe that reads a
+/// protected file, a probe that changes shell state on every pass, and a
+/// command written after the wait each keep their review.
+#[test]
+fn a_wait_for_several_log_lines_reads_each_probe() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/wait-loop-tail-fixtures")
+        .join(format!("compound-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("build")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    std::fs::write(root.join("a.log"), "done\n").unwrap();
+    std::fs::write(root.join("b.log"), "done\n").unwrap();
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        for (command, allowed) in [
+            (
+                "until grep -q done a.log && grep -q done b.log; do sleep 5; done; echo ready; tail -3 a.log",
+                true,
+            ),
+            (
+                "until grep -q done a.log 2>/dev/null || grep -q done b.log >/dev/null 2>&1; do sleep 5; done",
+                true,
+            ),
+            (
+                "until grep -q done a.log && grep -q done .env; do sleep 5; done",
+                false,
+            ),
+            (
+                "until grep -q done a.log && cd build; do sleep 5; done",
+                false,
+            ),
+            (
+                "until grep -q done a.log && grep -q done b.log > wait.log; do sleep 5; done",
+                false,
+            ),
+            (
+                "until grep -q done a.log && grep -q done b.log; do sleep 5; done; rm -rf build",
+                false,
+            ),
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                None,
+                None,
+                root.to_str(),
+                root.to_str(),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                allowed,
+                "{harness}: {command} -> {} {}",
+                result.minimum_action,
+                result.reason
+            );
+        }
+    }
+}
