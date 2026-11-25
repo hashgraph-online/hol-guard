@@ -1249,6 +1249,7 @@ mod runtime_identity_range;
 mod runtime_known_vulnerable;
 mod runtime_known_vulnerable_source;
 mod runtime_transition_record;
+mod runtime_upgrade_advice;
 mod secrets_cli;
 mod sensitive_request_op;
 #[cfg(all(test, unix))]

@@ -49,12 +49,12 @@ pub(crate) fn grant_answers(reason_code: &str) -> bool {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Finding {
-    advisory_id: String,
-    severity: String,
-    known_exploited: bool,
-    version: String,
-    resolved_path: String,
-    expired_at: Option<f64>,
+    pub(crate) advisory_id: String,
+    pub(crate) severity: String,
+    pub(crate) known_exploited: bool,
+    pub(crate) version: String,
+    pub(crate) resolved_path: String,
+    pub(crate) expired_at: Option<f64>,
 }
 
 #[cfg(test)]
@@ -73,7 +73,7 @@ impl Finding {
 }
 
 impl Finding {
-    fn describe(&self) -> String {
+    pub(crate) fn describe(&self) -> String {
         let mut text = format!(
             "Node.js {} at {} is affected by {} ({}{})",
             self.version,
@@ -379,7 +379,7 @@ fn anchored(search_path: &str, cwd: Option<&Path>) -> String {
 
 /// The strongest high or critical advisory this executable's build is known
 /// to be affected by.
-fn affected(path: &Path, advisories: &LaunchAdvisories) -> Option<Finding> {
+pub(crate) fn affected(path: &Path, advisories: &LaunchAdvisories) -> Option<Finding> {
     let (resolved_path, artifact) = source::probe(path)?;
     affected_artifact(resolved_path, &artifact, advisories)
 }
@@ -389,16 +389,28 @@ fn affected_artifact(
     artifact: &Value,
     advisories: &LaunchAdvisories,
 ) -> Option<Finding> {
-    let report = crate::runtime_identity::assess_launch(artifact, advisories).ok()?;
+    assessed(resolved_path, artifact, advisories).ok().flatten()
+}
+
+/// The worst high or critical finding for an identified runtime: `Ok(None)`
+/// when its assessment names none, `Err` when it could not be assessed.
+pub(crate) fn assessed(
+    resolved_path: String,
+    artifact: &Value,
+    advisories: &LaunchAdvisories,
+) -> Result<Option<Finding>, ()> {
+    let report = crate::runtime_identity::assess_launch(artifact, advisories).map_err(|_| ())?;
     let affected_ids: Vec<&str> = report["artifacts"]
-        .as_array()?
+        .as_array()
+        .ok_or(())?
         .iter()
         .flat_map(|row| row["matches"].as_array().into_iter().flatten())
         .filter(|row| row["status"] == "affected")
         .filter_map(|row| row["advisory_id"].as_str())
         .collect();
     let best = report["advisories"]
-        .as_array()?
+        .as_array()
+        .ok_or(())?
         .iter()
         .filter(|row| {
             row["advisory_id"]
@@ -413,18 +425,20 @@ fn affected_artifact(
             };
             Some((rank, row["known_exploited"] == true, row))
         })
-        .max_by_key(|(rank, exploited, _)| (*rank, *exploited))?;
-    let (_, known_exploited, row) = best;
-    Some(Finding {
-        advisory_id: row["advisory_id"].as_str()?.to_owned(),
-        severity: row["severity"].as_str()?.to_owned(),
+        .max_by_key(|(rank, exploited, _)| (*rank, *exploited));
+    let Some((_, known_exploited, row)) = best else {
+        return Ok(None);
+    };
+    Ok(Some(Finding {
+        advisory_id: row["advisory_id"].as_str().ok_or(())?.to_owned(),
+        severity: row["severity"].as_str().ok_or(())?.to_owned(),
         known_exploited,
         version: artifact["version"].as_str().unwrap_or("unknown").to_owned(),
         resolved_path,
         expired_at: (advisories.source["state"] == "stale")
             .then(|| advisories.source["expired_at"].as_f64())
             .flatten(),
-    })
+    }))
 }
 
 /// Raises `result` to the configured action for a finding. Observe mode, and

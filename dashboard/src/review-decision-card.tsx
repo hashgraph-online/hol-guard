@@ -9,16 +9,8 @@ import {
   HiMiniNoSymbol,
 } from "react-icons/hi2";
 import { ActionButton, Badge, EmptyState, SectionLabel } from "./approval-center-primitives";
-import {
-  harnessDisplayName,
-  isWatchOnlyObservation,
-  requestResolutionBlockReason,
-} from "./approval-center-utils";
-import {
-  oneTimeRetryWindowMinutes,
-  retryCannotReuseApproval,
-  retryCannotReuseApprovalHint,
-} from "./approval-retry-guidance";
+import { harnessDisplayName, isWatchOnlyObservation, requestResolutionBlockReason } from "./approval-center-utils";
+import { oneTimeRetryWindowMinutes, retryCannotReuseApproval, retryCannotReuseApprovalHint } from "./approval-retry-guidance";
 import { GuardRequestResolutionError, guardAwareHref } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import {
@@ -47,6 +39,7 @@ import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
 import { ApprovalExtensionCoverageCard } from "./approval-extension-coverage-card";
 import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
+import { RuntimeUpgradeCard } from "./runtime-upgrade-card";
 import { useReviewDecisionResolve } from "./use-review-decision-resolve";
 import { ReviewDecisionSignIn } from "./review-decision-sign-in";
 import { ContextReviewPanel } from "./context-assistance/review-panel";
@@ -332,6 +325,8 @@ export function ReviewDecisionCard(props: {
             )}
           </div>
         )}
+
+        {resolved === null && <RuntimeUpgradeCard key={item.request_id} requestId={item.request_id} advice={item.runtime_upgrade} />}
 
         {resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && (
           <ApprovalExtensionRecommendationCard

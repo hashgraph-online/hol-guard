@@ -17767,11 +17767,11 @@ function computePeriodComparison(receipts, days, now2) {
 function nonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function isRecord$b(value) {
+function isRecord$c(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeOperatorHealth(raw) {
-  if (!isRecord$b(raw)) {
+  if (!isRecord$c(raw)) {
     return void 0;
   }
   const state = raw["state"];
@@ -17881,7 +17881,7 @@ const PROTECTION_CHECK_IDS = [
 ];
 const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
 const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-function isRecord$a(value) {
+function isRecord$b(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function copyForState(state) {
@@ -17914,7 +17914,7 @@ function deriveState(checks) {
   return byId.get("decision_stream")?.status === "pass" ? "protected" : "partial";
 }
 function normalizeCheck(value) {
-  if (!isRecord$a(value)) return null;
+  if (!isRecord$b(value)) return null;
   const checkId = value.check_id;
   const status = value.status;
   const reasonCode = value.reason_code;
@@ -18005,7 +18005,7 @@ function useProtectionPresentationState(health) {
   });
 }
 function normalizeApp(value) {
-  if (!isRecord$a(value)) return null;
+  if (!isRecord$b(value)) return null;
   const harness = value.harness;
   if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
   const checks = normalizeChecks(value.checks);
@@ -18013,7 +18013,7 @@ function normalizeApp(value) {
   return { harness, ...healthFromChecks(checks) };
 }
 function normalizeProtectionHealth(value) {
-  if (!isRecord$a(value) || value.schema_version !== "guard.protection-health.v1") {
+  if (!isRecord$b(value) || value.schema_version !== "guard.protection-health.v1") {
     return unavailableProtectionHealth();
   }
   const checks = normalizeChecks(value.checks);
@@ -18111,12 +18111,12 @@ function remainingProtectionRepairMessage(health, displayName) {
     message: `${remaining} Open the repair details below for the exact check.`
   };
 }
-function isRecord$9(value) {
+function isRecord$a(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 const REASON_CODE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 function checkReasonMapValue(value) {
-  if (!isRecord$9(value)) return {};
+  if (!isRecord$a(value)) return {};
   const reasons2 = {};
   for (const [checkId, reason] of Object.entries(value)) {
     if (!REASON_CODE_ID.test(checkId) || checkId.length > 96) continue;
@@ -18125,7 +18125,7 @@ function checkReasonMapValue(value) {
   }
   return reasons2;
 }
-function isRecord$8(value) {
+function isRecord$9(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function stringValue$2(value) {
@@ -18152,7 +18152,7 @@ function normalizeSupplyChainRepairResult(result) {
   const failures = [];
   if (Array.isArray(result.failed_steps)) {
     for (const candidate of result.failed_steps) {
-      if (!isRecord$8(candidate)) continue;
+      if (!isRecord$9(candidate)) continue;
       const parsed = failedStep(candidate);
       if (parsed !== null) failures.push(parsed);
     }
@@ -18160,7 +18160,7 @@ function normalizeSupplyChainRepairResult(result) {
   const remaining = [];
   if (Array.isArray(result.remaining_steps)) {
     for (const candidate of result.remaining_steps) {
-      if (!isRecord$8(candidate)) continue;
+      if (!isRecord$9(candidate)) continue;
       const parsed = remainingStep(candidate);
       if (parsed !== null) remaining.push(parsed);
     }
@@ -18329,7 +18329,7 @@ const MAX_SEGMENT_INDEX = 255;
 const CATALOG_ID$1 = /^command\.[A-Za-z0-9._-]{1,248}$/;
 const DIGEST$4 = /^[0-9a-f]{64}$/;
 const EXECUTABLE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
-function isRecord$7(value) {
+function isRecord$8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function boundedText$1(value, limit) {
@@ -18341,7 +18341,7 @@ function catalogId$1(value) {
   return typeof value === "string" && CATALOG_ID$1.test(value) ? value : null;
 }
 function normalizeExtension(raw) {
-  if (!isRecord$7(raw)) return null;
+  if (!isRecord$8(raw)) return null;
   const extensionId = catalogId$1(raw.extension_id);
   const name = boundedText$1(raw.name, 120);
   if (extensionId === null || name === null) return null;
@@ -18352,7 +18352,7 @@ function normalizeExtension(raw) {
 const MAX_RULE_TEXT = 240;
 const MAX_SAFER_ALTERNATIVES = 2;
 function normalizeRule(raw) {
-  if (!isRecord$7(raw)) return null;
+  if (!isRecord$8(raw)) return null;
   const ruleId = catalogId$1(raw.rule_id);
   const title = raw.title === null || raw.title === void 0 ? null : boundedText$1(raw.title, 120);
   const severity = boundedText$1(raw.severity, 32);
@@ -18372,7 +18372,7 @@ function normalizeRule(raw) {
   return rule2;
 }
 function normalizePermission$1(raw) {
-  if (!isRecord$7(raw)) return null;
+  if (!isRecord$8(raw)) return null;
   const permissionId = catalogId$1(raw.permission_id);
   const label = boundedText$1(raw.label, 120);
   if (permissionId === null || label === null || typeof raw.configurable !== "boolean") return null;
@@ -18385,7 +18385,7 @@ function normalizeList(raw, normalize) {
   return items.slice(0, MAX_PER_SEGMENT);
 }
 function normalizeSegment(raw) {
-  if (!isRecord$7(raw)) return null;
+  if (!isRecord$8(raw)) return null;
   const { index } = raw;
   if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index > MAX_SEGMENT_INDEX) return null;
   const executable = raw.executable === null || raw.executable === void 0 ? null : typeof raw.executable === "string" && EXECUTABLE.test(raw.executable) ? raw.executable : void 0;
@@ -18397,7 +18397,7 @@ function normalizeSegment(raw) {
   return { index, executable, extensions, rules, permissions };
 }
 function normalizeApprovalExtensionCoverage(raw) {
-  if (!isRecord$7(raw) || raw.schema !== APPROVAL_EXTENSION_COVERAGE_SCHEMA) return null;
+  if (!isRecord$8(raw) || raw.schema !== APPROVAL_EXTENSION_COVERAGE_SCHEMA) return null;
   if (typeof raw.catalog_digest !== "string" || !DIGEST$4.test(raw.catalog_digest)) return null;
   if (typeof raw.compound !== "boolean" || !Array.isArray(raw.segments)) return null;
   if (raw.segments.length === 0) return null;
@@ -18448,7 +18448,7 @@ const MAX_PERMISSIONS$1 = 3;
 const CATALOG_ID = /^command\.[A-Za-z0-9._-]{1,248}$/;
 const DIGEST$3 = /^[0-9a-f]{64}$/;
 const CAUTION_REASONS = /* @__PURE__ */ new Set(["critical", "destructive", "sensitive"]);
-function isRecord$6(value) {
+function isRecord$7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function boundedText(value, limit) {
@@ -18460,7 +18460,7 @@ function catalogId(value) {
   return typeof value === "string" && CATALOG_ID.test(value) ? value : null;
 }
 function normalizePermission(raw) {
-  if (!isRecord$6(raw)) return null;
+  if (!isRecord$7(raw)) return null;
   const permissionId = catalogId(raw.permission_id);
   const extensionId = catalogId(raw.extension_id);
   const label = boundedText(raw.label, 120);
@@ -18487,7 +18487,7 @@ function normalizePermission(raw) {
   };
 }
 function normalizeApprovalExtensionRecommendation(raw) {
-  if (!isRecord$6(raw) || raw.schema !== RECOMMENDATION_SCHEMA) return null;
+  if (!isRecord$7(raw) || raw.schema !== RECOMMENDATION_SCHEMA) return null;
   if (raw.status !== "available" && raw.status !== "authority_unavailable") return null;
   if (!Array.isArray(raw.permissions) || raw.permissions.length === 0 || raw.permissions.length > MAX_PERMISSIONS$1) {
     return null;
@@ -18551,6 +18551,53 @@ function approvalExtensionRecommendationCopy(recommendation) {
     cautionLines,
     successMessage: `Approved. ${owner} now allows ${commandText} automatically.`
   };
+}
+const RUNTIME_UPGRADE_ADVICE_SCHEMA = "guard.runtime-upgrade-advice.v1";
+function isRecord$6(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function text$4(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+const MANAGERS = ["nvm", "homebrew", "other"];
+const NODE_DOWNLOAD_URL = "https://nodejs.org/en/download";
+function normalizeRuntimeUpgradeAdvice(raw) {
+  if (!isRecord$6(raw) || raw.schema !== RUNTIME_UPGRADE_ADVICE_SCHEMA || raw.family !== "node") return null;
+  const currentVersion = text$4(raw.current_version);
+  const currentPath = text$4(raw.current_path);
+  const advisoryId = text$4(raw.advisory_id);
+  const severity = text$4(raw.severity);
+  if (currentVersion === null || currentPath === null || advisoryId === null || severity === null) return null;
+  const manager = MANAGERS.find((candidate) => candidate === raw.manager) ?? "other";
+  return {
+    current_version: currentVersion,
+    current_path: currentPath,
+    advisory_id: advisoryId,
+    severity,
+    known_exploited: raw.known_exploited === true,
+    manager,
+    patched_version: text$4(raw.patched_version),
+    installed_version: text$4(raw.installed_version),
+    switch_version: manager === "nvm" ? text$4(raw.switch_version) : null,
+    switched: raw.switched === true,
+    command: text$4(raw.command),
+    download_url: NODE_DOWNLOAD_URL
+  };
+}
+function runtimeUpgradeTarget(advice) {
+  if (advice.installed_version !== null) {
+    return `Node.js ${advice.installed_version} is already installed and is not affected.`;
+  }
+  if (advice.patched_version !== null) {
+    return `Node.js ${advice.patched_version} fixes it.`;
+  }
+  return null;
+}
+function currentRuntimeUpgradeAdvice(latest, reply) {
+  return reply !== null && reply.answered === latest ? reply.advice : latest;
+}
+function finishedSwitchVersion(latest, done) {
+  return done !== null && done.answered === latest ? done.version : null;
 }
 const CHUNK_RELOAD_STORAGE_KEY = "hol-guard-dashboard-chunk-reload";
 const CHUNK_RELOAD_DELAY_MS = 400;
@@ -20661,8 +20708,10 @@ function normalizeApprovalRequest(item) {
     decision_contract_error: rawContractError,
     extension_recommendation: rawExtensionRecommendation,
     extension_coverage: rawExtensionCoverage,
+    runtime_upgrade: rawRuntimeUpgrade,
     ...baseItem
   } = item;
+  const runtimeUpgrade = normalizeRuntimeUpgradeAdvice(rawRuntimeUpgrade);
   const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
   const extensionCoverage = normalizeApprovalExtensionCoverage(rawExtensionCoverage);
   const policyAction = normalizeGuardAction(item.policy_action);
@@ -20726,6 +20775,7 @@ function normalizeApprovalRequest(item) {
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...extensionRecommendation !== null && !hasDecisionContractError ? { extension_recommendation: extensionRecommendation } : {},
     ...extensionCoverage !== null && !hasDecisionContractError ? { extension_coverage: extensionCoverage } : {},
+    ...runtimeUpgrade !== null ? { runtime_upgrade: runtimeUpgrade } : {},
     ...hasDecisionContractError ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT } : {}
   };
 }
@@ -36924,7 +36974,7 @@ function SetupStep(props) {
     ] })
   ] });
 }
-function CopyCommand(props) {
+function CopyCommand$1(props) {
   const [state, setState] = reactExports.useState("idle");
   const copy = async () => {
     try {
@@ -37002,7 +37052,7 @@ function ExtensionAuthoritySetup(props) {
             proofName,
             "."
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: terminal?.enroll ?? DEFAULT_ENROLL_COMMAND, label: "Copy enroll command" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand$1, { command: terminal?.enroll ?? DEFAULT_ENROLL_COMMAND, label: "Copy enroll command" })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -37036,7 +37086,7 @@ function ExtensionAuthoritySetup(props) {
         proofName,
         "."
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: terminal?.recover_authority ?? DEFAULT_RECOVER_COMMAND, label: "Copy repair command" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand$1, { command: terminal?.recover_authority ?? DEFAULT_RECOVER_COMMAND, label: "Copy repair command" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: `When the repair finishes, Approve & always allow ${commandText} appears here.` })
     ] });
   }
@@ -37507,6 +37557,168 @@ function ApprovalExtensionRecommendationCard(props) {
       ]
     }
   );
+}
+class RuntimeUpgradeError extends Error {
+  constructor(status, code) {
+    super(runtimeUpgradeErrorMessage(code, status));
+    this.status = status;
+    this.code = code;
+    this.name = "RuntimeUpgradeError";
+  }
+  status;
+  code;
+}
+function runtimeUpgradeErrorMessage(code, status) {
+  switch (code) {
+    case "runtime_upgrade_unavailable":
+      return "Guard no longer offers this switch. Reload the review to see the current advice.";
+    case "runtime_upgrade_version_mismatch":
+      return "The advice changed since this page loaded. Reload the review and try again.";
+    case "runtime_upgrade_failed":
+      return "Guard could not update nvm's default version. Run the command below in a terminal instead.";
+    default:
+      if (status === 401 || status === 403) {
+        return "This review link cannot change nvm's default. Open the review from Guard, or run the command below in a terminal.";
+      }
+      return `Guard could not switch the Node.js version (${status}).`;
+  }
+}
+async function switchRuntimeDefault(requestId, version2) {
+  const response = await fetchWithGuardAuth(`/v1/requests/${encodeURIComponent(requestId)}/runtime-upgrade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: version2 })
+  });
+  const payload = await response.json().catch(() => null);
+  const record2 = typeof payload === "object" && payload !== null ? payload : null;
+  if (!response.ok) {
+    throw new RuntimeUpgradeError(response.status, typeof record2?.error === "string" ? record2.error : null);
+  }
+  return normalizeRuntimeUpgradeAdvice(record2?.runtime_upgrade);
+}
+const RESTART_NOTE = "Agent sessions that are already running keep the Node.js they started with. Restart the agent so its next command uses the new version.";
+function RuntimeUpgradeCard(props) {
+  const [reply, setReply] = reactExports.useState(null);
+  const [state, setState] = reactExports.useState({ kind: "idle" });
+  const advice = currentRuntimeUpgradeAdvice(props.advice, reply);
+  if (!advice) return null;
+  const switchDefault = props.switchDefault ?? switchRuntimeDefault;
+  const target2 = runtimeUpgradeTarget(advice);
+  const exploited = advice.known_exploited ? " It is known to be exploited." : "";
+  const runSwitch = async (version2) => {
+    setState({ kind: "switching" });
+    try {
+      const answered = props.advice;
+      const next = await switchDefault(props.requestId, version2);
+      if (next) setReply({ answered, advice: next });
+      setState({ kind: "done", version: version2, answered });
+    } catch (error) {
+      setState({ kind: "failed", message: error instanceof Error ? error.message : "Guard could not switch the Node.js version." });
+    }
+  };
+  const doneVersion = finishedSwitchVersion(props.advice, state.kind === "done" ? state : null);
+  const switched = doneVersion !== null || advice.switched;
+  const switchVersion = doneVersion !== null ? null : advice.switch_version;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "section",
+    {
+      className: "mt-5 rounded-xl border border-amber-200 bg-amber-50/60 p-4",
+      "aria-labelledby": "runtime-upgrade-title",
+      "data-testid": "runtime-upgrade",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "mt-0.5 h-5 w-5 shrink-0 text-amber-600", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-amber-700", children: "Why this is paused" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "runtime-upgrade-title", className: "mt-1 text-sm font-semibold text-brand-dark", children: "Update Node.js to stop these reviews" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: [
+            "This command runs Node.js ",
+            advice.current_version,
+            ", which ",
+            advice.advisory_id,
+            " (",
+            advice.severity,
+            ") affects.",
+            exploited,
+            " Guard pauses every command that starts it. ",
+            target2
+          ] }),
+          switched ? /* @__PURE__ */ jsxRuntimeExports.jsx(SwitchedNote, { version: doneVersion ?? advice.installed_version }) : switchVersion !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ActionButton,
+              {
+                variant: "primary",
+                onClick: () => void runSwitch(switchVersion),
+                disabled: state.kind === "switching",
+                "aria-busy": state.kind === "switching",
+                children: state.kind === "switching" ? "Switching…" : `Use Node.js ${switchVersion}`
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-brand-dark/70", children: "Sets nvm's default version. New terminals start it." })
+          ] }),
+          state.kind === "failed" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-red-700", role: "alert", children: state.message }),
+          !switched && advice.command !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: advice.command }),
+          !switched && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-brand-dark/70", children: [
+            "After you update, ",
+            RESTART_NOTE.charAt(0).toLowerCase(),
+            RESTART_NOTE.slice(1)
+          ] }),
+          !switched && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "a",
+            {
+              href: advice.download_url,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              className: "mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+              children: [
+                "Download Node.js",
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+              ]
+            }
+          )
+        ] })
+      ] })
+    }
+  );
+}
+function SwitchedNote(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-start gap-2 text-sm text-brand-dark", role: "status", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-emerald-600", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+      props.version !== null ? `nvm now defaults to Node.js ${props.version}. ` : "nvm now defaults to a clean version. ",
+      RESTART_NOTE
+    ] })
+  ] });
+}
+function CopyCommand(props) {
+  const [state, setState] = reactExports.useState("idle");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(props.command);
+      setState("copied");
+    } catch {
+      setState("failed");
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-dark/70", children: "Or run this in a terminal:" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs text-brand-dark", children: props.command }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: () => void copy(),
+          "aria-label": state === "copied" ? "Command copied" : "Copy the update command",
+          className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-blue hover:border-brand-blue/40 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: [
+            state === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
+            state === "copied" ? "Copied" : "Copy"
+          ]
+        }
+      )
+    ] }),
+    state === "failed" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/70", role: "status", children: "Copy is unavailable here. Select the command and copy it." })
+  ] });
 }
 function resolvedStateForItem(state, item) {
   return item !== null && state?.requestId === item.request_id ? state : null;
@@ -38437,6 +38649,7 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
+      resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeUpgradeCard, { requestId: item.request_id, advice: item.runtime_upgrade }, item.request_id),
       resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionRecommendationCard,
         {
