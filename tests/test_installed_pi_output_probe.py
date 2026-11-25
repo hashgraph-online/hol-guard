@@ -748,6 +748,65 @@ def test_native_cleanup_does_not_accept_failed_stop_when_state_disappears(
     assert close_calls == 2
 
 
+def test_native_cleanup_gives_one_stop_more_than_the_runtime_stop_deadline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard import native_resident_client
+
+    # The runtime spends up to two seconds stopping once it has started; a slow
+    # host (x64 emulation) needs about a second more just to start it.
+    runtime_stop_deadline = 2.0
+    stop_timeouts: list[float] = []
+    state_file = tmp_path / "generation.json"
+    stopped = False
+
+    monkeypatch.setattr(native_resident_client, "close_native_residents", lambda *_args, **_kwargs: True)
+
+    def stop(*, timeout_seconds: float, **_kwargs: object) -> bool:
+        nonlocal stopped
+        stop_timeouts.append(timeout_seconds)
+        stopped = timeout_seconds > runtime_stop_deadline + 1.0
+        return stopped
+
+    monkeypatch.setattr(native_resident_client, "stop_native_resident", stop)
+    monkeypatch.setattr(probe, "_native_state_files", lambda _guard_home: () if stopped else (state_file,))
+    monkeypatch.setattr(probe.time, "sleep", lambda _seconds: None)
+
+    class Identity:
+        path = Path("/bin/false")
+
+    probe._cleanup_native(Identity(), tmp_path / "guard-home")
+
+    assert len(stop_timeouts) == 1
+    assert stop_timeouts[0] > runtime_stop_deadline + 1.0
+
+
+def test_native_cleanup_failure_names_each_attempt_without_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard import native_resident_client
+
+    clock = iter((0.0, 0.1, 0.2, 2.0))
+    monkeypatch.setattr(probe, "_daemon_cleanup_timeout_seconds", lambda: 1.0)
+    monkeypatch.setattr(probe.time, "monotonic", lambda: next(clock, 2.0))
+    monkeypatch.setattr(native_resident_client, "close_native_residents", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(native_resident_client, "stop_native_resident", lambda **_kwargs: False)
+    monkeypatch.setattr(probe, "_native_state_files", lambda _guard_home: (tmp_path / "generation.json",))
+    monkeypatch.setattr(probe.time, "sleep", lambda _seconds: None)
+
+    class Identity:
+        path = Path("/bin/false")
+
+    with pytest.raises(ProbeError, match="authenticated native cleanup failed: RuntimeError") as caught:
+        probe._cleanup_native(Identity(), tmp_path / "guard-home")
+
+    message = str(caught.value)
+    assert "attempts: close=ok@" in message
+    assert "stop=failed@" in message
+    assert "generations=1" in message
+    assert str(tmp_path) not in message
+
+
 def test_installed_daemon_cleanup_bounds_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     release = threading.Event()
 
