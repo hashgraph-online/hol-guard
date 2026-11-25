@@ -249,7 +249,11 @@ fn a_switch_never_writes_through_a_linked_alias_directory() {
         fs::read_to_string(elsewhere.join("default")).expect("target file"),
         "keep"
     );
-    assert_eq!(fs::read_dir(&elsewhere).expect("read").count(), 1, "nothing staged there");
+    assert_eq!(
+        fs::read_dir(&elsewhere).expect("read").count(),
+        1,
+        "nothing staged there"
+    );
     let file = root.path().join("other/alias");
     fs::create_dir_all(root.path().join("other")).expect("other dir");
     fs::write(&file, b"").expect("plain file");
