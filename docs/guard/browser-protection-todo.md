@@ -36,7 +36,7 @@ needs phase 1. Phase 4 needs phase 1 and ADR 0017. Phase 5 is planning only.
 - [x] **BP-T001** Write `docs/guard/adr/0018-provider-integration-authority.md`. Record: signals are
   evidence (I2), tightening-only composition (I3), payment independence (I4), fail direction (I10),
   the closed capability and fact lists (6.3, 6.4), and decisions D1, D2, D4. Evidence: ADR merged.
-- [x] **BP-T002** Write `docs/guard/adr/0017-browser-cdp-relay.md` as a design-gate ADR. Record: the
+- [ ] **BP-T002** Write `docs/guard/adr/0017-browser-cdp-relay.md` as a design-gate ADR. Record: the
   relay threat model, the WebSocket dependency options with license, size, maintenance and `unsafe`
   review, the sync-versus-async decision (D3), bounds, and the fail-closed rule (5.6). Evidence: ADR
   merged with an explicit accept or defer decision. No relay code before it is accepted.
