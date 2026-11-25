@@ -1760,6 +1760,19 @@
       ]
     },
     {
+      "id": "omp-native-git-check-ignore-directory-glob",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Check which source files git ignores. Run each listed command once, in order, exactly as written, and tell me which paths, if any, are ignored and by which rule. Change nothing.",
+      "commands": [
+        "git check-ignore -v src/*",
+        "git check-ignore -v src/*.ts README.md"
+      ]
+    },
+    {
       "id": "omp-native-git-staged-diff-pathspec",
       "expectation": "allow",
       "oracle": "native-tools",

@@ -139,3 +139,34 @@ fn literal_pathspecs_keep_their_existing_verdict() {
     assert!(proven("log --oneline -- src"));
     assert!(proven("log -1 -- src/app.ts"));
 }
+
+#[test]
+fn check_ignore_accepts_glob_paths() {
+    for text in [
+        "check-ignore -v docs/*",
+        "check-ignore docs/* src/*.ts",
+        "check-ignore -v -- *",
+        "check-ignore -q -- src/**/*.ts",
+    ] {
+        assert!(proven(text), "{text}");
+    }
+}
+
+#[test]
+fn check_ignore_keeps_credential_escaping_and_leading_wildcard_paths_reviewed() {
+    for text in [
+        // Without `--` a leading wildcard could expand to an option-named file.
+        "check-ignore -v *",
+        "check-ignore -v *.md",
+        "check-ignore -v .env*",
+        "check-ignore -v -- .env*",
+        "check-ignore -v secrets/*",
+        "check-ignore -v .ssh/*",
+        "check-ignore -v ../other/*",
+        "check-ignore -v /etc/*",
+        "check-ignore -v :(glob)docs/*",
+        "check-ignore -v docs/* .env",
+    ] {
+        assert!(!proven(text), "{text}");
+    }
+}

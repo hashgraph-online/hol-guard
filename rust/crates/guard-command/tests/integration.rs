@@ -148,6 +148,7 @@ pub mod pretool_git_allow_cd_fork;
 pub mod pretool_git_branch_listing;
 pub mod pretool_git_branch_rename;
 pub mod pretool_git_cd_reads;
+pub mod pretool_git_check_ignore_globs;
 pub mod pretool_git_context_boundaries;
 pub mod pretool_git_developer_checkout;
 pub mod pretool_git_editor_config_environment;

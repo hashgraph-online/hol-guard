@@ -60423,6 +60423,38 @@
       "expect": "allow"
     },
     {
+      "id": "signed-checkout-git-check-ignore-directory-glob",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-ignore -v src/*"
+      },
+      "cwd": "signed_app",
+      "expect": "allow"
+    },
+    {
+      "id": "signed-checkout-git-check-ignore-extension-glob-and-file",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-ignore -v src/*.ts README.md"
+      },
+      "cwd": "signed_app",
+      "expect": "allow"
+    },
+    {
       "id": "shell-process-substitution-diff-sorted-files",
       "fix_area": "shell",
       "harnesses": [
