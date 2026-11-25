@@ -136,6 +136,8 @@ impl Word {
 /// other than the plain argument the shell passes.
 fn changes_parse(word: &str) -> bool {
     word.is_empty()
+        // A word of digits next to `<` or `>` would become a descriptor.
+        || word.bytes().all(|byte| byte.is_ascii_digit())
         || word.starts_with(['#', '!', '{', '}'])
         || matches!(
             word,

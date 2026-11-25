@@ -74,6 +74,8 @@ fn shapes_the_shell_expands_differently_keep_their_review() {
         "ls {!,x}",
         "{if,x} true",
         "ls {a,}",
+        "cat {README.md,2}</dev/null",
+        "cat {README.md,#,.env}",
     ] {
         assert_eq!(expanded(command), None, "{command}");
     }
