@@ -61,7 +61,10 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
     let mut values = arguments.iter();
     while let Some(argument) = values.next() {
         let option = argument.as_str();
-        if option == "-d" || option == "--max-depth" {
+        if option == "--" {
+            // Every word after the end of the options is an operand.
+            operands.extend(values.by_ref().map(String::as_str));
+        } else if option == "-d" || option == "--max-depth" {
             match values.next() {
                 Some(level) if digits(level) && limit(level) => {}
                 _ => return false,
@@ -112,6 +115,15 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
     };
     operands.len() <= MAX_OPERANDS
         && operands.iter().all(|operand| {
+            // A pattern such as `du -sh *` sizes the names the shell expands
+            // it to, which are the names `ls` of the same pattern prints. Each
+            // match takes that listing's proof, and a walk below a match takes
+            // the recursive one. A pattern that matches nothing stays
+            // reviewed, because the shell may hand over its literal spelling.
+            if operand.contains(['*', '?', '[']) {
+                return search::safe_glob_operand(operand, context, walks_tree)
+                    && search::listable_spelling(operand, context, walks_tree, false);
+            }
             let present = if walks_tree {
                 search::safe_recursive_target(operand, context)
             } else {
