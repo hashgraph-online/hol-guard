@@ -789,3 +789,24 @@ fn a_lowercase_shell_variable_does_not_steer_a_later_git_read() {
         assert!(status_uncertain(command), "{command}");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn a_home_relative_route_resolves_operands_under_home() {
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("~/project"), Some("/home/dev")),
+        Some(std::path::PathBuf::from("/home/dev/project"))
+    );
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("~"), Some("/home/dev")),
+        Some(std::path::PathBuf::from("/home/dev"))
+    );
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("~/project"), None),
+        None
+    );
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("sub"), Some("/home/dev")),
+        Some(std::path::PathBuf::from("/work/cwd/sub"))
+    );
+}

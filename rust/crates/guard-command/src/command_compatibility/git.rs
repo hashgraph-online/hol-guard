@@ -171,11 +171,21 @@ fn bounded_cached_diff_pathspec(operand: &str, directory: Option<&std::path::Pat
 /// it there, so an operand that is present beside the shell's own working
 /// directory proves nothing about the repository git actually reads; a relative
 /// route needs that working directory to resolve at all.
-fn operand_directory(cwd: Option<&str>, route: Option<&str>) -> Option<std::path::PathBuf> {
+fn operand_directory(
+    cwd: Option<&str>,
+    route: Option<&str>,
+    home_dir: Option<&str>,
+) -> Option<std::path::PathBuf> {
     let Some(route) = route else {
         return cwd.map(std::path::PathBuf::from);
     };
-    let route = std::path::PathBuf::from(route);
+    let route = if route == "~" {
+        std::path::PathBuf::from(home_dir?)
+    } else if let Some(relative) = route.strip_prefix("~/") {
+        std::path::Path::new(home_dir?).join(relative)
+    } else {
+        std::path::PathBuf::from(route)
+    };
     if route.is_absolute() {
         return Some(route);
     }
@@ -197,7 +207,7 @@ pub(super) fn read_operand_directory(
     {
         return None;
     }
-    operand_directory(context.cwd, route.as_deref())
+    operand_directory(context.cwd, route.as_deref(), context.home_dir)
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -732,7 +742,8 @@ pub(super) fn observe_with_contexts(
             let route = routed_with_route(arguments, context, true).and_then(|(_, route)| route);
             bounded_cached_diff(
                 &remaining[1..],
-                operand_directory(proof_context.cwd, route.as_deref()).as_deref(),
+                operand_directory(proof_context.cwd, route.as_deref(), proof_context.home_dir)
+                    .as_deref(),
             )
         })
     {
