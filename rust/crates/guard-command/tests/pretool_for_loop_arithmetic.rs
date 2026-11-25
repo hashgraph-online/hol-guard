@@ -12,11 +12,23 @@
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 
+/// Removes the fixture when the test ends, whether it passes or panics.
+struct Fixture(std::path::PathBuf);
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 #[test]
 fn a_loop_over_numbers_with_simple_arithmetic_reads_each_pass() {
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/loop-arithmetic-fixtures")
-        .join(format!("fixture-{}", std::process::id()));
+        .join(format!("fixture-{}-{nonce}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let _fixture = Fixture(root.clone());
     std::fs::create_dir_all(root.join("logs")).unwrap();
     let lines: String = (1..=200).map(|line| format!("line {line}\n")).collect();
     std::fs::write(root.join("logs/job.log"), lines).unwrap();

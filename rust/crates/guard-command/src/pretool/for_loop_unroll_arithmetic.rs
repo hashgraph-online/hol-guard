@@ -22,6 +22,11 @@ pub(super) fn evaluated_bodies(
     if !rest.contains("$((") {
         return Some(None);
     }
+    // Every pass reads the loop variable, so a header past the word bound is
+    // refused later anyway; refuse it before writing out any pass.
+    if words.len() > super::MAX_WORDS {
+        return None;
+    }
     words
         .iter()
         .map(|word| {
@@ -46,16 +51,21 @@ fn plain_number(word: &str) -> Option<i64> {
 }
 
 /// `text` with each `$((...))` outside single quotes replaced by its value.
+/// An apostrophe inside double quotes is a plain character and opens no
+/// single-quoted span.
 fn evaluated(text: &str, name: &str, value: i64) -> Option<String> {
     let mut out = String::with_capacity(text.len());
     let mut single = false;
+    let mut double = false;
     let mut index = 0;
     while let Some(character) = text[index..].chars().next() {
         let rest = &text[index..];
         if single {
             single = character != '\'';
-        } else if character == '\'' {
+        } else if character == '\'' && !double {
             single = true;
+        } else if character == '"' {
+            double = !double;
         } else if character == '\\' {
             let escaped = rest[1..].chars().next().map_or(0, char::len_utf8);
             out.push_str(&rest[..1 + escaped]);

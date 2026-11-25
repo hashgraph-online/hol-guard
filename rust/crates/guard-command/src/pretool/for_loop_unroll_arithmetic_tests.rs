@@ -47,3 +47,26 @@ fn single_quotes_and_escapes_are_left_alone() {
         ]))
     );
 }
+
+#[test]
+fn an_apostrophe_inside_double_quotes_opens_no_single_quoted_span() {
+    // The shell reads `'part$((n+1)).md'` as literal text, so the written pass
+    // must keep it, while the expansion inside double quotes is evaluated.
+    assert_eq!(
+        bodies(
+            r#" echo "it's $((n+1))"; cat 'part$((n+1)).md'; done"#,
+            &["1"]
+        ),
+        Some(Some(vec![
+            r#" echo "it's 2"; cat 'part$((n+1)).md'; done"#.to_string()
+        ]))
+    );
+}
+
+#[test]
+fn a_header_past_the_word_bound_writes_out_no_pass() {
+    let words: Vec<String> = (0..=super::super::MAX_WORDS)
+        .map(|n| n.to_string())
+        .collect();
+    assert_eq!(evaluated_bodies(" echo $((n+1)); done", "n", &words), None);
+}
