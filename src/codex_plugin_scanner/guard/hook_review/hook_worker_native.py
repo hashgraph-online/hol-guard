@@ -360,7 +360,16 @@ class HookWorkerNativeMixin:
             # The edge settled the custom extension rules; a block it found
             # answers an allowed call (in Watch, as a recorded continue).
             custom_block = edge.get("local_cli_rule")
-            if isinstance(custom_block, dict) and custom_block["blocked"] is True:
+            if edge.get("local_cli_rule_blocked") is True:
+                if not isinstance(custom_block, dict):
+                    return _containment_outage(
+                        self,
+                        payload,
+                        native_harness,
+                        NativeHookDecisionError("native_hook_edge_invalid_response"),
+                        guard_home,
+                        deadline,
+                    )
                 return (
                     (
                         dict(cast("Mapping[str, object]", custom_block["harness_response"]))

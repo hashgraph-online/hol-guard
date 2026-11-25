@@ -96,6 +96,17 @@ fn the_edge_stamps_approval_classification_from_its_minimum_action() {
 }
 
 #[test]
+fn the_edge_stamps_custom_rule_classification_from_the_rule_object() {
+    let mut edge = pre_tool();
+    assert_eq!(
+        edge.local_cli_rule_blocked,
+        edge.local_cli_rule.as_ref().map(|rule| rule.blocked)
+    );
+    edge.local_cli_rule_blocked = Some(false);
+    assert!(edge_result_check::check(&edge).is_err());
+}
+
+#[test]
 fn the_edge_stamps_recording_only_denials_without_reclassifying_the_result() {
     let mut envelope = envelope(
         "PreToolUse",

@@ -10,8 +10,10 @@ from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def _edge(*, requires_approval: bool, recording_only_response: bool = False) -> dict[str, Any]:
-    return {
+def _edge(
+    *, requires_approval: bool, recording_only_response: bool = False, local_cli_rule_blocked: bool | None = None
+) -> dict[str, Any]:
+    edge = {
         "event_name": "PreToolUse",
         "harness": "codex",
         "result": {"decision": "deny", "minimum_action": "review"},
@@ -21,6 +23,13 @@ def _edge(*, requires_approval: bool, recording_only_response: bool = False) -> 
         "exact_command_block": False,
         "containment_route": "none",
     }
+    if local_cli_rule_blocked is not None:
+        edge["local_cli_rule_blocked"] = local_cli_rule_blocked
+        edge["local_cli_rule"] = {
+            "blocked": local_cli_rule_blocked,
+            "harness_response": {"policy_action": "blocked-by-extension"},
+        }
+    return edge
 
 
 def _review(worker: HookWorker, guard_home: Path) -> dict[str, object]:
@@ -107,5 +116,23 @@ def test_rust_recording_only_classification_returns_the_edge_response(tmp_path: 
     )
     try:
         assert _watch_review(worker, tmp_path / "guard") == {"policy_action": "review"}
+    finally:
+        worker.close()
+
+
+def test_rust_custom_rule_classification_selects_the_block_response(tmp_path: Path, monkeypatch: Any) -> None:
+    worker = HookWorker(store=GuardStore(tmp_path / "guard"), start_native_policy=False)
+    monkeypatch.setattr(
+        native_module,
+        "native_or_daemon_edge",
+        lambda *_args, **_kwargs: (_edge(requires_approval=False, local_cli_rule_blocked=True), False),
+    )
+    monkeypatch.setattr(
+        native_module,
+        "pause_native_pre_tool_for_approval",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("custom block entered approval")),
+    )
+    try:
+        assert _review(worker, tmp_path / "guard") == {"policy_action": "blocked-by-extension"}
     finally:
         worker.close()

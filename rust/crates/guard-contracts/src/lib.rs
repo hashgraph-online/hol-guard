@@ -494,6 +494,11 @@ pub struct GuardHookEdgeResultV2 {
     /// adapter does not classify Watch outcomes from policy fields.
     #[serde(default)]
     pub recording_only_response: bool,
+    /// The custom extension-rule outcome the edge returned for this
+    /// `PreToolUse`, when one was evaluated. The adapter uses this stamp to
+    /// route a blocked rule response without reinterpreting the rule object.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_cli_rule_blocked: Option<bool>,
     /// The harness-specific JSON a hook must print for `result`, rendered by
     /// the resident so no other layer interprets the verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]

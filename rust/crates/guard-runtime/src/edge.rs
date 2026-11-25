@@ -414,6 +414,7 @@ fn evaluate_validated_envelope<Lease>(
     let requires_approval = edge_result_check::requires_approval(&event_name, result_object);
     let recording_only_response =
         edge_result_check::recording_only_response(&event_name, recording_only, result_object);
+    let local_cli_rule_blocked = local_cli_rule.as_ref().map(|rule| rule.blocked);
     let mut edge = GuardHookEdgeResultV2 {
         exact_command_block: None,
         review_evidence,
@@ -432,6 +433,7 @@ fn evaluate_validated_envelope<Lease>(
         result,
         requires_approval,
         recording_only_response,
+        local_cli_rule_blocked,
         harness_response,
         receipt,
     };

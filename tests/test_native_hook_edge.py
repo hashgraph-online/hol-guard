@@ -107,6 +107,7 @@ def _edge_result() -> dict[str, object]:
         "harness_response": {"continue": True},
         "requires_approval": False,
         "recording_only_response": False,
+        "local_cli_rule_blocked": None,
         "containment_route": "none",
         "result": {
             "schema": "guard-pre-tool-result.v1",
@@ -182,6 +183,22 @@ def test_edge_decoder_requires_rust_approval_classification(value: object) -> No
         edge.pop("requires_approval")
     else:
         edge["requires_approval"] = value
+    assert _decode_edge(edge) is None
+
+
+@pytest.mark.parametrize("blocked", (True, False))
+def test_edge_decoder_binds_custom_rule_classification(blocked: bool) -> None:
+    edge = _edge_result()
+    edge["local_cli_rule"] = {"blocked": blocked, "harness_response": {"policy_action": "block"}}
+    edge["local_cli_rule_blocked"] = blocked
+    assert _decode_edge(edge) == edge
+    edge["local_cli_rule_blocked"] = not blocked
+    assert _decode_edge(edge) is None
+
+
+def test_edge_decoder_rejects_a_custom_rule_without_its_classification() -> None:
+    edge = _edge_result()
+    edge["local_cli_rule"] = {"blocked": True, "harness_response": {"policy_action": "block"}}
     assert _decode_edge(edge) is None
 
 
