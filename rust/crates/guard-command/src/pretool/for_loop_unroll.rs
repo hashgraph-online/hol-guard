@@ -5,6 +5,8 @@
 //! recognizer does not fully understand returns `None`, which keeps the
 //! existing review behavior.
 
+#[path = "for_loop_unroll_arithmetic.rs"]
+mod arithmetic;
 #[path = "for_loop_unroll_body.rs"]
 pub(super) mod body;
 #[path = "for_loop_unroll_conditional.rs"]
@@ -115,7 +117,31 @@ fn unrolled<'a>(
     }
     let rest = rest.trim_start_matches([' ', '\t', '\n', ';']);
     let rest = keyword(rest, "do")?;
-    let (items, _, after) = body_items(rest, name, &["done"])?;
+    // A body with `$((n+6))` is read once per word, with the value of that
+    // pass written in, so each pass's items are the work that pass runs.
+    let (items, after, passes) = match arithmetic::evaluated_bodies(rest, name, &words)? {
+        None => {
+            let (items, _, after) = body_items(rest, name, &["done"])?;
+            (items, after, None)
+        }
+        Some(bodies) => {
+            let mut passes = Vec::with_capacity(bodies.len());
+            let mut after = None;
+            for body in &bodies {
+                let (items, _, tail) = body_items(body, name, &["done"])?;
+                // The text after `done` must be the loop's own, untouched.
+                let tail = rest
+                    .strip_suffix(tail)
+                    .map(|_| &rest[rest.len() - tail.len()..])?;
+                if after.is_some_and(|after: &str| after != tail) {
+                    return None;
+                }
+                after = Some(tail);
+                passes.push(items);
+            }
+            (passes.first()?.clone(), after?, Some(passes))
+        }
+    };
     let (piped, tail, rest) = match place {
         Place::Alone => {
             // A pipe into text filters after `done` reads the whole loop's
@@ -157,7 +183,14 @@ fn unrolled<'a>(
             (None, String::new(), rest)
         }
     };
-    if items.is_empty() || items.iter().any(|(text, _)| rebinds(text, name)) {
+    if items.is_empty()
+        || passes
+            .iter()
+            .flatten()
+            .chain(std::iter::once(&items))
+            .flatten()
+            .any(|(text, _)| rebinds(text, name))
+    {
         return None;
     }
     // A body that never reads the loop variable runs the same text on every
@@ -168,9 +201,10 @@ fn unrolled<'a>(
     // written-out `cd ..` would prove the later commands in the wrong place.
     // A body that reads the variable, or carries shell state from pass to
     // pass, is written out once per word, which the word bound keeps finite.
-    let same_every_pass = !items
-        .iter()
-        .any(|(text, _)| body::reads_the_variable(text) || carries_state(text));
+    let same_every_pass = passes.is_none()
+        && !items
+            .iter()
+            .any(|(text, _)| body::reads_the_variable(text) || carries_state(text));
     if same_every_pass {
         words.truncate(1);
     } else if words.len() > MAX_WORDS {
@@ -209,13 +243,17 @@ fn unrolled<'a>(
         }
         items
     };
+    if passes.is_some() && (patterned || spaced) {
+        return None;
+    }
     let mut out = prefix;
-    for word in &words {
+    for (pass, word) in words.iter().enumerate() {
+        let items = passes.as_ref().map_or(&items, |passes| &passes[pass]);
         // The unrolled list runs the items the loop ran. A leading `!` only
         // inverts an item's exit status, so it is dropped wherever the
         // separator after it shows nothing reads that outcome. An `if … fi`
         // statement is written out whole as one step.
-        for (step, separator) in conditional::written_steps(&items, word, &tail)? {
+        for (step, separator) in conditional::written_steps(items, word, &tail)? {
             out.push_str(&step);
             out.push_str(separator);
         }

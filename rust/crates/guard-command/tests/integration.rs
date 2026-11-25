@@ -418,3 +418,4 @@ fn every_test_file_is_compiled() {
         "declare these test files in tests/integration.rs: {missing:?}"
     );
 }
+pub mod pretool_for_loop_arithmetic;
