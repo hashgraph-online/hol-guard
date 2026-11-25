@@ -122,6 +122,13 @@ fn changes_directory(segment: &CommandSegmentV1) -> bool {
         .is_none_or(|name| matches!(executable_basename(name), "cd" | "pushd" | "popd"))
 }
 
+/// A directory change the nested splits below cannot follow: anything but a
+/// plain `cd`. `pushd` and `popd` move through a stack the floor does not
+/// model, and a segment with no known executable may change directory too.
+fn unfollowed_directory_change(segment: &CommandSegmentV1) -> bool {
+    changes_directory(segment) && segment.executable.as_deref() != Some("cd")
+}
+
 /// `cd <dir>; <rest>` with no other directory change: `<rest>` runs in the
 /// returned directory when the `cd` succeeded and in the original directory
 /// when it failed. The rest keeps the original text and spans.
@@ -129,9 +136,28 @@ pub(in crate::pretool) fn leading_semicolon_cd(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> Option<(String, CanonicalCommandV1)> {
+    if model
+        .segments
+        .get(1..)
+        .is_some_and(|rest| rest.iter().any(changes_directory))
+    {
+        return None;
+    }
+    leading_semicolon_cd_nested(model, context)
+}
+
+/// [`leading_semicolon_cd`] that also accepts a later directory change.
+/// Only callers that judge each returned part again with the same
+/// directory-aware rules may use it: the part keeps its own `cd`, so a
+/// caller that inspects the part's reads in one directory would look in the
+/// wrong place.
+pub(in crate::pretool) fn leading_semicolon_cd_nested(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<(String, CanonicalCommandV1)> {
     if !exact_model(model)
         || separators(model)?.first().map(String::as_str) != Some(";")
-        || model.segments[1..].iter().any(changes_directory)
+        || model.segments[1..].iter().any(unfollowed_directory_change)
     {
         return None;
     }
@@ -152,7 +178,25 @@ pub(in crate::pretool) fn leading_and_cd(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> Option<(String, CanonicalCommandV1, CanonicalCommandV1)> {
-    if !exact_model(model) || model.segments[1..].iter().any(changes_directory) {
+    if model
+        .segments
+        .get(1..)
+        .is_some_and(|rest| rest.iter().any(changes_directory))
+    {
+        return None;
+    }
+    leading_and_cd_nested(model, context)
+}
+
+/// [`leading_and_cd`] that also accepts a later directory change, as in
+/// `cd <dir> && <read>; cd .. && git diff`. The same caller rule as
+/// [`leading_semicolon_cd_nested`] applies: each part must be judged again
+/// with the directory-aware rules, never as reads in one directory.
+pub(in crate::pretool) fn leading_and_cd_nested(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<(String, CanonicalCommandV1, CanonicalCommandV1)> {
+    if !exact_model(model) || model.segments[1..].iter().any(unfollowed_directory_change) {
         return None;
     }
     let separators = separators(model)?;
@@ -170,6 +214,55 @@ pub(in crate::pretool) fn leading_and_cd(
     let mut after = model.clone();
     after.segments = model.segments[tail..].to_vec();
     Some((cwd, rest, after))
+}
+
+/// `cd <dir> && <read>; cd .. && git diff`: a later plain `cd` in the
+/// remainder of a leading `cd`. The remainder is proved again, as a whole
+/// command, in every directory it can start in, so the later `cd` is followed
+/// by the same leading-`cd` rules. Each part is shorter than the command, so
+/// the recursion ends.
+pub(in crate::pretool) fn nested_cd_proof(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    if !model.segments.get(1..).is_some_and(|rest| {
+        rest.iter()
+            .any(|segment| segment.executable.as_deref() == Some("cd"))
+    }) {
+        return false;
+    }
+    if let Some((cwd, rest)) = leading_semicolon_cd_nested(model, context) {
+        let moved = PathContext {
+            cwd: Some(&cwd),
+            ..context
+        };
+        return crate::pretool::exact_safe_command_with_context(
+            &rest,
+            allow_git_helper_context,
+            moved,
+        ) && crate::pretool::exact_safe_command_with_context(
+            &rest,
+            allow_git_helper_context,
+            context,
+        );
+    }
+    if let Some((cwd, rest, tail)) = leading_and_cd_nested(model, context) {
+        let moved = PathContext {
+            cwd: Some(&cwd),
+            ..context
+        };
+        return crate::pretool::exact_safe_command_with_context(
+            &rest,
+            allow_git_helper_context,
+            moved,
+        ) && crate::pretool::exact_safe_command_with_context(
+            &tail,
+            allow_git_helper_context,
+            context,
+        );
+    }
+    false
 }
 
 fn cd_then_read_sequence(

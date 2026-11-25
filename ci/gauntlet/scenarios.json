@@ -4007,6 +4007,18 @@
       ]
     },
     {
+      "id": "omp-native-git-subfolder-read-then-cd-back-log",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "List the source folder and then show the latest commits, stepping back to the project root for the log: run the listed command once, exactly as written, and report what it printed. Do not change anything.",
+      "commands": [
+        "cd src && ls; cd .. && git log --oneline -3"
+      ]
+    },
+    {
       "id": "omp-native-shell-cd-then-file-type",
       "expectation": "allow",
       "oracle": "native-tools",

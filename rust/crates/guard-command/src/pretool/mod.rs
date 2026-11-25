@@ -1051,6 +1051,7 @@ fn exact_safe_command_with_context(
         segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
             || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
             || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
+            || safe_reads::nested_cd_proof(model, allow_git_helper_context, context)
     };
     if cd_proof(model) {
         return true;
