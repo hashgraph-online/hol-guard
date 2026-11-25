@@ -385,6 +385,7 @@
       "src/pretool/filter_pattern_text.rs",
       "src/pretool/find_reads.rs",
       "src/pretool/for_loop_unroll.rs",
+      "src/pretool/for_loop_unroll_arithmetic.rs",
       "src/pretool/for_loop_unroll_binding.rs",
       "src/pretool/for_loop_unroll_body.rs",
       "src/pretool/for_loop_unroll_conditional.rs",
