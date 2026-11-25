@@ -58,7 +58,7 @@ pub(crate) fn evaluate_with_store(
             saved_approval::answer(&request.harness, params, store)
                 .map(|document| cli_payload(CliOutcome::Document(document)))
         }
-        _ => render(request),
+        _ => render(request, store),
     };
     let (status, code, payload) = match result {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
@@ -94,7 +94,10 @@ fn cli_payload(outcome: CliOutcome) -> Value {
     }
 }
 
-fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
+fn render(
+    request: &HookRenderRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Value, &'static str> {
     let harness = request.harness.as_str();
     if request.kind == "review_reuse" {
         use crate::hook_direct::saved_decision::{consume::reuse_response, render_approval};
@@ -205,16 +208,13 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
             == Some(&Value::Bool(true))
             && matches!(event, "PostToolUse" | "PostToolUseFailure")
         {
-            if let (Some(store), Some(event_payload)) = (store, payload.as_object()) {
+            if let Some(store) = store {
                 if let Ok(home) =
                     crate::resident_state::private_root_for_state_base(store.state_base())
                 {
                     crate::hook_evidence_writer_op::record_direct(&home, |writer| {
                         crate::edge_receipt::queue_post_tool_activity(
-                            writer,
-                            harness,
-                            event,
-                            event_payload,
+                            writer, harness, event, payload,
                         )
                     })
                     .unwrap_or(false)
