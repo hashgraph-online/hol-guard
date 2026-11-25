@@ -115,6 +115,11 @@ fn size_and_comparison_reads_proceed() {
         "du -sh",
         "du -h -d 1 src",
         "du -sh src old --max-depth=0",
+        "du -sh *",
+        "du -sh src/*",
+        "du -sh -- *",
+        "du -sh */ | sort -h",
+        "du -h src/*.ts",
         "df -h",
         "df -h /tmp",
         "df -kP .",
@@ -145,6 +150,10 @@ fn unproven_size_and_comparison_reads_still_ask() {
         "du -ah src",
         "du -h src",
         "du -h -d 2 src",
+        "du -h *",
+        "du -sh src/*.env",
+        "du -sh ~/.s*",
+        "du -sh missing/*",
         "du -shL src",
         "du -L -s src",
         "df -h $(cat list)",
@@ -169,6 +178,19 @@ fn unproven_size_and_comparison_reads_still_ask() {
         "cmp -x README.md src/one.ts",
     ] {
         assert!(!shell(&home, command).contains("allow"), "{command}");
+    }
+}
+
+/// A bare pattern hands each match over as its own word, so a file named
+/// like an option would reach `du` as that option. After `--` it is an
+/// operand, and below a directory part it starts with that directory.
+#[test]
+fn a_glob_match_named_like_an_option_still_asks() {
+    let home = home();
+    write(home.join("project/--files0-from=notes.txt"), "x\n");
+    assert!(!shell(&home, "du -sh *").contains("allow"), "du -sh *");
+    for command in ["du -sh -- *", "du -sh src/*"] {
+        assert!(shell(&home, command).contains("allow"), "{command}");
     }
 }
 

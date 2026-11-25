@@ -704,6 +704,18 @@
       "prompt": "Use the task tool to have a subtask read {{workspace}}/src/one.ts and report its contents as plain text. Give it this exact file path and ask it to read that file directly, without discovery or other project inspection. Then use the wait tool until it finishes and tell me what it reported."
     },
     {
+      "id": "omp-native-size-each-source-entry-with-a-glob",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Show me how much space each entry in the source folder takes: run the listed command once, exactly as written, and tell me what it printed. Do not substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
+      "commands": [
+        "du -sh src/*"
+      ]
+    },
+    {
       "id": "omp-native-read-home-skill-doc",
       "expectation": "allow",
       "oracle": "native-tools",
