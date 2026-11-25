@@ -388,3 +388,86 @@ fn an_env_that_names_no_program_is_reviewed_rather_than_refused() {
         );
     }
 }
+
+#[test]
+fn a_path_setting_naming_one_data_file_reaches_the_ordinary_decision() {
+    let nonce = crate::unique_nanos::unique_nanos();
+    let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
+        "guard-env-data-path-{}-{nonce}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("project/scripts")).unwrap();
+    std::fs::create_dir_all(root.join("project/out")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::write(root.join("project/scripts/report.mjs"), "console.log(1)\n").unwrap();
+    std::fs::write(root.join("project/out/ledger.jsonl"), "{}\n").unwrap();
+    let ledger = root.join("project/out/ledger.jsonl");
+
+    // The setting names a file of records, so the command decides the way it
+    // does without it, or with the same value under a `*_FILE` name.
+    for (command, plain) in [
+        ("REPORT_LEDGER_PATH=out/ledger.jsonl ls", "ls"),
+        (
+            "REPORT_LEDGER_PATH=out/ledger.jsonl git status --short",
+            "git status --short",
+        ),
+        (
+            "REPORT_LEDGER_PATH=out/ledger.jsonl REPORT_ALLOW_CREATE=1 node scripts/report.mjs",
+            "node scripts/report.mjs",
+        ),
+        (
+            &format!(
+                "REPORT_LEDGER_PATH={} node scripts/report.mjs",
+                ledger.display()
+            ),
+            "node scripts/report.mjs",
+        ),
+        ("env REPORT_LEDGER_PATH=out/report.csv ls", "ls"),
+    ] {
+        let expected = evaluate(&root, plain).minimum_action;
+        let result = evaluate(&root, command);
+        assert_eq!(
+            result.minimum_action, expected,
+            "{command}: {}",
+            result.reason
+        );
+        assert_ne!(
+            result.reason_code, "native_command_extension_evaluation_failed",
+            "{command}"
+        );
+    }
+
+    // A directory, a list, a script, a second value the run actually gets,
+    // or a name another family claims keeps the refusal.
+    for (command, setting) in [
+        ("REPORT_SOURCE_PATH=src ls", "REPORT_SOURCE_PATH"),
+        (
+            "REPORT_LEDGER_PATH=a.jsonl:b.jsonl ls",
+            "REPORT_LEDGER_PATH",
+        ),
+        ("REPORT_LEDGER_PATH=scripts/run.sh ls", "REPORT_LEDGER_PATH"),
+        (
+            "REPORT_LEDGER_PATH=out/ledger.jsonl REPORT_LEDGER_PATH=src ls",
+            "REPORT_LEDGER_PATH",
+        ),
+        (
+            "REPORT_PLUGIN_PATH=out/ledger.json ls",
+            "REPORT_PLUGIN_PATH",
+        ),
+        (
+            "REPORT_CONFIG_PATH=out/ledger.json ls",
+            "REPORT_CONFIG_PATH",
+        ),
+        ("LUA_PATH=out/ledger.json ls", "LUA_PATH"),
+        ("C_INCLUDE_PATH=out/ledger.json ls", "C_INCLUDE_PATH"),
+        ("GIT_EXEC_PATH=out/ledger.json git status", "GIT_EXEC_PATH"),
+    ] {
+        let result = evaluate(&root, command);
+        assert_ne!(result.minimum_action, "allow", "{command}");
+        assert!(
+            result.reason.contains(&format!("the {setting} setting")),
+            "{command}: {}",
+            result.reason
+        );
+    }
+}

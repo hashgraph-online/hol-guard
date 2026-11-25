@@ -11,6 +11,8 @@ use std::time::Instant;
 
 #[path = "command_compatibility/catalog.rs"]
 mod catalog;
+#[path = "command_compatibility/data_file_setting.rs"]
+pub(crate) mod data_file_setting;
 #[path = "command_compatibility/domains.rs"]
 mod domains;
 #[path = "command_compatibility/environment.rs"]
@@ -217,10 +219,13 @@ pub(crate) fn basename(segment: &CommandSegmentV1) -> String {
 /// name swaps whose authority it runs with, as `env NAME=` already does.
 /// Neither is a reviewable steer of that program.
 fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
+    use crate::pretool::generic::inert_tool_settings::inert_tool_setting;
+    use data_file_setting::data_file_path_setting;
     segment.environment_names.iter().any(|name| {
         environment::credential_routing_environment_name(name)
             || (environment::code_loading_environment_name(name)
-                && !screened_build_setting(segment, name))
+                && !prefix_values_pass(segment, name, inert_tool_setting)
+                && !prefix_values_pass(segment, name, data_file_path_setting))
     })
 }
 
@@ -243,7 +248,14 @@ fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
 /// reading either as the screened one would clear
 /// `GOFLAGS=-v GOFLAGS=-toolexec=./x go test ./...` on the strength of a value
 /// the run never sees.
-fn screened_build_setting(segment: &CommandSegmentV1, name: &str) -> bool {
+///
+/// A `*_PATH` setting naming one data file passes the same way; see
+/// [`data_file_setting`].
+fn prefix_values_pass(
+    segment: &CommandSegmentV1,
+    name: &str,
+    pass: fn(&str, &str) -> bool,
+) -> bool {
     let prefix = crate::command_tokens::leading_environment(&segment.tokens).1;
     let mut values = segment.tokens[..prefix.min(segment.tokens.len())]
         .iter()
@@ -253,10 +265,7 @@ fn screened_build_setting(segment: &CommandSegmentV1, name: &str) -> bool {
                 .and_then(|rest| rest.strip_prefix('='))
         })
         .peekable();
-    values.peek().is_some()
-        && values.all(|value| {
-            crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value)
-        })
+    values.peek().is_some() && values.all(|value| pass(name, value))
 }
 
 /// A list item such as `OUT=build/report.json` only sets shell variables, so

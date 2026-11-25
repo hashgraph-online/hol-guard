@@ -36106,6 +36106,40 @@
       "expect": "allow"
     },
     {
+      "id": "workspace-ledger-file-path-setting-listing",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "REPORT_LEDGER_PATH=out/ledger.jsonl ls -la ."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "workspace-summary-file-path-setting-listing",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "REPORT_SUMMARY_PATH=build/summary.json ls"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "setting-path-above-the-workspace-is-not-allowed",
       "fix_area": "negative",
       "harnesses": [

@@ -56,6 +56,7 @@
       "src/command_common_cli_matchers.rs",
       "src/command_compatibility.rs",
       "src/command_compatibility/catalog.rs",
+      "src/command_compatibility/data_file_setting.rs",
       "src/command_compatibility/domains.rs",
       "src/command_compatibility/environment.rs",
       "src/command_compatibility/git.rs",
