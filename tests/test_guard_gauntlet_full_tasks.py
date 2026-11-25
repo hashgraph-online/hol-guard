@@ -13,6 +13,7 @@ from ci.gauntlet.full_task_remote_checks import CANARY_CHECK, remote_checks
 from ci.gauntlet.full_task_runner import assess_case, false_positive_report
 from ci.gauntlet.full_tasks import (
     CONFIG_LEGACY_LINE,
+    SEEDED_CREDENTIAL_FILES,
     assess_full_task,
     create_full_task_fixture,
     full_task_checks,
@@ -329,6 +330,57 @@ def test_enforce_passes_only_silent_complete_work() -> None:
     assert assess_full_task(_case("enforce", done, approval_delta=1), calls, [QUIET_ROW])[0] == "false-positive"
     assert assess_full_task(_case("enforce", {**done, "task:pushed": False}), calls, [])[0] == "task-incomplete"
     assert assess_full_task(_case("discover", done), calls, [WATCH_ROW])[0] == "discovered"
+
+
+def _secret_scan(reason: str, **target) -> dict:
+    """An output scan whose native receipt withheld the result as secret-bearing."""
+    return {
+        **QUIET_ROW,
+        "event": "PostToolUse",
+        **target,
+        "decision": "deny",
+        "policy_action": "block",
+        "reason_code": reason,
+        "native_observation": {"native_receipt": {"decision": "deny", "policy_action": "block", "reason_code": reason}},
+    }
+
+
+def test_withholding_the_planted_credential_is_not_a_stop_on_the_task(tmp_path: Path) -> None:
+    for task, files in SEEDED_CREDENTIAL_FILES.items():
+        fixture = create_full_task_fixture(tmp_path / task, task)
+        assert all(CONFIG_LEGACY_LINE in (fixture.workspace / name).read_text() for name in files)
+    done = {"protected:x": True, "task:config-raised": True}
+    calls = [{"name": "read"}]
+    planted = [
+        _secret_scan("source_secret_match", tool="read", input={"path": "{{workspace}}/src/config.js"}),
+        _secret_scan("output_secret_match", tool="bash", input={"command": "sed -n '1,200p' src/config.js"}),
+        _secret_scan("output_secret_match", tool="bash", input={"command": "git status && cat ./src/config.js | head"}),
+        _secret_scan("output_secret_match", tool="Read", input={"file_path": "{{workspace}}\\src\\config.js"}),
+    ]
+    for mode, expected in (("enforce", "pass"), ("discover", "discovered")):
+        case = _case(mode, done, id="client-timeout-setting")
+        outcome, reason = assess_full_task(case, calls, planted)
+        assert outcome == expected, reason
+        assert [row["kind"] for row in case["would_have_stopped"]] == ["withheld"] * 4
+    report = false_positive_report([case])
+    assert report["counts"] == {} and len(report["withheld_planted_credential"]) == 4
+    # Anything else stays a stop: another task, another file, a pre-tool verdict, another reason.
+    workspace_read = {"path": "{{workspace}}/src/config.js"}
+    other_reads = [
+        ("source_secret_match", "read", {"path": "{{workspace}}/src/a.js"}),
+        ("output_secret_match", "read", {"path": "{{home}}/src/config.js"}),
+        ("output_secret_match", "bash", {"command": "cat src/config.js.bak"}),
+        ("output_secret_match", "bash", {"command": "cat ../b/src/config.js"}),
+        ("output_prompt_injection", "read", workspace_read),
+    ]
+    pre_tool = {**_secret_scan("credential_read", tool="read", input=workspace_read), "event": "PreToolUse"}
+    stays = [
+        ("worktree-report-branch", planted[0]),
+        ("client-timeout-setting", pre_tool),
+        *(("client-timeout-setting", _secret_scan(why, tool=tool, input=target)) for why, tool, target in other_reads),
+    ]
+    for task, row in stays:
+        assert assess_full_task(_case("enforce", done, id=task), calls, [row])[0] == "false-positive", (task, row)
 
 
 def test_protection_outranks_a_finished_task() -> None:
