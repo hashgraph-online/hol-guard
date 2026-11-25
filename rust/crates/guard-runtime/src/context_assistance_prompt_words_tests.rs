@@ -303,3 +303,43 @@ fn abbreviations_and_email_addresses_are_not_code() {
         );
     }
 }
+
+/// A web address names a page, not code: before, a link's host and path read
+/// as dotted names (`github.com`, `web-app`) and a query key such as
+/// `workspaceId` as camelCase, and each mapped whichever file wrote them.
+#[test]
+fn a_web_address_gives_no_search_words() {
+    for prompt in [
+        "Review https://github.com/acme/web-app/pull/12 please",
+        "Page https://example.com/guard/fleet?workspaceId=7&tab=usage looks off",
+        "See [the run](https://ci.example.org/runs/42) and <http://localhost:3000/a_b>.",
+        "Clone git+ssh://git@example.com/acme/tool.git, then retry",
+        "Review **https://example.com/a?workspaceId=7** and _https://example.com/b_c_",
+        "Open http://[::1]:3000/a?workspaceId=7 now",
+    ] {
+        assert!(
+            spellings(prompt).is_empty(),
+            "{prompt}: {:?}",
+            spellings(prompt)
+        );
+        assert!(
+            !marked_terms(prompt).iter().any(|(_, shaped)| *shaped),
+            "{prompt}: {:?}",
+            marked_terms(prompt)
+        );
+    }
+    let found = terms("Review https://github.com/acme/web-app/pull/12, then fix parse_args");
+    for word in ["github", "com", "acme", "webapp", "web", "app", "pull"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"parsearg".to_owned()), "{found:?}");
+    // A word written right after a link stays, and a link to a file still
+    // names it.
+    let found = spellings("Read (https://example.com/docs),render_page next");
+    assert_eq!(found, ["render_page"]);
+    let found = named("Fix https://github.com/acme/app/blob/main/src/cli.py");
+    assert!(
+        found.len() == 1 && found[0].ends_with("src/cli.py"),
+        "{found:?}"
+    );
+}
