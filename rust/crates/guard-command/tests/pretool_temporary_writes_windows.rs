@@ -158,3 +158,39 @@ fn copy_into_profile_temporary_directory_needs_a_quoted_drive_path() {
     let unquoted = shell(&fixture, &format!("cp notes.txt {destination}"));
     assert_ne!(unquoted.minimum_action, "allow");
 }
+
+/// A Windows profile keeps its temporary directory inside the home. A scratch
+/// probe there for a name that is not present reads nothing, whatever the
+/// name spells, so it runs like the same probe in the macOS private root;
+/// the same probe below an ordinary home folder keeps its review.
+#[test]
+fn missing_hidden_name_probe_in_profile_temporary_directory_is_allowed() {
+    let fixture = fixture("listing");
+    let stage = fixture.temp.join("tmp.abc123");
+    std::fs::create_dir_all(stage.join("signup-funnel")).unwrap();
+    for spelled in [
+        stage.to_str().unwrap().to_owned(),
+        stage.to_str().unwrap().replace('\\', "/"),
+    ] {
+        for command in [
+            format!("ls {spelled}/signup-funnel/.tmp 2>/dev/null | head -5"),
+            format!("ls {spelled}/.tmp 2>/dev/null | head -5"),
+        ] {
+            let result = shell(&fixture, &command);
+            assert_eq!(
+                result.minimum_action, "allow",
+                "{command}: {}",
+                result.reason_code
+            );
+        }
+    }
+    // Outside the temporary directory the same probe below a home folder
+    // keeps its review, as `ls ~/work/.hidden-missing` does on macOS.
+    std::fs::create_dir_all(Path::new(&fixture.home).join("signup-funnel")).unwrap();
+    let home = fixture.home.replace('\\', "/");
+    let result = shell(
+        &fixture,
+        &format!("ls {home}/signup-funnel/.tmp 2>/dev/null | head -5"),
+    );
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+}

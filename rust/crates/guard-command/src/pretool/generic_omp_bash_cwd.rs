@@ -7,7 +7,7 @@
 //! directory could not prove its configuration.
 
 use serde_json::Value;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path, PathBuf, Prefix};
 
 const INPUT_KEYS: [&str; 3] = ["tool_input", "toolInput", "arguments"];
 
@@ -64,10 +64,13 @@ pub(super) fn resolve(payload: &Value, home_dir: Option<&str>, session: Option<&
     match target.strip_prefix(&root) {
         Ok(suffix) if suffix.as_os_str().is_empty() => BashCwd::Session,
         Ok(suffix) => match suffix.to_str() {
-            Some(suffix) => BashCwd::Within(format!("{}/{suffix}", session.trim_end_matches('/'))),
+            Some(suffix) => BashCwd::Within(format!(
+                "{}{SEPARATOR}{suffix}",
+                session.trim_end_matches(['/', SEPARATOR])
+            )),
             None => BashCwd::Unresolved,
         },
-        Err(_) => match target.to_str() {
+        Err(_) => match ordinary_spelling(&target) {
             Some(text) if session_worktree(&target, &root) => BashCwd::Within(text.to_owned()),
             Some(text) if !text.contains('\'') => BashCwd::Outside(text.to_owned()),
             _ => BashCwd::Unresolved,
@@ -75,14 +78,40 @@ pub(super) fn resolve(payload: &Value, home_dir: Option<&str>, session: Option<&
     }
 }
 
+/// The separator the host joins a directory below the session one with.
+const SEPARATOR: char = if cfg!(windows) { '\\' } else { '/' };
+
+/// The spelling a canonical directory is judged under. Windows canonicalizes
+/// to the verbatim form (`\\?\C:\work`), which names the same folder as the
+/// drive path the session directory is written in; a verbatim network or
+/// device path keeps no such spelling.
+fn ordinary_spelling(target: &Path) -> Option<&str> {
+    let text = target.to_str()?;
+    if !cfg!(windows) {
+        return Some(text);
+    }
+    let rest = text.strip_prefix(r"\\?\").unwrap_or(text);
+    let bytes = rest.as_bytes();
+    (bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'\\')
+        .then_some(rest)
+}
+
 /// The directory a plain path names. The host also rewrites `@`, `:` and
 /// `file:` prefixes, Unicode spaces and internal URLs before resolving, so
 /// those forms stay unresolved rather than guessed.
+///
+/// On Windows the host resolves the value with the platform's own rules, so
+/// `\` separates components and a drive path (`C:\work\site`, as the harness
+/// reports the session directory itself) names that folder. Only a path that
+/// ends up rooted on a drive is read: a drive-relative spelling (`C:work`)
+/// resolves against a per-drive directory Guard does not see, and a network
+/// or device path (`\\server\share`, `\\?\C:\work`) names no local folder.
+/// Elsewhere a `\` is part of a file name the host does not model.
 fn literal_target(text: &str, home_dir: Option<&str>, session: &str) -> Option<PathBuf> {
     if !text.is_ascii()
         || text
             .bytes()
-            .any(|byte| byte.is_ascii_control() || byte == b'\\')
+            .any(|byte| byte.is_ascii_control() || (byte == b'\\' && !cfg!(windows)))
         || text.starts_with(['@', ':'])
         || text.starts_with("file:")
         || text.contains("://")
@@ -97,9 +126,12 @@ fn literal_target(text: &str, home_dir: Option<&str>, session: &str) -> Option<P
     } else {
         Path::new(session).join(text)
     };
-    path.components()
-        .all(|component| !matches!(component, Component::Prefix(_)))
-        .then_some(path)
+    (path.is_absolute()
+        && path.components().all(|component| match component {
+            Component::Prefix(prefix) => matches!(prefix.kind(), Prefix::Disk(_)),
+            _ => true,
+        }))
+    .then_some(path)
 }
 
 /// Whether `target` sits inside a linked worktree of a repository at or below

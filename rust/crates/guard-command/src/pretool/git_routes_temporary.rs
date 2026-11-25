@@ -161,6 +161,35 @@ fn private_temporary_root(
         })
 }
 
+/// The profile's own Windows temporary directory, or a non-hidden directory
+/// below it, when that directory belongs to the home owner and only the
+/// owner, LocalSystem and the Administrators group can add an entry to it.
+/// It sits inside the home, so callers that keep the home tree's answers for
+/// paths inside it ask for this one by name.
+#[cfg(windows)]
+pub(in crate::pretool) fn profile_temporary_directory(
+    path: &std::path::Path,
+    context: super::super::PathContext<'_>,
+) -> bool {
+    private_temporary_root(path, context)
+        && context
+            .home_dir
+            .and_then(|home| std::fs::canonicalize(home).ok())
+            .is_some_and(|home| {
+                let root = home.join("AppData").join("Local").join("Temp");
+                guard_runtime_windows_process::owned_by_current_user(&root)
+                    && guard_runtime_windows_process::writable_only_by_trusted(&root)
+            })
+}
+
+#[cfg(not(windows))]
+pub(in crate::pretool) fn profile_temporary_directory(
+    _path: &std::path::Path,
+    _context: super::super::PathContext<'_>,
+) -> bool {
+    false
+}
+
 #[cfg(not(any(target_os = "macos", windows)))]
 fn private_temporary_root(
     _parent: &std::path::Path,
