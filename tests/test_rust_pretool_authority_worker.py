@@ -120,6 +120,9 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
             "event_name": "PreToolUse",
             "harness": "codex",
             "result": native_review,
+            "requires_approval": True,
+            "recording_only_response": False,
+            "containment_route": "none",
             "harness_response": {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",

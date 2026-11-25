@@ -32,6 +32,7 @@ def _allowing_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[H
         reason="Guard allows this command.",
     )
     edge["harness_response"] = {}
+    edge["requires_approval"] = False
     _sync_receipt(edge)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.hook_review.hook_worker.review_raw_hook_native",
