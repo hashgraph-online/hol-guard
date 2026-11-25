@@ -238,9 +238,15 @@ pub(super) fn uses<'a>(
         .into_iter()
         .map(|word| rare[word].text.as_str())
         .collect();
-    // Then one plain word's uses are a guess: "what did you change in the
-    // last step?" is not about `ProgressBar.make_step`.
-    if lone && used.len() < 2 && kept.iter().all(|item| !item.phrase && !item.named) {
+    // Then plain words that no one definition holds two of are a guess:
+    // "what did you change in the last step?" is not about
+    // `ProgressBar.make_step`, and "pause this and restart it in an hour"
+    // is not about a `pause` here, a `restart` there and an `hour` elsewhere.
+    if lone
+        && kept
+            .iter()
+            .all(|item| !item.phrase && !item.named && item.words.len() < 2)
+    {
         return Some((Vec::new(), Vec::new()));
     }
     let listed = kept
