@@ -222,6 +222,7 @@ fn a_literal_printf_commit_message_plans_as_the_message_itself() {
         "git commit -m \"$(printf '%s' \"$(cat ~/.ssh/id_rsa)\")\"",
         "git commit -m \"$(printf \"$(cat ~/.ssh/id_rsa)\")\"",
         "git commit -m \"$(printf 'x'; rm -rf /)\"",
+        "git commit -m \"$(printf \n'./payload')\"",
     ] {
         let result = evaluate(&root, &controls, command);
         assert_ne!(

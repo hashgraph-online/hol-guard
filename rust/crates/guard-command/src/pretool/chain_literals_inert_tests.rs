@@ -627,6 +627,9 @@ fn a_printf_that_computes_its_output_or_runs_elsewhere_stays_opaque() {
         "git commit -m \"$(printf 'a'; rm -rf build)\"",
         "git commit -m \"$(printf 'a' > out)\"",
         "git commit -m \"$(printf -v X 'a')\"",
+        // A newline after `printf` runs the quoted word as its own command.
+        "git commit -m \"$(printf \n'./payload')\"",
+        "git commit -m \"$(printf \t\n'./payload')\"",
         "git commit -m \"$(printf '-a')\"",
         // Not the value of `git commit -m`, or not a whole double-quoted word.
         "$(printf rm) -rf build",

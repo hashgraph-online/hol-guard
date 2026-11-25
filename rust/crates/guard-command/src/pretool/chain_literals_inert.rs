@@ -366,8 +366,9 @@ fn printf_value(
     let format = inner
         .trim()
         .strip_prefix("printf")?
-        .strip_prefix(' ')?
-        .trim_start()
+        // Only blanks: a newline here ends `printf` and starts a command.
+        .strip_prefix([' ', '\t'])?
+        .trim_start_matches([' ', '\t'])
         .strip_prefix('\'')?
         .strip_suffix('\'')?;
     if format.contains('\'')
