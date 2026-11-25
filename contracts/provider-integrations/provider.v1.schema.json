@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/provider-integration.v1.schema.json",
+  "title": "HOL Guard provider integration manifest",
+  "description": "Declares how Guard asks a provider a closed-list question about closed-list facts. Provider answers are evidence: they can tighten a decision, never approve or grant. Cross-field rules (shares equal the facts used, fixture prefix outside tests) are enforced by the native compiler.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "publisher",
+    "summary",
+    "surfaces",
+    "auth",
+    "hosts",
+    "capabilities",
+    "verify",
+    "limits",
+    "privacyUrl",
+    "termsUrl"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "guard.provider-integration.v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^provider\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+    },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "url",
+        "verified"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^<>\\u0000-\\u001f]*$"
+    },
+    "surfaces": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "browser"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "auth": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "header",
+            "keyFormat",
+            "obtainUrl"
+          ],
+          "properties": {
+            "kind": {
+              "const": "api-key"
+            },
+            "header": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,63}$",
+              "not": {
+                "enum": [
+                  "cookie",
+                  "host",
+                  "content-length",
+                  "content-type",
+                  "transfer-encoding",
+                  "connection",
+                  "proxy-authorization"
+                ]
+              }
+            },
+            "scheme": {
+              "enum": [
+                "bearer"
+              ]
+            },
+            "keyFormat": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "minLength",
+                "maxLength",
+                "charset"
+              ],
+              "properties": {
+                "minLength": {
+                  "type": "integer",
+                  "minimum": 8,
+                  "maximum": 4096
+                },
+                "maxLength": {
+                  "type": "integer",
+                  "minimum": 8,
+                  "maximum": 4096
+                },
+                "charset": {
+                  "enum": [
+                    "base64url",
+                    "base64",
+                    "hex",
+                    "alnum",
+                    "printable"
+                  ]
+                }
+              }
+            },
+            "obtainUrl": {
+              "$ref": "#/$defs/httpsUrl"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "signed-enrollment"
+            }
+          }
+        }
+      ]
+    },
+    "hosts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 253,
+        "pattern": "^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$",
+        "not": {
+          "pattern": "(^|\\.)(localhost|local|localdomain|internal|invalid|onion|home\\.arpa)$"
+        }
+      },
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
+    "verify": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "path"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "GET",
+            "POST"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/[A-Za-z0-9._~/-]{0,255}$"
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeoutMs",
+        "maxResponseBytes",
+        "maxRequestsPerMinute"
+      ],
+      "properties": {
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 2000
+        },
+        "maxResponseBytes": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 65536
+        },
+        "maxRequestsPerMinute": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        }
+      }
+    },
+    "privacyUrl": {
+      "$ref": "#/$defs/httpsUrl"
+    },
+    "termsUrl": {
+      "$ref": "#/$defs/httpsUrl"
+    },
+    "icon": {
+      "type": "string",
+      "pattern": "^(none|[A-Z][A-Za-z0-9]{1,63})$"
+    }
+  },
+  "$defs": {
+    "httpsUrl": {
+      "type": "string",
+      "pattern": "^https://[a-z0-9.-]+(/[^\\s?#]*)?$",
+      "maxLength": 256
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "request",
+        "response",
+        "shares"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "browser.origin-reputation",
+            "browser.script-integrity",
+            "browser.page-data-risk",
+            "browser.download-reputation",
+            "browser.site-policy"
+          ]
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "method",
+            "path"
+          ],
+          "properties": {
+            "method": {
+              "enum": [
+                "GET",
+                "POST"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/[A-Za-z0-9._~/-]{0,255}$"
+            },
+            "body": {
+              "type": "object",
+              "maxProperties": 8,
+              "propertyNames": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "fact"
+                ],
+                "properties": {
+                  "fact": {
+                    "enum": [
+                      "target.origin",
+                      "target.site_group",
+                      "target.path_prefix",
+                      "action.verb",
+                      "action.intent",
+                      "page.script_hashes",
+                      "download.sha256",
+                      "guard.version"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "response": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict"
+          ],
+          "properties": {
+            "verdict": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "pointer",
+                "map"
+              ],
+              "properties": {
+                "pointer": {
+                  "$ref": "#/$defs/pointer"
+                },
+                "map": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "maxProperties": 16,
+                  "propertyNames": {
+                    "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+                  },
+                  "additionalProperties": {
+                    "enum": [
+                      "ok",
+                      "caution",
+                      "danger",
+                      "unknown"
+                    ]
+                  }
+                }
+              }
+            },
+            "reasonCodes": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "pointer",
+                "allow"
+              ],
+              "properties": {
+                "pointer": {
+                  "$ref": "#/$defs/pointer"
+                },
+                "allow": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                  }
+                }
+              }
+            },
+            "labels": {
+              "type": "object",
+              "maxProperties": 64,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "pattern": "^[A-Za-z0-9 ,.'()-]+$"
+              }
+            },
+            "ttlSeconds": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "min",
+                "max"
+              ],
+              "properties": {
+                "pointer": {
+                  "$ref": "#/$defs/pointer"
+                },
+                "min": {
+                  "type": "integer",
+                  "minimum": 60,
+                  "maximum": 86400
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 60,
+                  "maximum": 86400
+                }
+              }
+            }
+          }
+        },
+        "shares": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "target.origin",
+              "target.site_group",
+              "target.path_prefix",
+              "action.verb",
+              "action.intent",
+              "page.script_hashes",
+              "download.sha256",
+              "guard.version"
+            ]
+          }
+        }
+      }
+    },
+    "pointer": {
+      "type": "string",
+      "pattern": "^(/[A-Za-z0-9_.-]{1,64}){1,6}$"
+    }
+  }
+}
