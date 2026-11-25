@@ -36089,6 +36089,40 @@
       "expect": "allow"
     },
     {
+      "id": "grep-recursive-flag-on-one-parent-file",
+      "fix_area": "search",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"strict\" ../../tsconfig.base.json"
+      },
+      "cwd": "workspace_package",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-recursive-list-on-one-parent-file",
+      "fix_area": "search",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rl workspaces ../../package.json | head -3"
+      },
+      "cwd": "workspace_package",
+      "expect": "allow"
+    },
+    {
       "id": "workspace-data-directory-setting-listing",
       "fix_area": "shell",
       "harnesses": [
