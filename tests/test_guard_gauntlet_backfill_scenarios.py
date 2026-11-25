@@ -55,10 +55,12 @@ def _run(command: str, workspace: Path, home: Path) -> subprocess.CompletedProce
 )
 @pytest.mark.parametrize("scenario_id", BACKFILLED_CASES)
 def test_every_listed_command_exits_cleanly(tmp_path: Path, scenario_id: str) -> None:
-    scenario = SCENARIOS[scenario_id]
-    fixture = create_fixture(tmp_path / "fixture", realistic=True, scenario_id=scenario_id)
+    # A space in the fixture path checks the quoting the live runner applies.
+    fixture = create_fixture(tmp_path / "fixture root", realistic=True, scenario_id=scenario_id)
+    scenario = SCENARIOS[scenario_id].render(
+        {"home": str(fixture.home), "workspace": str(fixture.workspace), "root": str(fixture.root)}
+    )
     for command in scenario.commands:
-        command = command.replace("{{workspace}}", str(fixture.workspace)).replace("{{home}}", str(fixture.home))
         completed = _run(command, fixture.workspace, fixture.home)
         assert completed.returncode == 0, (command, completed.stderr)
 

@@ -1454,7 +1454,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls -la '${PARENT}/app/items/[slug]'"
+        "command": "ls -la ${PARENT}/app/items/\\[slug\\]"
       },
       "cwd": "worktree",
       "expect": "allow"

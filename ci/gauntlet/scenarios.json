@@ -2941,7 +2941,7 @@
       ],
       "prompt": "Look inside the dynamic route folder: run each listed command once, in order, exactly as written, and summarize the output.",
       "commands": [
-        "ls -la '{{workspace}}/app/items/[slug]'",
+        "ls -la {{workspace}}/app/items/\\[slug\\]",
         "grep -rln export app/items/\\[slug\\]"
       ]
     },
