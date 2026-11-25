@@ -848,6 +848,10 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
             remaining = deadline - time.monotonic()
             if remaining > 0:
                 stop_confirmed = False
+                # The launcher takes a supplied deadline as authoritative and
+                # ignores the timeout beside it, so the attempt's own cap is a
+                # deadline too, never past the cleanup's.
+                attempt_deadline = min(deadline, time.monotonic() + _native_stop_attempt_seconds())
                 stop_started = time.perf_counter()
                 stop_result = "failed"
                 try:
@@ -860,7 +864,7 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
                         # its verified clients too, so a retry can authenticate
                         # idempotent containment after the generation disappears.
                         retire_clients=True,
-                        deadline_monotonic=deadline,
+                        deadline_monotonic=attempt_deadline,
                     ):
                         cleanup_error = RuntimeError("native resident stop did not complete")
                     else:

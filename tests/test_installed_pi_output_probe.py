@@ -755,17 +755,21 @@ def test_native_cleanup_gives_one_stop_more_than_the_runtime_stop_deadline(
 
     # The runtime spends up to two seconds stopping once it has started; a slow
     # host (x64 emulation) needs about a second more just to start it.
+    # The launcher obeys `deadline_monotonic` and ignores `timeout_seconds`
+    # when both are given, so the attempt is read from the deadline.
     runtime_stop_deadline = 2.0
-    stop_timeouts: list[float] = []
+    now = 100.0
+    stop_budgets: list[float] = []
     state_file = tmp_path / "generation.json"
     stopped = False
 
+    monkeypatch.setattr(probe.time, "monotonic", lambda: now)
     monkeypatch.setattr(native_resident_client, "close_native_residents", lambda *_args, **_kwargs: True)
 
-    def stop(*, timeout_seconds: float, **_kwargs: object) -> bool:
+    def stop(*, deadline_monotonic: float, **_kwargs: object) -> bool:
         nonlocal stopped
-        stop_timeouts.append(timeout_seconds)
-        stopped = timeout_seconds > runtime_stop_deadline + 1.0
+        stop_budgets.append(deadline_monotonic - now)
+        stopped = deadline_monotonic - now > runtime_stop_deadline + 1.0
         return stopped
 
     monkeypatch.setattr(native_resident_client, "stop_native_resident", stop)
@@ -777,8 +781,11 @@ def test_native_cleanup_gives_one_stop_more_than_the_runtime_stop_deadline(
 
     probe._cleanup_native(Identity(), tmp_path / "guard-home")
 
-    assert len(stop_timeouts) == 1
-    assert stop_timeouts[0] > runtime_stop_deadline + 1.0
+    assert len(stop_budgets) == 1
+    assert stop_budgets[0] > runtime_stop_deadline + 1.0
+    # One attempt has its own cap inside the cleanup budget, so a stop that
+    # hangs leaves time for another.
+    assert stop_budgets[0] < probe._daemon_cleanup_timeout_seconds()
 
 
 def test_native_cleanup_failure_names_each_attempt_without_paths(
