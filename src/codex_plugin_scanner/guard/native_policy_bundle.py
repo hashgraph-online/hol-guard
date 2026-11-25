@@ -155,9 +155,7 @@ def _native_policy_bundle_once(
 ) -> dict[str, object]:
     """Ask the resident for one policy-bundle verdict document."""
 
-    effective_deadline = (
-        deadline_monotonic if deadline_monotonic is not None else time.monotonic() + timeout_seconds
-    )
+    effective_deadline = deadline_monotonic if deadline_monotonic is not None else time.monotonic() + timeout_seconds
     status = native_runtime_status(deadline_monotonic=effective_deadline)
     if (
         not status.available
