@@ -255,21 +255,34 @@ fn helper_proof(
     // original one when it failed. Inspect each read in every directory it
     // can run in, the split the Git execution-context floor already makes,
     // and keep the strongest answer any of them produced.
-    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd(model, context) {
+    // Each part is inspected again by this same split, so a later `cd` in a
+    // part moves that part's reads in turn rather than leaving them probed in
+    // the directory the part started in.
+    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd_nested(model, context) {
         let moved = PathContext {
             cwd: Some(&cwd),
             ..context
         };
-        let moved_proof = segments_proof(&rest, moved, deadline, environment);
-        return moved_proof.max(segments_proof(&rest, context, deadline, environment));
+        let moved_proof = helper_proof(&rest, moved, deadline, execution_environment);
+        return moved_proof.max(helper_proof(
+            &rest,
+            context,
+            deadline,
+            execution_environment,
+        ));
     }
-    if let Some((cwd, rest, tail)) = super::safe_reads::leading_and_cd(model, context) {
+    if let Some((cwd, rest, tail)) = super::safe_reads::leading_and_cd_nested(model, context) {
         let moved = PathContext {
             cwd: Some(&cwd),
             ..context
         };
-        let moved_proof = segments_proof(&rest, moved, deadline, environment);
-        return moved_proof.max(segments_proof(&tail, context, deadline, environment));
+        let moved_proof = helper_proof(&rest, moved, deadline, execution_environment);
+        return moved_proof.max(helper_proof(
+            &tail,
+            context,
+            deadline,
+            execution_environment,
+        ));
     }
     // After a verified `cd`, the Git process reads configuration from the new
     // directory, so the probe must run there rather than in the reported cwd.

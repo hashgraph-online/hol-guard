@@ -194,9 +194,29 @@ fn reading_the_commit_prelude_docs_is_allowed() {
     for code in [
         "return await read('xd://eval/commit');",
         "await read('xd://eval/commit');",
+        // Oh My Pi 19 serves the same docs under `help://`.
+        "return await read(\"help://eval/commit\");",
+        "print(await read('help://eval'));",
     ] {
         let result = eval(&session, code);
         assert_eq!(result.minimum_action, "allow", "{code}");
+    }
+}
+
+/// A `help://` read that is not one of the host's doc pages keeps its
+/// review: a path below the topic, a parent step, a hidden name, or another
+/// selector than the one the prelude adds.
+#[test]
+fn help_reads_outside_the_doc_grammar_stay_reviewed() {
+    let session = session("omp-eval-help-escape");
+    for code in [
+        "return await read('help://eval/../../.ssh/id_rsa');",
+        "return await read('help://eval/commit/more');",
+        "return await read('help://.hidden');",
+        "return await read('help://~/notes');",
+    ] {
+        let result = eval(&session, code);
+        assert_ne!(result.minimum_action, "allow", "{code}");
     }
 }
 

@@ -153,6 +153,7 @@ pub(crate) mod git_conditional_include;
 mod git_config;
 pub(crate) mod git_config_reads;
 mod git_config_trust;
+mod git_excludes_file;
 pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
 mod git_init_chain;
@@ -1051,6 +1052,7 @@ fn exact_safe_command_with_context(
         segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
             || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
             || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
+            || safe_reads::nested_cd_proof(model, allow_git_helper_context, context)
     };
     if cd_proof(model) {
         return true;

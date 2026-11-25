@@ -429,9 +429,9 @@ pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {
 /// Windows separators, so spellings the standalone tool would interpret
 /// differently are rejected.
 fn read_helper_call(path: String) -> Option<Call> {
-    // `xd://` names Oh My Pi's own tool documentation; the helper hands any
-    // URL to the `read` tool, whose own proof judges it.
-    let device_doc = path.starts_with("xd://");
+    // `xd://` and `help://` name Oh My Pi's own tool documentation; the
+    // helper hands any URL to the `read` tool, whose own proof judges it.
+    let device_doc = super::super::host_refs::tool_docs_url(&path);
     if path.starts_with('~')
         || (path.contains("://") && !device_doc)
         || path.contains(['\\', '$'])

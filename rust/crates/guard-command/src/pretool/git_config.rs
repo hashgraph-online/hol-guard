@@ -749,9 +749,11 @@ fn probe(
             // A verbose ignore check prints the rule that matched and the file
             // it came from. The repository's own ignore files are part of the
             // checkout, but a configured excludes file names anything, so the
-            // check keeps its review until someone reads that setting.
+            // check keeps its review unless the setting names the repository's
+            // own exclude file or a per-user ignore list.
             "core.excludesfile" => {
                 !value.is_empty()
+                    && !super::git_excludes_file::names_an_ignore_list(value, git_home)
                     && super::git_listing_reads::prints_rule_source(operation, &remaining[1..])
             }
             // An attribute check prints the attribute names and values of

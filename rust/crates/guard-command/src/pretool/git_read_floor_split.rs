@@ -81,13 +81,18 @@ pub(super) fn split(
         return Some(Split::whole(vec![(rest, None)]));
     }
     // After `cd <dir>;` the rest runs in either directory, so each Git read
-    // must be helper-free in both.
-    if let Some((cwd, rest)) = super::super::safe_reads::leading_semicolon_cd(model, context) {
+    // must be helper-free in both. Every part is judged again by the whole
+    // floor, so a later `cd` inside a part splits that part in turn:
+    // `cd <dir> && <read>; cd .. && git diff` has its `git diff` judged in
+    // each directory the second `cd` can leave it in.
+    if let Some((cwd, rest)) = super::super::safe_reads::leading_semicolon_cd_nested(model, context)
+    {
         return Some(Split::whole(vec![(rest.clone(), Some(cwd)), (rest, None)]));
     }
     // `cd <dir> && <head>; <tail>`: the head runs only in `<dir>`, the tail
     // after it there or alone in the original directory when the `cd` failed.
-    if let Some((cwd, rest, tail)) = super::super::safe_reads::leading_and_cd(model, context) {
+    if let Some((cwd, rest, tail)) = super::super::safe_reads::leading_and_cd_nested(model, context)
+    {
         return Some(Split {
             parts: vec![(rest, Some(cwd)), (tail, None)],
             reported_tail: true,

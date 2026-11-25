@@ -1454,7 +1454,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls -la '${PARENT}/app/items/[slug]'"
+        "command": "ls -la ${PARENT}/app/items/\\[slug\\]"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -8774,7 +8774,8 @@
       "fix_area": "read",
       "harnesses": [
         "codex",
-        "claude-code"
+        "claude-code",
+        "omp"
       ],
       "tool": "shell",
       "tool_input": {
@@ -9535,6 +9536,49 @@
       },
       "cwd": "worktree",
       "expect": "allow",
+      "mirror_pi": false
+    },
+    {
+      "id": "omp-eval-commit-prelude-help-docs",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "return await read(\"help://eval/commit\");",
+        "language": "js",
+        "title": "Read the commit prelude docs"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-read-tool-help-doc-raw",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "help://eval/commit:raw"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "mirror_pi": false
+    },
+    {
+      "id": "neg-omp-read-tool-help-parent-escape",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "help://../.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow",
       "mirror_pi": false
     },
     {
@@ -18633,6 +18677,22 @@
       "expect": "allow"
     },
     {
+      "id": "grep-recursive-folder-holding-committed-design-dot-folder",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn palette design"
+      },
+      "cwd": "docs_site_docs",
+      "expect": "allow"
+    },
+    {
       "id": "sibling-find-missing-github-workflows",
       "fix_area": "shell",
       "harnesses": [
@@ -21875,6 +21935,23 @@
       "expect": "allow"
     },
     {
+      "id": "gauntlet-git-C-sibling-worktree-status-branch",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${HOME}/other-project-wt status --short --branch"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "gauntlet-git-compound-rev-parse-echo-log",
       "fix_area": "git",
       "harnesses": [
@@ -25062,6 +25139,66 @@
       "expect": "allow"
     },
     {
+      "id": "session-git-commit-printf-message",
+      "fix_area": "git",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -q -m \"$(printf 'fix(report): handle retry\\n\\nCo-Authored-By: Agent <noreply@example.test>')\""
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-add-commit-printf-message",
+      "fix_area": "git",
+      "harnesses": [
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add -A && git commit -q -m \"$(printf 'fix(report): handle retry\\n\\nSecond paragraph.')\" && git log --oneline -2 && git status --short"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-commit-printf-conversion",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -m \"$(printf '%s' \"$(cat ~/.ssh/id_rsa)\")\""
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-commit-printf-then-command",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -m \"$(printf 'x'; rm -rf src)\""
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "session-git-commit-multiline-quoted-message",
       "fix_area": "git",
       "harnesses": [
@@ -26085,6 +26222,57 @@
         "command": "cd ${ORG}/app-portal && ls src/lib/auth"
       },
       "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-log-filtered-to-sign-in-source-folder",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -- src/lib/auth"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "git-diff-stat-filtered-to-sign-in-source-folder",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --stat HEAD -- src/lib/auth"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "git-routed-diff-stat-filtered-to-nested-sign-in-folder",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C src diff --stat HEAD HEAD -- lib/session/auth"
+      },
+      "cwd": "org_app",
       "expect": "allow"
     },
     {
@@ -33605,6 +33793,176 @@
         "command": "doctl databases list --format ID,Name,Engine,Status,Region --no-header 2>&1 | head -20"
       },
       "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-git-stage-then-status-trailing-report",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${PARENT} && git add -- src/one.ts && git status --short; echo \"check exit: $?\""
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-git-commit-message-credential-word",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git commit -q --allow-empty -m 'fix: redact the secret field in the retry report' && git log -1 --oneline"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-sed-counted-print-range-sibling-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n '1,+2p' ${HOME}/other-project/notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-ls-missing-name-in-sibling-hidden-folder",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/other-project/.github/workflows/check.yml 2>/dev/null || echo \"no workflow\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-subfolder-read-then-cd-back-git-log",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd src && ls; cd .. && git log --oneline -3"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "subfolder-read-then-semicolon-cd-back-git-status",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd src; ls; cd ..; git status --short"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-missing-file-fallback-then-cd-subfolder-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${PARENT}/missing.tsbuildinfo 2>/dev/null || echo \"none\"; cd ${PARENT}/src && git status --short"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-cd-package-rg-parent-folder",
+      "fix_area": "search",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd packages/app && rg -n \"ready\" .."
+      },
+      "cwd": "workspace_monorepo",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-cd-package-grep-recursive-parent-file",
+      "fix_area": "search",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd packages/app && grep -rn \"strict\" ../../tsconfig.base.json"
+      },
+      "cwd": "workspace_monorepo",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-cd-package-grep-recursive-list-parent-file",
+      "fix_area": "search",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd packages/app && grep -rl workspaces ../../package.json | head -3"
+      },
+      "cwd": "workspace_monorepo",
       "expect": "allow"
     },
     {
@@ -60146,6 +60504,38 @@
       "expect": "allow"
     },
     {
+      "id": "signed-checkout-git-check-ignore-own-exclude-directory",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-ignore -v src"
+      },
+      "cwd": "signed_app",
+      "expect": "allow"
+    },
+    {
+      "id": "signed-checkout-git-check-ignore-own-exclude-file",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-ignore -v README.md"
+      },
+      "cwd": "signed_app",
+      "expect": "allow"
+    },
+    {
       "id": "signed-checkout-git-pull-then-log-status",
       "fix_area": "git",
       "harnesses": [
@@ -60207,6 +60597,38 @@
         "command": "git -C ${HOME}/Code/signed/app-signed worktree add ${HOME}/Code/signed/app-signed-lane feat/signed-lane"
       },
       "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "signed-checkout-git-check-ignore-directory-glob",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-ignore -v src/*"
+      },
+      "cwd": "signed_app",
+      "expect": "allow"
+    },
+    {
+      "id": "signed-checkout-git-check-ignore-extension-glob-and-file",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git check-ignore -v src/*.ts README.md"
+      },
+      "cwd": "signed_app",
       "expect": "allow"
     },
     {
@@ -68697,6 +69119,36 @@
       "tool": "shell",
       "tool_input": {
         "command": "git add README.md && git commit -m \"$(cat <<'EOF'\nAdd notes\n\nExplain the retry window.\nEOF\n)\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-commit-printf-message-worktree",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp",
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add README.md && git commit -m \"$(printf 'Add notes\\n\\nExplain the retry window.')\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "session-git-commit-printf-coauthor-then-reads-worktree",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git add README.md && git commit -q -m \"$(printf 'Add canonical host audit\\n\\nCo-Authored-By: Agent <noreply@example.test>')\" && git log --oneline -2 && git status --short"
       },
       "cwd": "worktree",
       "expect": "allow"

@@ -22,9 +22,10 @@ from .edge_clone_fixtures import write_edge_clone
 from .extension_adapters import EXTENSION_ADAPTERS
 from .extension_allow_fixtures import extension_allow_checks
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
+from .feature_folder_fixtures import add_feature_folder
 from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .fixture_remotes import INSTEAD_OF_CASE, add_checkout_origin
-from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
+from .git_allow_fixtures import add_git_allow_shape, add_unstaged_source_edit, git_allow_checks
 from .git_rules_cases import git_rules_checks
 from .heredoc_commit_fixtures import add_heredoc_commit_change, heredoc_commit_checks
 from .output_cases import add_output_fixture
@@ -55,7 +56,10 @@ from .runtime_cases import runtime_case_checks
 from .script_cases import script_case_checks
 from .search_diff_fixtures import add_search_and_diff_content
 from .session_folder import session_folder_checks
+from .git_exclude_fixtures import add_own_exclude_setting
 from .package_store_fixtures import add_package_store_checkout
+from .backfill_fixtures import add_backfill_shapes, add_hidden_script_checkout
+from .nested_package_fixtures import add_nested_workspace_package
 from .sibling_runner_fixtures import add_sibling_test_runner
 from .supply_chain import supply_chain_checks
 from .workspace_runner_fixtures import (
@@ -350,6 +354,7 @@ def create_fixture(
             "Gauntlet on Windows needs symlink creation: enable Developer Mode or run elevated"
         ) from error
     os.link(workspace / ".env", workspace / "aliases/linked.txt")
+    add_feature_folder(workspace, scenario_id)
     environment = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "WINDIR") if k in os.environ}
     environment.update(HOME=str(home), USERPROFILE=str(home), GIT_CONFIG_NOSYSTEM="1")
     commands = [
@@ -387,11 +392,16 @@ def create_fixture(
     add_workspace_test_runner(workspace, scenario_id)
     add_output_fixture(workspace, scenario_id)
     add_route_group_directory(workspace, scenario_id)
+    add_unstaged_source_edit(workspace, scenario_id)
+    add_own_exclude_setting(workspace, environment, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
     add_home_bun_runtime(home, scenario_id)
     add_design_token_documents(workspace, scenario_id)
     add_cargo_package(workspace, scenario_id)
     add_search_and_diff_content(workspace, scenario_id)
+    add_nested_workspace_package(workspace, environment, scenario_id)
+    add_backfill_shapes(workspace, environment, scenario_id)
+    add_hidden_script_checkout(home, environment, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)

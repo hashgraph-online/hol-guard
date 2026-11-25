@@ -73,7 +73,10 @@ fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
                 input.insert(key.clone(), Value::String(text.clone()));
             }
             Lit::Str(text) if allowed_string.contains(&key.as_str()) => {
-                if call.sdk_read_helper && text.contains(':') && !text.starts_with("xd://") {
+                if call.sdk_read_helper
+                    && text.contains(':')
+                    && !super::host_refs::tool_docs_url(text)
+                {
                     let path = std::path::Path::new(text);
                     let candidate = if path.is_absolute() {
                         path.to_path_buf()

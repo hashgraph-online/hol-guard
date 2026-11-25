@@ -126,6 +126,31 @@ fn listing_inspections_are_proven_reads() {
             result.reason_code
         );
     }
+    // A setting that names the repository's own exclude file, or a per-user
+    // ignore list in the home Git runs with, adds nothing but ignore rules to
+    // what the verbose check can print. Any other file keeps the review.
+    for (value, allowed) in [
+        (".git/info/exclude", true),
+        ("~/.gitignore_global", true),
+        ("~/.config/git/ignore", true),
+        ("~/.ssh/id_ed25519", false),
+        ("../.git/info/exclude", false),
+    ] {
+        git(
+            &session.home,
+            &session.primary,
+            &["config", "core.excludesFile", value],
+        );
+        for command in ["git check-ignore -v src", "git check-ignore -v src/a.ts"] {
+            let result = session.evaluate_at(command, &session.primary);
+            assert_eq!(
+                result.minimum_action == "allow",
+                allowed,
+                "{value}: {command}: {}",
+                result.reason_code
+            );
+        }
+    }
 }
 
 /// `git fsck` walks the objects the repository already holds and reports the

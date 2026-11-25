@@ -68,6 +68,8 @@ class PolicyBundleNativeUnavailableError(PolicyBundleNativeError):
     ``NATIVE_UNAVAILABLE_REJECTION`` instead of inventing a rejection reason.
     """
 
+    retryable: bool | None = None
+
 
 _LEAVE = object()
 
@@ -144,15 +146,16 @@ def _next_request_id() -> str:
     return f"pba-{os.getpid()}-{next(_request_counter)}"
 
 
-def native_policy_bundle(
+def _native_policy_bundle_once(
     kind: str,
     request_input: dict[str, object],
     *,
     timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, object]:
     """Ask the resident for one policy-bundle verdict document."""
 
-    effective_deadline = time.monotonic() + timeout_seconds
+    effective_deadline = deadline_monotonic if deadline_monotonic is not None else time.monotonic() + timeout_seconds
     status = native_runtime_status(deadline_monotonic=effective_deadline)
     if (
         not status.available
@@ -223,8 +226,11 @@ def native_policy_bundle(
     if refusal is not None:
         # A framed resident refusal (``{"error": code, "retryable": bool}``) is an outage with a
         # known cause; keep that code instead of reporting a schema mismatch.
+        assert envelope is not None
         native_record_resident_failure(status.identity.sha256, guard_home, reason=refusal)
-        raise PolicyBundleNativeUnavailableError(refusal)
+        error = PolicyBundleNativeUnavailableError(refusal)
+        error.retryable = envelope.get("retryable") is True
+        raise error
     if (
         envelope is None
         or envelope.get("schema") != _RESULT_SCHEMA
@@ -245,6 +251,47 @@ def native_policy_bundle(
         # the resident failing to serve the op, not a verdict about the bundle.
         raise PolicyBundleNativeUnavailableError(code if isinstance(code, str) else UNAVAILABLE)
     return cast("dict[str, object]", result)
+
+
+def native_policy_bundle(
+    kind: str,
+    request_input: dict[str, object],
+    *,
+    timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
+) -> dict[str, object]:
+    """Ask the resident for a policy-bundle verdict, retrying one outage.
+
+    A compatibility worker can briefly lose the resident between the status
+    probe and its request while another test case is tearing the process down.
+    One bounded retry keeps that transport race from turning a policy verdict
+    into an outage while preserving the fail-closed result when the resident
+    remains unavailable.
+    """
+
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    try:
+        return _native_policy_bundle_once(
+            kind,
+            request_input,
+            timeout_seconds=timeout_seconds,
+            deadline_monotonic=deadline,
+        )
+    except PolicyBundleNativeUnavailableError as error:
+        # Only a lost connection is a race worth retrying. Overload, framed
+        # refusals and schema failures must keep their original outage code and
+        # must not add load or another health failure to the resident.
+        if error.code != UNAVAILABLE and error.retryable is not True:
+            raise
+        retry_deadline = min(deadline, time.monotonic() + 1.0)
+        retry_timeout = retry_deadline - time.monotonic()
+        if retry_timeout <= 0.0:
+            raise
+        return _native_policy_bundle_once(
+            kind,
+            request_input,
+            timeout_seconds=retry_timeout,
+            deadline_monotonic=retry_deadline,
+        )
 
 
 def policy_bundle_verdict(kind: str, request_input: dict[str, object]) -> dict[str, object]:
