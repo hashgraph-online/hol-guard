@@ -249,7 +249,7 @@ fn unrolled<'a>(
         // inverts an item's exit status, so it is dropped wherever the
         // separator after it shows nothing reads that outcome. An `if … fi`
         // statement is written out whole as one step.
-        for (step, separator) in conditional::written_steps(&items, word, &tail)? {
+        for (step, separator) in conditional::written_steps(items, word, &tail)? {
             out.push_str(&step);
             out.push_str(separator);
         }
