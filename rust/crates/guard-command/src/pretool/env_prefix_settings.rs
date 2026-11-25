@@ -76,7 +76,10 @@ pub(super) fn ordinary_project_setting(
 ) -> bool {
     inert_tool_setting(name, value)
         || (plain_project_value(value) || workspace_path_value(value, context, first_command))
-            && crate::command_compatibility::environment::ordinary_setting_name(name)
+            && (crate::command_compatibility::environment::ordinary_setting_name(name)
+                || crate::command_compatibility::data_file_setting::data_file_path_setting(
+                    name, value,
+                ))
 }
 
 /// A value that spells a location inside the working directory, written in
