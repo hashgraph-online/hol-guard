@@ -378,3 +378,37 @@ def test_inline_scripts_tolerate_closer_spacing_and_case() -> None:
 
     html = "<SCRIPT>let a = 1;</SCRIPT ><script src=x.js>ignored()</script><Script type=module>let b = 2;</SCRIPT foo>"
     assert inline_scripts(html) == ["let a = 1;", "let b = 2;"]
+
+
+def test_harness_full_task_setup_failure_keeps_its_reason_code(tmp_path: Path, monkeypatch) -> None:
+    """A setup refusal is judged by its reason code, not a bare class name.
+
+    Hook install fails as `NativeRunnerAuthorityError` whether the resident was
+    unavailable or ran past its deadline; only the message tells them apart.
+    """
+
+    class NativeRunnerAuthorityError(ValueError):
+        pass
+
+    def refuse(*_args, **_kwargs):
+        raise NativeRunnerAuthorityError(f"native_client_deadline_exceeded under {Path.home()}")
+
+    monkeypatch.setattr(full_task_harness, "create_full_task_fixture", refuse)
+    task = local_tasks(["flappy-bird-game"])[0]
+    case = full_task_harness.run_harness_full_task(
+        task,
+        harness="codex",
+        root=tmp_path / "run",
+        public=tmp_path / "public",
+        executable="codex",
+        identity=None,
+        timeout=1.0,
+        mode="discover",
+        index=1,
+    )
+
+    assert case["execution_error"] == "NativeRunnerAuthorityError"
+    assert case["assessment"]["outcome"] == "harness-error"
+    chain = case["execution_error_chain"]
+    assert chain[0].startswith("NativeRunnerAuthorityError: native_client_deadline_exceeded")
+    assert str(Path.home()) not in json.dumps(case)
