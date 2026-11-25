@@ -99,7 +99,10 @@ fn the_edge_stamps_approval_classification_from_its_minimum_action() {
 fn the_edge_stamps_recording_only_denials_without_reclassifying_the_result() {
     let mut envelope = envelope(
         "PreToolUse",
-        serde_json::json!({"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}}),
+        serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_input": {"command": "cat .env.synthetic"}
+        }),
     );
     envelope.recording_only = true;
     let edge: GuardHookEdgeResultV2 =
