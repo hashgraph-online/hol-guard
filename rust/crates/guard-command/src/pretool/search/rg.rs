@@ -333,12 +333,13 @@ fn rg_arguments_pass(
             }
             // A broad search of only parent directories traverses unrelated
             // sibling projects. Named sibling paths still use canonical
-            // provenance checks, but `rg pattern ../` remains at review.
+            // provenance checks; `rg pattern ../` reviews above the repo root.
             let directories: Vec<_> = argument
                 .split('/')
                 .filter(|part| !part.is_empty() && *part != ".")
                 .collect();
-            if !directories.is_empty() && directories.iter().all(|part| *part == "..") {
+            let only_parents = !directories.is_empty() && directories.iter().all(|p| *p == "..");
+            if only_parents && !tree::parent_root_inside_repository(argument, context) {
                 return false;
             }
             roots.push(argument);
