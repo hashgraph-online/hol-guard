@@ -90,6 +90,8 @@ fn an_exclusion_that_leaves_out_the_key_releases_the_search() {
         format!("rg -l scrollTo --glob='!fixtures' {tests}"),
         format!("rg -l scrollTo '-g!loopback-server.key' {tests}"),
         format!("rg -l scrollTo -g '!tls' -g '!node_modules' {tests} | head -5"),
+        // A nonempty attached value may end in `=`; only an empty one holds.
+        format!("rg -l --regexp=scrollTo= -g '!tls' {tests}"),
     ] {
         let (decision, reason) = evaluate(&command, &home, &repo);
         assert_eq!(decision, "allow", "{command}: {reason}");

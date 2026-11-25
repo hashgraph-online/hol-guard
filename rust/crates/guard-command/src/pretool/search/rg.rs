@@ -232,8 +232,9 @@ fn rg_arguments_pass(
         if options_enabled && argument.starts_with("--") {
             let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
             // rg reads `--glob=` as an empty value, so the next word stays an
-            // operand and must not be read as the value (an exclusion).
-            if argument.ends_with('=')
+            // operand and must not be read as the value (an exclusion). A
+            // nonempty value may itself end in `=`, as in `--regexp=a=`.
+            if (argument.contains('=') && attached.is_empty())
                 || matches!(
                     name,
                     "--hidden"
