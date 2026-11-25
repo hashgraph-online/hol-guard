@@ -453,6 +453,7 @@
       "src/pretool/git_config_textconv.rs",
       "src/pretool/git_config_trust.rs",
       "src/pretool/git_config_writes.rs",
+      "src/pretool/git_excludes_file.rs",
       "src/pretool/git_grep.rs",
       "src/pretool/git_hash_object.rs",
       "src/pretool/git_helper_context.rs",
