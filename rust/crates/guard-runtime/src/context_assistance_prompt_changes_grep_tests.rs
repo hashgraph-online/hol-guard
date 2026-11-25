@@ -10,6 +10,10 @@ fn git(root: &Path, home: &Path, arguments: &[&str]) {
         .args(["-c", "commit.gpgsign=false"])
         .args(arguments)
         .current_dir(root)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_OBJECT_DIRECTORY")
         .env("HOME", home)
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_AUTHOR_NAME", "Test")
@@ -35,8 +39,9 @@ fn later() -> Instant {
     Instant::now() + Duration::from_secs(10)
 }
 
-/// Tracked files holding a code name as a word are found; a name in many
-/// files, a short or dotted name, and an untracked file place nothing.
+/// Tracked files holding a code name as a word are found, whatever line or
+/// column settings Git has; a name in many files, a short or dotted name,
+/// and an untracked file place nothing.
 #[test]
 fn names_written_as_code_find_the_tracked_files_holding_them() {
     let (root, home) = (TempDir::new().unwrap(), TempDir::new().unwrap());
@@ -52,6 +57,10 @@ fn names_written_as_code_find_the_tracked_files_holding_them() {
     git(root, home, &["add", "-A"]);
     git(root, home, &["commit", "-q", "-m", "first"]);
     write(root, "scratch.py", "MERGE_LIMIT = 5\n");
+    // Line and column numbers the project's configuration asks for change
+    // nothing.
+    git(root, home, &["config", "grep.lineNumber", "true"]);
+    git(root, home, &["config", "grep.column", "true"]);
     let asked = searched_names(&names(&["comment_id", "abc", "x.y", "MERGE_LIMIT"]));
     assert_eq!(asked, names(&["comment_id", "MERGE_LIMIT"]));
     let mut found = holding(home, root, &asked, later());

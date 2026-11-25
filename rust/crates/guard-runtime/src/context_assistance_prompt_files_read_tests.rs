@@ -34,15 +34,21 @@ fn files_git_found_are_read_after_the_walk_stops() {
     );
     assert_eq!(read.files, first);
     assert!(!read.complete);
-    // With time, the walk passes over it instead of reading it again.
+    // A walk that runs to the end reads it itself and never waits on Git.
+    let asked = std::cell::Cell::new(false);
+    let search = || {
+        asked.set(true);
+        first.clone()
+    };
     let whole = walk_exact(
         root,
         &terms,
         &[],
         &[],
-        (&exact, &|| first.clone()),
+        (&exact, &search),
         Duration::from_secs(5),
     );
+    assert!(!asked.get());
     assert_eq!(whole.files, first);
     assert_eq!(whole.checked, 2);
     assert_eq!(whole.exact, vec![("MERGE_LIMIT".to_owned(), 1)]);
@@ -110,4 +116,25 @@ fn files_git_found_pass_the_walks_own_checks() {
         Duration::ZERO,
     );
     assert_eq!(kept.files, owned(&["kept/limit.py"]));
+}
+
+/// Files the walk already read take none of the places for Git's files.
+#[test]
+fn files_already_read_leave_room_for_the_rest() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root, "a/limit.py", "LIMIT = 3\n");
+    write(root, "b/limit.py", "LIMIT = 4\n");
+    let mut first = vec!["a/limit.py".to_owned(); 20];
+    first.push("b/limit.py".to_owned());
+    let terms = owned(&["limit"]);
+    let read = walk_exact(
+        root,
+        &terms,
+        &[],
+        &[],
+        (&[], &|| first.clone()),
+        Duration::ZERO,
+    );
+    assert_eq!(read.files, owned(&["a/limit.py", "b/limit.py"]));
 }

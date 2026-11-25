@@ -125,14 +125,19 @@ impl<'a> Reading<'a> {
     }
 
     /// Reads `searched`, project-relative paths from Git's search, that the
-    /// walk did not read. Each passes the walk's own checks on the way down:
+    /// walk did not read, at most [`MAX_SEARCHED`] of them. Each passes the walk's own checks on the way down:
     /// no hidden, skipped, ignored or credential folder, no link, not too
     /// deep, and a wanted, non-credential, unignored file.
     pub(super) fn searched(&mut self, root: &Path, rules: &Chain, searched: &[String]) {
-        for relative in searched.iter().take(MAX_SEARCHED) {
+        let mut left = MAX_SEARCHED;
+        for relative in searched {
+            if left == 0 {
+                break;
+            }
             if self.read.contains(relative.as_str()) {
                 continue;
             }
+            left -= 1;
             if let Some(metadata) = admitted(root, rules, relative) {
                 self.file(&root.join(relative), relative.clone(), Some(metadata));
             }

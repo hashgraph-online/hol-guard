@@ -8,7 +8,7 @@
 //! search runs no filter or text conversion, and the walk still reads each
 //! file it is given through its own checks.
 use super::Git;
-use crate::context_assistance_prompt_files::{named, walk_exact, Walk};
+use crate::context_assistance_prompt_files::{named, walk_exact, Walk, WALK_BUDGET};
 use crate::context_assistance_prompt_words::spellings;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -23,8 +23,9 @@ const MAX_HOLDING: usize = 8;
 const MIN_NAME: usize = 5;
 
 /// The walk for `prompt`. While project context is on, Git searches for the
-/// names it writes as code at the same time, for at most half of `budget`,
-/// and the walk then reads the files Git found that it did not reach.
+/// names it writes as code at the same time, for no longer than the walk
+/// itself may take, and a walk that stops early then reads the files Git
+/// found that it did not reach.
 pub(crate) fn walk(
     home: &Path,
     root: &Path,
@@ -34,7 +35,7 @@ pub(crate) fn walk(
     context_on: &dyn Fn() -> bool,
 ) -> Walk {
     let exact = spellings(prompt);
-    let until = Instant::now() + budget / 2;
+    let until = Instant::now() + budget.min(WALK_BUDGET);
     let names = searched_names(&exact);
     let search = (!names.is_empty() && context_on())
         .then(|| start(home.to_path_buf(), root.to_path_buf(), names, until))
@@ -102,7 +103,8 @@ fn holding(home: &Path, root: &Path, names: &[String], until: Instant) -> Vec<St
     };
     // Only tracked files: no untracked or ignored file, no submodule, and no
     // search outside a repository even where configuration allows one. Each
-    // match prints as `path NUL name`, so one pass answers every name.
+    // match prints as `path NUL name`, with no line or column number even
+    // where configuration asks for them, so one pass answers every name.
     let mut arguments = vec![
         "-c",
         "grep.fallbackToNoIndex=false",
@@ -113,6 +115,8 @@ fn holding(home: &Path, root: &Path, names: &[String], until: Instant) -> Vec<St
         "-F",
         "-w",
         "--no-color",
+        "--no-line-number",
+        "--no-column",
         "--no-recurse-submodules",
     ];
     for name in names {
@@ -122,15 +126,18 @@ fn holding(home: &Path, root: &Path, names: &[String], until: Instant) -> Vec<St
     let Some(listed) = git.run(&arguments, until) else {
         return Vec::new();
     };
+    // A name is common once a ninth file holds it, and its other matches
+    // are passed over.
     let mut holders: Vec<Vec<&str>> = vec![Vec::new(); names.len()];
     for line in listed.lines() {
         let Some((file, matched)) = line.split_once('\0') else {
             continue;
         };
-        if let Some(at) = names.iter().position(|name| name == matched) {
-            if !holders[at].contains(&file) {
-                holders[at].push(file);
-            }
+        let Some(at) = names.iter().position(|name| name == matched) else {
+            continue;
+        };
+        if holders[at].len() <= MAX_HOLDING && !holders[at].contains(&file) {
+            holders[at].push(file);
         }
     }
     let mut found: Vec<String> = Vec::new();

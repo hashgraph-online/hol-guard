@@ -29,7 +29,7 @@ pub(super) const MAX_DEPTH: usize = 10;
 const MAX_NAMED_MATCHES: usize = 2;
 /// Test files kept aside for the map's list of where a new test goes.
 const MAX_KEPT_TESTS: usize = 6;
-const WALK_BUDGET: Duration = Duration::from_millis(350);
+pub(crate) const WALK_BUDGET: Duration = Duration::from_millis(350);
 
 pub(super) const SKIPPED_DIRS: &[&str] = &[
     "node_modules",
@@ -255,7 +255,10 @@ pub(crate) fn walk_exact(
         inside.sort_by_key(|(tests, _)| !tests);
         stack.extend(inside.into_iter().map(|(_, dir)| dir));
     }
-    reading.searched(root, &rules, &searched());
+    // A walk that ran to the end read every file it may read.
+    if stopped {
+        reading.searched(root, &rules, &searched());
+    }
     reading.finish(stopped)
 }
 
