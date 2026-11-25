@@ -260,7 +260,7 @@ export function ReviewDecisionCard(props: {
         </div>
 
         {!nativeDisplayOnly && <PrimaryActionCard item={item} />}
-        {nativeDisplayOnly && <BusinessReviewSummaryPanel key={item.request_id} requestId={item.request_id} />}
+        {nativeDisplayOnly && <BusinessReviewSummaryPanel key={`business-summary:${item.request_id}`} requestId={item.request_id} />}
         {resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             {retryCannotReuseApprovalHint(item, harnessName)}
@@ -298,7 +298,7 @@ export function ReviewDecisionCard(props: {
 
         {topAlertItems.length > 0 && (
           <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
-            <ConsolidatedEvidenceAlert key={item.request_id} items={topAlertItems} />
+            <ConsolidatedEvidenceAlert key={`top-alerts:${item.request_id}`} items={topAlertItems} />
           </div>
         )}
 
@@ -326,11 +326,11 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
-        {resolved === null && <RuntimeUpgradeCard key={item.request_id} requestId={item.request_id} advice={item.runtime_upgrade} />}
+        {resolved === null && <RuntimeUpgradeCard key={`runtime-upgrade:${item.request_id}`} requestId={item.request_id} advice={item.runtime_upgrade} />}
 
         {resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && (
           <ApprovalExtensionRecommendationCard
-            key={item.request_id}
+            key={`extension-recommendation:${item.request_id}`}
             item={item}
             approvalGate={approvalGate}
             allowScope={allowScope}
@@ -453,14 +453,14 @@ export function ReviewDecisionCard(props: {
           </button>
           {showEvidence && (
             <div className="mt-4">
-              <ConsolidatedEvidenceAlert key={item.request_id} items={evidenceItems} />
+              <ConsolidatedEvidenceAlert key={`evidence:${item.request_id}`} items={evidenceItems} />
             </div>
           )}
         </div>
       )}
 
       {mcpCall === null ? (
-        <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+        <ContextReviewPanel key={`context-review:${item.request_id}:${decisionSubjectKey}`} item={item} />
       ) : (
         // The MCP card answers the question on its own; extra context is there for anyone who wants it.
         <details className="rounded-xl border border-slate-100 px-4 py-3 sm:px-5">
@@ -468,7 +468,7 @@ export function ReviewDecisionCard(props: {
             Prepare more context for this decision
           </summary>
           <div className="mt-3">
-            <ContextReviewPanel key={`${item.request_id}:${decisionSubjectKey}`} item={item} />
+            <ContextReviewPanel key={`mcp-context-review:${item.request_id}:${decisionSubjectKey}`} item={item} />
           </div>
         </details>
       )}
