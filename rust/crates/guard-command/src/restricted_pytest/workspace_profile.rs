@@ -516,6 +516,18 @@ pub(super) fn compose_with(
     for pattern in patterns() {
         lines.push(regex_rule("file-read* file-write*", &pattern));
     }
+    // The one exception: a committed, secret-free document those patterns
+    // name, which the read review already opens. It is reopened for reading
+    // only, by its exact canonical path, so writing, replacing or renaming it
+    // stays denied by the rule above.
+    for document in crate::pretool::search_scope_tracked::sandbox_readable_documents(workspace) {
+        if let Some(text) = document.to_str() {
+            lines.push(format!(
+                "(allow file-read* (literal {}))",
+                seatbelt_string(text)
+            ));
+        }
+    }
     Ok(lines.join("\n"))
 }
 

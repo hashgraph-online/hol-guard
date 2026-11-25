@@ -519,3 +519,30 @@ fn a_read_grant_is_one_regular_file_and_nothing_else() {
     assert!(granted(vec![directory.join("missing.py")]).is_err());
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_committed_key_named_page_is_reopened_for_reading_only() {
+    use crate::pretool::search_scope_tracked::sandbox_documents_tests::{populate, HIDDEN, PAGE};
+    let root = std::env::temp_dir().join(format!("guard-wp-docs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let workspace = root.canonicalize().unwrap();
+    populate(&workspace);
+    let profile =
+        workspace_profile::compose(&input(workspace.to_str().unwrap()), &[], &[]).unwrap();
+    let lines: Vec<&str> = profile.lines().collect();
+    let denial = lines
+        .iter()
+        .rposition(|line| line.starts_with("(deny file-read* file-write* (regex"))
+        .unwrap();
+    let page = workspace.join(PAGE).to_string_lossy().into_owned();
+    let reopened = format!("(allow file-read* (literal \"{page}\"))");
+    // The page is reopened after every denial, for reading only.
+    assert_eq!(&lines[denial + 1..], [reopened.as_str()]);
+    for name in HIDDEN {
+        let path = workspace.join(name).to_string_lossy().into_owned();
+        assert!(!profile.contains(&format!("\"{path}\"")), "{name}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
