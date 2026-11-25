@@ -93,6 +93,20 @@ def test_policy_bundle_retries_one_transient_native_outage(monkeypatch: pytest.M
     assert calls == 2
 
 
+def test_policy_bundle_does_not_retry_overload_or_framed_refusals(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def overloaded(*_args: object, **_kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        raise PolicyBundleNativeUnavailableError("native_overloaded")
+
+    monkeypatch.setattr(bridge, "_native_policy_bundle_once", overloaded)
+    with pytest.raises(PolicyBundleNativeUnavailableError, match="native_overloaded"):
+        bridge.native_policy_bundle("validate_v1", {})
+    assert calls == 1
+
+
 def test_self_referential_input_is_rejected_not_followed() -> None:
     cyclic_list: list[object] = []
     cyclic_list.append(cyclic_list)

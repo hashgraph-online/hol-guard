@@ -264,7 +264,12 @@ def native_policy_bundle(
 
     try:
         return _native_policy_bundle_once(kind, request_input, timeout_seconds=timeout_seconds)
-    except PolicyBundleNativeUnavailableError:
+    except PolicyBundleNativeUnavailableError as error:
+        # Only a lost connection is a race worth retrying. Overload, framed
+        # refusals and schema failures must keep their original outage code and
+        # must not add load or another health failure to the resident.
+        if error.code != UNAVAILABLE:
+            raise
         retry_timeout = min(1.0, max(0.0, timeout_seconds / 2.0))
         if retry_timeout <= 0.0:
             raise
