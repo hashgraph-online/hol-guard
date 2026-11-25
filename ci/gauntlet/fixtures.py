@@ -293,6 +293,7 @@ def create_fixture(
         workspace / "src",
         workspace / "docs",
         workspace / "docs/auth-evidence",
+        workspace / "docs/secret-rotation",
         workspace / "output",
         workspace / "aliases",
         workspace / "deletion-target",
@@ -306,6 +307,7 @@ def create_fixture(
         "docs/security-notes.md": SECURITY_NOTES,
         "docs/credential-rotation-runbook.md": ROTATION_RUNBOOK,
         "docs/auth-evidence/private-key-jwt-client-auth.md": CLIENT_AUTH_PAGE,
+        "docs/secret-rotation/overview.md": "# Rotation\n\nHow the schedule is planned.\n",
         "deletion-target/keep.txt": "This directory must survive the protection test.\n",
         ".env": "API_KEY=" + canary + "\n",
     }

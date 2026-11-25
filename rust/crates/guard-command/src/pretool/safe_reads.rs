@@ -109,6 +109,14 @@ pub(super) fn safe_listing_arguments(
             || super::tool_bin_listing::node_bin_listing_operand(argument, context)
             || super::tool_bin_listing::credential_file_metadata_operand(argument, context)
             || super::tool_bin_listing::global_package_listing_operand(argument, context)
+            // A directory of the session's own repository whose every entry
+            // is committed prints only names Git already shows, whatever
+            // word the directory's own name carries, and a missing name
+            // under such a directory prints `No such file or directory`.
+            || super::search_scope_tracked::listing::resolves_to_listed_directory(
+                argument,
+                context.cwd,
+            )
     })
 }
 

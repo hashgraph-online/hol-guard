@@ -250,6 +250,7 @@ pub mod pretool_lookup_reads;
 pub mod pretool_loop_comment_lines;
 pub mod pretool_ls_documentation_glob_names;
 pub mod pretool_ls_temporary_operands;
+pub mod pretool_ls_tracked_secret_named_dir;
 pub mod pretool_manager_exec_local_bin;
 pub mod pretool_metadata_predicate_reads;
 pub mod pretool_metadata_reads;

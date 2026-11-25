@@ -52,6 +52,9 @@ PARENT_DOCUMENTS = {
         "# private_key_jwt\n\nThe client signs a JWT assertion with its own key and\n"
         "posts it to the token endpoint.\n"
     ),
+    # A feature directory whose name carries a credential word. Every entry is
+    # committed, so a listing prints only names Git already shows.
+    "docs/secret-rotation/overview.md": "# Rotation\n\nHow the schedule is planned.\n",
 }
 
 # A committed screenshot named for the screen it shows: a one-pixel PNG with a

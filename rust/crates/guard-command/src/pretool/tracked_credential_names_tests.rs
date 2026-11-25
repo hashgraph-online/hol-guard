@@ -167,6 +167,7 @@ fn only_the_operand_occurrence_of_a_tracked_word_is_removed() {
         false,
         &BTreeSet::new(),
         false,
+        false,
     )
     .unwrap();
     assert!(rest.contains(&format!("../copy/{CATALOG}")), "{rest}");
@@ -178,6 +179,7 @@ fn only_the_operand_occurrence_of_a_tracked_word_is_removed() {
         false,
         &BTreeSet::new(),
         false,
+        false,
     )
     .unwrap();
     assert!(!rest.contains(CATALOG), "{rest}");
@@ -187,7 +189,8 @@ fn only_the_operand_occurrence_of_a_tracked_word_is_removed() {
         cwd(&project),
         true,
         &BTreeSet::new(),
-        false
+        false,
+        false,
     )
     .is_none());
 }

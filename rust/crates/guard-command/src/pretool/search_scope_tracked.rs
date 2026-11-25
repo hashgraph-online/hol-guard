@@ -25,6 +25,8 @@ const STORE_DIRECTORIES: &[&str] = &[
     ".aws", ".ssh", ".gnupg", ".kube", ".docker", ".azure", ".gcloud", ".config", ".npm",
 ];
 
+#[path = "tracked_listing_names.rs"]
+pub(in crate::pretool) mod listing;
 #[path = "tracked_credential_names.rs"]
 pub(super) mod names;
 
