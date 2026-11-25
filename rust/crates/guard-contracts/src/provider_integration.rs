@@ -103,7 +103,9 @@ pub struct ProviderDetailV1 {
 }
 
 /// `POST .../connect/preview` response: the exact share set and a one-use proof challenge.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+///
+/// The challenge comes back as the connect request's proof, so `Debug` omits it.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderConnectPreviewV1 {
     pub provider_id: String,
@@ -112,6 +114,20 @@ pub struct ProviderConnectPreviewV1 {
     pub hosts: Vec<String>,
     pub challenge: String,
     pub expires_at_ms: u64,
+}
+
+impl std::fmt::Debug for ProviderConnectPreviewV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProviderConnectPreviewV1")
+            .field("provider_id", &self.provider_id)
+            .field("shares", &self.shares)
+            .field("opt_in_facts", &self.opt_in_facts)
+            .field("hosts", &self.hosts)
+            .field("challenge", &!self.challenge.is_empty())
+            .field("expires_at_ms", &self.expires_at_ms)
+            .finish()
+    }
 }
 
 /// `POST .../connect` body. Holds the user's key, so it deserializes only.
@@ -145,8 +161,8 @@ impl ProviderConnectRequestV1 {
     }
 }
 
-/// `POST .../settings` body.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// `POST .../settings` body. Holds a one-use proof, so it deserializes only.
+#[derive(Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderSettingsRequestV1 {
     pub proof: String,
@@ -154,11 +170,32 @@ pub struct ProviderSettingsRequestV1 {
     pub enabled_opt_in_facts: Vec<ProviderShareableFactV1>,
 }
 
-/// `POST .../disconnect` body. Deletes the stored key and the signal cache.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+impl std::fmt::Debug for ProviderSettingsRequestV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProviderSettingsRequestV1")
+            .field("proof", &!self.proof.is_empty())
+            .field("settings", &self.settings)
+            .field("enabled_opt_in_facts", &self.enabled_opt_in_facts)
+            .finish()
+    }
+}
+
+/// `POST .../disconnect` body. Deletes the stored key and the signal cache. Holds a one-use
+/// proof, so it deserializes only.
+#[derive(Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderDisconnectRequestV1 {
     pub proof: String,
+}
+
+impl std::fmt::Debug for ProviderDisconnectRequestV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProviderDisconnectRequestV1")
+            .field("proof", &!self.proof.is_empty())
+            .finish()
+    }
 }
 
 /// `POST .../test` body: one live call for a public origin the user typed.

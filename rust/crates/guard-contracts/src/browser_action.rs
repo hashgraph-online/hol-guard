@@ -14,6 +14,38 @@ pub const BROWSER_ACTION_V2_VERSION: u32 = 2;
 pub const BROWSER_ACTION_OPERATION_MAX_BYTES: usize = 128;
 /// Largest element name preview, in characters. Display only, never part of a grant key.
 pub const BROWSER_ELEMENT_NAME_PREVIEW_MAX_CHARS: usize = 80;
+/// Longest display URL an action may carry.
+pub const BROWSER_URL_REDACTED_MAX_CHARS: usize = 2_048;
+/// The only query value a redacted URL may carry.
+pub const BROWSER_URL_REDACTED_VALUE: &str = "[redacted]";
+
+/// True for a lowercase hex SHA-256 digest, the only digest form these contracts carry.
+pub fn sha256_hex_is_valid(digest: &str) -> bool {
+    digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// True when a display URL holds no query values and no fragment.
+///
+/// The runtime builds the URL; this check makes the contract refuse one that skipped redaction.
+pub fn browser_url_is_redacted(url: &str) -> bool {
+    if url.chars().count() > BROWSER_URL_REDACTED_MAX_CHARS || url.contains('#') {
+        return false;
+    }
+    let Some((_, query)) = url.split_once('?') else {
+        return true;
+    };
+    query.split('&').all(|field| match field.split_once('=') {
+        None => true,
+        Some((_, value)) => {
+            value.is_empty()
+                || value == BROWSER_URL_REDACTED_VALUE
+                || value.eq_ignore_ascii_case("%5Bredacted%5D")
+        }
+    })
+}
 
 /// The route a browser action arrived on.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -82,7 +114,8 @@ pub struct BrowserSessionV2 {
     pub profile_mode: BrowserProfileModeV1,
 }
 
-/// Where the action lands. `url_redacted` has query values listed in `REDACT_QUERY_KEYS` removed.
+/// Where the action lands. `url_redacted` keeps query keys but no query values: every value is
+/// [`BROWSER_URL_REDACTED_VALUE`] or empty, and there is no fragment. See [`browser_url_is_redacted`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct BrowserTargetV2 {
@@ -172,6 +205,8 @@ pub enum BrowserActionShapeErrorV1 {
     OperationTooLong,
     ElementPreviewTooLong,
     CdpMissingForCdpDriver,
+    UrlNotRedacted,
+    DigestInvalid,
 }
 
 impl BrowserActionShapeErrorV1 {
@@ -181,6 +216,8 @@ impl BrowserActionShapeErrorV1 {
             Self::OperationTooLong => "browser_action_operation_too_long",
             Self::ElementPreviewTooLong => "browser_action_element_preview_too_long",
             Self::CdpMissingForCdpDriver => "browser_action_cdp_missing",
+            Self::UrlNotRedacted => "browser_action_url_not_redacted",
+            Self::DigestInvalid => "browser_action_digest_invalid",
         }
     }
 }
@@ -205,6 +242,30 @@ impl BrowserActionV2 {
         if self.driver.kind == BrowserDriverKindV1::Cdp && self.cdp.is_none() {
             return Err(BrowserActionShapeErrorV1::CdpMissingForCdpDriver);
         }
+        if self
+            .target
+            .url_redacted
+            .as_deref()
+            .is_some_and(|url| !browser_url_is_redacted(url))
+        {
+            return Err(BrowserActionShapeErrorV1::UrlNotRedacted);
+        }
+        let digests = [
+            self.session.session_ref_digest.as_deref(),
+            self.element
+                .as_ref()
+                .and_then(|element| element.name_digest.as_deref()),
+            self.input
+                .as_ref()
+                .and_then(|input| input.digest.as_deref()),
+        ];
+        if digests
+            .into_iter()
+            .flatten()
+            .any(|digest| !sha256_hex_is_valid(digest))
+        {
+            return Err(BrowserActionShapeErrorV1::DigestInvalid);
+        }
         Ok(())
     }
 }
@@ -213,8 +274,9 @@ impl BrowserActionV2 {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum BrowserCardProfileLineV1 {
-    /// "Your Chrome profile, signed in"
-    SharedSignedIn,
+    /// "Your own browser profile". Guard does not know whether it is signed in, so the line
+    /// says only whose profile it is.
+    Shared,
     /// "A separate automation profile"
     Dedicated,
     /// "A throwaway browser"
@@ -228,7 +290,7 @@ pub enum BrowserCardProfileLineV1 {
 impl From<BrowserProfileModeV1> for BrowserCardProfileLineV1 {
     fn from(mode: BrowserProfileModeV1) -> Self {
         match mode {
-            BrowserProfileModeV1::Shared => Self::SharedSignedIn,
+            BrowserProfileModeV1::Shared => Self::Shared,
             BrowserProfileModeV1::Dedicated => Self::Dedicated,
             BrowserProfileModeV1::Isolated => Self::Isolated,
             BrowserProfileModeV1::RemoteDebugging => Self::RemoteDebugging,

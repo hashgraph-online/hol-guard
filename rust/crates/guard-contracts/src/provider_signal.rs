@@ -99,7 +99,8 @@ pub enum ProviderSubjectKindV1 {
     File,
 }
 
-/// What a signal is about. Holds a digest so the cache never stores the subject itself.
+/// What a signal is about. Holds a lowercase hex SHA-256 digest so the cache never stores the
+/// subject itself; `validate_shape` rejects anything else.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderSubjectV1 {
@@ -196,6 +197,7 @@ pub enum ProviderSignalShapeErrorV1 {
     ReasonCodeInvalid,
     ExpiresBeforeObserved,
     ProviderIdInvalid,
+    SubjectDigestInvalid,
 }
 
 impl ProviderSignalShapeErrorV1 {
@@ -206,6 +208,7 @@ impl ProviderSignalShapeErrorV1 {
             Self::ReasonCodeInvalid => "provider_signal_reason_code_invalid",
             Self::ExpiresBeforeObserved => "provider_signal_expires_before_observed",
             Self::ProviderIdInvalid => "provider_signal_provider_id_invalid",
+            Self::SubjectDigestInvalid => "provider_signal_subject_digest_invalid",
         }
     }
 }
@@ -241,6 +244,9 @@ impl ProviderSignalV1 {
         }
         if !provider_id_is_valid(&self.provider_id) {
             return Err(ProviderSignalShapeErrorV1::ProviderIdInvalid);
+        }
+        if !crate::sha256_hex_is_valid(&self.subject.digest) {
+            return Err(ProviderSignalShapeErrorV1::SubjectDigestInvalid);
         }
         if self.reason_codes.len() > PROVIDER_SIGNAL_MAX_REASON_CODES {
             return Err(ProviderSignalShapeErrorV1::TooManyReasonCodes);

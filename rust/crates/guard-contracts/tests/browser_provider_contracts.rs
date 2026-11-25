@@ -24,7 +24,7 @@ fn browser_action() -> Value {
             "path_prefix": "/checkout",
             "is_loopback": false,
             "is_guard_origin": false,
-            "url_redacted": "https://shop.example.test/checkout?session=REDACTED"
+            "url_redacted": "https://shop.example.test/checkout?step=[redacted]&lang="
         },
         "element": {
             "role": "textbox",
@@ -131,6 +131,68 @@ fn browser_action_shape_bounds() {
 }
 
 #[test]
+fn browser_action_url_must_be_redacted() {
+    for url in [
+        "https://shop.example.test/checkout",
+        "https://shop.example.test/checkout?",
+        "https://shop.example.test/checkout?step=[redacted]",
+        "https://shop.example.test/checkout?step=%5Bredacted%5D&flag",
+    ] {
+        assert!(browser_url_is_redacted(url), "{url}");
+    }
+    let raw_value = format!(
+        "https://shop.example.test/checkout?session={}",
+        "z".repeat(24)
+    );
+    for url in [
+        raw_value.as_str(),
+        "https://shop.example.test/checkout?step=[redacted]&page=2",
+        "https://shop.example.test/checkout#fragment",
+    ] {
+        assert!(!browser_url_is_redacted(url), "{url}");
+    }
+    let long = format!(
+        "https://shop.example.test/{}",
+        "a".repeat(BROWSER_URL_REDACTED_MAX_CHARS)
+    );
+    assert!(!browser_url_is_redacted(&long));
+
+    let mut action: BrowserActionV2 = serde_json::from_value(browser_action()).unwrap();
+    action.target.url_redacted = Some(raw_value);
+    assert_eq!(
+        action.validate_shape(),
+        Err(BrowserActionShapeErrorV1::UrlNotRedacted)
+    );
+}
+
+#[test]
+fn browser_action_digests_are_sha256_hex() {
+    assert!(sha256_hex_is_valid(&"0123456789abcdef".repeat(4)));
+    for bad in [
+        String::new(),
+        "A".repeat(64),
+        "a".repeat(63),
+        "a".repeat(65),
+        "https://shop.example.test/".into(),
+    ] {
+        assert!(!sha256_hex_is_valid(&bad), "{bad}");
+    }
+    let edits: [fn(&mut BrowserActionV2); 3] = [
+        |action| action.session.session_ref_digest = Some("raw-session".into()),
+        |action| action.element.as_mut().unwrap().name_digest = Some("Card number".into()),
+        |action| action.input.as_mut().unwrap().digest = Some(String::new()),
+    ];
+    for edit in edits {
+        let mut action: BrowserActionV2 = serde_json::from_value(browser_action()).unwrap();
+        edit(&mut action);
+        assert_eq!(
+            action.validate_shape(),
+            Err(BrowserActionShapeErrorV1::DigestInvalid)
+        );
+    }
+}
+
+#[test]
 fn legacy_v1_intent_stays_readable() {
     let value = json!({
         "version": 1,
@@ -181,10 +243,10 @@ fn card_round_trips_and_checks_invariant() {
         ],
         steps: vec![],
     };
-    assert_eq!(card.profile_line, BrowserCardProfileLineV1::SharedSignedIn);
+    assert_eq!(card.profile_line, BrowserCardProfileLineV1::Shared);
     assert!(card.keeps_approval_invariant());
     let value = serde_json::to_value(&card).unwrap();
-    assert_eq!(value["profile_line"], json!("shared-signed-in"));
+    assert_eq!(value["profile_line"], json!("shared"));
     let back: BrowserCardV1 = serde_json::from_value(value).unwrap();
     assert_eq!(back, card);
 
@@ -254,6 +316,19 @@ fn provider_signal_shape_errors() {
         signal.validate_shape(),
         Err(ProviderSignalShapeErrorV1::ProviderIdInvalid)
     );
+
+    for digest in [
+        "https://shop.example.test/checkout".to_owned(),
+        String::new(),
+        "e".repeat(65),
+    ] {
+        let mut signal = base.clone();
+        signal.subject.digest = digest;
+        assert_eq!(
+            signal.validate_shape(),
+            Err(ProviderSignalShapeErrorV1::SubjectDigestInvalid)
+        );
+    }
 
     let mut signal = base;
     signal.state = ProviderSignalStateV1::Stale;
@@ -333,6 +408,40 @@ fn connect_request_never_prints_the_key() {
     )
     .unwrap();
     assert!(!long.key_is_plausible());
+}
+
+#[test]
+fn proof_bearing_messages_never_print_the_proof() {
+    let proof_marker = "n".repeat(40);
+    let settings: ProviderSettingsRequestV1 = serde_json::from_value(json!({
+        "proof": proof_marker.clone(),
+        "settings": [],
+        "enabled_opt_in_facts": []
+    }))
+    .unwrap();
+    let disconnect: ProviderDisconnectRequestV1 =
+        serde_json::from_value(json!({"proof": proof_marker.clone()})).unwrap();
+    let preview: ProviderConnectPreviewV1 = serde_json::from_value(json!({
+        "provider_id": "provider.exampleshield",
+        "shares": ["target.origin"],
+        "opt_in_facts": ["target.path_prefix"],
+        "hosts": ["api.exampleshield.example"],
+        "challenge": proof_marker.clone(),
+        "expires_at_ms": 5_000
+    }))
+    .unwrap();
+    for printed in [
+        format!("{settings:?}"),
+        format!("{disconnect:?}"),
+        format!("{preview:?}"),
+    ] {
+        assert!(!printed.contains(&proof_marker), "{printed}");
+    }
+    // The preview is a response, so it still serializes the challenge for the client.
+    assert_eq!(
+        serde_json::to_value(&preview).unwrap()["challenge"],
+        json!(proof_marker)
+    );
 }
 
 #[test]
