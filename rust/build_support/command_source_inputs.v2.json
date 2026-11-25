@@ -481,6 +481,7 @@
       "src/pretool/git_read_after_allow.rs",
       "src/pretool/git_read_floor.rs",
       "src/pretool/git_read_floor_prefix.rs",
+      "src/pretool/git_read_floor_split.rs",
       "src/pretool/git_reads.rs",
       "src/pretool/git_ref_listings.rs",
       "src/pretool/git_remote_config.rs",

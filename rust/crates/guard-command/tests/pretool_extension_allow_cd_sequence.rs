@@ -82,6 +82,7 @@ fn a_path_free_step_keeps_its_proof_after_an_unproven_cd() {
         "cd . && git worktree remove ../review --force && git worktree remove ../other --force 2>/dev/null; git worktree list | grep -c app",
         "cd . && git worktree prune; echo done",
         "cd . && git worktree prune; true",
+        "cd . && git worktree prune; git status --short",
     ] {
         for harness in HARNESSES {
             let result = decide(&root, harness, command, &controls);
@@ -99,7 +100,6 @@ fn a_step_that_reads_the_working_directory_stays_unproven() {
     for command in [
         "cd . && git worktree prune; ls",
         "cd . && git worktree prune; cat README.md",
-        "cd . && git worktree prune; git status --short",
         "cd nowhere && git worktree prune; cat .env",
     ] {
         for harness in HARNESSES {

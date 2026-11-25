@@ -7458,6 +7458,57 @@
       "expect": "allow"
     },
     {
+      "id": "git-diff-exclusion-pathspec",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff HEAD --unified=0 -- . ':!bun.lock'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-diff-exclusion-pathspec-forms",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --cached -U0 -- . ':(exclude)package-lock.json' ':^dist'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-diff-quoted-filter-pattern",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff HEAD --unified=0 | grep -E \"^\\+.*process\\.env\" | grep -vE \"^\\+\\+\\+\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-worktree-diff-stat",
       "fix_area": "git",
       "harnesses": [

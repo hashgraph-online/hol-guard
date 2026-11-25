@@ -103,7 +103,7 @@ fn allowed_add_then_reads_keeps_its_allow_with_a_trailing_report() {
 }
 
 #[test]
-fn trailing_report_does_not_settle_what_the_allow_does_not_cover() {
+fn the_allow_covers_each_part_after_the_fork_and_nothing_without_it() {
     let s = staged_session("add-report-floor");
     let w = s.worktree.display().to_string();
     let reported =
@@ -111,21 +111,22 @@ fn trailing_report_does_not_settle_what_the_allow_does_not_cover() {
     // Without the user's Git Allow the staging step still waits.
     let result = evaluate(&s, "codex", &reported, &default_controls());
     assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
-    // A Git read after the fork may run in the starting directory, which the
-    // staging step's proof never covered.
-    let git_tail = format!("cd {w} && git add -- {FILES} && git status --short; git log -1");
-    let result = evaluate(&s, "codex", &git_tail, &git_allowed());
-    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
-    // Only a report of how the run went is carried past the fork. Any other
-    // Git-free tail leaves the reads' directory unresolved for the allow, so
-    // the chain keeps its review.
-    for tail in ["true", "ls", "echo done; true"] {
+    // After the fork every part is answered where it runs: the head in the
+    // worktree, and the tail there after the head or alone in the starting
+    // directory. Each Git read is probed in its own directory, so the Allow
+    // covers a Git tail and any Git-free tail alike.
+    for tail in ["git log -1", "true", "echo done; true"] {
         let other = format!("cd {w} && git add -- {FILES} && git status --short; {tail}");
         let result = evaluate(&s, "codex", &other, &git_allowed());
-        assert_ne!(
+        assert_eq!(
             result.minimum_action, "allow",
-            "{other}: {}",
-            result.reason_code
+            "{other}: {} {}",
+            result.reason_code, result.reason
         );
     }
+    // A listing reads whichever directory the fork left it in, which no
+    // Git permission covers.
+    let listing = format!("cd {w} && git add -- {FILES} && git status --short; ls");
+    let result = evaluate(&s, "codex", &listing, &git_allowed());
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
 }
