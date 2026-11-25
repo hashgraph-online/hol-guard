@@ -124,6 +124,20 @@ fn the_allow_covers_each_part_after_the_fork_and_nothing_without_it() {
             result.reason_code, result.reason
         );
     }
+    // The full staging report: names, a whitespace check, and the exit code.
+    let full = format!(
+        "cd {w} && git add -- {FILES} && git status --short && echo '--- staged ---' && \
+         git diff --cached --name-status && echo '--- check ---' && git diff --cached --check; \
+         echo \"check exit: $?\""
+    );
+    let result = evaluate(&s, "codex", &full, &git_allowed());
+    assert_eq!(
+        result.minimum_action, "allow",
+        "{full}: {} {}",
+        result.reason_code, result.reason
+    );
+    let result = evaluate(&s, "codex", &full, &default_controls());
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
     // A listing reads whichever directory the fork left it in, which no
     // Git permission covers.
     let listing = format!("cd {w} && git add -- {FILES} && git status --short; ls");
