@@ -133,3 +133,54 @@ fn asking_whether_a_process_is_alive_reads_it() {
         }
     }
 }
+
+/// `>/dev/null 2>&1` is the usual way a wait silences both streams of its
+/// probe. The duplication opens nothing of its own, so the test still opens
+/// no file, and the probe faces the ordinary proofs in the flat list. A real
+/// file, a duplication onto another descriptor and an input redirect each
+/// keep their review.
+#[test]
+fn a_wait_that_silences_both_streams_reads_its_probe() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/wait-loop-tail-fixtures")
+        .join(format!("silenced-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    for harness in ["omp", "zcode", "claude-code"] {
+        for (command, allowed) in [
+            ("until kill -0 4821 >/dev/null 2>&1; do sleep 5; done", true),
+            ("while kill -0 4821 > /dev/null 2>&1; do sleep 15; done; echo done", true),
+            (
+                "until hol-guard approvals wait 0123456789abcdef --json >/dev/null 2>&1; do sleep 60; done",
+                true,
+            ),
+            ("until kill -0 4821 2>&1; do sleep 5; done", true),
+            ("until kill -0 4821 2>/dev/null >/dev/null; do sleep 5; done", true),
+            // A real file still grows on every pass.
+            ("until kill -0 4821 >wait.log 2>&1; do sleep 5; done", false),
+            ("until kill -0 4821 2>&1 >wait.log; do sleep 5; done", false),
+            // A duplication onto another descriptor, or an input, is not inert.
+            ("until kill -0 4821 >/dev/null 2>&3; do sleep 5; done", false),
+            ("until kill -0 4821 </dev/tty 2>&1; do sleep 5; done", false),
+            // The probe still faces the ordinary proofs.
+            ("until rm -rf build >/dev/null 2>&1; do sleep 5; done", false),
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                None,
+                None,
+                root.to_str(),
+                root.to_str(),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                allowed,
+                "{harness}: {command} -> {} {}",
+                result.minimum_action,
+                result.reason
+            );
+        }
+    }
+}

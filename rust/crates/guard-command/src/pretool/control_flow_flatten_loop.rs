@@ -127,23 +127,48 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
 /// 2>/dev/null` is how a wait asks whether a process is still running
 /// without printing the answer while it is not, and the sink holds nothing:
 /// every pass writes the same nothing, so the flat list stands for the loop
-/// exactly as the unredirected spelling does. Only a sink that ends the test
-/// is read, and only in front of text that spells no other redirection,
-/// quote or escape, so what is taken off is the whole of what the probe
-/// opens.
+/// exactly as the unredirected spelling does. `>/dev/null 2>&1` silences both
+/// streams the same way: the duplication opens nothing, it points stderr at
+/// the descriptor stdout already holds. Only redirections that end the test
+/// are read, each a null-device sink or a duplication between stdout and
+/// stderr, and only in front of text that spells no other redirection, quote
+/// or escape, so what is taken off is the whole of what the probe opens.
 fn opens_no_file(probe: &str) -> bool {
     if !probe.contains(['<', '>']) {
         return true;
     }
-    let asked = probe.trim_end();
-    let chars: Vec<char> = asked.chars().collect();
-    let Some(start) = (0..chars.len()).find(|start| {
-        crate::parser_segments::null_sink_redirect_end(&chars, *start, false) == Some(chars.len())
-    }) else {
-        return false;
-    };
-    let command: String = chars[..start].iter().collect();
-    !command.trim().is_empty() && !command.contains(['<', '>', '\\', '\'', '"'])
+    let mut chars: Vec<char> = probe.trim_end().chars().collect();
+    let mut stripped = false;
+    while let Some(start) = trailing_inert_redirect(&chars) {
+        chars.truncate(start);
+        while chars
+            .last()
+            .is_some_and(|value| matches!(value, ' ' | '\t'))
+        {
+            chars.pop();
+        }
+        stripped = true;
+    }
+    let command: String = chars.iter().collect();
+    stripped && !command.trim().is_empty() && !command.contains(['<', '>', '\\', '\'', '"', '&'])
+}
+
+/// Where the inert redirection that ends `chars` starts: a sink to the null
+/// device, or `2>&1`, `1>&2` or `>&2`, which only copy a descriptor the probe
+/// already holds.
+fn trailing_inert_redirect(chars: &[char]) -> Option<usize> {
+    for dup in ["2>&1", "1>&2", ">&2"] {
+        let dup: Vec<char> = dup.chars().collect();
+        let Some(start) = chars.len().checked_sub(dup.len()) else {
+            continue;
+        };
+        if start > 0 && chars[start..] == dup[..] && matches!(chars[start - 1], ' ' | '\t') {
+            return Some(start);
+        }
+    }
+    (0..chars.len()).find(|start| {
+        crate::parser_segments::null_sink_redirect_end(chars, *start, false) == Some(chars.len())
+    })
 }
 
 /// The command list written after `done`, empty when nothing follows it.
