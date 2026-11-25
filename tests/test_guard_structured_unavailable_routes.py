@@ -25,6 +25,8 @@ def test_daemon_unavailable_routes_withhold_only_required_structured_content(
     config = _config()
 
     def render(kind, adapter, params, **_transport):
+        if kind == "unavailable_event":
+            return None
         assert kind == "structured_outage"
         assert adapter == harness
         assert params == {"event_name": "PostToolUse", "view": structured_output_view(config)}
@@ -64,3 +66,34 @@ def test_daemon_unavailable_routes_withhold_only_required_structured_content(
         assert not mediation.get("native_decision_id")
     else:
         assert "structured_content_mediation" not in result
+
+
+def test_unavailable_event_route_uses_native_projection_and_activity_marker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorded: list[dict[str, object]] = []
+
+    class StubWorker:
+        def _apply_structured_unavailable_overlay(self, response, **_kwargs):
+            return response
+
+        def _record_post_tool_activity(self, **kwargs):
+            recorded.append(kwargs)
+
+    native = {
+        "event_name": "PostToolUse",
+        "response": {"decision": "allow"},
+        "activity_recorded": True,
+    }
+    monkeypatch.setattr(hook_worker_unavailable, "native_unavailable_event_response", lambda *args, **kwargs: native)
+    result = hook_worker_unavailable.unavailable_event_response(
+        StubWorker(),
+        payload={"hook_event_name": "post_toolcall"},
+        harness="pi",
+        guard_home=tmp_path,
+        workspace=None,
+        deadline=None,
+    )
+    assert result == {"decision": "allow"}
+    assert recorded == []

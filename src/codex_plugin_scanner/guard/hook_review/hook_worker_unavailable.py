@@ -11,9 +11,9 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 from time import monotonic
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from ..native_hook_render import native_render_cli
+from ..native_hook_render import native_render_cli, native_unavailable_event_response
 from ..native_policy_snapshot_direct_lane_structured import structured_output_view
 from .hook_availability_policy import availability_harness_response, canonical_hook_event_name
 
@@ -103,6 +103,37 @@ def unavailable_event_response(
 ) -> dict[str, object]:
     """Return a fail-safe response after the resident misses event identity."""
 
+    try:
+        native = native_unavailable_event_response(
+            payload,
+            harness,
+            guard_home=guard_home,
+            deadline=deadline,
+            record_post_tool_activity=True,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        native = None
+    if native is not None:
+        native_event = native.get("event_name")
+        native_response = native.get("response")
+        if isinstance(native_event, str) and isinstance(native_response, dict):
+            if native_event in {"PostToolUse", "PostToolUseFailure"} and native.get("activity_recorded") is not True:
+                worker._record_post_tool_activity(
+                    harness=harness,
+                    payload=payload,
+                    event=native_event,
+                )
+            return worker._apply_structured_unavailable_overlay(
+                cast("dict[str, object]", native_response),
+                harness=harness,
+                event_name=native_event,
+                guard_home=guard_home,
+                workspace=workspace,
+                deadline=deadline,
+            )
+
+    # A missing renderer leaves only the bounded compatibility response. This
+    # path is itself fail-closed and cannot claim that evidence was recorded.
     fallback_event = canonical_hook_event_name(payload, guard_home=guard_home, deadline=deadline)
     if fallback_event in {"PostToolUse", "PostToolUseFailure"}:
         worker._record_post_tool_activity(
