@@ -124,6 +124,7 @@ fn checked(edge: &GuardHookEdgeResultV2) -> Option<bool> {
             && edge.requires_approval == requires_approval(event, result)
             && (!edge.recording_only_response
                 || recording_only_response("PreToolUse", true, result))
+            && edge.local_cli_rule_blocked == edge.local_cli_rule.as_ref().map(|rule| rule.blocked)
             && receipt_agrees(edge, kind, result, &receipt),
     )
 }

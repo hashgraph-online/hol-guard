@@ -414,13 +414,15 @@ fn evaluate_validated_envelope<Lease>(
     let requires_approval = edge_result_check::requires_approval(&event_name, result_object);
     let recording_only_response =
         edge_result_check::recording_only_response(&event_name, recording_only, result_object);
+    let local_cli_rule = local_cli_rule?;
+    let local_cli_rule_blocked = local_cli_rule.as_ref().map(|rule| rule.blocked);
     let mut edge = GuardHookEdgeResultV2 {
         exact_command_block: None,
         review_evidence,
         // Every edge carries its route so no hook asks again; only PreToolUse is routed.
         containment_route: Some(edge_route(&event_name, &result, recording_only)),
         containment_rewrite: None,
-        local_cli_rule: local_cli_rule?,
+        local_cli_rule,
         receipt_recorded: false,
         activity_recorded: false,
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
@@ -432,6 +434,7 @@ fn evaluate_validated_envelope<Lease>(
         result,
         requires_approval,
         recording_only_response,
+        local_cli_rule_blocked,
         harness_response,
         receipt,
     };

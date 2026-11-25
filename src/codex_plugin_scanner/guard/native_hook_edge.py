@@ -35,6 +35,7 @@ STRUCTURED_OUTPUT_BINDING_FEATURE = "edge-structured-output-binding-v1"
 _UNSUPPORTED_EVENT_CODE = "native_hook_event_unsupported"
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _LOCAL_CLI_RULE_FEATURE = "edge-local-cli-rule-v1"
+_LOCAL_CLI_RULE_STAMP_FEATURE = "edge-local-cli-rule-stamp-v1"
 # The custom extension rule is read after the review, and identifying a
 # launch can take seconds. It once had its own request with this timeout;
 # the edge keeps that allowance rather than spending the review's budget.
@@ -100,6 +101,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "harness_response",
         "requires_approval",
         "recording_only_response",
+        "local_cli_rule_blocked",
         "containment_route",
         "containment_rewrite",
         "local_cli_rule",
@@ -126,6 +128,10 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or not isinstance(payload.get("harness_response"), dict)
         or not isinstance(payload.get("requires_approval"), bool)
         or not isinstance(payload.get("recording_only_response"), bool)
+        or (
+            payload.get("local_cli_rule_blocked") is not None
+            and not isinstance(payload.get("local_cli_rule_blocked"), bool)
+        )
         or not isinstance(payload.get("receipt_recorded", False), bool)
         or not isinstance(payload.get("activity_recorded", False), bool)
         or not isinstance(payload.get("exact_command_block", False), bool)
@@ -152,6 +158,12 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or not isinstance(rule["blocked"], bool)
         or not isinstance(rule["harness_response"], dict)
     ):
+        return None
+    blocked_stamp = payload.get("local_cli_rule_blocked")
+    if rule is None:
+        if blocked_stamp is not None:
+            return None
+    elif blocked_stamp != rule["blocked"]:
         return None
     evidence = payload.get("review_evidence")
     if evidence is not None and (not isinstance(evidence, dict) or review_evidence_parts(evidence) is None):
@@ -310,6 +322,7 @@ def review_raw_hook_native(
             required_features.add("git-execution-context-v1")
             if local_cli_rules is not None:
                 required_features.add(_LOCAL_CLI_RULE_FEATURE)
+                required_features.add(_LOCAL_CLI_RULE_STAMP_FEATURE)
                 if local_cli_rules.get("exact_action_control_digest") is not None:
                     required_features.add(_REVIEW_EVIDENCE_FEATURE)
     tool_call = "git-execution-context-v1" in required_features
