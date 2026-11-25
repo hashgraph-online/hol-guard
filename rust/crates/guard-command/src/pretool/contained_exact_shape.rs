@@ -96,7 +96,7 @@ pub(crate) fn runs_whole(shape: &Shape) -> bool {
 }
 
 fn literal_shape(text: &str, workspace: &Path) -> Option<Shape> {
-    match workspace_redirects::project(text) {
+    match workspace_redirects::project_for_workspace(text, workspace) {
         Some(projected) => workspace_redirects::contained_shape(text, &projected, workspace),
         None => {
             let model = parse_command(&CommandModelRequestV1 {
