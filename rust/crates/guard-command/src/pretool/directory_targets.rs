@@ -541,17 +541,32 @@ impl<'a> super::PathContext<'a> {
         // rest move where a release it would download comes from, whether it
         // is checked on arrival, and which module cache an already-fetched
         // one is taken from.
+        //
+        // `XDG_CONFIG_HOME` only moves the stored go environment file, so a
+        // value that spells out `~/.config` names the file the proof reads
+        // anyway. Its value is stamped rather than only named; a name with no
+        // value, or any other directory, keeps the review.
         let go_toolchain_inert = match execution_environment {
             Some(environment) => {
                 environment.has_valid_shape()
-                    && !environment
-                        .environment_names
-                        .iter()
-                        .any(|name| super::go_toolchain::go_toolchain_selector(name))
+                    && !environment.environment_names.iter().any(|name| {
+                        super::go_toolchain::go_toolchain_selector(name)
+                            && !(name.eq_ignore_ascii_case("XDG_CONFIG_HOME")
+                                && go_config_home_is_default(
+                                    environment.xdg_config_home.as_deref(),
+                                    environment.home.as_deref(),
+                                ))
+                    })
             }
             None => !std::env::vars_os().any(|(name, value)| {
+                let name = name.to_string_lossy();
                 !value.is_empty()
-                    && super::go_toolchain::go_toolchain_selector(&name.to_string_lossy())
+                    && super::go_toolchain::go_toolchain_selector(&name)
+                    && !(name.eq_ignore_ascii_case("XDG_CONFIG_HOME")
+                        && go_config_home_is_default(
+                            value.to_str(),
+                            std::env::var("HOME").ok().as_deref(),
+                        ))
             }),
         };
         // Cargo reads its configuration from the environment too, including
@@ -782,6 +797,16 @@ fn xdg_config_is_default(value: Option<&str>, home: Option<&str>) -> bool {
             .ok()
             .zip(std::fs::canonicalize(&default).ok())
             .is_some_and(|(value, default)| value == default)
+}
+
+/// Whether a set `XDG_CONFIG_HOME` names `~/.config`, where
+/// [`super::go_toolchain`] already reads the stored go environment file.
+///
+/// Unlike [`xdg_config_is_default`], an absent value does not count: the
+/// variable is known to be set, so a value this proof cannot see could name
+/// any directory.
+fn go_config_home_is_default(value: Option<&str>, home: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.is_empty()) && xdg_config_is_default(value, home)
 }
 
 fn rustup_selector(name: &str) -> bool {
