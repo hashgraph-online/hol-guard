@@ -137,6 +137,7 @@ fn browser_action_url_must_be_redacted() {
         "https://shop.example.test/checkout?",
         "https://shop.example.test/checkout?step=[redacted]",
         "https://shop.example.test/checkout?step=%5Bredacted%5D&flag",
+        "https://shop.example.test/people/@handle",
     ] {
         assert!(browser_url_is_redacted(url), "{url}");
     }
@@ -144,8 +145,12 @@ fn browser_action_url_must_be_redacted() {
         "https://shop.example.test/checkout?session={}",
         "z".repeat(24)
     );
+    let userinfo = format!("https://{}@shop.example.test/checkout", "reader");
+    let userinfo_no_path = format!("https://{}@shop.example.test", "reader");
     for url in [
         raw_value.as_str(),
+        userinfo.as_str(),
+        userinfo_no_path.as_str(),
         "https://shop.example.test/checkout?step=[redacted]&page=2",
         "https://shop.example.test/checkout#fragment",
     ] {

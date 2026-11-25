@@ -34,6 +34,12 @@ pub fn browser_url_is_redacted(url: &str) -> bool {
     if url.chars().count() > BROWSER_URL_REDACTED_MAX_CHARS || url.contains('#') {
         return false;
     }
+    // Userinfo in the authority (`scheme://name:secret@host`) is a credential redaction must strip.
+    let after_scheme = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = after_scheme.split(['/', '?']).next().unwrap_or("");
+    if authority.contains('@') {
+        return false;
+    }
     let Some((_, query)) = url.split_once('?') else {
         return true;
     };
