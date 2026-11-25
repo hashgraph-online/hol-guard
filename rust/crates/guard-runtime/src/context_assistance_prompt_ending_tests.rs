@@ -84,7 +84,9 @@ fn the_codex_hint_asks_for_the_edit_and_the_test_as_two_tool_calls() {
 fn the_codex_hint_says_the_passing_check_finishes_the_change() {
     assert!(ACT_ON_IT.contains("Run the test that covers the change before you finish."));
     assert!(ACT_ON_IT.contains("Once it passes, the change is done"));
-    assert!(ACT_ON_IT.contains("a full test run, or a diff of your own edits, that nobody asked for"));
+    assert!(
+        ACT_ON_IT.contains("a full test run, or a diff of your own edits, that nobody asked for")
+    );
 }
 
 /// Claude Code ran the whole suite and committed after the doctest or test a
