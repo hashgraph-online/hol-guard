@@ -210,6 +210,10 @@ fn a_wait_after_a_list_is_written_out_in_place() {
             "sleep 5\nuntil grep -q ready server.log; do sleep 2; done\ntail -3 server.log",
             "sleep 5\ngrep -q ready server.log; sleep 2; tail -3 server.log",
         ),
+        (
+            "git status --short; while read name; do wc -l README.md; done < list.txt",
+            "git status --short; cat list.txt; wc -l README.md",
+        ),
     ] {
         assert_eq!(
             spliced(command, None).as_deref(),

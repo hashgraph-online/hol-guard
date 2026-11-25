@@ -57,9 +57,11 @@ fn spliced_wait(command: &str) -> Option<String> {
         return None;
     }
     let text = command.trim();
-    let start = match next_construct(text, "until")? {
-        Some(start) => start,
-        None => next_construct(text, "while")??,
+    // Each scan stops at the other keyword, so run both and take the one
+    // that reaches its construct.
+    let start = match (next_construct(text, "until"), next_construct(text, "while")) {
+        (Some(Some(start)), _) | (_, Some(Some(start))) => start,
+        _ => return None,
     };
     let (before, construct) = text.split_at(start);
     if before.trim().is_empty() || construct.contains(['$', '`']) {
