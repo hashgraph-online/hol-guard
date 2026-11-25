@@ -9,6 +9,7 @@ import {
 import { ActionButton } from "./approval-center-primitives";
 import {
   currentRuntimeUpgradeAdvice,
+  finishedSwitchVersion,
   type GuardRuntimeUpgradeAdvice,
   runtimeUpgradeTarget,
 } from "./runtime-upgrade-advice";
@@ -17,7 +18,7 @@ import { switchRuntimeDefault } from "./runtime-upgrade-api";
 type SwitchState =
   | { readonly kind: "idle" }
   | { readonly kind: "switching" }
-  | { readonly kind: "done"; readonly version: string }
+  | { readonly kind: "done"; readonly version: string; readonly answered: GuardRuntimeUpgradeAdvice | undefined }
   | { readonly kind: "failed"; readonly message: string };
 
 const RESTART_NOTE =
@@ -51,14 +52,16 @@ export function RuntimeUpgradeCard(props: {
       const answered = props.advice;
       const next = await switchDefault(props.requestId, version);
       if (next) setReply({ answered, advice: next });
-      setState({ kind: "done", version });
+      setState({ kind: "done", version, answered });
     } catch (error) {
       setState({ kind: "failed", message: error instanceof Error ? error.message : "Guard could not switch the Node.js version." });
     }
   };
 
-  const switched = state.kind === "done" || advice.switched;
-  const switchVersion = state.kind === "done" ? null : advice.switch_version;
+  // A finished switch counts only while the review shows the advice it answered.
+  const doneVersion = finishedSwitchVersion(props.advice, state.kind === "done" ? state : null);
+  const switched = doneVersion !== null || advice.switched;
+  const switchVersion = doneVersion !== null ? null : advice.switch_version;
 
   return (
     <section
@@ -78,7 +81,7 @@ export function RuntimeUpgradeCard(props: {
             {exploited} Guard pauses every command that starts it. {target}
           </p>
           {switched ? (
-            <SwitchedNote version={state.kind === "done" ? state.version : advice.installed_version} />
+            <SwitchedNote version={doneVersion ?? advice.installed_version} />
           ) : (
             switchVersion !== null && (
               <div className="mt-3 flex flex-wrap items-center gap-3">

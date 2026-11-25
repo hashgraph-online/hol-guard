@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { normalizeApprovalRequest } from "./guard-api";
 import {
   currentRuntimeUpgradeAdvice,
+  finishedSwitchVersion,
   normalizeRuntimeUpgradeAdvice,
   RUNTIME_UPGRADE_ADVICE_SCHEMA,
 } from "./runtime-upgrade-advice";
@@ -122,6 +123,10 @@ const nvmAdvice = {
     assert(currentRuntimeUpgradeAdvice(undefined, null) === undefined, "no advice stays empty");
     const late = currentRuntimeUpgradeAdvice(first, { answered: undefined, advice: switched });
     assert(late === first, "advice that arrives after an empty review is shown");
+    const done = { answered: first, version: "24.22.1" };
+    assert(finishedSwitchVersion(first, done) === "24.22.1", "a finished switch shows while its advice stands");
+    assert(finishedSwitchVersion(refreshed, done) === null, "a refreshed review drops the finished switch");
+    assert(finishedSwitchVersion(first, null) === null, "no switch, no finished version");
   }
 }
 

@@ -18596,6 +18596,9 @@ function runtimeUpgradeTarget(advice) {
 function currentRuntimeUpgradeAdvice(latest, reply) {
   return reply !== null && reply.answered === latest ? reply.advice : latest;
 }
+function finishedSwitchVersion(latest, done) {
+  return done !== null && done.answered === latest ? done.version : null;
+}
 const CHUNK_RELOAD_STORAGE_KEY = "hol-guard-dashboard-chunk-reload";
 const CHUNK_RELOAD_DELAY_MS = 400;
 const MODULE_LINK_ERROR_PATTERNS = [
@@ -37608,13 +37611,14 @@ function RuntimeUpgradeCard(props) {
       const answered = props.advice;
       const next = await switchDefault(props.requestId, version2);
       if (next) setReply({ answered, advice: next });
-      setState({ kind: "done", version: version2 });
+      setState({ kind: "done", version: version2, answered });
     } catch (error) {
       setState({ kind: "failed", message: error instanceof Error ? error.message : "Guard could not switch the Node.js version." });
     }
   };
-  const switched = state.kind === "done" || advice.switched;
-  const switchVersion = state.kind === "done" ? null : advice.switch_version;
+  const doneVersion = finishedSwitchVersion(props.advice, state.kind === "done" ? state : null);
+  const switched = doneVersion !== null || advice.switched;
+  const switchVersion = doneVersion !== null ? null : advice.switch_version;
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",
     {
@@ -37638,7 +37642,7 @@ function RuntimeUpgradeCard(props) {
             " Guard pauses every command that starts it. ",
             target2
           ] }),
-          switched ? /* @__PURE__ */ jsxRuntimeExports.jsx(SwitchedNote, { version: state.kind === "done" ? state.version : advice.installed_version }) : switchVersion !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3", children: [
+          switched ? /* @__PURE__ */ jsxRuntimeExports.jsx(SwitchedNote, { version: doneVersion ?? advice.installed_version }) : switchVersion !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               ActionButton,
               {

@@ -84,3 +84,11 @@ export function currentRuntimeUpgradeAdvice(
 ): GuardRuntimeUpgradeAdvice | undefined {
   return reply !== null && reply.answered === latest ? reply.advice : latest;
 }
+
+/** The version a finished switch set, while the review still shows the advice it answered. */
+export function finishedSwitchVersion(
+  latest: GuardRuntimeUpgradeAdvice | undefined,
+  done: { readonly answered: GuardRuntimeUpgradeAdvice | undefined; readonly version: string } | null,
+): string | null {
+  return done !== null && done.answered === latest ? done.version : null;
+}
