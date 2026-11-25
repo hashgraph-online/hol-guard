@@ -305,7 +305,7 @@ fn braces_in_an_in_place_edit_script_are_not_a_root_glob() {
         "perl -i -pe 's/.*//' -- -e *",
         "sed -i 's|{OLD}|{NEW}|' *",
         "sed -i * -e 's|{OLD}|{NEW}|'",
-        "sed -i -- 's|{OLD}|{NEW}|' {a,b}",
+        "sed -i -- 's|{OLD}|{NEW}|' {*,b}",
         "perl -i -ne *",
         "perl -i -0777pe *",
         "sed -i -e *",
