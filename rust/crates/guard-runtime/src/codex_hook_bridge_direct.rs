@@ -24,7 +24,9 @@ use crate::claude_hook_bridge_http::remaining;
 use crate::claude_hook_bridge_render::py_strip;
 #[cfg(unix)]
 use crate::codex_hook_bridge_direct_resident::send_to_live_resident;
-use crate::codex_hook_bridge_direct_resident::{send_to_live_resident_reporting, DirectMiss};
+use crate::codex_hook_bridge_direct_resident::{
+    direct_timeout, send_to_live_resident_reporting, DirectMiss, DIRECT_TIMEOUT,
+};
 use crate::codex_hook_response::{POST_TOOL_USE, PRE_TOOL_USE};
 
 pub(crate) const STATE_DIRECTORY: &str = "native-runtime";
@@ -75,9 +77,6 @@ pub(crate) const BOUNDED_DIRECT_HARNESSES: [&str; 8] = [
 ];
 const BOUNDED_DIRECT_SWITCH: &str = "HOL_GUARD_BOUNDED_DIRECT_HOOK";
 const GROK: &str = "grok";
-/// A resident answers an allow well inside this. A slower resident leaves
-/// the daemon most of the hook's budget.
-const DIRECT_TIMEOUT: Duration = Duration::from_millis(1_000);
 
 /// Which answers the resident is asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -436,7 +435,7 @@ pub(crate) fn direct_answer_reporting(
     if !harness_event(&harness, event_name) {
         return Err(DirectMiss::Event);
     }
-    let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
+    let deadline = Instant::now() + remaining(rpc_deadline).min(direct_timeout(event_name));
     let request = direct_request(harness, guard_home, query, data, remaining(deadline))
         .ok_or(DirectMiss::Request)?;
     let output =
