@@ -136,5 +136,9 @@ fn files_already_read_leave_room_for_the_rest() {
         (&[], &|| first.clone()),
         Duration::ZERO,
     );
-    assert_eq!(read.files, owned(&["a/limit.py", "b/limit.py"]));
+    // The walk may read either file before its zero budget stops it, so the
+    // order follows the directory listing; only the set is under test.
+    let mut files = read.files;
+    files.sort();
+    assert_eq!(files, owned(&["a/limit.py", "b/limit.py"]));
 }
