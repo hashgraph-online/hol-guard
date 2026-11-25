@@ -22,6 +22,7 @@ from .edge_clone_fixtures import write_edge_clone
 from .extension_adapters import EXTENSION_ADAPTERS
 from .extension_allow_fixtures import extension_allow_checks
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
+from .feature_folder_fixtures import add_feature_folder
 from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .fixture_remotes import INSTEAD_OF_CASE, add_checkout_origin
 from .git_allow_fixtures import add_git_allow_shape, add_unstaged_source_edit, git_allow_checks
@@ -352,6 +353,7 @@ def create_fixture(
             "Gauntlet on Windows needs symlink creation: enable Developer Mode or run elevated"
         ) from error
     os.link(workspace / ".env", workspace / "aliases/linked.txt")
+    add_feature_folder(workspace, scenario_id)
     environment = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "WINDIR") if k in os.environ}
     environment.update(HOME=str(home), USERPROFILE=str(home), GIT_CONFIG_NOSYSTEM="1")
     commands = [

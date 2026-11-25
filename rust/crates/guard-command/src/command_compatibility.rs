@@ -59,6 +59,15 @@ pub(crate) fn git_inspection_arguments<'a>(
     git::inspection_arguments(arguments, context)
 }
 
+/// The directory Git resolves a bare pathspec against: the last `-C` an
+/// admitted read routes through, or the shell's own working directory.
+pub(crate) fn git_operand_directory(
+    arguments: &[String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    git::read_operand_directory(arguments, context)
+}
+
 /// Whether a `symbolic-ref` form only prints where a symbolic ref points. A
 /// second operand writes that ref instead.
 pub(crate) fn git_symbolic_ref_read(rest: &[String]) -> bool {
