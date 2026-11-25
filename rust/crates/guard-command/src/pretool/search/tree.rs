@@ -277,7 +277,8 @@ pub(in crate::pretool) fn glob_matches_option_word(value: &str, context: ReadCon
 /// A `*` or `?` operand qualifies when the strict expansion proves that it
 /// matches nothing under any shell option: the program then receives either
 /// the literal word, which names no file, or no operand under `nullglob`. So
-/// `ls ~/code/app/vite.config.*` probes for an optional file.
+/// `ls ~/code/app/vite.config.*` probes for an optional file, and
+/// `grep -rn KEY ../../*/src/*install*` looks for a file in sibling crates.
 pub(in crate::pretool) fn safe_unmatched_glob_operand(
     value: &str,
     context: ReadContext<'_>,
@@ -320,15 +321,18 @@ fn unmatched_glob_operand(
     expand: fn(&str, ReadContext<'_>) -> Option<Vec<PathBuf>>,
 ) -> bool {
     if !value.contains('[') {
-        // Only the last component may be a pattern, inside a real directory.
-        let directory = value
+        // The literal directory before the first pattern component must be a
+        // real directory, so the expansion below walked it rather than
+        // nothing. A pattern component above the last is fine: the expansion
+        // refuses a link or a hidden name it would descend through.
+        let first_pattern = value.find(['*', '?']).unwrap_or(value.len());
+        let directory = value[..first_pattern]
             .rsplit_once('/')
             .map_or(".", |(directory, _)| directory);
         let directory = if directory.is_empty() { "/" } else { directory };
-        return !directory.contains(['*', '?'])
-            && expanded_operand(directory, context)
-                .and_then(|path| std::fs::symlink_metadata(path).ok())
-                .is_some_and(|metadata| metadata.is_dir())
+        return expanded_operand(directory, context)
+            .and_then(|path| std::fs::symlink_metadata(path).ok())
+            .is_some_and(|metadata| metadata.is_dir())
             && expand(value, context).is_some_and(|matches| matches.is_empty());
     }
     inert_bracket_class(value, context) && safe_literal_bracket_tree(value, context, recursive)
