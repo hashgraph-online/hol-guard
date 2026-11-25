@@ -49,12 +49,12 @@ pub(crate) fn grant_answers(reason_code: &str) -> bool {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Finding {
-    advisory_id: String,
-    severity: String,
-    known_exploited: bool,
-    version: String,
-    resolved_path: String,
-    expired_at: Option<f64>,
+    pub(crate) advisory_id: String,
+    pub(crate) severity: String,
+    pub(crate) known_exploited: bool,
+    pub(crate) version: String,
+    pub(crate) resolved_path: String,
+    pub(crate) expired_at: Option<f64>,
 }
 
 #[cfg(test)]
@@ -73,7 +73,7 @@ impl Finding {
 }
 
 impl Finding {
-    fn describe(&self) -> String {
+    pub(crate) fn describe(&self) -> String {
         let mut text = format!(
             "Node.js {} at {} is affected by {} ({}{})",
             self.version,
@@ -379,7 +379,7 @@ fn anchored(search_path: &str, cwd: Option<&Path>) -> String {
 
 /// The strongest high or critical advisory this executable's build is known
 /// to be affected by.
-fn affected(path: &Path, advisories: &LaunchAdvisories) -> Option<Finding> {
+pub(crate) fn affected(path: &Path, advisories: &LaunchAdvisories) -> Option<Finding> {
     let (resolved_path, artifact) = source::probe(path)?;
     affected_artifact(resolved_path, &artifact, advisories)
 }

@@ -57,6 +57,10 @@ impl SemVer {
         Some(Self { core, prerelease })
     }
 
+    pub(crate) fn major(&self) -> u64 {
+        self.core[0]
+    }
+
     pub(crate) fn is_prerelease(&self) -> bool {
         !self.prerelease.is_empty()
     }

@@ -156,6 +156,16 @@ pub(super) fn respond(
         let (status, body) = answer.unwrap_or((DROPPED, Value::Null));
         return Some((status, body, caller.cors_origin, false));
     }
+    if let Some(request_id) = (request.method == "POST")
+        .then(|| super::requests::runtime_upgrade_target(request.path))
+        .flatten()
+    {
+        let caller = authorize_write(request, &config.token)?;
+        let payload = read_body!(json_payload(request, body), caller.cors_origin.clone());
+        reads.report_activity();
+        let (status, body) = super::requests::runtime_upgrade(request_id, &payload, config, reads)?;
+        return Some((status, body, caller.cors_origin, true));
+    }
     if let Some((name, args)) = (request.method == "POST")
         .then(|| route_calls::route(request.path))
         .flatten()

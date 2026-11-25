@@ -1,4 +1,5 @@
 import type { GuardApprovalExtensionCoverage } from "./approval-extension-coverage-types";
+import type { GuardRuntimeUpgradeAdvice } from "./runtime-upgrade-advice";
 import type { GuardApprovalExtensionRecommendation } from "./approval-extension-recommendation-types";
 import type { NativeDecisionSelector } from "./context-assistance/native-decision-selector";
 
@@ -302,6 +303,8 @@ export type GuardApprovalRequest = {
   /** Live daemon advice: a built-in extension permission that would let this command run automatically. */
   extension_recommendation?: GuardApprovalExtensionRecommendation;
   extension_coverage?: GuardApprovalExtensionCoverage;
+  /** Upgrade advice when an affected Node.js build is why this is paused. */
+  runtime_upgrade?: GuardRuntimeUpgradeAdvice;
 };
 
 export type GuardTemporaryMcpGrantTarget = "exact" | "category" | "server";
