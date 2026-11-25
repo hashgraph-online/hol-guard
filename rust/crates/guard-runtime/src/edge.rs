@@ -34,6 +34,9 @@ use pre_tool_chain::evaluate_pre_tool_chain;
 #[path = "edge_result_check.rs"]
 mod edge_result_check;
 pub(crate) use edge_result_check::standalone_receipt;
+#[path = "edge_snapshot.rs"]
+mod edge_snapshot;
+pub(crate) use edge_snapshot::evaluate_envelope_with_snapshot;
 
 /// Bind the exact validated tool intent without policy-generation identity.
 /// Policy evaluation remains bound by `request_identity`; this commitment is
@@ -481,17 +484,6 @@ pub(crate) fn evaluate_cursor_probe(
     let lease = policy_store.command_authority_lease(snapshot)?;
     evaluate_validated_envelope(envelope, Some(admitted.as_ref()), Some(policy_store), lease)
         .map(Some)
-}
-
-/// Evaluate against a snapshot while the policy store's request fence is
-/// held. Approval challenge creation uses this entry point so the action,
-/// snapshot, and derived bindings describe one coherent state.
-pub(crate) fn evaluate_envelope_with_snapshot(
-    envelope: GuardHookEnvelopeV2,
-    snapshot: &AdmittedPolicySnapshot,
-) -> Result<Vec<u8>, String> {
-    validate_envelope_shape(&envelope)?;
-    evaluate_validated_envelope(envelope, Some(snapshot), None, ())
 }
 
 #[cfg(test)]
