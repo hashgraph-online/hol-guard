@@ -66,6 +66,14 @@ fn shapes_the_shell_expands_differently_keep_their_review() {
         "ls {a,b} # {c,d}",
         "cat 'unclosed {a,b}",
         "cat {a,b}\u{0}",
+        // An empty alternative: bash drops it, zsh passes an empty argument.
+        "ls {,docs}",
+        // Words that would parse differently once written out.
+        "head -5 README.md {#,.env}",
+        "ls {#,x}; rm -rf y",
+        "ls {!,x}",
+        "{if,x} true",
+        "ls {a,}",
     ] {
         assert_eq!(expanded(command), None, "{command}");
     }

@@ -118,19 +118,47 @@ impl Word {
         if word.quoted || redirect_target || word.text.contains('=') {
             return None;
         }
-        // An alternative left empty, as in `{,x}`, is a word the shell drops.
-        let words: Vec<&str> = words
-            .iter()
-            .rev()
-            .map(String::as_str)
-            .filter(|word| !word.is_empty())
-            .collect();
-        if words.is_empty() {
+        // An alternative left empty, as in `{,x}`, is dropped by bash but
+        // passed as an empty argument by zsh, so it is not followed.
+        // A word that would read differently once spelled out is not
+        // followed either: `{#,x}` gives the shell a literal `#`, but written
+        // out it starts a comment that hides the rest of the line.
+        if words.iter().any(|word| changes_parse(word)) {
             return None;
         }
+        let words: Vec<&str> = words.iter().rev().map(String::as_str).collect();
         out.push_str(&words.join(" "));
         Some(true)
     }
+}
+
+/// Whether `word`, written out as a bare word, would parse as something
+/// other than the plain argument the shell passes.
+fn changes_parse(word: &str) -> bool {
+    word.is_empty()
+        || word.starts_with(['#', '!', '{', '}'])
+        || matches!(
+            word,
+            "case"
+                | "esac"
+                | "if"
+                | "then"
+                | "else"
+                | "elif"
+                | "fi"
+                | "for"
+                | "while"
+                | "until"
+                | "do"
+                | "done"
+                | "in"
+                | "function"
+                | "select"
+                | "time"
+                | "coproc"
+                | "[["
+                | "]]"
+        )
 }
 
 /// Whether `text` opens a `{` while another is still open.

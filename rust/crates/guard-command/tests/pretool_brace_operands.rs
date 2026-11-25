@@ -39,6 +39,9 @@ fn a_read_of_braced_operands_reads_each_operand() {
             ("rm {README.md,AGENTS.md}", false),
             ("cat README.md > {a,b}.txt", false),
             ("cat part{1..3}.md", false),
+            // A `#` from a brace is a literal word, not a comment.
+            ("head -5 README.md {#,.env}", false),
+            ("ls {#,x}; rm -rf docs", false),
         ] {
             let result = evaluate_pre_tool_envelope_with_context(
                 harness,
