@@ -1,5 +1,5 @@
-//! `git log` that lists commits and file names, and `git ls-files`, filtered
-//! by glob pathspecs.
+//! `git log` that lists commits and file names, `git ls-files` and
+//! `git check-ignore`, filtered by glob pathspecs.
 //!
 //! A pathspec after `--` only chooses which commits and names the log
 //! prints. Without a patch option the log prints no file content, and the
@@ -71,6 +71,9 @@ pub(super) fn pathspec_start(
     if subcommand == "ls-files" {
         return ls_files_pathspec_start(rest).map(|start| offset + 1 + start);
     }
+    if subcommand == "check-ignore" {
+        return check_ignore_pathspec_start(rest).map(|start| offset + 1 + start);
+    }
     if subcommand != "log" {
         return None;
     }
@@ -110,6 +113,32 @@ fn ls_files_pathspec_start(rest: &[String]) -> Option<usize> {
     let pathspecs = &rest[start..];
     (!pathspecs.is_empty() && pathspecs.iter().all(|pathspec| listed_pathspec(pathspec)))
         .then_some(start)
+}
+
+/// Index in `rest` of the first `check-ignore` path, or `None`.
+///
+/// `check-ignore` never opens the paths it is given. It matches each name
+/// against the ignore rules and prints the name, with the matching rule in
+/// its verbose form, so a glob such as `docs/*` prints names a listing of
+/// `docs` would print. The shell expands an unquoted glob before Git parses
+/// its options, so a glob that starts with a wildcard needs `--` in front of
+/// it: `*` could expand to a file named like an option.
+fn check_ignore_pathspec_start(rest: &[String]) -> Option<usize> {
+    if !super::super::git_listing_reads::read_form("check-ignore", rest) {
+        return None;
+    }
+    let separator = rest.iter().position(|argument| argument == "--");
+    let start = match separator {
+        Some(separator) => separator + 1,
+        None => rest
+            .iter()
+            .position(|argument| !argument.starts_with('-'))?,
+    };
+    let paths = &rest[start..];
+    (!paths.is_empty()
+        && paths.iter().all(|path| listed_pathspec(path))
+        && (separator.is_some() || !paths.iter().any(|path| path.starts_with(['*', '?', '[']))))
+    .then_some(start)
 }
 
 /// A revision, or an option that keeps the log to metadata and names.
