@@ -56,6 +56,19 @@ mod rule_reviews_then_runtime {
         }
     }
 
+    /// A call held only because Guard did not recognize the command.
+    fn unrecognized() -> PreToolResultV1 {
+        PreToolResultV1 {
+            decision: "deny".into(),
+            policy_action: "review".into(),
+            minimum_action: "review".into(),
+            reason_code: "native_command_review_required".into(),
+            reason: "Guard does not recognize this command.".into(),
+            explicitly_benign: false,
+            ..allowed()
+        }
+    }
+
     fn envelope(guard_home: &std::path::Path) -> GuardHookEnvelopeV2 {
         serde_json::from_value(serde_json::json!({
             "schema": "guard-hook-envelope.v2",
@@ -118,16 +131,17 @@ mod rule_reviews_then_runtime {
 
     #[test]
     fn a_rule_review_stays_apart_from_a_vulnerable_runtime_finding() {
-        for (home, rule) in [
-            (saved_review_home(), "saved review rule"),
-            (unreadable_home(), "unreadable rule store"),
+        for (home, rule, before) in [
+            (saved_review_home(), "saved review rule", allowed()),
+            (unreadable_home(), "unreadable rule store", allowed()),
+            // A non-recognition review is one a grant answers, so the rule
+            // still records over it.
+            (saved_review_home(), "saved review rule", unrecognized()),
+            (unreadable_home(), "unreadable rule store", unrecognized()),
         ] {
-            let raised = rule_reviews_then_runtime(
-                &envelope(home.path()),
-                None,
-                allowed(),
-                vulnerable_runtime,
-            );
+            let rule = format!("{rule} over {}", before.reason_code);
+            let raised =
+                rule_reviews_then_runtime(&envelope(home.path()), None, before, vulnerable_runtime);
             assert_eq!(raised.minimum_action, "review", "{rule}");
             assert_eq!(
                 raised.reason_code, "native_runtime_known_vulnerable_with_review",
@@ -140,10 +154,12 @@ mod rule_reviews_then_runtime {
 
     #[test]
     fn a_lone_finding_is_still_one_a_script_grant_answers() {
-        let home = tempfile::tempdir().unwrap();
-        let raised =
-            rule_reviews_then_runtime(&envelope(home.path()), None, allowed(), vulnerable_runtime);
-        assert_eq!(raised.reason_code, "native_runtime_known_vulnerable");
-        assert!(grant_answers(&raised.reason_code));
+        for before in [allowed(), unrecognized()] {
+            let home = tempfile::tempdir().unwrap();
+            let raised =
+                rule_reviews_then_runtime(&envelope(home.path()), None, before, vulnerable_runtime);
+            assert_eq!(raised.reason_code, "native_runtime_known_vulnerable");
+            assert!(grant_answers(&raised.reason_code));
+        }
     }
 }

@@ -169,6 +169,44 @@ fn a_warning_is_raised_and_a_stronger_result_is_kept() {
 }
 
 #[test]
+fn a_rule_replaces_a_review_held_only_for_non_recognition() {
+    for code in crate::connector_setup::NON_RECOGNITION_REASON_CODES {
+        let mut unrecognized = result(PreToolActionTypeV1::Command, "review");
+        unrecognized.reason_code = code.into();
+        let saved = home(&[rule("git status")]);
+        let raised = apply(
+            saved.path(),
+            &call("git status"),
+            Some(NOW),
+            unrecognized.clone(),
+        );
+        assert_eq!(raised.minimum_action, "review", "{code}");
+        assert_eq!(raised.reason_code, "policy_exact_command_review", "{code}");
+        validate_pre_tool_result_matrix(&raised).unwrap();
+        let unreadable = tempfile::tempdir().unwrap();
+        std::fs::write(unreadable.path().join(STORE_FILE_NAME), b"not a database").unwrap();
+        let raised = apply(
+            unreadable.path(),
+            &call("git status"),
+            Some(NOW),
+            unrecognized.clone(),
+        );
+        assert_eq!(
+            raised.reason_code, "exact_command_rules_unreadable",
+            "{code}"
+        );
+        // A stronger floor than review is kept, whatever its reason.
+        let mut held = unrecognized;
+        held.minimum_action = "require-reapproval".into();
+        held.policy_action = "require-reapproval".into();
+        assert_eq!(
+            apply(saved.path(), &call("git status"), Some(NOW), held.clone()),
+            held
+        );
+    }
+}
+
+#[test]
 fn a_raised_policy_action_is_never_lowered() {
     let home = home(&[rule("git status")]);
     let mut stronger_policy = allowed();

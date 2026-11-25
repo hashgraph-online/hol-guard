@@ -22,6 +22,7 @@ use guard_contracts::{GuardHookEnvelopeV2, PreToolActionTypeV1, PreToolResultV1}
 use rusqlite::{params, Connection};
 use serde_json::Value;
 
+use crate::connector_setup::is_non_recognition;
 use crate::local_store_read::{
     open_read_only_cached, pre_tool_command, table_exists, STORE_FILE_NAME,
 };
@@ -169,16 +170,17 @@ pub(crate) fn apply_with_sources(
     if minimum >= ActionFloor::Block {
         return result;
     }
-    let reviewable = minimum <= ActionFloor::Warn;
+    // A grant answers a non-recognition review, so a saved rule replaces it.
+    let reviewable = minimum <= ActionFloor::Warn
+        || (minimum == ActionFloor::Review && is_non_recognition(Some(&result.reason_code)));
     // A missing store holds no rule.
     let connection = match open_read_only_cached(&guard_home.join(STORE_FILE_NAME)) {
         Ok(Some(connection)) => connection,
         Ok(None) => return result,
         Err(_) => return unreadable(result, reviewable),
     };
-    // One read snapshot for the block and review rules, the allow rule and the
-    // signed bundle behind it, so a policy sync that commits between the reads
-    // cannot pair a newly signed allow with the rules from before it.
+    // One read snapshot for the rules and the signed bundle behind an allow, so
+    // a policy sync cannot pair a newly signed allow with older rules.
     let Ok(_snapshot) = connection.unchecked_transaction() else {
         return unreadable(result, reviewable);
     };
