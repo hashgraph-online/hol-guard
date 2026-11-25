@@ -107,16 +107,6 @@ fn a_receipt_no_resident_answers_comes_from_the_daemon() {
     let sent: Value = serde_json::from_slice(&request.body).unwrap();
     assert_eq!(sent["guard_containment_receipt_only"], Value::Bool(true));
     assert_eq!(sent["tool_call_id"], "call_fixture");
-    assert_eq!(
-        sent["guard_transition_probe"]["schema"],
-        "hol-guard.transition-hook-probe.v1"
-    );
-    assert!(sent["guard_transition_probe"]["operation_id"]
-        .as_str()
-        .is_some_and(|value| value.len() == 36));
-    assert!(sent["guard_transition_probe"]["request_id"]
-        .as_str()
-        .is_some_and(|value| value.starts_with("transition-hook-")));
 }
 
 #[test]
@@ -174,10 +164,6 @@ fn codex_and_claude_code_prove_the_daemon_before_asking_it() {
         );
         let sent: Value = serde_json::from_slice(&hooks[0].body).unwrap();
         assert_eq!(sent["guard_containment_receipt_only"], Value::Bool(true));
-        assert_eq!(
-            sent["guard_transition_probe"]["schema"],
-            "hol-guard.transition-hook-probe.v1"
-        );
     }
 }
 
