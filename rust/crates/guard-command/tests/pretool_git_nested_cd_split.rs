@@ -191,3 +191,52 @@ fn a_configuration_write_before_the_read_still_reviews() {
         }
     }
 }
+
+/// A `cd` guarded by `||` can leave the read in the directory it names or
+/// in the one before it. The split cannot follow it, so a helper configured
+/// in that directory keeps the review instead of the read being judged where
+/// the command started.
+#[test]
+fn a_guarded_cd_into_a_helper_checkout_keeps_the_review() {
+    let (root, project, _cleanup) = checkout("guarded-cd", true);
+    let allow = git_allow();
+    let parent = project.parent().unwrap().to_str().unwrap().to_owned();
+    for command in [
+        format!("cd src; cd {parent} || true; git status --short"),
+        format!("cd src && ls; cd {parent} || true; git status --short"),
+    ] {
+        for harness in HARNESSES {
+            let result = decide(&root, &project, harness, &command, Some(&allow));
+            assert_ne!(
+                result.minimum_action, "allow",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+        }
+    }
+}
+
+/// A leading climb moves the remainder above the session's directory, so a
+/// removal there is outside the workspace even though it looks local to the
+/// remainder.
+#[test]
+fn a_removal_after_a_leading_climb_keeps_the_review() {
+    let (root, project, _cleanup) = checkout("climb-remove", false);
+    std::fs::write(project.parent().unwrap().join("notes.txt"), "keep\n").unwrap();
+    let allow = git_allow();
+    for command in [
+        "cd ..; cd . && rm notes.txt",
+        "cd .. && ls; cd . && rm notes.txt",
+    ] {
+        for harness in HARNESSES {
+            for controls in [None, Some(&allow)] {
+                let result = decide(&root, &project, harness, command, controls);
+                assert_ne!(
+                    result.minimum_action, "allow",
+                    "{harness}: {command}: {}",
+                    result.reason_code
+                );
+            }
+        }
+    }
+}

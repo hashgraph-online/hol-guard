@@ -129,6 +129,25 @@ fn unfollowed_directory_change(segment: &CommandSegmentV1) -> bool {
     changes_directory(segment) && segment.executable.as_deref() != Some("cd")
 }
 
+/// Whether every later `cd` starts a step the nested splits can follow: it
+/// comes after a `;` and is followed by `;` or `&&`. Each part is judged by
+/// the leading-`cd` rules, which only split at those two separators. A `cd`
+/// guarded by `||`, run after `&&`, or piped, can leave a later read in a
+/// directory the split never looks at, as in `cd src; cd <dir> || true; git
+/// diff`.
+fn later_cds_followed(model: &CanonicalCommandV1, separators: &[String]) -> bool {
+    model
+        .segments
+        .iter()
+        .enumerate()
+        .skip(1)
+        .filter(|(_, segment)| changes_directory(segment))
+        .all(|(index, _)| {
+            separators.get(index - 1).map(String::as_str) == Some(";")
+                && matches!(separators.get(index).map(String::as_str), Some(";" | "&&"))
+        })
+}
+
 /// `cd <dir>; <rest>` with no other directory change: `<rest>` runs in the
 /// returned directory when the `cd` succeeded and in the original directory
 /// when it failed. The rest keeps the original text and spans.
@@ -155,9 +174,12 @@ pub(in crate::pretool) fn leading_semicolon_cd_nested(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> Option<(String, CanonicalCommandV1)> {
-    if !exact_model(model)
-        || separators(model)?.first().map(String::as_str) != Some(";")
-        || model.segments[1..].iter().any(unfollowed_directory_change)
+    if !exact_model(model) || model.segments[1..].iter().any(unfollowed_directory_change) {
+        return None;
+    }
+    let separators = separators(model)?;
+    if separators.first().map(String::as_str) != Some(";")
+        || !later_cds_followed(model, &separators)
     {
         return None;
     }
@@ -202,6 +224,7 @@ pub(in crate::pretool) fn leading_and_cd_nested(
     let separators = separators(model)?;
     let tail = separators.iter().position(|separator| forks(separator))? + 1;
     if separators.first().map(String::as_str) != Some("&&")
+        || !later_cds_followed(model, &separators)
         || !separators[..tail - 1]
             .iter()
             .all(|separator| matches!(separator.as_str(), "&&" | "|"))
@@ -232,7 +255,22 @@ pub(in crate::pretool) fn nested_cd_proof(
     }) {
         return false;
     }
+    // A step after the leading `cd` is proved with that directory as its
+    // working directory, and a write proof treats the working directory as
+    // the workspace. Only a `cd` that stays inside the original directory
+    // keeps that workspace inside the session's own, so a climb such as
+    // `cd ..; cd . && rm notes.txt` keeps its review.
+    let stays_inside = |cwd: &str| {
+        context.cwd.is_some_and(|base| {
+            let base = std::fs::canonicalize(base);
+            let target = std::fs::canonicalize(cwd);
+            matches!((base, target), (Ok(base), Ok(target)) if target.starts_with(&base))
+        })
+    };
     if let Some((cwd, rest)) = leading_semicolon_cd_nested(model, context) {
+        if !stays_inside(&cwd) {
+            return false;
+        }
         let moved = PathContext {
             cwd: Some(&cwd),
             ..context
@@ -248,6 +286,9 @@ pub(in crate::pretool) fn nested_cd_proof(
         );
     }
     if let Some((cwd, rest, tail)) = leading_and_cd_nested(model, context) {
+        if !stays_inside(&cwd) {
+            return false;
+        }
         let moved = PathContext {
             cwd: Some(&cwd),
             ..context
