@@ -90,6 +90,8 @@ const AUTHORIZATION_MESSAGE: &str =
 const INVALID_COMMAND: &str = "pytest_restricted_invalid_command";
 const SANDBOX_UNAVAILABLE: &str = "pytest_restricted_sandbox_unavailable";
 const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";
+const TRANSITION_PROBE_FIELD: &str = "guard_transition_probe";
+const TRANSITION_PROBE_SCHEMA: &str = "hol-guard.transition-hook-probe.v1";
 const PLAN_MISMATCH: &str = "The workspace sandbox plan does not match the authorized command.";
 const INVALID_PLAN: &str = "Invalid workspace sandbox plan.";
 const PLAN_FIELDS: [&str; 20] = [
@@ -287,6 +289,7 @@ impl Authority<'_> {
     fn authorize(&self, payload: &Map<String, Value>) -> Option<Map<String, Value>> {
         let mut asked = payload.clone();
         asked.insert(RECEIPT_ONLY_FIELD.to_owned(), Value::Bool(true));
+        asked.insert(TRANSITION_PROBE_FIELD.to_owned(), transition_probe().ok()?);
         let text = serde_json::to_string(&asked).ok()?;
         let environment = crate::hook_env_stamp::current_environment();
         let crate::hook_env_stamp::Stamp::Text(stamped) =
@@ -312,6 +315,25 @@ impl Authority<'_> {
             _ => None,
         }
     }
+}
+
+fn transition_probe() -> Result<Value, ()> {
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes).map_err(|_| ())?;
+    let hex = hex::encode(bytes);
+    let operation_id = format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    );
+    Ok(serde_json::json!({
+        "schema": TRANSITION_PROBE_SCHEMA,
+        "operation_id": operation_id,
+        "request_id": format!("transition-hook-{}", &hex[32..64]),
+    }))
 }
 
 /// Whether `receipt` is a live workspace-sandbox requirement.
