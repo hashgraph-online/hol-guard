@@ -37622,13 +37622,13 @@ function RuntimeUpgradeCard(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",
     {
-      className: "mt-5 rounded-xl border border-amber-200 bg-amber-50/60 p-4",
+      className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.04] p-4",
       "aria-labelledby": "runtime-upgrade-title",
       "data-testid": "runtime-upgrade",
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "mt-0.5 h-5 w-5 shrink-0 text-amber-600", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-amber-700", children: "Why this is paused" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-brand-dark/75", children: "Why this is paused" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "runtime-upgrade-title", className: "mt-1 text-sm font-semibold text-brand-dark", children: "Update Node.js to stop these reviews" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: [
             "This command runs Node.js ",
@@ -38607,7 +38607,7 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone, children: badgeLabel })
       ] }),
       !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
-      nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, item.request_id),
+      nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, `business-summary:${item.request_id}`),
       resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: retryCannotReuseApprovalHint(item, harnessName) }) : null,
       mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -38631,7 +38631,7 @@ function ReviewDecisionCard(props) {
           ) : null
         ] })
       ] }) }),
-      topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
+      topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, `top-alerts:${item.request_id}`) }),
       whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
@@ -38649,7 +38649,7 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
-      resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeUpgradeCard, { requestId: item.request_id, advice: item.runtime_upgrade }, item.request_id),
+      resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeUpgradeCard, { requestId: item.request_id, advice: item.runtime_upgrade }, `runtime-upgrade:${item.request_id}`),
       resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionRecommendationCard,
         {
@@ -38662,7 +38662,7 @@ function ReviewDecisionCard(props) {
           onApproved: handleExtensionApproved,
           onDialogActiveChange: setExtensionDialogActive
         },
-        item.request_id
+        `extension-recommendation:${item.request_id}`
       ),
       resolutionBlockReason === null && resolved === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionCoverageCard,
@@ -38761,13 +38761,13 @@ function ReviewDecisionCard(props) {
           ]
         }
       ),
-      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
+      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, `evidence:${item.request_id}`) })
     ] }),
-    mcpCall === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) : (
+    mcpCall === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `context-review:${item.request_id}:${decisionSubjectKey}`) : (
       // The MCP card answers the question on its own; extra context is there for anyone who wants it.
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-100 px-4 py-3 sm:px-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80", children: "Prepare more context for this decision" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `mcp-context-review:${item.request_id}:${decisionSubjectKey}`) })
       ] })
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewLastTimeCard, { detail }),
