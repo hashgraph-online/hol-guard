@@ -220,7 +220,7 @@ pub(super) fn recording_only_response(
     recording_only: bool,
     result: &Map<String, Value>,
 ) -> bool {
-    recording_only
+    (recording_only || result.get("observe_mode") == Some(&Value::Bool(true)))
         && event == "PreToolUse"
         && !(result.get("minimum_action").and_then(Value::as_str) == Some("allow")
             && result.get("decision").and_then(Value::as_str) == Some("allow"))

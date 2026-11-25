@@ -126,6 +126,13 @@ fn the_edge_stamps_recording_only_denials_without_reclassifying_the_result() {
         true,
         result
     ));
+    let mut observed = result.clone();
+    observed.insert("observe_mode".to_owned(), Value::Bool(true));
+    assert!(edge_result_check::recording_only_response(
+        "PreToolUse",
+        false,
+        &observed
+    ));
     let mut tampered = pre_tool();
     tampered.recording_only_response = true;
     assert!(edge_result_check::check(&tampered).is_err());
