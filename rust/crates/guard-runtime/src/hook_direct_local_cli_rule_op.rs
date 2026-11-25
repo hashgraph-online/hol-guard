@@ -7,7 +7,7 @@
 //! is blocked when its grant blocks it, and blocked as unverified when its
 //! identity or grant cannot be checked. `review`: a block applies to any
 //! review, and an allow lifts only an overridable review due to
-//! non-recognition alone.
+//! non-recognition alone, or to a known-vulnerable runtime over nothing else.
 
 use guard_contracts::{
     HookLocalCliRuleRequestV1, HookLocalCliRuleResultV1, HOOK_LOCAL_CLI_RULE_REQUEST_SCHEMA,
@@ -124,7 +124,7 @@ pub(crate) fn review_verdict(request: &HookLocalCliRuleRequestV1) -> RuleVerdict
     match super::review_grant(&check(request)) {
         Some(ReviewVerdict::Blocked(name)) => RuleVerdict::Blocked(name),
         Some(ReviewVerdict::Allowed)
-            if crate::connector_setup::is_non_recognition(
+            if crate::connector_setup::grant_answers_review(
                 result.get("reason_code").and_then(Value::as_str),
             ) && crate::hook_direct::saved_decision::overridable(result) =>
         {

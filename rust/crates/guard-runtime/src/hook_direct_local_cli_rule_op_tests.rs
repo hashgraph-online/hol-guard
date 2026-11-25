@@ -231,6 +231,37 @@ fn a_custom_allow_lifts_only_a_non_recognition_review() {
 }
 
 #[test]
+fn a_custom_allow_answers_a_known_vulnerable_runtime_held_over_nothing_else() {
+    let case = Case::new("review-vulnerable-runtime", Some("allowed"));
+    // The runtime that launches the script matched an advisory, and nothing
+    // else holds the call. The user allowed the script under every runtime
+    // that runs it, so the grant lifts the review.
+    let mut vulnerable = review("native_runtime_known_vulnerable");
+    vulnerable["minimum_action"] = json!("require-reapproval");
+    vulnerable["policy_action"] = json!("require-reapproval");
+    assert_eq!(
+        review_verdict(&case.request("review", "npm run build", vulnerable.clone())),
+        RuleVerdict::Allowed
+    );
+    // The finding over a review held for its own risk keeps that review.
+    let mut over_review = vulnerable.clone();
+    over_review["reason_code"] = json!("native_runtime_known_vulnerable_with_review");
+    assert_eq!(
+        review_verdict(&case.request("review", "npm run build", over_review)),
+        RuleVerdict::None
+    );
+    // A policy that blocks a vulnerable runtime outright is not a review.
+    let mut blocked = vulnerable;
+    for key in ["minimum_action", "policy_action"] {
+        blocked[key] = json!("block");
+    }
+    assert_eq!(
+        review_verdict(&case.request("review", "npm run build", blocked)),
+        RuleVerdict::None
+    );
+}
+
+#[test]
 fn the_reply_names_the_verdict_and_refuses_an_unknown_mode() {
     let case = Case::new("reply", Some("blocked"));
     let reply =
