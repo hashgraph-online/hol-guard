@@ -184,3 +184,78 @@ fn a_wait_that_silences_both_streams_reads_its_probe() {
         }
     }
 }
+
+/// A wait for a line in a log file quotes the text it looks for.
+///
+/// `until grep -q 'exit status:' deploy.log 2>/dev/null; do sleep 30; done`
+/// holds the next step until a background job writes its last line. The
+/// quotes only keep the pattern one word, so the null sink after them is
+/// still the whole of what the test opens and the flat list carries the
+/// probe to the ordinary read proofs. A redirection outside the quotes, an
+/// input redirect and an unclosed quote each keep their review.
+#[test]
+fn a_wait_for_a_quoted_log_line_reads_its_probe() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/wait-loop-tail-fixtures")
+        .join(format!("quoted-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    std::fs::write(root.join("deploy.log"), "exit status: 0\n").unwrap();
+    for harness in ["omp", "zcode", "claude-code"] {
+        for (command, allowed) in [
+            (
+                "until grep -q 'exit status:' deploy.log 2>/dev/null; do sleep 30; done",
+                true,
+            ),
+            (
+                "until grep -q \"exit status:\" deploy.log >/dev/null 2>&1; do sleep 30; done; tail -5 deploy.log",
+                true,
+            ),
+            ("until grep -q '=> ready' deploy.log; do sleep 5; done", true),
+            // A pause written before the wait runs once, ahead of it.
+            (
+                "sleep 20; until grep -q 'exit status:' deploy.log 2>/dev/null; do sleep 30; done; sleep 10; grep -E 'exit|error' deploy.log | tail -5 | cut -c1-150",
+                true,
+            ),
+            (
+                "sleep 20; until grep -q 'exit status:' deploy.log > wait.log; do sleep 30; done",
+                false,
+            ),
+            (
+                "rm -f deploy.log; until grep -q 'exit status:' deploy.log; do sleep 30; done",
+                false,
+            ),
+            // A redirection outside the quotes still opens a file.
+            (
+                "until grep -q 'exit status:' deploy.log > wait.log 2>/dev/null; do sleep 30; done",
+                false,
+            ),
+            (
+                "until grep -q 'exit status:' < deploy.log 2>/dev/null; do sleep 30; done",
+                false,
+            ),
+            // An unclosed quote could hold the sink inside a string.
+            (
+                "until grep -q \"exit status:' deploy.log 2>/dev/null; do sleep 30; done",
+                false,
+            ),
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                None,
+                None,
+                root.to_str(),
+                root.to_str(),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                allowed,
+                "{harness}: {command} -> {} {}",
+                result.minimum_action,
+                result.reason
+            );
+        }
+    }
+}

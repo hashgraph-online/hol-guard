@@ -131,14 +131,14 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
 /// streams the same way: the duplication opens nothing, it points stderr at
 /// the descriptor stdout already holds. Only redirections that end the test
 /// are read, each a null-device sink or a duplication between stdout and
-/// stderr, and only in front of text that spells no other redirection, quote
-/// or escape, so what is taken off is the whole of what the probe opens.
+/// stderr, and only in front of text that spells no other redirection or
+/// escape outside a closed quote, so what is taken off is the whole of what
+/// the probe opens.
 fn opens_no_file(probe: &str) -> bool {
     if !probe.contains(['<', '>']) {
         return true;
     }
     let mut chars: Vec<char> = probe.trim_end().chars().collect();
-    let mut stripped = false;
     while let Some(start) = trailing_inert_redirect(&chars) {
         chars.truncate(start);
         while chars
@@ -147,10 +147,35 @@ fn opens_no_file(probe: &str) -> bool {
         {
             chars.pop();
         }
-        stripped = true;
     }
     let command: String = chars.iter().collect();
-    stripped && !command.trim().is_empty() && !command.contains(['<', '>', '\\', '\'', '"', '&'])
+    !command.trim().is_empty() && plain_words(&command)
+}
+
+/// Whether `command` spells no redirection, background or escape of its own.
+///
+/// Quoted text is read as the shell reads it. The loop already refused every
+/// `$` and backtick, so a single- or double-quoted string is literal through
+/// to its closing quote, and a `>` inside `'=> ready'` is a character the
+/// probe searches for, not a file it opens. Outside quotes `<`, `>` and `&`
+/// keep their meaning and keep the review. A backslash anywhere, or a quote
+/// left open, also keeps it: the redirections taken off the end could then
+/// sit inside a string rather than after the command.
+fn plain_words(command: &str) -> bool {
+    let mut quote: Option<char> = None;
+    for value in command.chars() {
+        if value == '\\' {
+            return false;
+        }
+        match quote {
+            Some(open) if value == open => quote = None,
+            Some(_) => {}
+            None if matches!(value, '\'' | '"') => quote = Some(value),
+            None if matches!(value, '<' | '>' | '&') => return false,
+            None => {}
+        }
+    }
+    quote.is_none()
 }
 
 /// Where the inert redirection that ends `chars` starts: a sink to the null
