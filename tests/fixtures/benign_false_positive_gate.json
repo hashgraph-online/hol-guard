@@ -4,6 +4,91 @@
   "pending_fix": {},
   "cases": [
     {
+      "id": "chained-cds-git-reads-sibling-then-workspace",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git status --short && git log --oneline -3 && echo \"---\" && cd ${PARENT} && git status --short && git log --oneline -3 && find src -type f"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "chained-cds-git-reads-from-workspace",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short && cd ${HOME}/other-project && git log --oneline -1 && cd ${WORKTREE} && git log --oneline -1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-chained-cds-delete-after-second-cd",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git status --short && cd ${WORKTREE} && rm -rf src"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-chained-cds-config-write-before-cd",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git config core.pager id && cd ${WORKTREE} && git log --oneline -1"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-chained-cds-secret-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git status --short && cd ${HOME}/.ssh && cat id_ed25519"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "codex-exit-status-binding",
       "fix_area": "shell",
       "harnesses": [

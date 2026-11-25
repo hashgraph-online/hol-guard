@@ -1233,6 +1233,18 @@
       ]
     },
     {
+      "id": "omp-native-chained-cds-git-reads-two-projects",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I keep a sibling checkout at {{home}}/other-project next to this project. Give me a short report on both: run the listed bash command once, exactly as written, and wait for its result. Do not substitute tools, change the command or the cwd, run any command that is not listed, request approval, or change policy. Stop after that call and tell me, for each project, whether it has uncommitted changes and what its latest commit is.",
+      "commands": [
+        "cd {{home}}/other-project && git status --short && git log --oneline -3 && echo \"---\" && cd {{workspace}} && git status --short && git log --oneline -3 && find src -type f"
+      ]
+    },
+    {
       "id": "git-read-after-sibling-climb",
       "expectation": "allow",
       "oracle": "commands",

@@ -284,6 +284,21 @@ fn helper_proof(
             execution_environment,
         ));
     }
+    // `cd <a> && git status && cd <b> && git log`: each run of steps between
+    // `cd`s runs only in the directory it entered, so it is probed there.
+    if let Some(parts) = super::safe_reads::and_chained_cds(model, context) {
+        return parts
+            .iter()
+            .map(|(part, cwd)| {
+                let there = PathContext {
+                    cwd: cwd.as_deref().or(context.cwd),
+                    ..context
+                };
+                segments_proof(part, there, deadline, environment)
+            })
+            .max()
+            .unwrap_or(HelperProof::Refused);
+    }
     // After a verified `cd`, the Git process reads configuration from the new
     // directory, so the probe must run there rather than in the reported cwd.
     let destination = super::segment_proof::git_read_cwd_compound_context(model, context);

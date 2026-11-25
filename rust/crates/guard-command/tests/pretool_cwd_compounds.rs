@@ -39,7 +39,16 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
             ("; cat one.txt", true),
             ("|| cat one.txt", false),
             ("| cat one.txt", false),
-            ("&& cd .. && cat one.txt", false),
+            // A second `cd` resolves from the first: the read runs back in
+            // the starting folder, where a missing file is an ordinary read.
+            // What the second folder holds keeps its own answers.
+            ("&& cd .. && cat one.txt", true),
+            ("&& cd .. && cat project/one.txt", true),
+            ("&& cd .. && cat project/.env", false),
+            ("&& cd .. && cat project/alias.txt", false),
+            ("&& cd .. && rm project/one.txt", false),
+            ("&& cd .. && cd project && cat .env", false),
+            ("&& cd .. || cat one.txt", false),
             ("&& cp one.txt copy.txt", true),
             ("&& mkdir -p generated/nested", true),
             ("&& touch created.txt", true),

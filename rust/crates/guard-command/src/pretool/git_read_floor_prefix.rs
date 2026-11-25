@@ -11,26 +11,55 @@ pub(super) fn after_git_read_prefix(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Option<CanonicalCommandV1> {
     after_prefix(model, |prefix, index| {
-        let segment = &prefix.segments[index];
-        let git = segment
-            .executable
-            .as_deref()
-            .is_some_and(|executable| super::super::executable_basename(executable) == "git");
-        if git {
-            super::super::git_remote_ops::proven_read(
-                prefix,
-                index,
-                context,
-                deadline,
-                execution_environment,
-            )
-        } else {
-            super::super::segment_proof::cwd_read_executable(segment.executable.as_deref())
-                && super::super::segment_proof::exact_safe_segment_with_context(
-                    prefix, segment, false, context,
-                )
-        }
+        proven_read_step(prefix, index, context, deadline, execution_environment)
     })
+}
+
+/// Whether every step of `part` is a plain read the Git read prefix accepts,
+/// so it writes no configuration, ref or hook a later step's reads pick up.
+pub(super) fn proven_reads(
+    part: &CanonicalCommandV1,
+    context: super::super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    (0..part.segments.len()).all(|index| {
+        let segment = &part.segments[index];
+        segment.environment_names.is_empty()
+            && segment.wrapper_chain.is_empty()
+            && !segment.path_overridden
+            && proven_read_step(part, index, context, deadline, execution_environment)
+    })
+}
+
+/// A Git read proven helper-free in `context`, or a read the plain read
+/// prefix also accepts.
+fn proven_read_step(
+    prefix: &CanonicalCommandV1,
+    index: usize,
+    context: super::super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let segment = &prefix.segments[index];
+    let git = segment
+        .executable
+        .as_deref()
+        .is_some_and(|executable| super::super::executable_basename(executable) == "git");
+    if git {
+        super::super::git_remote_ops::proven_read(
+            prefix,
+            index,
+            context,
+            deadline,
+            execution_environment,
+        )
+    } else {
+        super::super::segment_proof::cwd_read_executable(segment.executable.as_deref())
+            && super::super::segment_proof::exact_safe_segment_with_context(
+                prefix, segment, false, context,
+            )
+    }
 }
 
 /// The command from its only `cd` onward when everything before the `cd` is
