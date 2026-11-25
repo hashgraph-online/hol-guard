@@ -22,7 +22,8 @@ between such a driver and the browser. This record decides whether and how to bu
 - The browser side is trusted for transport but its events can carry page-controlled strings (URLs, titles). Those
   are facts for display, never instructions.
 - The relay listens on loopback only and must not become an open proxy for other local processes. Each listening
-  socket is bound to one upstream endpoint and one Guard session.
+  socket is bound to one upstream endpoint and one Guard session, and only the client that session launched may use
+  it.
 
 ## Decision
 
@@ -36,6 +37,17 @@ model as the tool-call layer. Nothing in this layer is Python.
 - An allowed frame is forwarded unchanged. A held or denied frame is answered with
   `{"id": <id>, "error": {"code": -32000, "message": "Held by HOL Guard: <short reason>"}}`.
 - Events are forwarded untouched. Only the fields needed for target tracking are read.
+- Client authentication: each listener mints a random capability of at least 128 bits. Discovery endpoints and the
+  WebSocket upgrade are served only under a path containing it; anything else is refused before a frame is read.
+  Managed mode hands the capability to the one driver it launches through the driver's endpoint flag, and manual mode
+  prints it once to the invoking terminal. One client connection at a time per listener. Where the platform reports
+  the peer's user, a different user's connection is refused. Limit: a process of the same user can read another
+  process's arguments, so the capability keeps out other users and sandboxed processes, not same-user code, which can
+  already drive the browser without the relay.
+- Origins are tracked per target and per frame. URL-bearing commands (`Page.navigate`, `Target.createTarget` with a
+  URL) are classified and decided on their destination origin before they are forwarded. While a navigation is in
+  flight on a target, or when a command's frame has no known origin, the command has no site and no grant covers it,
+  so it is reviewed.
 - Bounds: frame size cap, per-connection memory cap, command queue cap. Screenshots and response bodies are forwarded,
   never stored.
 - Budget: routine verbs under a live grant are answered from memory, p95 under 1 ms per forwarded frame.

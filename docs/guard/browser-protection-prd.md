@@ -102,6 +102,10 @@ Verified against `origin/main` at `c72a9c5187` (2026-11-25).
 - **Driver profile**: declarative data that tells Guard how one driver names its actions and arguments.
 - **Browser session**: one agent session driving one browser instance through one driver, identified by
   `(harness, harness_session_id, driver_identity_hash, profile_mode)`.
+- **Driver identity hash**: a digest over the driver's server identity (MCP server name, launch
+  command or package, and the existing `server_identity_hash`) and the `tool_identity_hash` and
+  `schema_hash` of every tool the driver profile maps. A changed launch command, an added or removed
+  tool, or a changed tool schema gives a new hash, so no grant or saved allow carries over to it.
 - **Site**: an origin (`scheme://host[:port]`). A **site group** is a registrable domain plus its
   subdomains, offered only when Guard can compute it natively from a pinned public-suffix snapshot.
 - **Provider**: a third party that answers a closed set of questions about a site, a page inventory, or
@@ -374,12 +378,26 @@ Rules:
 
 - `site`, `site-category` and `site-group` keep today's eligibility: routine categories only, hard
   exclusions unchanged.
+- **Cross-tool scope is explicit.** A site grant covers the routine actions of one driver identity on one
+  site, whichever of that driver's profiled tools performs them, because one routine step (open, click,
+  type) is often split across several tools. The card says so in words ("routine actions by
+  <driver> on <site>") before the user picks it. It never covers a tool the profile does not map
+  (`unclassified`), a tool of another driver, or any tool once the driver identity hash changes. Tests
+  cover a second profiled tool on the same site (covered), an unprofiled tool on the same driver (not
+  covered), and a changed tool schema (not covered).
 - `session-site` is the answer for shared-profile drivers. It is eligible when the only excluded risk
   present is `browser_shared_profile`. It never covers `browser_transfer`, `browser_privileged`,
   `browser_sensitive_surface`, a password or payment element, or a `looks_like_secret` input. It is
   bound to the session digest, so a different agent session on the same driver asks again.
 - A grant never follows a cross-origin navigation. The first action on a new origin is a new review,
   with the card stating that the agent left the granted site.
+- **A navigation is decided on its destination.** For `Navigate` actions, and for any command or tool
+  call that carries a URL (open a tab, create a target, follow a link the driver resolves to a URL), the
+  target is the destination origin, extracted and authorized before the call is forwarded. The current
+  origin is tracked per tab and per frame. While a navigation is in flight, or when the frame a command
+  acts in has no known origin, the origin is unknown and no grant covers the command: it is reviewed.
+  Tests cover a redirect to another site, a new tab on another site, a cross-origin frame inside a
+  granted page, and a command sent during a pending navigation.
 - Durations stay `once`, `15m`, `1h`, `5h`, plus `session` for `session-site`.
 - Default selection on the card: `site-category` for 15 minutes when eligible, else Allow once. This is
   a preselection under "More choices", so I1 holds: Allow once and Always allow stay the two primary
@@ -461,7 +479,18 @@ governed per message.
   normal decision, and either forward, or answer with a protocol error
   `{"id": <id>, "error": {"code": -32000, "message": "Held by HOL Guard: <short reason>"}}` after the
   review window. Target tracking (`Target.attachedToTarget`, `Page.frameNavigated`) keeps the current
-  origin per `sessionId` so each command has a site.
+  origin per `sessionId` and per frame so each command has a site. URL-bearing commands
+  (`Page.navigate`, `Target.createTarget` with a URL) are decided on their destination before they are
+  forwarded. A target with a navigation in flight, or a command in a frame with no known origin, has no
+  site, so no grant covers it (5.5).
+- Client authentication: each listener mints a random capability of at least 128 bits and serves
+  discovery and WebSocket upgrades only under a path that contains it. Requests without it are refused
+  before any frame is read. Managed mode passes the capability to the one driver it launches through
+  that driver's endpoint flag. Manual mode prints it once to the invoking terminal. A listener accepts
+  one client connection at a time. Where the platform reports the peer's user, a connection from a
+  different user is refused. This keeps other users and sandboxed local processes off the session's
+  grants and approval path. It does not hide the capability from processes of the same user, which can
+  already drive the browser directly, and the ADR records that limit.
 - Discovery endpoints (`/json/version`, `/json/list`) are proxied with the WebSocket URL rewritten to
   the relay.
 - Bounds: frame size cap, per-connection memory cap, command queue cap, no buffering of event payloads

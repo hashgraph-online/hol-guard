@@ -256,8 +256,11 @@ transcript in the pull request (after BP-T052).
   `rust/crates/guard-hook-payload/src/hook_adapter_cline_tables.rs` (`NETWORK_TOOLS`) and
   `rust/crates/guard-command/src/adapters/hook/hook_adapter_envelope_tables.rs`
   (`CURSOR_NETWORK_TOOL_NAMES`, `CURSOR_NETWORK_URL_KEYS`) through the driver matcher so they produce a
-  `BrowserActionV2`. Keep their network handling as a fallback when no profile matches. Hook payload
-  parity tests for each affected harness.
+  `BrowserActionV2`. When a known browser built-in matches no profile, or its payload shape changed,
+  produce an unclassified `BrowserActionV2` (verb `Other`, reviewed) so the Guard-origin block and the
+  browser sensitive-surface screens still run, and keep the network-request facts as extra evidence
+  rather than as the only classification. Hook payload parity tests for each affected harness, including
+  an unmatched tool and a changed payload shape.
 - [ ] **BP-T026** Oh My Pi eval facade: make `generic_omp_eval_browser.rs` and its `_flow`, `_lex`,
   `_page` modules emit a `BrowserActionV2` for both admitted and reviewed shapes. Admission rules do
   not change. Existing `generic_omp_eval_browser_tests.rs` stay green.
@@ -359,14 +362,18 @@ transcript in the pull request (after BP-T052).
   `session` to `rust/crates/guard-runtime/src/temporary_mcp_grant.rs` with the selectors in PRD 5.5.
   Extend `guard_store_temporary_mcp.rs` (`covers`, `covered_request_ids`, `resolve_covered`) with
   target kind and digests. Existing `exact`, `category`, `server` selectors keep working for stored
-  rows.
+  rows. Compute `driver_identity_hash` as PRD section 3 defines it. Tests: a second profiled tool of the
+  same driver on the same site is covered, an unprofiled tool of the same driver is not, and a changed
+  tool schema ends the grant.
 - [ ] **BP-T061** Eligibility rules: `site*` targets keep today's routine-only rule and hard
   exclusions. `session-site` is eligible when the only excluded risk is `browser_shared_profile`, and
   never covers transfer, privileged, a sensitive surface, a password or payment element, or a
   `looks_like_secret` input. Table-driven tests for every combination.
 - [ ] **BP-T062** Cross-origin rule: a grant never follows a navigation to another origin. The first
-  action on the new origin is reviewed with a "left the granted site" marker. Test redirects,
-  `window.open` style new tabs, and frames.
+  action on the new origin is reviewed with a "left the granted site" marker. Navigations and other
+  URL-bearing calls are decided on their destination before they run, and a command with no known
+  origin (navigation in flight, unknown frame) is reviewed. Test redirects, `window.open` style new
+  tabs, cross-origin frames, and a command sent during a pending navigation.
 - [ ] **BP-T063** Durable "Always allow <verb> on <site>": saved allow on
   `{intent, verb, target_origin, profile_mode, driver_identity_hash, sensitive_surface_flags: []}`
   with no argument hash, offered only for routine categories with an empty surface set. Wire through
@@ -568,7 +575,10 @@ transcript in the pull request (after BP-T052).
   target tracking, discovery endpoint rewrite) with decisions delegated to `guard-runtime`.
 - [ ] **BP-T083** `hol-guard browser relay --upstream <endpoint> [--listen-port <n>]` behind a flag,
   off by default. Hold, forward, or answer with the protocol error from PRD 5.6. Relay failure closes
-  the connection and never falls through.
+  the connection and never falls through. Per-listener client capability, one client at a time, and
+  peer-user check from ADR 0017. Tests: a client without the capability, a second concurrent client,
+  and a different-user peer are all refused before a frame is read; destination-origin decisions for
+  `Page.navigate` and `Target.createTarget`; per-frame origin tracking.
 - [ ] **BP-T084** Bounds and budget: frame cap, memory cap, queue cap, no stored payloads, p95 under
   1 ms per forwarded frame under a live grant. Soak test and latency evidence.
 - [ ] **BP-T085** Managed mode: rewrite a recognized driver's endpoint flag at MCP admission to the
