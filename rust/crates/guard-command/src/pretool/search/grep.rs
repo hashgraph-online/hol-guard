@@ -377,6 +377,8 @@ fn scan_into(
                     // `app/[slug]/route.ts` names one route when its class
                     // matches nothing, and is walked as that path.
                     || (!dereference && tree::safe_literal_bracket_search_target(target, context))
+                    // A file operand starts no walk: `-r` opens it once.
+                    || recursive_file_operand(target, context)
                     // A sensitive file the pattern cannot match prints nothing.
                     || clearance.as_ref().is_some_and(|clearance| {
                         tree::safe_recursive_target_cleared(
@@ -410,6 +412,19 @@ fn scan_into(
 pub(super) fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
     (!value.starts_with('~') || context.shell_home_matches)
         && crate::pretool::listing_reads::absent_listing_operand(value, context)
+}
+
+/// `grep -r` walks only a directory operand. A regular file named as an
+/// operand, or a link to one, is opened once exactly as plain `grep` opens it,
+/// so it takes the plain read screen rather than the walk proof. The walk
+/// proof refuses any `..` because a walk above the working directory reaches
+/// a tree whose ignore rules were never read; one file reaches no tree.
+fn recursive_file_operand(value: &str, context: ReadContext<'_>) -> bool {
+    !value.contains(['*', '?', '['])
+        && (!value.starts_with('~') || context.shell_home_matches)
+        && tree::expanded_operand(value, context)
+            .is_some_and(|path| std::fs::metadata(path).is_ok_and(|meta| meta.is_file()))
+        && !unsafe_search_value(SearchValueRole::Path, value, context)
 }
 
 /// A shell glob operand whose every expansion is screened, and whose matched
