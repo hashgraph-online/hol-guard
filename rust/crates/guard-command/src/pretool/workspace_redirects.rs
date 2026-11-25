@@ -32,26 +32,42 @@ enum Quote {
 }
 
 /// The command with every literal-path redirect, descriptor copy and quoted
-/// `cat` heredoc removed. A quoted heredoc may also carry the message of a
-/// `git commit -F -`, or feed `python3` or `python3 -` a program that meets
-/// the bar a script file in the workspace meets (`redirect_stdin`); the
-/// projection keeps the interpreter, so every control still sees it. `None`
-/// when nothing was removed or any redirect has another form: process
-/// substitution, a computed or home-relative target, a descriptor above 2, a
-/// herestring, or a heredoc fed to anything else.
+/// `cat` heredoc removed, for the workspace sandbox's own shape of `raw`. A
+/// quoted heredoc may also carry the message of a `git commit -F -`, or feed
+/// `python3` or `python3 -` a program that meets the bar a script file in the
+/// workspace meets (`redirect_stdin`); the projection keeps the interpreter,
+/// so every control still sees it. `None` when nothing was removed or any
+/// redirect has another form: process substitution, a computed or
+/// home-relative target, a descriptor above 2, a herestring, or a heredoc fed
+/// to anything else.
+///
+/// A program fed to Python after plain readers or a `cd` is projected only
+/// where `contained`, which routes it to the sandbox, took its lead: readers
+/// exactly as `raw` runs them, or a `cd` to the absolute path of `workspace`,
+/// where the sandbox runs. Without that the sandbox refused a run the
+/// decision sent it.
+pub(crate) fn project_for_workspace(raw: &str, workspace: &Path) -> Option<String> {
+    let (projected, _, _, entered) = project_scan(raw)?;
+    (!entered || readers::lead_runs_in(&projected, raw, workspace)).then_some(projected)
+}
+
+/// [`project_for_workspace`] with no Python program after a lead taken, as
+/// every route but `contained` reads it.
+#[cfg(test)]
 pub(crate) fn project(raw: &str) -> Option<String> {
     project_scan(raw).and_then(|(projected, _, _, entered)| (!entered).then_some(projected))
 }
 
-/// [`project`], and whether any removed redirect names a file other than
-/// `/dev/null`, which no link in the workspace can retarget.
+/// The projection of `raw` with no Python program after a lead, and whether
+/// any removed redirect names a file other than `/dev/null`, which no link in
+/// the workspace can retarget.
 pub(crate) fn project_naming_files(raw: &str) -> Option<(String, bool)> {
     project_scan(raw).and_then(|(projected, _, names_files, entered)| {
         (!entered).then_some((projected, names_files))
     })
 }
 
-/// [`project`] with, for each byte of the projection, the index of the raw
+/// The projection of `raw` with, for each byte of the projection, the index of the raw
 /// character it came from. Bytes the projection inserts take the index of the
 /// redirect they replace.
 fn project_mapped(raw: &str) -> Option<(String, Vec<usize>)> {

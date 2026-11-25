@@ -71,6 +71,17 @@ pub(super) fn lead_admitted(
     }
 }
 
+/// [`lead_admitted`] for the sandbox, which runs in `workspace` and has no
+/// hook context: readers exactly as `command` runs them, or a `cd` to
+/// `workspace` itself. The sandbox confines whatever the readers start, so the
+/// ripgrep configuration the decision checked needs no second look here.
+pub(super) fn lead_runs_in(projected: &str, command: &str, workspace: &std::path::Path) -> bool {
+    match program_after_readers(projected) {
+        Some(cut) => command.trim_start().starts_with(&projected[..cut]),
+        None => super::cd::enters_workspace(projected, workspace),
+    }
+}
+
 /// Whether a reader in `lead` is ripgrep reading its configuration file,
 /// which can name a preprocessor (`--pre`) the words never show. Only a
 /// `--no-config` right after `rg` is surely a flag: later it can be the value
