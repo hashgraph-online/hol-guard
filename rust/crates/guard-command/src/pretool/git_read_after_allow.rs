@@ -231,8 +231,7 @@ fn config_stable_route(
     let index = crate::command_compatibility::git_command_index(&segment.arguments)?;
     let operation =
         crate::command_compatibility::canonical_git_subcommand(segment.arguments.get(index)?);
-    CONFIG_STABLE_STEPS
-        .contains(&operation)
+    super::git_step_preserves::config_stable_step(operation, &segment.arguments[index + 1..])
         .then(|| routed_checkout(segment, context))
         .flatten()
 }

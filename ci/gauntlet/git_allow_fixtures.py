@@ -76,9 +76,14 @@ GIT_ALLOW_RELATIVE_HOOKS_CASE = "git-allow-worktree-from-repo-relative-hooks-pat
 # destination that does not exist yet, so the read opens what the repository
 # supplies at the ref the add named, and the user's ALLOW has to carry it.
 GIT_ALLOW_READ_NEW_CHECKOUT_CASE = "git-allow-worktree-add-then-read-new-checkout"
+# A plain rebase onto the fetched branch, then reads. A rebase that runs no
+# command of its own (no --exec, -x or interactive todo) records no
+# configuration, so the user's ALLOW carries the reads after it.
+GIT_ALLOW_REBASE_CASE = "git-allow-rebase-then-reads"
 GIT_ALLOW_CASES = frozenset(
     {
         GIT_ALLOW_MERGE_CASE,
+        GIT_ALLOW_REBASE_CASE,
         GIT_ALLOW_STASH_CASE,
         GIT_ALLOW_ROUTED_MERGE_CASE,
         GIT_ALLOW_REF_READS_CASE,
