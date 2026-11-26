@@ -439,7 +439,7 @@ transcript in the pull request (after BP-T052).
 - [ ] **BP-T101** Closed capability list and closed fact list in `guard-contracts` (6.3, 6.4), with
   the never-shareable set asserted by a test that enumerates `BrowserActionV2` fields and fails when a
   new field is not classified as shareable or not.
-- [ ] **BP-T102** Origin exclusion: loopback, private ranges, link-local, `.local`, `.internal`,
+- [x] **BP-T102** Origin exclusion: loopback, private ranges, link-local, `.local`, `.internal`,
   `.test`, single-label hosts and IP literals never leave the device. Table-driven tests.
 - [ ] **BP-T103** Ship the synthetic reference manifest `provider.exampleshield` as a test fixture
   under `tests/fixtures/provider_integrations/` only. Do not add any real provider manifest in this
