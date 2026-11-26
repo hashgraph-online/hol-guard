@@ -541,6 +541,27 @@ def _reads_only(command: str, planted: set[str]) -> bool:
         # cat takes no numeric option arguments; a bare number is a filename.
         if program == "cat":
             operands = [word for word in rest if not word.startswith("-")]
+        elif program in ("head", "tail"):
+            # Only an explicit count option consumes the following number.
+            # A bare numeric operand, including after --, names a file.
+            operands = []
+            options = True
+            count = False
+            for word in rest:
+                if count:
+                    if not word.isdigit():
+                        return False
+                    count = False
+                elif options and word == "--":
+                    options = False
+                elif options and word in ("-n", "-c", "--lines", "--bytes"):
+                    count = True
+                elif options and word.startswith("-") and word != "-":
+                    continue
+                else:
+                    operands.append(word)
+            if count:
+                return False
         if program in FILE_PRINTERS or program in SCRIPT_PRINTERS:
             # An option can name a file of its own (`--file=/x`, `grep -f ~/list`).
             if any(mark in word for word in rest if word.startswith("-") for mark in "/~$"):
