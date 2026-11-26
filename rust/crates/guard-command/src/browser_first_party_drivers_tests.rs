@@ -282,12 +282,12 @@ fn oracle_names(oracle: &[(BrowserIntentV1, &[&str])]) -> Vec<String> {
 #[test]
 fn first_party_profiles_compile_as_first_party() {
     let drivers = compile_first_party().expect("first-party profiles compile");
-    assert_eq!(drivers.len(), 5);
+    assert_eq!(drivers.len(), 7);
     for driver in &drivers {
         assert_eq!(driver.trust_class, BrowserDriverTrustClassV1::FirstParty);
         assert!(driver.publisher_verified);
     }
-    assert_eq!(first_party_browser_drivers().len(), 5);
+    assert_eq!(first_party_browser_drivers().len(), 7);
 }
 
 #[test]
@@ -490,4 +490,164 @@ fn a_drag_screens_its_destination_as_well_as_its_source() {
     assert!(!plain
         .sensitive_surface_flags
         .contains(&BrowserSensitiveSurfaceV1::PasswordField));
+}
+
+fn mcp_call(server: &str, tool: &str, driver_id: &str, arguments: Value) -> BrowserProjection {
+    let harness_tool_name = format!("mcp__{server}__{tool}");
+    let call = BrowserToolCallIdentity {
+        harness_tool_name: &harness_tool_name,
+        mcp_server_name: Some(server),
+        mcp_tool_name: Some(tool),
+        package: None,
+    };
+    let matched = match_browser_driver(first_party_browser_drivers(), &call).expect("matched");
+    assert_eq!(matched.driver.id, driver_id);
+    let Value::Object(arguments) = arguments else {
+        panic!("arguments are an object");
+    };
+    project_browser_action(&matched, &arguments, &BrowserProjectionContext::default())
+}
+
+fn classified_intent(projection: BrowserProjection, label: &str) -> BrowserIntentV1 {
+    let BrowserProjection::Classified(projected) = projection else {
+        panic!("{label} is classified");
+    };
+    projected.intent
+}
+
+#[test]
+fn agent_framework_instruction_tools_are_privileged_and_carry_only_a_digest() {
+    for (server, driver_id, tool, arguments) in [
+        (
+            "browserbase",
+            BROWSERBASE_DRIVER_ID,
+            "act",
+            json!({"action": "click the sign-in button"}),
+        ),
+        (
+            "browserbase",
+            BROWSERBASE_DRIVER_ID,
+            "extract",
+            json!({"instruction": "read the order total"}),
+        ),
+        (
+            "browserbase",
+            BROWSERBASE_DRIVER_ID,
+            "observe",
+            json!({"instruction": "list the buttons"}),
+        ),
+        (
+            "browserbase",
+            BROWSERBASE_DRIVER_ID,
+            "browserbase_stagehand_agent",
+            json!({"prompt": "buy the first item"}),
+        ),
+        (
+            "browser-use",
+            BROWSER_USE_DRIVER_ID,
+            "browser_exec",
+            json!({"code": "await page.click('#go')"}),
+        ),
+        (
+            "browser-use",
+            BROWSER_USE_DRIVER_ID,
+            "retry_with_browser_use_agent",
+            json!({"task": "fill in the form"}),
+        ),
+    ] {
+        let BrowserProjection::Classified(projected) = mcp_call(server, tool, driver_id, arguments)
+        else {
+            panic!("{tool} is classified");
+        };
+        assert_eq!(projected.intent, BrowserIntentV1::Privileged, "{tool}");
+        let input = projected.input.expect("instruction input");
+        assert_eq!(
+            input.kind,
+            guard_contracts::BrowserInputKindV1::Script,
+            "{tool}"
+        );
+        assert!(input.digest.is_some(), "{tool}");
+    }
+}
+
+#[test]
+fn agent_framework_direct_tools_keep_their_routine_intent() {
+    for (server, driver_id, tool, arguments, intent) in [
+        (
+            "browserbase",
+            BROWSERBASE_DRIVER_ID,
+            "navigate",
+            json!({"url": "https://example.com/"}),
+            BrowserIntentV1::Navigation,
+        ),
+        (
+            "browserbase",
+            BROWSERBASE_DRIVER_ID,
+            "browserbase_screenshot",
+            json!({}),
+            BrowserIntentV1::Inspect,
+        ),
+        (
+            "browserbase",
+            BROWSERBASE_DRIVER_ID,
+            "start",
+            json!({}),
+            BrowserIntentV1::Privileged,
+        ),
+        (
+            "browser-use",
+            BROWSER_USE_DRIVER_ID,
+            "browser_navigate",
+            json!({"url": "https://example.com/"}),
+            BrowserIntentV1::Navigation,
+        ),
+        (
+            "browser-use",
+            BROWSER_USE_DRIVER_ID,
+            "browser_type",
+            json!({"index": 3, "text": "hello"}),
+            BrowserIntentV1::Interact,
+        ),
+        (
+            "browser-use",
+            BROWSER_USE_DRIVER_ID,
+            "browser_get_state",
+            json!({}),
+            BrowserIntentV1::Inspect,
+        ),
+    ] {
+        assert_eq!(
+            classified_intent(mcp_call(server, tool, driver_id, arguments), tool),
+            intent,
+            "{tool}"
+        );
+    }
+}
+
+#[test]
+fn browserbase_runs_a_remote_session_and_browser_use_an_unknown_one() {
+    let BrowserProjection::Classified(browserbase) = mcp_call(
+        "browserbase",
+        "navigate",
+        BROWSERBASE_DRIVER_ID,
+        json!({"url": "https://example.com/"}),
+    ) else {
+        panic!("browserbase navigate is classified");
+    };
+    assert_eq!(
+        browserbase.session.profile_mode,
+        BrowserProfileModeV1::RemoteDebugging
+    );
+    let BrowserProjection::Classified(browser_use) = mcp_call(
+        "browser-use",
+        "browser_navigate",
+        BROWSER_USE_DRIVER_ID,
+        json!({"url": "https://example.com/"}),
+    ) else {
+        panic!("browser-use navigate is classified");
+    };
+    assert_eq!(
+        browser_use.session.profile_mode,
+        BrowserProfileModeV1::Unknown
+    );
 }

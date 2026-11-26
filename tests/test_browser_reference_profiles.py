@@ -19,6 +19,8 @@ REFERENCE_PROFILES = (
     ("browser.puppeteer-mcp", "puppeteer", "unknown"),
     ("browser.browsermcp", "browsermcp", "shared"),
     ("browser.computer-use", "computer-use", "shared"),
+    ("browser.browserbase", "browserbase", "remote-debugging"),
+    ("browser.browser-use", "browser-use", "unknown"),
 )
 
 
@@ -75,3 +77,32 @@ def test_every_published_computer_use_action_has_a_case() -> None:
     published = set(computer["inputSchema"]["properties"]["action"]["enum"])
     (tool,) = _profile("browser.computer-use")["tools"]
     assert published <= set(tool["cases"])
+
+
+INSTRUCTION_TOOLS = (
+    ("browser.browserbase", "act"),
+    ("browser.browserbase", "extract"),
+    ("browser.browserbase", "observe"),
+    ("browser.browserbase", "browserbase_stagehand_act"),
+    ("browser.browserbase", "browserbase_stagehand_agent"),
+    ("browser.browserbase", "browserbase_stagehand_extract"),
+    ("browser.browserbase", "browserbase_stagehand_observe"),
+    ("browser.browser-use", "browser_exec"),
+    ("browser.browser-use", "browser_extract_content"),
+    ("browser.browser-use", "retry_with_browser_use_agent"),
+)
+
+
+@pytest.mark.parametrize(("identity", "name"), INSTRUCTION_TOOLS)
+def test_a_free_text_instruction_tool_is_never_below_privileged(identity: str, name: str) -> None:
+    tool = next(tool for tool in _profile(identity)["tools"] if tool["name"] == name)
+    assert tool["verb"] == "Other"
+    assert tool["script"]
+
+
+def test_no_agent_framework_tool_outside_the_instruction_list_takes_free_text_as_a_script() -> None:
+    listed = set(INSTRUCTION_TOOLS)
+    for identity in ("browser.browserbase", "browser.browser-use"):
+        for tool in _profile(identity)["tools"]:
+            if tool.get("script"):
+                assert (identity, tool["name"]) in listed, tool["name"]

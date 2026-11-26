@@ -1,6 +1,80 @@
 {
   "_comment": "Coverage gaps of shipped browser driver profiles that the benign gate cannot close yet: the driver stand-in serves only the recorded tool list, and no grant state preset is wired. test_browser_driver_gate_coverage fails on a gap missing from this file and on an entry that is no longer a gap.",
   "profiles": {
+    "browser.browser-use": {
+      "missing_tools": [
+        "browser_click",
+        "browser_close_all",
+        "browser_close_session",
+        "browser_close_tab",
+        "browser_exec",
+        "browser_extract_content",
+        "browser_feedback",
+        "browser_get_html",
+        "browser_get_state",
+        "browser_go_back",
+        "browser_list_sessions",
+        "browser_list_tabs",
+        "browser_login",
+        "browser_navigate",
+        "browser_screenshot",
+        "browser_scroll",
+        "browser_switch_tab",
+        "browser_type",
+        "retry_with_browser_use_agent"
+      ],
+      "verb_gaps": [
+        "Click: no allow row under a grant",
+        "Click: no row that is not allow",
+        "Navigate: no allow row under a grant",
+        "Navigate: no row that is not allow",
+        "Other: no allow row under a grant",
+        "Other: no row that is not allow",
+        "Read: no allow row under a grant",
+        "Read: no row that is not allow",
+        "Screenshot: no allow row under a grant",
+        "Screenshot: no row that is not allow",
+        "Scroll: no allow row under a grant",
+        "Scroll: no row that is not allow",
+        "TabControl: no allow row under a grant",
+        "TabControl: no row that is not allow",
+        "Type: no allow row under a grant",
+        "Type: no row that is not allow"
+      ]
+    },
+    "browser.browserbase": {
+      "missing_tools": [
+        "act",
+        "browserbase_screenshot",
+        "browserbase_session_close",
+        "browserbase_session_create",
+        "browserbase_stagehand_act",
+        "browserbase_stagehand_agent",
+        "browserbase_stagehand_extract",
+        "browserbase_stagehand_get_url",
+        "browserbase_stagehand_navigate",
+        "browserbase_stagehand_observe",
+        "end",
+        "extract",
+        "navigate",
+        "observe",
+        "start"
+      ],
+      "verb_gaps": [
+        "Attach: no allow row under a grant",
+        "Attach: no row that is not allow",
+        "Navigate: no allow row under a grant",
+        "Navigate: no row that is not allow",
+        "Other: no allow row under a grant",
+        "Other: no row that is not allow",
+        "Read: no allow row under a grant",
+        "Read: no row that is not allow",
+        "Screenshot: no allow row under a grant",
+        "Screenshot: no row that is not allow",
+        "TabControl: no allow row under a grant",
+        "TabControl: no row that is not allow"
+      ]
+    },
     "browser.browsermcp": {
       "missing_tools": [
         "browser",
