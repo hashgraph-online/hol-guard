@@ -8647,7 +8647,7 @@ const CATALOG_TRUST_FILTERS = [
   "trusted-library",
   "external"
 ];
-const CATALOG_KIND_FILTERS = ["commands", "mcp"];
+const CATALOG_KIND_FILTERS = ["commands", "mcp", "browser"];
 function catalogFiltersActive(filters) {
   return filters.trusts.length > 0 || filters.kinds.length > 0 || filters.areas.length > 0;
 }
@@ -8658,6 +8658,7 @@ function catalogTrustLabel(trust) {
 }
 function catalogKindLabel(kind) {
   if (kind === "mcp") return "MCP";
+  if (kind === "browser") return "Browser";
   return "Commands";
 }
 function catalogItemKind(extension) {
@@ -8665,16 +8666,25 @@ function catalogItemKind(extension) {
   if (extension.surface === "unsupported") return null;
   return "commands";
 }
+function catalogItemCoversBrowser(extension) {
+  return extension.surfaces?.includes("browser") ?? false;
+}
+function catalogItemMatchesKinds(extension, kinds) {
+  const kind = catalogItemKind(extension);
+  if (kind !== null && kinds.includes(kind)) return true;
+  return kinds.includes("browser") && catalogItemCoversBrowser(extension);
+}
+function availableCatalogKinds(extensions) {
+  const browser = extensions.some((extension) => catalogItemCoversBrowser(extension));
+  return CATALOG_KIND_FILTERS.filter((kind) => kind !== "browser" || browser);
+}
 function toggleCatalogFilterValue(selected, value) {
   if (selected.includes(value)) return selected.filter((item) => item !== value);
   return [...selected, value];
 }
 function catalogItemMatchesFilters(extension, filters) {
   if (filters.trusts.length > 0 && !filters.trusts.includes(extension.trust_class)) return false;
-  if (filters.kinds.length > 0) {
-    const kind = catalogItemKind(extension);
-    if (kind === null || !filters.kinds.includes(kind)) return false;
-  }
+  if (filters.kinds.length > 0 && !catalogItemMatchesKinds(extension, filters.kinds)) return false;
   if (filters.areas.length > 0) {
     const area = protectionCategoryIdForExtension(extension);
     if (!filters.areas.includes(area)) return false;
@@ -8704,6 +8714,7 @@ function catalogFiltersEqual(left, right) {
 function pruneCatalogFilters(filters, extensions) {
   const presentTrusts = new Set(extensions.map((item) => item.trust_class));
   const presentKinds = new Set(extensions.map((item) => catalogItemKind(item)));
+  if (extensions.some((item) => catalogItemCoversBrowser(item))) presentKinds.add("browser");
   const presentAreas = new Set(populatedCatalogAreas(extensions));
   return {
     trusts: filters.trusts.filter((trust) => presentTrusts.has(trust)),
@@ -8938,7 +8949,7 @@ function CatalogFilterBar(props) {
               },
               trust
             )) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: CATALOG_KIND_FILTERS.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: availableCatalogKinds(props.catalog).map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
               KindFilterOption,
               {
                 value: kind,
