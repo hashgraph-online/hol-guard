@@ -752,8 +752,6 @@ pub(crate) struct BrowserRiskFacts {
     pub sensitive_surface: bool,
     /// The action targets Guard's own approval center (R-SELF).
     pub guard_origin: bool,
-    /// The URL the action targets: its own URL argument, else the page the driver reports.
-    pub target: Option<String>,
     /// Where the action lands, when Guard knows: its own URL argument, else the reported page for
     /// an action on that page. A history step or a tab switch with no URL leaves the reported
     /// page, so its destination is unknown.
@@ -831,7 +829,6 @@ pub(crate) fn browser_risk_facts(
         ),
         sensitive_surface,
         guard_origin,
-        target: target.map(str::to_owned),
         destination: destination.map(str::to_owned),
         profile,
         debugging_or_shared_launch: crate::browser_launch_args::debugging_or_shared_launch(
