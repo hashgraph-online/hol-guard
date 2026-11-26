@@ -481,6 +481,14 @@ pub(in crate::pretool) fn project_skill_document(
             .all(|part| !part.to_string_lossy().starts_with('.'))
 }
 
+/// The home-relative directories that hold agent planning and memory notes.
+pub(in crate::pretool) const AGENT_NOTE_ROOTS: [&str; 4] = [
+    ".codex/plans",
+    ".codex/memories",
+    ".claude/plans",
+    ".grok/memory-v2",
+];
+
 /// Agent planning and memory notes in the verified user home:
 /// `~/.codex/plans/**`, `~/.codex/memories/**`, `~/.claude/plans/**` and
 /// `~/.grok/memory-v2/**`. Notes are Markdown, plain text or JSON evidence.
@@ -502,14 +510,7 @@ pub(in crate::pretool) fn codex_notes_document(
     {
         return false;
     }
-    [
-        ".codex/plans",
-        ".codex/memories",
-        ".claude/plans",
-        ".grok/memory-v2",
-    ]
-    .iter()
-    .any(|name| {
+    AGENT_NOTE_ROOTS.iter().any(|name| {
         let root = under(&home, name);
         crate::runtime_read_paths::canonicalize_text(&root).is_ok_and(|resolved| resolved == root)
             && canonical.strip_prefix(&root).is_ok_and(|relative| {

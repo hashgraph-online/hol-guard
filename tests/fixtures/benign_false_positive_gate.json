@@ -35738,6 +35738,70 @@
       "expect": "allow"
     },
     {
+      "id": "session-cd-codex-plans-sed-note",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && sed -n 1,5p acme-plan-todo.md"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-codex-plans-wc-then-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && wc -l acme-plan-findings.md && ls"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-claude-memory-sed-then-grep",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.claude/projects/p/memory && sed -n 1,20p note.md; grep -n Synthetic note.md"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-claude-plans-head-note",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.claude/plans && head -20 acme-plan.md"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
       "id": "session-grep-roots-one-missing-tmp-sibling",
       "fix_area": "shell",
       "harnesses": [
@@ -47270,6 +47334,86 @@
       "tool": "shell",
       "tool_input": {
         "command": "rg -n 541 ~/.codex/plans/acme-plan-todo.md ~/.codex/auth.json 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-plans-read-parent-auth",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && cat ../auth.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-plans-grep-parent",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && grep -rn tokens .."
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-home-read-auth",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex && cat auth.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-claude-memory-parent-list",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.claude/projects/p && ls -la"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-plans-redirect-parent-hooks",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && echo '{}' > ../hooks.json"
       },
       "cwd": "worktree",
       "expect": "not_allow"
