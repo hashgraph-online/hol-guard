@@ -608,6 +608,8 @@ pub mod false_positive_rules;
 #[cfg(unix)]
 mod forwarded_settings;
 pub mod guard_sync_transport;
+#[path = "adapters/hook/hook_adapter_browser.rs"]
+pub mod hook_adapter_browser;
 #[path = "adapters/hook/hook_adapter_envelope.rs"]
 pub mod hook_adapter_envelope;
 #[path = "adapters/hook/hook_adapter_envelope_tables.rs"]
