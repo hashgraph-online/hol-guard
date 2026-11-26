@@ -449,11 +449,14 @@ def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, An
     is_setup = data.get("guardReasonCode") == RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED
     groups = [CONNECTOR_GROUP_ID.fullmatch(str(row["queue_group_id"])) for row in rows]
     if case.expect == "block":
-        # A baseline row for a call main stops outright: no setup, no review row, never forwarded.
-        if is_setup or rows:
-            return f"expected an outright block, got setup or review rows: {error} {rows}"
+        # A baseline row for a call main answers with a policy block: never forwarded, not held as
+        # setup, and the agent is told not to retry while one per-call review row is still queued.
+        if is_setup or any(groups):
+            return f"expected a policy block, got connector setup: {error} {rows}"
         if data.get("transportOutcome") != "not-forwarded" or data.get("guardPolicyAction") != "block":
             return f"expected a Guard policy block, got {error}"
+        if len(rows) != 1 or not rows[0].get("allow_scopes"):
+            return f"expected the block to queue one per-call review row, got {rows}"
         return None
     if case.expect != "setup":
         if is_setup or any(groups):
