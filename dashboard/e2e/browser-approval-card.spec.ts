@@ -137,8 +137,11 @@ for (const width of [320, 390, 720, 800, 1024, 1440]) {
     await expect(reach.getByRole("listitem")).toHaveCount(3);
     await expect(reach.getByRole("listitem").filter({ hasText: "Password field" })).toBeVisible();
 
-    // The typed text is never on the card face; it waits behind the exact input.
+    // A masked step's typed text is nowhere on the card, the exact input included.
     const main = page.locator("main");
+    expect(await main.innerText()).not.toContain(TYPED);
+    await card.getByText("See the exact input", { exact: true }).click();
+    await expect(card.getByText("so Guard does not show its input.", { exact: false })).toBeVisible();
     expect(await main.innerText()).not.toContain(TYPED);
 
     // Allow once, Always allow and Keep blocked stay offered for a browser step.
