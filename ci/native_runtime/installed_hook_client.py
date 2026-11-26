@@ -12,8 +12,12 @@ import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
+from typing import TYPE_CHECKING
 
-from ci.guard_daemon_harness import GuardDaemonServer
+# The harness is only a type here. Importing it as ``ci.…`` at run time fails when an installed
+# dependency owns the top-level ``ci`` name; the probes load the harness by path themselves.
+if TYPE_CHECKING:
+    from ci.guard_daemon_harness import GuardDaemonServer
 
 # Probes run this file with ``python -I`` against an installed wheel, so the
 # repository root is not importable; load the shared hook client and the auth
