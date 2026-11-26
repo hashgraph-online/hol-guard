@@ -68,9 +68,12 @@ fn unavailable_event_uses_reason_overrides_from_the_daemon() {
         "reason": "Policy update is still being applied.",
     }));
     let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
-    let response = &result.payload.expect("payload")["response"];
+    let response = &result.payload.expect("payload")["response"]["response"];
     assert_eq!(response["reason_code"], "native_policy_update_pending");
-    assert_eq!(response["reason"], "Policy update is still being applied.");
+    assert_eq!(
+        response["hookSpecificOutput"]["permissionDecisionReason"],
+        "Policy update is still being applied."
+    );
 }
 
 #[test]
