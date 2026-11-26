@@ -48278,6 +48278,70 @@
       "expect": "allow"
     },
     {
+      "id": "wait-loop-chain-lock-appears-then-clears",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "until test -e build/lock.d/pid; do sleep 60; done; until ! test -e build/lock.d/pid; do sleep 30; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wait-loop-chain-newline-joined-then-report",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "until test -f build/ready; do sleep 2; done\nwhile test -e build/lock.d/pid; do sleep 5; done; echo finished"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wait-loop-chain-gauntlet-lock-cleared",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "until test -d .; do sleep 1; done; until ! test -e build/lock.d/pid; do sleep 1; done; echo \"lock cleared\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wait-loop-chain-second-loop-deletes-keeps-review",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "until test -e build/lock.d/pid; do sleep 60; done; until ! test -e build/lock.d/pid; do rm -rf build; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "inert-pnpm-filter-dependents-only-prefixed-name-run-build",
       "fix_area": "package",
       "harnesses": [
