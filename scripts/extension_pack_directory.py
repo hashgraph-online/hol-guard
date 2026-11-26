@@ -43,4 +43,5 @@ def public_entry(root: Path, catalog: list) -> dict:
         source_path = root / "contributions/command-sources" / f"{identity}.json"
         command_sources[source_path.relative_to(root).as_posix()] = read_bytes(source_path, limit=8 * 1024 * 1024)
     v1 = directory._export_directory(sources, listings, extensions=(native,))
-    return directory._export_directory_v2(v1, sources, listings, command_sources)["entries"][0]
+    servers = directory._browser_driver_servers(root)
+    return directory._export_directory_v2(v1, sources, listings, command_sources, servers)["entries"][0]
