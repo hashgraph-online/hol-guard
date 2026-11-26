@@ -9,6 +9,8 @@ import pytest
 
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import extension_builder_browser
+from codex_plugin_scanner.guard.cli.extension_builder_cloud import _write_new
+from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 
 TOOLS = '{"tools": [{"name": "page_navigate", "inputSchema": {"properties": {"url": {}}}}, {"name": "frobnicate"}]}'
@@ -180,6 +182,21 @@ def test_browser_generate_removes_the_profile_when_the_rows_cannot_be_written(
     assert status == 0, result
     assert output.exists() and rows.exists()
 
+
+
+def test_a_file_the_builder_could_not_finish_is_removed(tmp_path: Path) -> None:
+    # A lone surrogate cannot be encoded, so the file is created and then the write fails, the way
+    # a full disk would fail it. The half-written file must not block a rerun.
+    rows = tmp_path / "rows.json"
+    with pytest.raises(UnicodeEncodeError):
+        _write_new(rows, "[\ud800]")
+    assert not rows.exists()
+    _write_new(rows, "[]")
+    assert rows.read_text(encoding="utf-8") == "[]"
+    with pytest.raises(BuilderError) as refused:
+        _write_new(rows, "[1]")
+    assert refused.value.code == "output_exists"
+    assert rows.read_text(encoding="utf-8") == "[]"
 
 def test_browser_generate_refuses_wrong_inputs_and_existing_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
