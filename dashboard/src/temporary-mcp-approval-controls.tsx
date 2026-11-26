@@ -19,18 +19,6 @@ type Props = {
 const EXCLUSION_COPY =
   "Privileged browser access, file transfer, secrets, command execution, destructive actions, and shared-profile access still require review.";
 
-export function TemporaryMcpRetryNotice() {
-  return (
-    <div className="mt-5 border-l-2 border-brand-blue bg-brand-blue/[0.04] px-4 py-3" role="status">
-      <p className="text-sm font-medium text-brand-dark">Timed access is not available for this request.</p>
-      <p className="mt-1 text-sm text-brand-dark/70">
-        You can approve this browser action once below. Routine browser actions also show time and access choices
-        when Guard can safely verify them.
-      </p>
-    </div>
-  );
-}
-
 export function TemporaryMcpApprovalControls(props: Props) {
   const expiry = temporaryMcpExpiryLabel(props.duration);
   const descriptionId = "temporary-mcp-boundary";
