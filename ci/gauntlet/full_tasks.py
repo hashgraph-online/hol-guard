@@ -562,6 +562,43 @@ def _reads_only(command: str, planted: set[str]) -> bool:
                     operands.append(word)
             if count:
                 return False
+        elif program in ("wc", "nl"):
+            # Numeric filenames remain operands. Only known nl count options
+            # may consume a numeric argument; ambiguous options stay stops.
+            operands = []
+            options = True
+            number = False
+            for word in rest:
+                if number:
+                    if not re.fullmatch(r"[0-9]+", word):
+                        return False
+                    number = False
+                elif options and word == "--":
+                    options = False
+                elif options and word.startswith("-") and word != "-":
+                    if program == "wc" and (re.fullmatch(r"-[clmwL]+", word) or word in (
+                        "--bytes", "--chars", "--lines", "--words", "--max-line-length"
+                    )):
+                        continue
+                    if program == "nl":
+                        if word in (
+                            "-i", "-l", "-v", "-w", "--line-increment", "--join-blank-lines",
+                            "--starting-line-number", "--number-width",
+                        ):
+                            number = True
+                            continue
+                        if re.fullmatch(
+                            r"-[ilvw][0-9]+|--(?:line-increment|join-blank-lines|starting-line-number|number-width)=[0-9]+",
+                            word,
+                        ):
+                            continue
+                        if word in ("-p", "--no-renumber"):
+                            continue
+                    return False
+                else:
+                    operands.append(word)
+            if number:
+                return False
         if program in FILE_PRINTERS or program in SCRIPT_PRINTERS:
             # An option can name a file of its own (`--file=/x`, `grep -f ~/list`).
             if any(mark in word for word in rest if word.startswith("-") for mark in "/~$"):
