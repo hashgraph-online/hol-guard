@@ -143,6 +143,9 @@ class NativePolicySnapshotPublisher(
         self._last_runtime_status: Any | None = None
         self._resident_startup_required = True
         self._acked = False
+        # A crashed daemon's ACK stops the resident trusting it right away;
+        # a live peer's, such as the daemon's beside a request process, stays.
+        self._withdraw_abandoned_direct_lane_ack()
         self._harness_postures: dict[str, str] = {}
         self._epoch = 0
         self._last_error: str | None = None

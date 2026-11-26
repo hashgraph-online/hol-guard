@@ -34,6 +34,7 @@ class _Publisher(NativePolicySnapshotDirectLaneAck):
     def __init__(self, guard_home: Path) -> None:
         self.guard_home = guard_home
         self._acked = False
+        self._withdraw_abandoned_direct_lane_ack()
 
 
 def _publisher(tmp_path: Path) -> _Publisher:
@@ -99,8 +100,10 @@ def test_ack_follows_the_barrier(tmp_path: Path) -> None:
     assert 0 < body["lease_expires_at_ms"] - direct_lane._now_ms() <= DIRECT_LANE_ACK_LEASE_MS
     assert stat.S_IMODE(ack.stat().st_mode) == 0o600
     assert stat.S_IMODE(ack.parent.stat().st_mode) == 0o700
-    # No temporary file is left behind; the lock every ACK writer shares stays.
-    assert sorted(entry.name for entry in ack.parent.iterdir()) == sorted([ack.name, f".{ack.name}.lock"])
+    # No temporary file is left behind; the locks every ACK writer shares stay.
+    assert sorted(entry.name for entry in ack.parent.iterdir()) == sorted(
+        [ack.name, f".{ack.name}.lock", f".{ack.name}.live"]
+    )
 
     publisher._acked = False
     assert not ack.exists()
@@ -113,10 +116,49 @@ def test_init_withdraws_an_ack_left_by_a_previous_daemon(tmp_path: Path) -> None
     first._acked = True
     first._publish_direct_lane_ack({"generation": 3, "policy_digest": DIGEST})
     assert first._direct_lane_ack_path().exists()
+    # The kernel releases the liveness lock when the daemon's process exits.
+    first._release_direct_lane_liveness()
 
     _Publisher(tmp_path)
 
     assert not first._direct_lane_ack_path().exists()
+
+
+def test_a_request_process_publisher_leaves_the_live_daemon_ack_alone(tmp_path: Path) -> None:
+    # Request and hook processes build publishers of their own for the same
+    # Guard home. Starting one, or closing one that never wrote an ACK, used to
+    # delete the daemon's ACK and send every direct hook to the daemon.
+    daemon = _publisher(tmp_path)
+    daemon._acked = True
+    daemon._publish_direct_lane_ack({"generation": 3, "policy_digest": DIGEST})
+    ack = daemon._direct_lane_ack_path()
+    written = ack.read_bytes()
+
+    request = _Publisher(tmp_path)
+    assert ack.read_bytes() == written
+
+    request._acked = True
+    request.enable_direct_evidence_drain(False)
+    request._acked = False
+    assert ack.read_bytes() == written
+
+    daemon._acked = False
+    assert not ack.exists()
+
+
+def test_a_withdrawal_leaves_a_newer_ack_another_publisher_wrote(tmp_path: Path) -> None:
+    older = _publisher(tmp_path)
+    older._acked = True
+    older._publish_direct_lane_ack({"generation": 3, "policy_digest": DIGEST})
+    newer = _Publisher(tmp_path)
+    newer._acked = True
+    newer._publish_direct_lane_ack({"generation": 4, "policy_digest": "b" * 64})
+
+    older._acked = False
+    assert json.loads(newer._direct_lane_ack_path().read_bytes())["generation"] == 4
+
+    newer._acked = False
+    assert not newer._direct_lane_ack_path().exists()
 
 
 def test_lease_renews_only_near_expiry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

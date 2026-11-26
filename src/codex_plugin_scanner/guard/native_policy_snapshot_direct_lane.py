@@ -7,6 +7,12 @@ and the publisher mirrors its ``_acked`` barrier into a short-lease ACK file
 that the resident checks before answering directly. Withdrawing the barrier
 unlinks the file; a crashed daemon stops renewing the lease. Anything the
 resident cannot prove makes the hook take the daemon path instead.
+
+Every publisher for a Guard home shares the one file, and short-lived request
+and hook processes run publishers of their own beside the daemon's. A
+publisher therefore withdraws only the ACK it wrote itself. A new publisher
+removes a leftover ACK only when no live publisher holds the liveness lock,
+which the kernel releases when its process exits.
 """
 
 from __future__ import annotations
@@ -23,7 +29,7 @@ from pathlib import Path
 
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
-from .native_policy_snapshot_direct_lane_owner import renewable
+from .native_policy_snapshot_direct_lane_owner import hold_liveness, liveness_held, names_target, renewable
 from .native_policy_snapshot_direct_lane_windows import unlink_windows_ack, write_windows_ack
 
 DIRECT_LANE_ACK_DIRECTORY = "direct-lane"
@@ -268,6 +274,11 @@ class NativePolicySnapshotDirectLaneAck:
     guard_home: Path  # pyright: ignore[reportUninitializedInstanceVariable]
     _acked_value: bool = False
     _direct_lane_ack_target: tuple[int, str] | None = None
+    # The ACK this publisher last wrote. Only that one is ever withdrawn.
+    _direct_lane_written_target: tuple[int, str] | None = None
+    # A shared lock held while this publisher keeps an ACK, so a new
+    # publisher can tell a live peer's ACK from one a dead process left.
+    _direct_lane_liveness_fd: int | None = None
     _direct_lane_lease_expires_at_ms: int = 0
     # The custom command-line rule revision the open lane was bound against.
     _direct_lane_local_cli_revision: int | None = None
@@ -435,17 +446,69 @@ class NativePolicySnapshotDirectLaneAck:
         return self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / DIRECT_LANE_ACK_DIRECTORY / DIRECT_LANE_ACK_FILE_NAME
 
     def _unlink_direct_lane_ack(self) -> None:
+        """Withdraw the ACK this publisher wrote, leaving a peer's in place.
+
+        Request and hook processes build publishers that share the daemon's
+        ACK path. One that withdrew whatever file it found would close the
+        lane under every harness each time such a process started or exited,
+        until the daemon's next poll wrote its ACK again.
+        """
+
+        owned = self._direct_lane_written_target
+        self._direct_lane_written_target = None
+        if owned is None:
+            self._release_direct_lane_liveness()
+            return
+        path = self._direct_lane_ack_path()
         try:
             if os.name == "nt":
-                unlink_windows_ack(self.guard_home, self._direct_lane_ack_path())
-            else:
-                self._direct_lane_ack_path().unlink()
+                if names_target(path, owned):
+                    unlink_windows_ack(self.guard_home, path)
+                return
+            with _ack_file_lock(path):
+                if names_target(path, owned):
+                    path.unlink()
         except FileNotFoundError:
             pass
         except (OSError, RuntimeError):
             # A failed Windows binding or delete raises NativePolicySnapshotError.
             # The lease still bounds how long the resident can trust it.
             self._direct_lane_lease_expires_at_ms = 0
+        finally:
+            self._release_direct_lane_liveness()
+
+    def _withdraw_abandoned_direct_lane_ack(self) -> None:
+        """Remove an ACK whose publisher is gone, never a live peer's.
+
+        A publisher holds the liveness lock while it keeps an ACK, and the
+        kernel drops it when that process exits. When the lock is free, any
+        ACK on disk was left behind and the resident must stop trusting it
+        now rather than when its lease runs out. Windows has no such lock
+        here, so it keeps withdrawing any ACK it finds.
+        """
+
+        path = self._direct_lane_ack_path()
+        try:
+            if os.name == "nt":
+                unlink_windows_ack(self.guard_home, path)
+                return
+            if not path.parent.is_dir():
+                return
+            with _ack_file_lock(path):
+                if not liveness_held(path):
+                    path.unlink()
+        except FileNotFoundError:
+            pass
+        except (OSError, RuntimeError):
+            # The lease still bounds how long the resident can trust it.
+            return
+
+    def _release_direct_lane_liveness(self) -> None:
+        descriptor = self._direct_lane_liveness_fd
+        self._direct_lane_liveness_fd = None
+        if descriptor is not None:
+            with contextlib.suppress(OSError):
+                os.close(descriptor)
 
     def _write_direct_lane_ack_locked(self, *, unless_superseded: bool = False) -> None:
         """Write the ACK for the current target.
@@ -477,6 +540,7 @@ class NativePolicySnapshotDirectLaneAck:
                 if unless_superseded and not renewable(path, target):
                     return
                 write_windows_ack(self.guard_home, path, body)
+                self._direct_lane_written_target = target
                 self._direct_lane_lease_expires_at_ms = lease_expires_at_ms
                 return
             _ensure_private_directory(path.parent)
@@ -492,11 +556,16 @@ class NativePolicySnapshotDirectLaneAck:
                 try:
                     with os.fdopen(descriptor, "wb") as handle:
                         handle.write(body)
+                    # Held before the ACK appears, so no new publisher can
+                    # mistake it for one a dead process left behind.
+                    if self._direct_lane_liveness_fd is None:
+                        self._direct_lane_liveness_fd = hold_liveness(path)
                     os.replace(temporary, path)
                 except BaseException:
                     with contextlib.suppress(OSError):
                         temporary.unlink()
                     raise
+                self._direct_lane_written_target = target
         except (OSError, RuntimeError):
             # Without a fresh ACK file the resident defers every direct hook.
             self._direct_lane_lease_expires_at_ms = 0
