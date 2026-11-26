@@ -80,7 +80,6 @@ class StoreApprovalsMixin:
         claude_key: dict[str, str] | None = None,
         codex_live_wait: dict[str, object] | None = None,
         respond: dict[str, object] | None = None,
-        blocked_request_mode: str | None = None,
         connector_lookup: dict[str, object] | None = None,
         bound_bash: bool = False,
     ) -> dict[str, object] | None:
@@ -143,8 +142,6 @@ class StoreApprovalsMixin:
             args["codex_live_wait_facts"] = codex_live_wait
         if respond is not None:
             args["respond"] = respond
-        if blocked_request_mode is not None:
-            args["blocked_request_mode"] = blocked_request_mode
         if connector_lookup is not None:
             args["connector_lookup"] = connector_lookup
         try:

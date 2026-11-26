@@ -253,6 +253,16 @@ impl PolicySnapshotStore {
                 .and_then(|binding| binding.review.blocked_request_mode.clone())
         })
     }
+    pub(crate) fn effective_blocked_request_mode(&self, workspace: Option<&str>) -> Option<String> {
+        self.blocked_request_mode().or_else(|| {
+            crate::guard_config_load::blocked_request_mode(
+                Path::new(&self.expected_guard_home),
+                workspace.map(Path::new),
+            )
+            .ok()
+            .flatten()
+        })
+    }
     #[cfg(test)]
     pub(crate) fn new(state_base: &Path, runtime_identity: &str) -> Result<Self, String> {
         Self::new_with_resident_generation(state_base, runtime_identity, 0)

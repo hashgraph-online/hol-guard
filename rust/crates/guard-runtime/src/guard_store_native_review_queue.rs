@@ -222,7 +222,9 @@ pub(crate) fn delegate(
     let respond = match respond {
         Some(RespondAsk::NativeReview(NativeAsk {})) => {
             let ask = owner
-                .and_then(PolicySnapshotStore::blocked_request_mode)
+                .and_then(|owner| {
+                    owner.effective_blocked_request_mode(query.envelope.workspace.as_deref())
+                })
                 .or(fallback_mode)
                 .ok_or(INVALID)?
                 .as_str()
