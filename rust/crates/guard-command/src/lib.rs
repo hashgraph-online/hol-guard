@@ -34,6 +34,7 @@ pub mod browser_card;
 pub mod browser_driver_compile;
 pub mod browser_driver_enablement;
 pub mod browser_driver_match;
+pub mod browser_driver_observe;
 pub mod browser_first_party_drivers;
 pub mod browser_guard_origin;
 pub(crate) mod browser_launch_args;
