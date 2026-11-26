@@ -41,6 +41,7 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _pending_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _deferred_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _deferred_workspace_readiness: dict[Path, object]  # pyright: ignore[reportUninitializedInstanceVariable]
     _published_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     _observed_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     # The blocked-request mode every config of the last compile agreed on.

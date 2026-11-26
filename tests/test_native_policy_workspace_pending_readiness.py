@@ -361,23 +361,23 @@ def test_deferred_subdirectory_that_gains_an_overlay_queues_its_publish(
         publisher.close()
 
 
-def test_deferred_subdirectory_whose_probe_misses_its_budget_is_published(
+def test_deferred_subdirectory_whose_probe_misses_its_budget_keeps_its_proven_answer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # A loaded resident can answer the second overlay probe past its budget.
-    # The hook then waits for this workspace's own ACK, so a publish must be
-    # queued for it; a deferred workspace otherwise waits out the hook budget.
-    publisher, _resident, existing = _published(tmp_path, monkeypatch)
+    # A loaded resident can answer the hook's overlay probe past its budget.
+    # That proves nothing about the directory, which registration already
+    # found file-less; the hook keeps that answer and the current ACK instead
+    # of waiting out its deadline for a publish of its own.
+    publisher, resident, existing = _published(tmp_path, monkeypatch)
     monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
     worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
     nested = existing / "src"
     nested.mkdir()
     calls: list[object] = []
 
-    def second_probe_misses(*_args: object, **_kwargs: object) -> object:
-        # Registration sees a file-less directory and defers it; the hook's own
-        # probe then runs out of budget. Fixed results keep the deferred state
-        # independent of how fast the resident answers on this host.
+    def later_probes_miss(*_args: object, **_kwargs: object) -> object:
+        # Fixed results keep the deferred state independent of how fast the
+        # resident answers on this host.
         result = "directory_and_ancestors" if not calls else None
         calls.append(result)
         return result
@@ -385,15 +385,45 @@ def test_deferred_subdirectory_whose_probe_misses_its_budget_is_published(
     publisher.start()
     try:
         assert publisher.wait_until_ready(time.monotonic() + 5.0, workspace=existing)
-        monkeypatch.setattr(readiness, "_workspace_overlay_readiness", second_probe_misses)
-        started = time.monotonic()
-        snapshot = worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 10.0)
-        assert calls[:2] == ["directory_and_ancestors", None]
-        assert snapshot is not None, "the hook must get the ACK that compiles its workspace"
-        assert time.monotonic() - started < 8.0, "the hook must not sit out its whole budget"
-        assert not publisher.workspace_policy_pending(nested)
+        publishes = resident.calls
+        monkeypatch.setattr(readiness, "_workspace_overlay_readiness", later_probes_miss)
+        for _ in range(3):
+            started = time.monotonic()
+            snapshot = worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 3.0)
+            assert snapshot is not None, "the hook keeps the ACK that already covers its workspace"
+            assert time.monotonic() - started < 1.0, "a missed probe must not wait for a publish"
+        assert calls[0] == "directory_and_ancestors"
+        assert set(calls[1:]) == {None}
+        with publisher._condition:
+            assert nested in publisher._deferred_workspace_paths
+        assert resident.calls == publishes, "a missed probe must not force a publish"
     finally:
         publisher.close()
+
+
+def test_deferred_subdirectory_that_gains_an_overlay_after_a_missed_probe_waits_for_its_ack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A missed probe keeps the last proven answer only until a probe answers.
+    # An answer that the directory now has an overlay still drops the old
+    # answer, so the hook waits for the ACK that compiles the overlay.
+    publisher, _resident, existing = _published(tmp_path, monkeypatch)
+    monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
+    nested = existing / "src"
+    nested.mkdir()
+    answers = iter(["directory_and_ancestors", None, "unproven"])
+    monkeypatch.setattr(readiness, "_workspace_overlay_readiness", lambda *_a, **_k: next(answers, "unproven"))
+
+    assert publisher.register_workspace(nested)
+    with publisher._condition:
+        assert nested in publisher._deferred_workspace_paths
+    assert publisher.workspace_admissible_without_overlay(nested, deadline=time.monotonic() + 1.0)
+    assert not publisher.workspace_admissible_without_overlay(nested, deadline=time.monotonic() + 1.0)
+    with publisher._condition:
+        assert nested not in publisher._deferred_workspace_paths
+        assert nested not in publisher._deferred_workspace_readiness
+    assert publisher._publish_event.is_set(), "the overlay must queue its own publish"
+    publisher.close()
 
 
 @pytest.mark.parametrize("overlay", [".hol-guard.toml", ".ai-plugin-scanner-guard.toml"])
