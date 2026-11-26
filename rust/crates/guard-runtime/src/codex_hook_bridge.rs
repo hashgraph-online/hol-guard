@@ -470,7 +470,7 @@ mod handoff;
 #[path = "codex_hook_bridge_observation.rs"]
 mod observation;
 #[path = "codex_hook_bridge_recovery.rs"]
-mod recovery;
+pub(crate) mod recovery;
 #[path = "codex_hook_bridge_restart.rs"]
 mod restart;
 #[path = "codex_hook_bridge_trust.rs"]

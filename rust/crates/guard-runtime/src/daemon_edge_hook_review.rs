@@ -448,7 +448,7 @@ impl Hook<'_> {
                     code,
                 );
             }
-            return prepare_refusal(&reply_harness, &reply_event, refused)
+            return prepare_refusal(&reply_harness, &reply_event, refused, &payload)
                 .unwrap_or_else(unavailable);
         }
         if let Some(answer) = self.lifecycle(&reply_harness, &event, &payload, expires) {

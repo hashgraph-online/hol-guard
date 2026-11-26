@@ -88,7 +88,7 @@ const NO_VERDICT_REASON_CODES: [&str; 22] = [
 /// Whether `code` says the daemon could not decide, as opposed to refusing.
 /// Integrity and provenance findings (a mismatch, a rollback, an invalid or
 /// missing authority) are verdicts, so they are not listed.
-pub(super) fn is_no_verdict(code: &str) -> bool {
+pub(crate) fn is_no_verdict(code: &str) -> bool {
     NO_VERDICT_REASON_CODES.contains(&code)
 }
 
@@ -118,7 +118,7 @@ pub(super) fn is_recovery_command(command: &str) -> bool {
 /// Whether the hook is a shell call that runs only a recovery command inside
 /// Codex's own sandbox policy. The event is checked by the caller against the
 /// bridge's normalized event name.
-pub(super) fn is_recovery_call(data: &str) -> bool {
+pub(crate) fn is_recovery_call(data: &str) -> bool {
     let Ok(payload) = serde_json::from_str::<Value>(data) else {
         return false;
     };

@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 
 use super::hook_scheduler;
 #[cfg(test)]
@@ -18,8 +18,16 @@ pub(super) fn refusal(refused: &Value) -> Option<(&str, &str)> {
     ))
 }
 
-pub(super) fn prepare_refusal(harness: &str, event: &str, refused: &Value) -> Option<Value> {
+pub(super) fn prepare_refusal(
+    harness: &str,
+    event: &str,
+    refused: &Value,
+    payload: &Map<String, Value>,
+) -> Option<Value> {
     let (fallback, code) = refusal(refused)?;
+    if let Some(allowed) = claude_recovery(harness, event, code, payload) {
+        return Some(allowed);
+    }
     let reason = refused
         .get("policy_failure")
         .and_then(Value::as_object)
@@ -31,6 +39,35 @@ pub(super) fn prepare_refusal(harness: &str, event: &str, refused: &Value) -> Op
         reason.as_deref().unwrap_or(fallback),
         code,
     ))
+}
+
+/// The answer that lets a Claude Code recovery command run when the daemon
+/// could not reach a verdict. Codex gets the same list in its hook bridge
+/// (`codex_hook_bridge_recovery`); without it a Claude Code session whose
+/// daemon cannot publish policy is refused every tool call, including the
+/// `hol-guard daemon repair` the refusal asks for, until a person runs it in
+/// a terminal. Only a word-for-word recovery or diagnostic command qualifies;
+/// a real verdict, any other command and any other harness keep the refusal.
+fn claude_recovery(
+    harness: &str,
+    event: &str,
+    code: &str,
+    payload: &Map<String, Value>,
+) -> Option<Value> {
+    use crate::codex_hook_bridge::recovery;
+    if harness != "claude-code" || event != "PreToolUse" || !recovery::is_no_verdict(code) {
+        return None;
+    }
+    let data = serde_json::to_string(payload).ok()?;
+    recovery::is_recovery_call(&data).then(|| {
+        json!({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+                "permissionDecisionReason": "HOL Guard could not finish preparing its policy, so it did not review this call. It runs because it only reads or repairs Guard's own state; every other action stays blocked until Guard answers.",
+            },
+        })
+    })
 }
 
 /// Whether a `native_policy_not_ready` refusal only means the policy wait
