@@ -12,14 +12,20 @@ use winapi::shared::minwindef::{DWORD, FALSE};
 use winapi::shared::ntdef::HANDLE;
 use winapi::shared::winerror::{ERROR_INVALID_PARAMETER, WAIT_TIMEOUT};
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-use winapi::um::jobapi2::{AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject};
+use winapi::um::jobapi2::{
+    AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject, TerminateJobObject,
+};
 use winapi::um::processthreadsapi::{GetProcessTimes, ResumeThread, TerminateProcess};
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::tlhelp32::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 use winapi::um::winbase::{QueryFullProcessImageNameW, WAIT_FAILED, WAIT_OBJECT_0};
-use winapi::um::winnt::{PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, SYNCHRONIZE};
+use winapi::um::winnt::{
+    JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE,
+    SYNCHRONIZE,
+};
 
 const MAX_FINITE_WAIT_MILLIS: DWORD = u32::MAX - 1;
 
@@ -253,6 +259,32 @@ pub(super) fn create_process_job() -> io::Result<OwnedHandle> {
     } else {
         // SAFETY: CreateJobObjectW returned this handle exactly once.
         Ok(unsafe { OwnedHandle::from_raw_handle(job as RawHandle) })
+    }
+}
+
+/// Set or clear the job's only limit, kill-on-close. A job holding no other
+/// limits is how the managed spawn keeps a suspended child from outliving a
+/// parent that dies before resuming it.
+pub(super) fn set_kill_on_close(job: &OwnedHandle, kill_on_close: bool) -> io::Result<()> {
+    // SAFETY: JOBOBJECT_EXTENDED_LIMIT_INFORMATION is a plain C struct where an
+    // all-zero value means no limits.
+    let mut limits = unsafe { zeroed::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() };
+    if kill_on_close {
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    }
+    // SAFETY: `job` is a live job handle and `limits` outlives the call.
+    if unsafe {
+        SetInformationJobObject(
+            job.as_raw_handle() as HANDLE,
+            JobObjectExtendedLimitInformation,
+            (&mut limits as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+            size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as DWORD,
+        )
+    } == FALSE
+    {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
     }
 }
 

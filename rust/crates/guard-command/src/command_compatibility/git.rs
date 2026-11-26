@@ -50,6 +50,49 @@ pub(crate) fn canonical_subcommand(word: &str) -> &str {
     }
 }
 
+/// Subcommands that only read the repository: Git runs no hook, credential
+/// helper or transport for them. A pager or an external diff tool is chosen
+/// by Git's own settings and `GIT_*` names, which assignments ahead of the
+/// read never count as plain.
+///
+/// `status`, `diff` and `describe --dirty` are left out: they refresh the
+/// index and may write it back, which runs the `post-index-change` hook, and
+/// they can start `core.fsmonitor` and clean filters on changed files.
+const USER_PROGRAM_FREE_READS: &[&str] = &[
+    "blame",
+    "cat-file",
+    "for-each-ref",
+    "grep",
+    "log",
+    "ls-files",
+    "ls-tree",
+    "merge-base",
+    "name-rev",
+    "rev-list",
+    "rev-parse",
+    "shortlog",
+    "show",
+    "show-ref",
+];
+
+/// Whether `git ARGUMENTS` is a read that starts no hook or helper, which
+/// read whatever environment names they like. `branch --show-current` only
+/// prints the name HEAD points at; any other `branch` form can move a ref,
+/// which the reference-transaction hook sees.
+pub(super) fn starts_no_user_program(arguments: &[String]) -> bool {
+    let Some(index) = command_index(arguments) else {
+        return false;
+    };
+    let Some(word) = arguments.get(index).map(|word| canonical_subcommand(word)) else {
+        return false;
+    };
+    USER_PROGRAM_FREE_READS.contains(&word)
+        || (word == "branch"
+            && arguments
+                .get(index + 1..)
+                .is_some_and(|rest| rest == ["--show-current"]))
+}
+
 pub(crate) fn command_index(arguments: &[String]) -> Option<usize> {
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {

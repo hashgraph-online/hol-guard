@@ -317,7 +317,10 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
         # Startup must recover without asking the user to reapprove unchanged
         # controls. A successful floor migration alone left the old IR active.
         assert recovered.engine == authority.engine
-        assert recovered.selected == old.selected
+        # The upgrade keeps every pack the user had and adds only the packs the
+        # signed release turns on by default that the old install never knew.
+        assert old.selected <= recovered.selected
+        assert recovered.selected - old.selected <= {"command.browser-automation"}
         recovered_registry = candidates.GeneratedCommandCatalog.from_prepared_packs(recovered)
         controls_after = store.read_extension_control_authority_for_registry(
             recovered_registry, include_managed_controls=False, read_only=True
@@ -347,7 +350,7 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
             store=store, registry=recovered_registry, runtime=ExtensionControlRuntime(controls_after)
         )
         active = apply(version)
-        assert active.selected == old.selected
+        assert active.selected == recovered.selected
         assert active.engine == authority.engine and active.engine != old.engine
         assert active.record()["source_sha"] == source
         _, floor = lifecycle_store.inspect(store)
@@ -360,7 +363,12 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
             )
     # The exact remote high-water identity permits authenticated crash recovery,
     # but cannot make its old-engine executable IR admissible in the new runtime.
-    with pytest.raises(transport.NativeSourceCompilerError, match="command_pack_reuse_engine_invalid"):
+    # The old selection also lacks a pack the new release requires, which is
+    # refused first; either refusal keeps the old IR out.
+    with pytest.raises(
+        transport.NativeSourceCompilerError,
+        match=r"command_pack_reuse_engine_invalid|native_command_required_pack_missing",
+    ):
         transport.check_pack_cache(old.directory, old.record()["program_digest"])
     assert len(reports) == 3 and all(
         report["extensions"] > 0 and report["profile"] == "complete-offline" for report in reports

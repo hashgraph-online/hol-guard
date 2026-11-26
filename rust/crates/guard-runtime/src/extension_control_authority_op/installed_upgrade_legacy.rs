@@ -49,6 +49,16 @@ impl Metadata<'_> {
     }
 }
 
+/// The release publication the previous activation was prepared from, read
+/// from the pack cache by the hash its authenticated record binds.
+pub(super) fn previous_publication(previous: &Value, directory: &Path) -> Res<Value> {
+    Metadata {
+        directory,
+        blob_limit: 8 * 1024 * 1024,
+    }
+    .json(&previous["distribution"])
+}
+
 pub(super) fn validate_predecessor(
     snapshot: &Map<String, Value>,
     expected: &Value,

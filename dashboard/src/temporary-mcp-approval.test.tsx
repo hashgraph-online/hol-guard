@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { GuardApprovalRequest } from "./guard-types";
 import {
   TemporaryMcpApprovalControls,
-  TemporaryMcpRetryNotice,
 } from "./temporary-mcp-approval-controls";
 import {
   buildTemporaryMcpResolutionFields,
@@ -10,7 +9,6 @@ import {
   defaultTemporaryMcpTarget,
   temporaryMcpAllowButtonLabel,
   temporaryMcpApprovalOptions,
-  temporaryMcpApprovalNeedsRetry,
   temporaryMcpExpiryLabel,
   temporaryMcpSummary,
   validTemporaryMcpSelection,
@@ -79,47 +77,6 @@ assert(
   temporaryMcpApprovalOptions({ ...request, temporary_mcp_approval: null }) === null,
   "legacy requests omit temporary controls",
 );
-assert(
-  temporaryMcpApprovalNeedsRetry({
-    ...request,
-    artifact_id: "codex:runtime:global:chrome-devtools:take_snapshot",
-    artifact_name: "chrome-devtools:take_snapshot",
-    artifact_type: "tool_call",
-    temporary_mcp_approval: null,
-  }),
-  "legacy routine browser requests expose inline retry guidance",
-);
-assert(
-  temporaryMcpApprovalNeedsRetry({
-    ...request,
-    artifact_id: "codex:runtime:global:chrome-devtools:list_pages",
-    artifact_name: "chrome-devtools:list_pages",
-    artifact_type: "tool_call",
-    temporary_mcp_approval: null,
-  }),
-  "existing routine navigation calls expose inline recovery guidance",
-);
-assert(
-  !temporaryMcpApprovalNeedsRetry({
-    ...request,
-    artifact_id: "codex:project:tool-action:shell",
-    artifact_name: "shell",
-    artifact_type: "tool_call",
-    temporary_mcp_approval: null,
-  }),
-  "ordinary tool calls do not show browser retry guidance",
-);
-assert(
-  !temporaryMcpApprovalNeedsRetry({
-    ...request,
-    artifact_id: "codex:runtime:global:chrome-devtools:evaluate_script",
-    artifact_name: "chrome-devtools:evaluate_script",
-    artifact_type: "tool_call",
-    temporary_mcp_approval: null,
-  }),
-  "privileged browser calls do not promise timed access on retry",
-);
-
 const html = renderToStaticMarkup(
   <TemporaryMcpApprovalControls
     options={options}
@@ -136,11 +93,5 @@ assert(html.includes("What should it cover?"), "coverage question is explicit");
 assert(html.includes("Privileged browser access"), "hard-risk boundary stays visible");
 assert(html.includes("min-h-11"), "controls preserve 44px touch targets");
 assert(!html.includes("sha256-secret-binding"), "stable server fingerprint is never rendered");
-
-const recoveryHtml = renderToStaticMarkup(<TemporaryMcpRetryNotice />);
-assert(recoveryHtml.includes("not available for this request"), "the request explains why timed access is unavailable");
-assert(recoveryHtml.includes("approve this browser action once"), "legacy requests offer an immediate safe choice");
-assert(recoveryHtml.includes("when Guard can safely verify them"), "timed access guidance preserves the safety boundary");
-assert(!recoveryHtml.includes("settings"), "legacy requests never send users to unrelated settings");
 
 console.log("temporary-mcp-approval.test.tsx: all tests passed");

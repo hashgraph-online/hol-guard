@@ -7457,7 +7457,7 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-git-status-after-substituted-variable",
+      "id": "git-status-after-an-assigned-user-id-lookup",
       "fix_area": "git",
       "harnesses": [
         "codex",
@@ -7469,6 +7469,23 @@
       "tool": "shell",
       "tool_input": {
         "command": "h=$(id -u); git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-status-after-an-assigned-private-key-read",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "h=$(cat ${HOME}/.ssh/id_rsa); git status --short"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -11835,6 +11852,159 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "git-status-porcelain-checked-for-output-by-test",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "[ -n \"$(git status --porcelain)\" ] && echo dirty || echo clean"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-status-porcelain-checked-for-no-output-by-test",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "[ -z \"$(git status --porcelain)\" ] && echo clean"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-status-porcelain-checked-inside-an-if",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "if [ -n \"$(git status --porcelain)\" ]; then echo dirty; fi"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-commit-ids-compared-by-test",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "[ \"$(git rev-parse HEAD)\" = \"$(git rev-parse HEAD~1)\" ] && echo same || echo differ"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-commit-ids-compared-by-the-test-builtin",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test \"$(git rev-parse HEAD)\" = \"$(git rev-parse HEAD~1)\" && echo same"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-current-branch-compared-by-test",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "[ \"$(git branch --show-current)\" = main ] && echo on-main"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-current-branch-compared-by-the-test-builtin-either-way",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test \"$(git branch --show-current)\" = main && echo on-main || echo elsewhere"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-private-key-checked-for-output-by-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "[ -n \"$(cat ${HOME}/.ssh/id_rsa)\" ] && echo key"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-private-key-compared-by-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "[ \"$(cat ${HOME}/.ssh/id_rsa)\" = x ] && echo key"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "routine-git-status-tracked-only",
@@ -39319,6 +39489,159 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "shell-uppercase-name-keeps-a-commit-for-git-log",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "H=$(git rev-parse HEAD); git log --oneline -1 \"$H\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-uppercase-name-keeps-a-listing-for-echo",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "P=$(ls); echo $P"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-uppercase-name-keeps-a-branch-for-a-label",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "B=$(git branch --show-current); echo \"branch: $B\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-uppercase-name-kept-after-a-status-read",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short; H=$(git rev-parse --short HEAD); echo \"head $H\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-uppercase-name-assigned-and-never-read",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "HEAD_SHA=$(git rev-parse HEAD)"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-uppercase-literal-before-a-git-read",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "REF=HEAD; git log --oneline -1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-uppercase-literal-read-by-a-kept-lookup",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "REF=HEAD; H=$(git rev-parse \"$REF\"); git log --oneline -1 \"$H\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-shell-uppercase-name-keeps-a-private-key",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "K=$(cat ${HOME}/.ssh/id_rsa); echo $K"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-shell-uppercase-name-keeps-a-key-for-git-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "H=$(cat ${HOME}/.ssh/id_rsa); git log --oneline -1 \"$H\""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "neg-shell-comment-ends-before-next-line",

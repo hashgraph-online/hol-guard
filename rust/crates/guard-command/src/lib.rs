@@ -34,6 +34,7 @@ pub mod browser_card;
 pub mod browser_driver_compile;
 pub mod browser_driver_enablement;
 pub mod browser_driver_match;
+pub mod browser_driver_observe;
 pub mod browser_first_party_drivers;
 pub mod browser_guard_origin;
 pub(crate) mod browser_launch_args;
@@ -302,6 +303,7 @@ mod protection_health_facts_containment_tests;
 mod protection_health_facts_tests;
 #[cfg(test)]
 mod protection_health_tests;
+pub mod provider_origin_share;
 pub mod pytest_argv;
 #[cfg(test)]
 mod pytest_argv_tests;

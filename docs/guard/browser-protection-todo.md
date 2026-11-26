@@ -121,12 +121,12 @@ place to put its cases.
 
 ### Quiet by default (phase 2)
 
-- [ ] **BP-T168** Quiet set for loopback development origins (PRD 5.10, D10) as a pure Rust function
+- [x] **BP-T168** Quiet set for loopback development origins (PRD 5.10, D10) as a pure Rust function
   beside the grant evaluation, with the exclusions: Guard's own origin, `LOCAL_ADMIN_PORTS`, recorded
   debugging ports, sensitive surfaces, `shared` and `remote-debugging` profiles. Vectors for each
   exclusion. Gate rows: local page click `allow`, same click on an admin port `not_allow`, same click
   in a shared profile `review`. Live: `browser-quiet-local-dev-page`.
-- [ ] **BP-T169** R-QUIET-1: a retried call attaches to its pending row, and an action covered by a
+- [x] **BP-T169** R-QUIET-1: a retried call attaches to its pending row, and an action covered by a
   live grant, saved allow or answered row never creates a row. Store test, gate preset
   `pending-same-call`, live case `browser-task-retry-while-pending`.
 - [ ] **BP-T170** R-QUIET-2: unknown tools on one driver in one session coalesce into one card that
@@ -139,7 +139,7 @@ place to put its cases.
 - [ ] **BP-T172** Report path: card menu item "This should not have asked" and
   `hol-guard browser report-prompt <request-id>`, native. Output is the anonymized skeleton from PRD
   5.10. Test: every argument value is a placeholder and the origin is `site-a.example.test`.
-- [ ] **BP-T173** R-QUIET-4: `observe` state for an external driver profile mapping. The decision is
+- [x] **BP-T173** R-QUIET-4: `observe` state for an external driver profile mapping. The decision is
   unchanged and a would-have-stopped receipt is written in the Watch format. First-party floors and
   native sensitive-surface screens ignore it. Vectors both ways.
 - [ ] **BP-T174** Extend the drift check (BP-T027) to open one issue listing new upstream tools per
@@ -436,10 +436,10 @@ transcript in the pull request (after BP-T052).
   `guard.provider-integration.v1` per PRD 6.2, including exact-host rules, single credential header,
   fact-only request bodies, pointer-only response mapping, `shares` equality, limit caps, safe-text
   labels for reason codes. Unit test per rejection.
-- [ ] **BP-T101** Closed capability list and closed fact list in `guard-contracts` (6.3, 6.4), with
+- [x] **BP-T101** Closed capability list and closed fact list in `guard-contracts` (6.3, 6.4), with
   the never-shareable set asserted by a test that enumerates `BrowserActionV2` fields and fails when a
   new field is not classified as shareable or not.
-- [ ] **BP-T102** Origin exclusion: loopback, private ranges, link-local, `.local`, `.internal`,
+- [x] **BP-T102** Origin exclusion: loopback, private ranges, link-local, `.local`, `.internal`,
   `.test`, single-label hosts and IP literals never leave the device. Table-driven tests.
 - [ ] **BP-T103** Ship the synthetic reference manifest `provider.exampleshield` as a test fixture
   under `tests/fixtures/provider_integrations/` only. Do not add any real provider manifest in this

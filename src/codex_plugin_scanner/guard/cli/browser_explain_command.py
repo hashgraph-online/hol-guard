@@ -1,8 +1,14 @@
-"""``hol-guard browser explain``: show what Guard makes of one browser tool call.
+"""``hol-guard browser``: explain a browser tool call, or report a review that should not have asked.
 
-The native runtime projects the call through the named driver profile, evaluates it under the
-default policy and checks grant eligibility. This module only parses the arguments, sends one
-request and prints the answer. Nothing is written, and no saved approval, grant or setting is read.
+``explain``: the native runtime projects the call through the named driver profile, evaluates it
+under the default policy and checks grant eligibility. Nothing is written, and no saved approval,
+grant or setting is read.
+
+``report-prompt``: the native runtime reads one stored approval and prints an anonymized case
+skeleton for a public issue. Every argument value is a placeholder and every site is synthetic.
+Nothing is written or sent.
+
+This module only parses the arguments, sends one request and prints the answer.
 """
 
 from __future__ import annotations
@@ -37,6 +43,14 @@ def configure_guard_browser_parser(
     explain.add_argument("--tool", required=True, help="Tool name as the driver lists it")
     explain.add_argument("--args", dest="tool_arguments", default="{}", help="Tool arguments as a JSON object")
     explain.add_argument("--json", action="store_true", help="Print the native answer as JSON")
+    report = commands.add_parser(
+        "report-prompt",
+        help="Print an anonymized case skeleton for a browser review that should not have asked",
+    )
+    report.add_argument("request_id", help="The approval request id from the approval card")
+    report.add_argument("--json", action="store_true", help="Print the native answer as JSON")
+    report.add_argument("--home", help=argparse.SUPPRESS)
+    report.add_argument("--guard-home", help=argparse.SUPPRESS)
 
 
 def run_browser_command(
@@ -48,8 +62,9 @@ def run_browser_command(
     stream = output_stream if output_stream is not None else sys.stdout
     errors = error_stream if error_stream is not None else sys.stderr
     as_json = bool(getattr(args, "json", False))
+    report = getattr(args, "browser_command", None) == "report-prompt"
     try:
-        result = _explain(args)
+        result = _report_prompt(args) if report else _explain(args)
     except BrowserExplainError as exc:
         if as_json:
             print(json.dumps({"ok": False, "error": {"code": exc.code, "message": str(exc)}}), file=stream)
@@ -58,6 +73,8 @@ def run_browser_command(
         return 2
     if as_json:
         print(json.dumps(result, sort_keys=True), file=stream)
+    elif report:
+        _print_report(result, stream)
     else:
         _print(result, stream)
     return 0
@@ -85,7 +102,20 @@ def _explain(args: argparse.Namespace) -> dict[str, object]:
     return {key: value for key, value in reply.items() if key != "ok"}
 
 
-def _native_request(line: str) -> dict[str, object]:
+def _report_prompt(args: argparse.Namespace) -> dict[str, object]:
+    from ..config import resolve_guard_home
+
+    guard_home = resolve_guard_home(getattr(args, "guard_home", None) or getattr(args, "home", None))
+    request = {"guard_home": str(guard_home), "request_id": str(args.request_id).strip()}
+    reply = _native_request(json.dumps(request, separators=(",", ":")), command="browser-report-prompt")
+    if reply.get("ok") is not True:
+        error = _mapping(reply.get("error"))
+        message = str(error.get("message") or "The approval could not be reported.")
+        raise BrowserExplainError(str(error.get("code") or "browser_report_prompt"), message)
+    return {key: value for key, value in reply.items() if key != "ok"}
+
+
+def _native_request(line: str, *, command: str = "browser-explain") -> dict[str, object]:
     from ..native_runtime import _run_native_process, native_runtime_status
 
     status = native_runtime_status()
@@ -93,7 +123,7 @@ def _native_request(line: str) -> dict[str, object]:
         raise BrowserExplainError("native_runtime_unavailable", "The HOL Guard native runtime is required.")
     output = _run_native_process(
         status.identity.path,
-        ("browser-explain", "--stdin"),
+        (command, "--stdin"),
         input_text=line,
         timeout_seconds=_NATIVE_TIMEOUT_SECONDS,
     )
@@ -133,3 +163,17 @@ def _print(result: dict[str, object], stream: TextIO) -> None:
     else:
         print("No temporary browser grant can cover this call.", file=stream)
     print("Saved approvals, workspace rules and device settings can still change the outcome.", file=stream)
+
+
+def _print_report(result: dict[str, object], stream: TextIO) -> None:
+    print("Case skeleton for a browser review that should not have asked:", file=stream)
+    print("", file=stream)
+    print("```json", file=stream)
+    print(json.dumps(result.get("skeleton"), indent=2, sort_keys=True), file=stream)
+    print("```", file=stream)
+    print("", file=stream)
+    print(
+        "Every argument value is a placeholder and every site is synthetic. Read it before you paste it"
+        " into a public issue. Guard has not sent it anywhere.",
+        file=stream,
+    )
