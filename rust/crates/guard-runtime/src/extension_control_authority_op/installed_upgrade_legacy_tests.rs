@@ -118,7 +118,7 @@ impl Fixture {
         let sealed = crate::pack_lifecycle::evaluate(&json!({"kind":"record","operation":"seal",
             "purpose":"activation","key":hex::encode(KEY),"payload":self.header}))
         .unwrap();
-        super::super::open(&sealed, &KEY, self.directory.path())
+        super::super::open("previous", &sealed, &KEY, self.directory.path())
     }
 
     fn rewrite_manifest(&mut self) {
