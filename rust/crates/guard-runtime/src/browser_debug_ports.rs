@@ -41,6 +41,12 @@ use crate::policy_enforcement::ActionFloor;
 const DEBUG_PORT_REVIEW: &str = "browser_debug_port";
 const DEBUG_PORT_REASON: &str = "This reaches the debugging port of a browser launched earlier in \
      this session. That port controls the browser, its cookies and the sites it is signed in to.";
+const CONVENTIONAL_PORT_REASON: &str =
+    "This reaches a conventional debugger port (Chrome DevTools \
+     or the Node inspector). Whatever answers there can be driven through it.";
+const SATURATED_REASON: &str = "This session named more browser debugging ports than Guard \
+     tracks, so every loopback port in it is treated as one. A debugging port controls the \
+     browser, its cookies and the sites it is signed in to.";
 /// Destinations read per call; the debugging port check needs only loopback ones.
 const MAX_TARGETS: usize = 64;
 /// The driver identity of a browser launched from a shell command.
@@ -87,7 +93,7 @@ pub(crate) fn apply(
     }
     let harness_session = harness_session_digest(harness, payload);
     let command = command_text(payload);
-    let launched = command
+    let (launched, overflowed) = command
         .as_deref()
         .map(debugging_ports_in)
         .unwrap_or_default();
@@ -110,28 +116,45 @@ pub(crate) fn apply(
     if reached.is_empty() {
         return result;
     }
-    let mut known = harness_session
+    let recorded = harness_session
         .as_deref()
         .map(|session| recorded_ports(guard_home, harness, session, now_unix))
         .unwrap_or_default();
-    known.extend(&launched);
-    if command.is_none() {
-        known.extend(CONVENTIONAL_DEBUG_PORTS);
+    // A session that named more ports than the store keeps may have dropped the one the browser
+    // listens on, so every loopback port in it is held rather than the overflow being missed.
+    if overflowed || recorded.len() >= MAX_DEBUGGING_PORTS_PER_SESSION {
+        return raise(result, SATURATED_REASON);
     }
-    if reached.iter().any(|port| known.contains(port)) {
-        raise(result)
-    } else {
-        result
+    let matched: Vec<u16> = reached
+        .iter()
+        .copied()
+        .filter(|port| recorded.contains(port) || launched.contains(port))
+        .collect();
+    if !matched.is_empty() {
+        // Driving the browser keeps its session alive: refresh the recorded port.
+        if let Some(harness_session) = harness_session.as_deref() {
+            record(guard_home, harness, harness_session, &matched, now_unix);
+        }
+        return raise(result, DEBUG_PORT_REASON);
     }
+    if command.is_none()
+        && reached
+            .iter()
+            .any(|port| CONVENTIONAL_DEBUG_PORTS.contains(port))
+    {
+        return raise(result, CONVENTIONAL_PORT_REASON);
+    }
+    result
 }
 
-/// The harness session the call belongs to. A call without a session id has
-/// no session to scope a port to, so nothing is recorded or matched against
-/// the store.
+/// The harness session the call belongs to, read from the keys that harness
+/// names its session with (Cursor's is `conversation_id`). A call without one
+/// has no session to scope a port to, so nothing is recorded or matched
+/// against the store.
 fn harness_session_digest(harness: &str, payload: &Value) -> Option<String> {
-    let session = payload
-        .get("session_id")
-        .and_then(Value::as_str)
+    let session = crate::edge_identity::session_identity_keys(harness)
+        .iter()
+        .find_map(|key| payload.get(*key).and_then(Value::as_str))
         .map(str::trim)
         .filter(|session| !session.is_empty())?;
     Some(hex_digest(&format!("{harness}\0{session}")))
@@ -166,12 +189,13 @@ fn schemeless_loopback_ports(command: &str) -> Vec<u16> {
         .collect()
 }
 
-/// Debugging ports the command text names, without duplicates. Port `0` asks
-/// the browser to pick one, which no later request can be matched against,
-/// so it is skipped.
-pub(crate) fn debugging_ports_in(command: &str) -> Vec<u16> {
+/// Debugging ports the command text names, without duplicates, and whether it
+/// named more than a session keeps. Port `0` asks the browser to pick one,
+/// which no later request can be matched against, so it is skipped.
+pub(crate) fn debugging_ports_in(command: &str) -> (Vec<u16>, bool) {
     let words = command_words(command);
     let mut ports = Vec::new();
+    let mut overflowed = false;
     for (index, word) in words.iter().enumerate() {
         let flag = word.trim_start_matches('-');
         if flag.len() == word.len() {
@@ -192,12 +216,17 @@ pub(crate) fn debugging_ports_in(command: &str) -> Vec<u16> {
             .and_then(|value| value.parse::<u16>().ok())
             .filter(|port| *port != 0);
         if let Some(port) = port {
-            if !ports.contains(&port) && ports.len() < MAX_DEBUGGING_PORTS_PER_SESSION {
+            if ports.contains(&port) {
+                continue;
+            }
+            if ports.len() < MAX_DEBUGGING_PORTS_PER_SESSION {
                 ports.push(port);
+            } else {
+                overflowed = true;
             }
         }
     }
-    ports
+    (ports, overflowed)
 }
 
 /// The port of a destination on this machine, or `None` for any other host.
@@ -234,9 +263,8 @@ pub(crate) fn loopback_port(target: &str) -> Option<u16> {
 fn loopback_host(host: &str) -> bool {
     host == "localhost"
         || host.ends_with(".localhost")
-        || host
-            .parse::<Ipv4Addr>()
-            .is_ok_and(|address| address.is_loopback() || address.is_unspecified())
+        || lenient_ipv4(host)
+            .is_some_and(|address| address.is_loopback() || address.is_unspecified())
         || host.parse::<Ipv6Addr>().is_ok_and(|address| {
             address.is_loopback()
                 || address.is_unspecified()
@@ -244,6 +272,51 @@ fn loopback_host(host: &str) -> bool {
                     .to_ipv4_mapped()
                     .is_some_and(|mapped| mapped.is_loopback() || mapped.is_unspecified())
         })
+}
+
+/// An IPv4 address in any spelling curl and browsers accept: one to four
+/// parts, each decimal, `0x` hex or `0`-prefixed octal, the last part filling
+/// the remaining bytes (`127.1`, `2130706433`, `0x7f.0.0.1`, `0177.0.0.1`).
+fn lenient_ipv4(host: &str) -> Option<Ipv4Addr> {
+    let parts: Vec<&str> = host.split('.').collect();
+    if parts.is_empty() || parts.len() > 4 {
+        return None;
+    }
+    let mut values = Vec::with_capacity(parts.len());
+    for part in &parts {
+        let (digits, radix) =
+            if let Some(hex) = part.strip_prefix("0x").or_else(|| part.strip_prefix("0X")) {
+                (hex, 16)
+            } else if part.len() > 1 && part.starts_with('0') {
+                (&part[1..], 8)
+            } else {
+                (*part, 10)
+            };
+        if (digits.is_empty() && radix != 16)
+            || !digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return None;
+        }
+        let value = if digits.is_empty() {
+            0
+        } else {
+            u32::from_str_radix(digits, radix).ok()?
+        };
+        values.push(value);
+    }
+    let (last, leading) = values.split_last()?;
+    if leading.iter().any(|value| *value > 255) {
+        return None;
+    }
+    let remaining_bits = 8 * (4 - leading.len() as u32);
+    if remaining_bits < 32 && u64::from(*last) >= 1u64 << remaining_bits {
+        return None;
+    }
+    let mut address = u64::from(*last);
+    for (index, value) in leading.iter().enumerate() {
+        address |= u64::from(*value) << (24 - 8 * index as u32);
+    }
+    u32::try_from(address).ok().map(Ipv4Addr::from)
 }
 
 /// Records each port on the harness session's shell-launched browser. A store
@@ -292,7 +365,7 @@ fn recorded_ports(
     known_debugging_ports(&connection, harness, harness_session, now_unix).unwrap_or_default()
 }
 
-fn raise(mut result: PreToolResultV1) -> PreToolResultV1 {
+fn raise(mut result: PreToolResultV1, reason: &str) -> PreToolResultV1 {
     let (Some(minimum), Some(policy)) = (
         ActionFloor::parse(&result.minimum_action),
         ActionFloor::parse(&result.policy_action),
@@ -311,7 +384,7 @@ fn raise(mut result: PreToolResultV1) -> PreToolResultV1 {
     }
     result.explicitly_benign = false;
     result.reason_code = DEBUG_PORT_REVIEW.into();
-    result.reason = DEBUG_PORT_REASON.into();
+    result.reason = reason.into();
     result
 }
 

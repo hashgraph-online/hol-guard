@@ -109,7 +109,7 @@ pub(super) fn request_payload_identity(
 /// `generation_id`. Reading only `session_id` left the Cursor retry guard
 /// unreachable, so a Cursor retry kept its moving `generation_id` and could
 /// never reach the approval the user had just given.
-fn session_identity_keys(harness: &str) -> &'static [&'static str] {
+pub(crate) fn session_identity_keys(harness: &str) -> &'static [&'static str] {
     match harness {
         "cursor" => &["session_id", "conversation_id", "conversationId"],
         _ => &["session_id"],
