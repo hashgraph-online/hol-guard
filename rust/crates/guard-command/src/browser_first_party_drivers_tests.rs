@@ -1,6 +1,12 @@
 use guard_contracts::{BrowserDriverTrustClassV1, BrowserIntentV1, BrowserProfileModeV1};
 
+use serde_json::{json, Value};
+
 use super::*;
+use crate::browser_action_project::{
+    project_browser_action, BrowserProjection, BrowserProjectionContext,
+};
+use crate::browser_driver_match::{match_browser_driver, BrowserToolCallIdentity};
 
 // The operation tables these profiles replaced. Every name keeps its intent.
 const CHROME_DEVTOOLS_ORACLE: &[(BrowserIntentV1, &[&str])] = &[
@@ -194,12 +200,12 @@ fn oracle_names(oracle: &[(BrowserIntentV1, &[&str])]) -> Vec<String> {
 #[test]
 fn first_party_profiles_compile_as_first_party() {
     let drivers = compile_first_party().expect("first-party profiles compile");
-    assert_eq!(drivers.len(), 4);
+    assert_eq!(drivers.len(), 5);
     for driver in &drivers {
         assert_eq!(driver.trust_class, BrowserDriverTrustClassV1::FirstParty);
         assert!(driver.publisher_verified);
     }
-    assert_eq!(first_party_browser_drivers().len(), 4);
+    assert_eq!(first_party_browser_drivers().len(), 5);
 }
 
 #[test]
@@ -323,4 +329,54 @@ fn profile_mode_reads_the_profile_flag_lists_in_priority_order() {
     assert_eq!(mode(&["--persistent"]), BrowserProfileModeV1::Dedicated);
     assert_eq!(mode(&["--no-isolated"]), BrowserProfileModeV1::Shared);
     assert_eq!(mode(&["--shared"]), BrowserProfileModeV1::Shared);
+}
+
+fn computer_use(harness_tool_name: &str, arguments: Value) -> BrowserProjection {
+    let call = BrowserToolCallIdentity {
+        harness_tool_name,
+        ..Default::default()
+    };
+    let matched = match_browser_driver(first_party_browser_drivers(), &call).expect("matched");
+    assert_eq!(matched.driver.id, COMPUTER_USE_DRIVER_ID);
+    let Value::Object(arguments) = arguments else {
+        panic!("arguments are an object");
+    };
+    project_browser_action(&matched, &arguments, &BrowserProjectionContext::default())
+}
+
+#[test]
+fn computer_use_maps_each_action_and_acts_in_the_shared_session() {
+    use guard_contracts::BrowserVerbV1::*;
+    for (tool, action, verb) in [
+        ("computer", "get_screenshot", Screenshot),
+        ("computer", "screenshot", Screenshot),
+        ("computer", "left_click", Click),
+        ("computer", "mouse_move", Click),
+        ("computer", "type", Type),
+        ("computer", "key", Key),
+        ("computer", "scroll", Scroll),
+        ("mcp__computer-use__computer", "double_click", Click),
+    ] {
+        let BrowserProjection::Classified(projected) =
+            computer_use(tool, json!({"action": action, "text": "x"}))
+        else {
+            panic!("{action} is classified");
+        };
+        assert_eq!(projected.verb, verb, "{action}");
+        assert_eq!(
+            projected.session.profile_mode,
+            BrowserProfileModeV1::Shared,
+            "{action}"
+        );
+    }
+}
+
+#[test]
+fn an_unlisted_computer_use_action_stays_unclassified() {
+    for arguments in [json!({"action": "open_application"}), json!({})] {
+        assert!(matches!(
+            computer_use("computer", arguments),
+            BrowserProjection::Unclassified { .. }
+        ));
+    }
 }

@@ -145,6 +145,25 @@
         "Upload: no row that is not allow"
       ]
     },
+    "browser.computer-use": {
+      "missing_tools": [
+        "computer"
+      ],
+      "verb_gaps": [
+        "Click: no allow row under a grant",
+        "Click: no row that is not allow",
+        "Key: no allow row under a grant",
+        "Key: no row that is not allow",
+        "Read: no allow row under a grant",
+        "Read: no row that is not allow",
+        "Screenshot: no allow row under a grant",
+        "Screenshot: no row that is not allow",
+        "Scroll: no allow row under a grant",
+        "Scroll: no row that is not allow",
+        "Type: no allow row under a grant",
+        "Type: no row that is not allow"
+      ]
+    },
     "browser.playwright-mcp": {
       "missing_tools": [
         "browser_accessibility_snapshot",

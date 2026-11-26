@@ -18,6 +18,7 @@ _BUNDLE = _ROOT / "rust" / "crates" / "guard-command" / "src" / "browser_first_p
 REFERENCE_PROFILES = (
     ("browser.puppeteer-mcp", "puppeteer", "unknown"),
     ("browser.browsermcp", "browsermcp", "shared"),
+    ("browser.computer-use", "computer-use", "shared"),
 )
 
 
@@ -37,13 +38,20 @@ def test_every_pointer_names_an_argument_the_tool_takes(identity: str, vector: s
     schemas = {tool["name"]: tool["inputSchema"]["properties"] for tool in recorded_tools(vector)}
     checked = 0
     for tool in _profile(identity)["tools"]:
-        for field, pointers in tool.items():
-            if field in {"name", "verb"}:
-                continue
-            names = pointers["name"] if isinstance(pointers, dict) else pointers
-            for name in names:
-                assert name in schemas[tool["name"]], (tool["name"], field, name)
-                checked += 1
+        arguments = schemas[tool["name"]]
+        shapes = [tool]
+        if "discriminator" in tool:
+            assert tool["discriminator"] in arguments, tool["name"]
+            shapes = list(tool["cases"].values())
+            checked += 1
+        for shape in shapes:
+            for field, pointers in shape.items():
+                if field in {"name", "verb"}:
+                    continue
+                names = pointers["name"] if isinstance(pointers, dict) else pointers
+                for name in names:
+                    assert name in arguments, (tool["name"], field, name)
+                    checked += 1
     assert checked > 0
 
 
@@ -60,3 +68,10 @@ def test_the_profile_is_bundled_and_tracked_upstream(identity: str, vector: str,
 def test_a_command_script_tool_is_never_below_privileged() -> None:
     script = next(tool for tool in _profile("browser.browsermcp")["tools"] if tool["name"] == "browser")
     assert script["verb"] == "Other"
+
+
+def test_every_published_computer_use_action_has_a_case() -> None:
+    (computer,) = recorded_tools("computer-use")
+    published = set(computer["inputSchema"]["properties"]["action"]["enum"])
+    (tool,) = _profile("browser.computer-use")["tools"]
+    assert published <= set(tool["cases"])
