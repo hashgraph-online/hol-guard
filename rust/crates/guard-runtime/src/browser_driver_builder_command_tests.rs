@@ -160,3 +160,60 @@ fn unknown_ops_and_bad_requests_are_refused() {
     assert_eq!(run_command(b"not json")["error"]["code"], "request_invalid");
     assert_eq!(run(json!({"op": "apply"}))["error"]["code"], "op_invalid");
 }
+
+/// `count` spellings of `word` that differ only in the case of its first three letters.
+fn spellings(word: &str, count: usize) -> Vec<String> {
+    (0..count)
+        .map(|mask| {
+            word.chars()
+                .enumerate()
+                .map(|(index, character)| {
+                    if index < 3 && mask & (1 << index) != 0 {
+                        character.to_ascii_uppercase()
+                    } else {
+                        character
+                    }
+                })
+                .collect()
+        })
+        .collect()
+}
+
+#[test]
+fn generate_returns_the_text_it_compiled() {
+    let result = run(generate_request());
+    assert_eq!(result["ok"], true, "{result}");
+    let text = result["profileText"].as_str().unwrap();
+    assert!(text.ends_with("}\n"));
+    assert!(text.contains("\n  \"tools\": ["));
+    assert_eq!(
+        serde_json::from_str::<Value>(text).unwrap(),
+        result["profile"]
+    );
+}
+
+#[test]
+fn generate_refuses_a_draft_that_only_fits_without_indentation() {
+    let mut properties = serde_json::Map::new();
+    for word in ["link", "values", "javascript", "filename", "selector"] {
+        for spelling in spellings(word, 8) {
+            properties.insert(spelling, json!({}));
+        }
+    }
+    let tools: Vec<Value> = (0..256)
+        .map(|index| {
+            json!({
+                "name": format!("tool_{index:03}_{}", "a".repeat(55)),
+                "inputSchema": {"properties": properties},
+            })
+        })
+        .collect();
+    let mut request = generate_request();
+    request["document"] = json!({ "tools": tools }).to_string();
+    let result = run(request);
+
+    // Without indentation this draft is about 143 KB, under the 256 KiB limit; the indented
+    // text the CLI writes is about 270 KB, so only the written form is over it.
+    assert_eq!(result["ok"], false, "the indented draft should be refused");
+    assert_eq!(result["error"]["code"], "browser_driver_bytes_invalid");
+}

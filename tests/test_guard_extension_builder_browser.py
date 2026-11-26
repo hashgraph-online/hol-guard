@@ -12,11 +12,17 @@ from codex_plugin_scanner.guard.cli import extension_builder_browser
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 
 TOOLS = '{"tools": [{"name": "page_navigate", "inputSchema": {"properties": {"url": {}}}}, {"name": "frobnicate"}]}'
+PROFILE = {"schemaVersion": "guard.browser-driver.v1", "id": "browser.example-pilot", "tools": [{}, {}]}
 DRAFT = {
     "ok": True,
-    "profile": {"schemaVersion": "guard.browser-driver.v1", "id": "browser.example-pilot", "tools": [{}, {}]},
+    "profile": PROFILE,
+    "profileText": json.dumps(PROFILE, indent=2) + "\n",
     "proposals": [{"tool": "page_navigate", "verb": "Navigate", "evidence": "navigate"}],
-    "notes": [{"code": "verb_unknown", "tool": "frobnicate"}],
+    "notes": [
+        {"code": "verb_unknown", "tool": "frobnicate"},
+        {"code": "tool_name_unsupported", "tool": "BadName"},
+        {"code": "tool_limit", "tool": "page_extra"},
+    ],
 }
 
 
@@ -74,10 +80,34 @@ def test_browser_generate_sends_the_tool_list_and_writes_the_profile(
             "publisher": "Example Org",
         }
     ]
-    assert json.loads(output.read_text(encoding="utf-8")) == DRAFT["profile"]
+    assert output.read_text(encoding="utf-8") == DRAFT["profileText"]
     assert result["driverId"] == "browser.example-pilot"
     assert result["tools"] == 2
     assert result["notes"] == DRAFT["notes"]
+
+
+def test_browser_generate_text_output_names_skipped_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(extension_builder_browser, "native_browser_request", lambda request, *, code: DRAFT)
+    output = tmp_path / "browser.example-pilot.json"
+    status = cli.main(["guard", "extensions", "generate", *generate_args(tmp_path, output)])
+    text = capsys.readouterr().out
+    assert status == 0, text
+    assert "page_navigate: Navigate (navigate)" in text
+    assert "Skipped BadName" in text
+    assert "Skipped page_extra: a profile holds at most 256 tools." in text
+
+
+def test_browser_generate_refuses_a_reply_without_profile_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    reply = {key: value for key, value in DRAFT.items() if key != "profileText"}
+    monkeypatch.setattr(extension_builder_browser, "native_browser_request", lambda request, *, code: reply)
+    output = tmp_path / "out.json"
+    status, error = run("generate", generate_args(tmp_path, output), capsys)
+    assert (status != 0, error["error"]["code"]) == (True, "browser_generate")
+    assert not output.exists()
 
 
 def test_browser_generate_refuses_wrong_inputs_and_existing_output(

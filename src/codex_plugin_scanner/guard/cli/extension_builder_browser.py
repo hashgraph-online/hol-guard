@@ -82,9 +82,11 @@ def generate_browser_draft(args: argparse.Namespace) -> dict[str, object]:
     if reply.get("ok") is not True:
         raise BuilderError("browser_generate", f"The draft could not be built: {_refusal(reply)}.")
     profile = reply.get("profile")
-    if not isinstance(profile, dict) or not isinstance(profile.get("tools"), list):
+    profile_text = reply.get("profileText")
+    if not isinstance(profile, dict) or not isinstance(profile.get("tools"), list) or not isinstance(profile_text, str):
         raise BuilderError("browser_generate", "The native drafter returned an invalid profile.")
-    _write_new(args.output, json.dumps(profile, indent=2, ensure_ascii=False) + "\n")
+    # Write the exact text the native compiler checked, so the file on disk is the one it accepted.
+    _write_new(args.output, profile_text)
     return {
         "generated": True,
         "browser": True,
@@ -112,6 +114,23 @@ def validate_browser_driver(path: Path) -> dict[str, object]:
     }
 
 
+_OMISSION_NOTES = {
+    "tool_name_unsupported": "Skipped {tool}: Guard tool names use lowercase letters, digits, '.', '_' or '-'.",
+    "tool_limit": "Skipped {tool}: a profile holds at most 256 tools.",
+    "tool_skipped": "Skipped a tool list entry: {detail}.",
+}
+
+
+def _emit_omissions(notes: object, output: TextIO) -> None:
+    for note in notes if isinstance(notes, list) else []:
+        template = _OMISSION_NOTES.get(note.get("code")) if isinstance(note, dict) else None
+        if template:
+            print(
+                "  " + template.format(tool=note.get("tool", "a tool"), detail=note.get("detail", "unreadable")),
+                file=output,
+            )
+
+
 def emit_browser_summary(command: str, result: dict[str, object], output: TextIO) -> None:
     if command == "generate":
         print(f"Drafted {result['tools']} tools for {result['driverId']} in {result['output']}.", file=output)
@@ -119,6 +138,7 @@ def emit_browser_summary(command: str, result: dict[str, object], output: TextIO
             if isinstance(proposal, dict):
                 evidence = proposal.get("evidence") or "no matching name"
                 print(f"  {proposal.get('tool')}: {proposal.get('verb')} ({evidence})", file=output)
+        _emit_omissions(result["notes"], output)
         print(
             "Check every verb, set profileMode once you know how the driver launches its browser, "
             "then run extensions validate --browser.",

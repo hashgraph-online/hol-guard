@@ -292,8 +292,15 @@ fn generate(request: &Map<String, Value>) -> Value {
         "tools": tools,
     });
     notes.push(json!({"code": "profile_mode_unknown"}));
-    let bytes = serde_json::to_vec(&profile).unwrap_or_default();
-    match compile_browser_driver(&bytes, BrowserDriverOrigin::Contributed, &[]) {
+    // The compiler checks the exact text the CLI writes, indentation included, so a draft near
+    // the size limit cannot pass here and then fail validation once it is on disk.
+    let mut profile_text = serde_json::to_string_pretty(&profile).unwrap_or_default();
+    profile_text.push('\n');
+    match compile_browser_driver(
+        profile_text.as_bytes(),
+        BrowserDriverOrigin::Contributed,
+        &[],
+    ) {
         Err(error) => {
             return json!({
                 "ok": false,
@@ -308,7 +315,13 @@ fn generate(request: &Map<String, Value>) -> Value {
         }
         Ok(_) => {}
     }
-    json!({"ok": true, "profile": profile, "proposals": proposals, "notes": notes})
+    json!({
+        "ok": true,
+        "profile": profile,
+        "profileText": profile_text,
+        "proposals": proposals,
+        "notes": notes,
+    })
 }
 
 fn is_shipped_id(driver: &CompiledBrowserDriverV1) -> bool {
