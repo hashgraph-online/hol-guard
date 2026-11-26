@@ -215,7 +215,8 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
     let mut detail = project(source, DETAIL_FIELDS, OPTIONAL_DETAIL_FIELDS)?;
     detail.insert("catalog_defaults".into(), defaults);
     detail.insert("content_revision".into(), Value::String(revision));
-    detail.insert("surfaces".into(), serde_json::json!(surfaces));
+    // The index carries `surfaces` for filtering; the detail page stays the extension's own
+    // record, which the v1 client reassembles exactly.
     let mut search_parts = vec![id.clone(), text("name")?, text("description")?];
     search_parts.extend(
         source

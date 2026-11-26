@@ -230,10 +230,12 @@ fn index_and_detail_values_match_source_catalog() {
         assert_eq!(item["catalog_defaults"]["activation"], source["activation"]);
         let detail = ok_body(&read(snapshot, &format!("extensions/{id}"), ""));
         for (key, value) in detail["extension"].as_object().unwrap() {
-            if !matches!(
+            assert_ne!(
                 key.as_str(),
-                "catalog_defaults" | "content_revision" | "surfaces"
-            ) {
+                "surfaces",
+                "{id}: the detail page has no derived surfaces"
+            );
+            if !matches!(key.as_str(), "catalog_defaults" | "content_revision") {
                 assert_eq!(*value, source[key], "{id} {key}");
             }
         }
