@@ -569,13 +569,16 @@ fn probe(
         .iter()
         .skip(1)
         .take_while(|value| value.as_str() != "--");
-    // Deliberately conservative: an explicit signature request always needs
-    // review, even if a later --no-show-signature would disable it. We do not
-    // claim to prove the complete signature-format/helper option grammar.
+    // Deliberately conservative: an explicit signature request is read as
+    // one even if a later --no-show-signature would disable it. It starts the
+    // configured verification program, so it is cleared only below, once the
+    // program is shown to be one the user chose.
+    let verifies = super::git_history_reads::verifies_signatures(rendering);
+    let mut signature_requested = options
+        .clone()
+        .any(|value| value.as_str() == "--show-signature" || (verifies && value.contains("%G")));
     if options.clone().any(|value| {
-        value.as_str() == "--show-signature"
-            || (super::git_history_reads::verifies_signatures(rendering) && value.contains("%G"))
-            || value.starts_with("--remerge-diff")
+        value.starts_with("--remerge-diff")
             || value == "--diff-merges=remerge"
             || value == "--submodule=diff"
     }) {
@@ -827,13 +830,16 @@ fn probe(
             }
             key if key.starts_with("filter.") => filtered && !value.is_empty() && !filters_unused,
             "format.pretty" => {
-                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
+                signature_requested |= verifies && value.contains("%G");
+                false
             }
             key if key.starts_with("pretty.") => {
-                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
+                signature_requested |= verifies && value.contains("%G");
+                false
             }
             "log.showsignature" => {
-                super::git_history_reads::verifies_signatures(rendering) && !disabled
+                signature_requested |= verifies && !disabled;
+                false
             }
             // A configured skip list names a file of object names Git reads
             // before it checks anything, and a line of that file that is not
@@ -845,18 +851,30 @@ fn probe(
             // Outside a repository grep would search every file under cwd.
             "grep.fallbacktonoindex" => operation == "grep" && !disabled,
             // A configured verification program (a very common developer
-            // setting) runs only when signature verification is requested.
-            // Every such request is rejected above: --show-signature,
-            // log.showSignature, %G placeholders in the command line,
-            // format.pretty or any pretty.* alias, for the reflog walk as
-            // much as for `log` and `show`. A bare gpg.* definition
-            // therefore cannot execute for the remaining reads.
+            // setting) runs only when signature verification is requested:
+            // --show-signature, log.showSignature, %G placeholders in the
+            // command line, format.pretty or any pretty.* alias, for the
+            // reflog walk as much as for `log` and `show`. Each of those
+            // marks the read above, and the read is cleared below only when
+            // every program it could start is one the user chose. A bare
+            // gpg.* definition cannot execute for the remaining reads.
             key if key.starts_with("gpg.") => false,
             _ => return None,
         };
         if unsafe_value {
             return Some(false);
         }
+    }
+    if signature_requested
+        && !super::git_signature_helper::user_chosen(
+            &command,
+            &home,
+            &cwd,
+            execution_environment,
+            deadline,
+        )
+    {
+        return Some(false);
     }
     if operation == "config" {
         return super::git_config_reads::credential_free(&command, &remaining[1..], deadline);
