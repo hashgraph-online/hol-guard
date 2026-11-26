@@ -488,6 +488,12 @@ transcript in the pull request (after BP-T052).
   `encrypted_secret_store`, format validation from the manifest before storing, `Zeroizing` copies
   only. Secret tests: the key never appears in a route response, a log line, a receipt, a store row
   outside the secret store, a panic message or `Debug` output.
+  - [x] Secret module: id, `keyFormat` check (length, charset, Guard's 4 KiB cap) before anything is
+    written, a `ProviderKey` wrapper that zeroes on drop and prints as `redacted`, refusal codes with
+    no key text, per-provider delete for disconnect and `delete_all_provider_keys` for uninstall and
+    forget-device. Tests cover `Debug`, error text and every file under the Guard home.
+  - [ ] Route, log and receipt checks land with the routes (BP-T130) and the worker (BP-T122), which
+    are the first code that handles a key outside this module.
 - [ ] **BP-T121** `provider_integration_store.rs`: connection rows and the `provider_signals` cache
   table keyed by `(provider_id, capability, subject_digest)`, through the native `ensure_schema`
   chain. Subjects are stored as digests.
