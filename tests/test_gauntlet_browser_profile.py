@@ -201,6 +201,14 @@ def test_a_repeat_prompt_fails_a_task_as_a_false_positive() -> None:
     assert "already covered" in reason
 
 
+@pytest.mark.parametrize("budget", [0, 2])
+def test_a_stop_on_a_task_tool_is_a_false_positive_even_without_a_row(budget: int) -> None:
+    evidence = BrowserEvidence(True, [_decision(SNAPSHOT, "deny", "mcp_tool_blocked")])
+    outcome, reason = browser_outcome(_scenario({**TASK, "approval_budget": budget}), evidence)
+    assert outcome == "false-positive"
+    assert "mcp_tool_blocked" in reason
+
+
 def test_a_review_row_without_always_allow_fails_a_task() -> None:
     evidence = BrowserEvidence(
         True,
