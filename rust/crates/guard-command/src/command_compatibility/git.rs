@@ -54,11 +54,13 @@ pub(crate) fn canonical_subcommand(word: &str) -> &str {
 /// helper or transport for them. A pager or an external diff tool is chosen
 /// by Git's own settings and `GIT_*` names, which assignments ahead of the
 /// read never count as plain.
+///
+/// `status`, `diff` and `describe --dirty` are left out: they refresh the
+/// index and may write it back, which runs the `post-index-change` hook, and
+/// they can start `core.fsmonitor` and clean filters on changed files.
 const USER_PROGRAM_FREE_READS: &[&str] = &[
     "blame",
     "cat-file",
-    "describe",
-    "diff",
     "for-each-ref",
     "grep",
     "log",
@@ -71,7 +73,6 @@ const USER_PROGRAM_FREE_READS: &[&str] = &[
     "shortlog",
     "show",
     "show-ref",
-    "status",
 ];
 
 /// Whether `git ARGUMENTS` is a read that starts no hook or helper, which

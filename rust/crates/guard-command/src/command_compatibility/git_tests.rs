@@ -777,12 +777,14 @@ fn a_plain_shell_variable_does_not_steer_a_later_git_read() {
         "out_dir=/tmp/report; git status --short",
         "work_dir=\"$HOME/projects\"; git status --short",
         "a=1; b2=2; git status --short",
-        "REF=HEAD; git status --short",
-        "N=3; X=1; git status --short",
     ] {
         assert!(!status_uncertain(command), "{command}");
     }
     for command in [
+        // `git status` can write the index and run the `post-index-change`
+        // or fsmonitor hook, which reads any name the session exported.
+        "REF=HEAD; git status --short",
+        "N=3; X=1; git status --short",
         "PAGER=/tmp/x; git status --short",
         "GIT_DIR=/tmp/elsewhere; git status --short",
         "http_proxy=http://127.0.0.1:9; git status --short",
