@@ -3,7 +3,7 @@ mod allowances;
 pub(super) use allowances::{
     agent_skill_document, agent_skill_listing_directory, agent_skill_script,
     agent_state_tree_holds_only_documents, inside_agent_state_tree,
-    project_skill_listing_directory, skill_link_resolves_over_home,
+    project_skill_listing_directory, skill_link_resolves_over_home, AGENT_NOTE_ROOTS,
 };
 #[path = "read_feature_directories.rs"]
 pub(super) mod feature_directories;
