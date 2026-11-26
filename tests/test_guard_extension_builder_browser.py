@@ -183,7 +183,6 @@ def test_browser_generate_removes_the_profile_when_the_rows_cannot_be_written(
     assert output.exists() and rows.exists()
 
 
-
 def test_a_file_the_builder_could_not_finish_is_removed(tmp_path: Path) -> None:
     # A lone surrogate cannot be encoded, so the file is created and then the write fails, the way
     # a full disk would fail it. The half-written file must not block a rerun.
@@ -197,6 +196,7 @@ def test_a_file_the_builder_could_not_finish_is_removed(tmp_path: Path) -> None:
         _write_new(rows, "[1]")
     assert refused.value.code == "output_exists"
     assert rows.read_text(encoding="utf-8") == "[]"
+
 
 def test_browser_generate_refuses_wrong_inputs_and_existing_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
