@@ -53,14 +53,20 @@ pub(super) fn safe_file_predicate_arguments(
     };
     // Each predicate reads only the target's metadata: its type, permission
     // bits or size. `-x` is also true for a directory the caller may enter.
+    // `-L` and its older spelling `-h` ask `lstat` whether the name itself is
+    // a link and never follow it, one bit less than `-e` returns, so they
+    // take the same proof; a link is as often to a directory as to a file.
     verified_path_context(context.home_dir, context.cwd)
-        && matches!(predicate.as_str(), "-f" | "-d" | "-e" | "-r" | "-x" | "-s")
+        && matches!(
+            predicate.as_str(),
+            "-f" | "-d" | "-e" | "-r" | "-x" | "-s" | "-L" | "-h"
+        )
         && !target.starts_with('-')
         && (bounded_read_target(
             target,
             context.home_dir,
             context.cwd,
-            matches!(predicate.as_str(), "-d" | "-e" | "-x"),
+            matches!(predicate.as_str(), "-d" | "-e" | "-x" | "-L" | "-h"),
         ) || metadata_only_target(target, context)
             || super::listing_reads::tested_glob_operand(target, context))
 }
