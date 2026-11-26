@@ -5636,30 +5636,6 @@
               "config": {
                 "allow_leading_options": true,
                 "executables": [
-                  "@puppeteer/browsers",
-                  "@puppeteer/browsers.cmd",
-                  "@puppeteer/browsers.exe"
-                ],
-                "fail_secure_unknown_options": false,
-                "forbidden_flags": [],
-                "interspersed_flags": [],
-                "interspersed_options_with_values": [],
-                "inverse_flag_pairs": [],
-                "leading_options_with_values": [],
-                "options_with_values": [],
-                "required_flags": [],
-                "required_flags_in_all_arguments": false,
-                "required_option_values": [],
-                "subcommands": [
-                  "launch"
-                ]
-              },
-              "op": "executable.v1"
-            },
-            {
-              "config": {
-                "allow_leading_options": true,
-                "executables": [
                   "npx",
                   "npx.cmd",
                   "npx.exe"
@@ -10596,32 +10572,6 @@
                   "config": {
                     "allow_leading_options": true,
                     "executables": [
-                      "@puppeteer/browsers",
-                      "@puppeteer/browsers.cmd",
-                      "@puppeteer/browsers.exe"
-                    ],
-                    "fail_secure_unknown_options": false,
-                    "forbidden_flags": [],
-                    "interspersed_flags": [],
-                    "interspersed_options_with_values": [],
-                    "inverse_flag_pairs": [],
-                    "leading_options_with_values": [],
-                    "options_with_values": [],
-                    "required_flags": [
-                      "--help"
-                    ],
-                    "required_flags_in_all_arguments": false,
-                    "required_option_values": [],
-                    "subcommands": [
-                      "launch"
-                    ]
-                  },
-                  "op": "executable.v1"
-                },
-                {
-                  "config": {
-                    "allow_leading_options": true,
-                    "executables": [
                       "npx",
                       "npx.cmd",
                       "npx.exe"
@@ -15551,32 +15501,6 @@
                       "exec",
                       "@playwright/test",
                       "wk"
-                    ]
-                  },
-                  "op": "executable.v1"
-                },
-                {
-                  "config": {
-                    "allow_leading_options": true,
-                    "executables": [
-                      "@puppeteer/browsers",
-                      "@puppeteer/browsers.cmd",
-                      "@puppeteer/browsers.exe"
-                    ],
-                    "fail_secure_unknown_options": false,
-                    "forbidden_flags": [],
-                    "interspersed_flags": [],
-                    "interspersed_options_with_values": [],
-                    "inverse_flag_pairs": [],
-                    "leading_options_with_values": [],
-                    "options_with_values": [],
-                    "required_flags": [
-                      "-h"
-                    ],
-                    "required_flags_in_all_arguments": false,
-                    "required_option_values": [],
-                    "subcommands": [
-                      "launch"
                     ]
                   },
                   "op": "executable.v1"
