@@ -203,3 +203,37 @@ pub(super) fn opaque(word: &str) -> bool {
     }
     false
 }
+
+/// Whether the character outside ASCII at `at` is plain text to every shell:
+/// printable, no word break, no direction or zero-width mark that hides
+/// text, and not the tail of a `$NAME` or `${NAME` that zsh reads it into.
+/// A joiner and a variation selector stay plain, since emoji carry them.
+pub(super) fn plain_non_ascii(chars: &[char], at: usize) -> bool {
+    let character = chars[at];
+    if character.is_whitespace()
+        || character.is_control()
+        || matches!(
+            character,
+            '\u{00AD}'
+                | '\u{061C}'
+                | '\u{180E}'
+                | '\u{200B}'
+                | '\u{200C}'
+                | '\u{200E}'
+                | '\u{200F}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{2060}'..='\u{206F}'
+                | '\u{FEFF}'
+                | '\u{FFF9}'..='\u{FFFB}'
+                | '\u{E0000}'..='\u{E007F}'
+        )
+    {
+        return false;
+    }
+    let start = chars[..at]
+        .iter()
+        .rposition(|c| c.is_ascii() && !(c.is_ascii_alphanumeric() || *c == '_'))
+        .map_or(0, |before| before + 1);
+    let opener = |offset: usize| start.checked_sub(offset).map(|index| chars[index]);
+    !(opener(1) == Some('$') || (opener(1) == Some('{') && opener(2) == Some('$')))
+}

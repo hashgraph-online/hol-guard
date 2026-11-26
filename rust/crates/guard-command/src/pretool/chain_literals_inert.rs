@@ -85,8 +85,9 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         .iter()
         .map(|substitution| commit_message::message_slot(&masked, &substitutions, substitution))
         .collect();
-    // Text outside ASCII may stand only in a commit message, which the
-    // projection writes without it.
+    // Text outside ASCII stands in a commit message, which the projection
+    // writes without it, or outside every substitution as plain text the
+    // shell passes through as is.
     let in_message = |at: usize| {
         substitutions
             .iter()
@@ -95,11 +96,12 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                 *message && substitution.body_start <= at && at < substitution.body_end
             })
     };
-    if chars
-        .iter()
-        .enumerate()
-        .any(|(at, character)| !character.is_ascii() && !in_message(at))
-    {
+    if chars.iter().enumerate().any(|(at, character)| {
+        !character.is_ascii()
+            && !in_message(at)
+            && (substitutions.iter().any(|s| s.start <= at && at < s.end)
+                || !super::lex::plain_non_ascii(&chars, at))
+    }) {
         return None;
     }
     // Each substitution's own text, replaced by a character that is neither a

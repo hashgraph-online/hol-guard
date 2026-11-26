@@ -375,9 +375,9 @@ fn a_cat_that_reads_more_than_a_quoted_heredoc_stays_opaque() {
         "echo \"$(cat <<'EOF'\ncost $(id)\nEOF\n)\"",
         "echo \"$(cat <<'EOF'\nsay \"hi\"\nEOF\n)\"",
         "echo \"$(cat <<'EOF'\nit's a \\ path\nEOF\n)\"",
-        // Outside a commit message the projection is ASCII only.
+        // Inside a substitution other than a commit message the projection
+        // is ASCII only.
         "echo \"$(cat <<'EOF'\nit's a caf\u{e9}\nEOF\n)\"",
-        "echo caf\u{e9} && git commit -m \"$(cat <<'EOF'\nsubject\nEOF\n)\"",
         "echo \"$(cat <<'EOF'\nwipe *\nEOF\n)\"",
         // A pattern character is refused even though the double quotes keep
         // the shell from matching it: the screens downstream read the
@@ -740,6 +740,41 @@ fn a_printf_that_computes_its_output_or_runs_elsewhere_stays_opaque() {
         "git commit -m $(printf 'subject')",
         "git commit -m \"x$(printf 'subject')\"",
         "git tag -m \"$(printf 'subject')\" v1",
+    ] {
+        assert_eq!(projected(command), None, "{command}");
+    }
+}
+
+/// A word such as `café`, an em dash or an emoji outside every substitution
+/// is text the shell passes through as written, so the projection keeps it.
+/// A Unicode space or a direction or zero-width mark, or a letter zsh would
+/// read into a `$NAME`, keeps the command opaque.
+#[test]
+fn plain_text_outside_ascii_beside_a_substitution_keeps_the_projection() {
+    let d = DATE_VALUE;
+    for (command, expected) in [
+        (
+            "echo caf\u{e9} && git commit -m \"$(cat <<'EOF'\nsubject\nEOF\n)\"".to_owned(),
+            "echo caf\u{e9} && git commit -m \"subject\"".to_owned(),
+        ),
+        (
+            "echo \"$(date +%F) \u{2014} build \u{2705}\u{fe0f}\"".to_owned(),
+            format!("echo \"{d} \u{2014} build \u{2705}\u{fe0f}\""),
+        ),
+        (
+            "D=$(date +%F); echo '\u{65e5}\u{4ed8}' \"$D\"".to_owned(),
+            format!("D={d}; echo '\u{65e5}\u{4ed8}' \"$D\""),
+        ),
+    ] {
+        assert_eq!(projected(&command), Some(expected), "{command}");
+    }
+    for command in [
+        "echo caf\u{e9}\u{a0}x \"$(date +%F)\"",
+        "echo \"a\u{202e}b\" \"$(date +%F)\"",
+        "echo \"a\u{200b}b\" \"$(date +%F)\"",
+        "echo $caf\u{e9} \"$(date +%F)\"",
+        "echo ${caf\u{e9}} \"$(date +%F)\"",
+        "echo \"$(date +%F)\u{3000}\"",
     ] {
         assert_eq!(projected(command), None, "{command}");
     }
