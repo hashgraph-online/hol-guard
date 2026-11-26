@@ -525,7 +525,6 @@ fn visit_sensitive_surfaces(
         (SENSITIVE_STORAGE_PATTERNS, Storage, false),
         (SENSITIVE_AUTH_PATTERNS, AuthHeaders, false),
         (SENSITIVE_CDP_PATTERNS, Cdp, false),
-        (SENSITIVE_LAUNCH_PATTERNS, Cdp, true),
         (SENSITIVE_SCRIPT_EVAL_PATTERNS, ScriptEval, true),
         (SENSITIVE_UPLOAD_PATTERNS, Upload, true),
         (SENSITIVE_DOWNLOAD_PATTERNS, Download, true),
@@ -540,6 +539,14 @@ fn visit_sensitive_surfaces(
         {
             add(surface);
         }
+    }
+    // A launch option counts only when the call supplies it under its own name: a description
+    // or a schema that mentions one does not relaunch the browser.
+    if keys
+        .iter()
+        .any(|key| SENSITIVE_LAUNCH_PATTERNS.contains(&key.as_str()))
+    {
+        add(Cdp);
     }
     if schema_keys.iter().any(|key| {
         SENSITIVE_PASSWORD_PATTERNS

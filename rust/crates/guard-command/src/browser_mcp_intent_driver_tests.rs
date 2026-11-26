@@ -58,6 +58,30 @@ fn a_navigate_that_passes_launch_options_is_raw_protocol_access() {
 }
 
 #[test]
+fn a_launch_option_named_only_in_the_description_or_a_longer_key_is_not_raw_protocol_access() {
+    let artifact = BrowserMcpArtifactV1 {
+        name: "puppeteer_navigate".to_owned(),
+        command: Some("puppeteer_navigate".to_owned()),
+        metadata: json!({"server_name": "puppeteer",
+            "tool_description": "Navigate to a URL. Pass launchOptions to relaunch the browser."})
+        .as_object()
+        .cloned()
+        .unwrap(),
+    };
+    for arguments in [
+        json!({"url": "https://example.com/"}),
+        json!({"url": "https://example.com/", "launchOptionsDocumentation": "see readme"}),
+    ] {
+        let found = normalize_approval_intent(&artifact, &arguments)
+            .expect("normalizes")
+            .unwrap();
+        assert!(!found
+            .sensitive_surface_flags
+            .contains(&BrowserSensitiveSurfaceV1::Cdp));
+    }
+}
+
+#[test]
 fn browsermcp_runs_a_command_script_as_privileged() {
     let script = intent(
         "browsermcp",

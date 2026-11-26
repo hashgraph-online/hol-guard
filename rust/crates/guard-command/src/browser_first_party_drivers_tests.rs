@@ -1,4 +1,6 @@
-use guard_contracts::{BrowserDriverTrustClassV1, BrowserIntentV1, BrowserProfileModeV1};
+use guard_contracts::{
+    BrowserDriverTrustClassV1, BrowserIntentV1, BrowserProfileModeV1, BrowserSensitiveSurfaceV1,
+};
 
 use serde_json::{json, Value};
 
@@ -379,4 +381,33 @@ fn an_unlisted_computer_use_action_stays_unclassified() {
             BrowserProjection::Unclassified { .. }
         ));
     }
+}
+
+#[test]
+fn a_drag_screens_its_destination_as_well_as_its_source() {
+    let call = BrowserToolCallIdentity {
+        harness_tool_name: "mcp__browsermcp__browser_drag",
+        ..Default::default()
+    };
+    let matched = match_browser_driver(first_party_browser_drivers(), &call).expect("matched");
+    assert_eq!(matched.driver.id, BROWSERMCP_DRIVER_ID);
+    let project = |arguments: Value| {
+        let Value::Object(arguments) = arguments else {
+            panic!("arguments are an object");
+        };
+        let BrowserProjection::Classified(projected) =
+            project_browser_action(&matched, &arguments, &BrowserProjectionContext::default())
+        else {
+            panic!("drag is classified");
+        };
+        projected
+    };
+    let password = project(json!({"startElement": "Account name", "endElement": "Password"}));
+    assert!(password
+        .sensitive_surface_flags
+        .contains(&BrowserSensitiveSurfaceV1::PasswordField));
+    let plain = project(json!({"startElement": "Card one", "endElement": "Done column"}));
+    assert!(!plain
+        .sensitive_surface_flags
+        .contains(&BrowserSensitiveSurfaceV1::PasswordField));
 }
