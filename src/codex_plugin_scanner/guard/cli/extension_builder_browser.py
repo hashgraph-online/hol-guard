@@ -123,6 +123,7 @@ def generate_browser_draft(args: argparse.Namespace) -> dict[str, object]:
                 "unsafe_path", "The gate rows file could not be written; choose a writable --gate-output."
             ) from exc
         raise
+    gate_rows = reply.get("gateRows")
     return {
         "generated": True,
         "browser": True,
@@ -130,7 +131,7 @@ def generate_browser_draft(args: argparse.Namespace) -> dict[str, object]:
         "tools": len(profile["tools"]),
         "output": str(args.output),
         "gateRowsOutput": str(rows_path),
-        "gateRows": len(reply.get("gateRows") or []),
+        "gateRows": len(gate_rows) if isinstance(gate_rows, list) else 0,
         "proposals": reply.get("proposals", []),
         "notes": reply.get("notes", []),
     }
