@@ -327,7 +327,7 @@ def test_the_early_bundle_check_waits_for_the_one_the_worker_host_started(monkey
 
 
 def test_a_migration_step_reaches_only_a_caller_that_listens(tmp_path, monkeypatch) -> None:
-    from codex_plugin_scanner.guard.installed_authority_migration_turn import report_migration_step
+    from codex_plugin_scanner.guard.catalog_delivery.installed_upgrade import report_migration_step
 
     monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: None)
 
@@ -347,7 +347,7 @@ def test_a_migration_step_reaches_only_a_caller_that_listens(tmp_path, monkeypat
 
 
 def test_a_reporter_that_fails_never_fails_the_migration(tmp_path, monkeypatch) -> None:
-    from codex_plugin_scanner.guard.installed_authority_migration_turn import report_migration_step
+    from codex_plugin_scanner.guard.catalog_delivery.installed_upgrade import report_migration_step
 
     monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: None)
     finished: list[str] = []

@@ -68,9 +68,7 @@ class ExtensionControlAuthorityCommitMixin:
                     require_compatible_extension_control_schema(connection)
                 lifecycle_store.migrate_installed(self, installed)
         from .catalog_delivery.installed_upgrade import migrate_active
-        from .installed_authority_migration_turn import report_migration_step
 
-        report_migration_step("release_floor_checked")
         migrate_active(self, installed)
 
     def enroll_extension_control_authority(

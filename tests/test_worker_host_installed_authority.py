@@ -77,7 +77,7 @@ class _SteppingStore(_Store):
     """Reports the migration's own steps, as the real store does."""
 
     def migrate_installed_command_pack_authority(self) -> None:
-        from codex_plugin_scanner.guard.installed_authority_migration_turn import report_migration_step
+        from codex_plugin_scanner.guard.catalog_delivery.installed_upgrade import report_migration_step
 
         super().migrate_installed_command_pack_authority()
         report_migration_step("candidate_prepared")

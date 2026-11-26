@@ -3,14 +3,42 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import cast
 
-from ..installed_authority_migration_turn import report_migration_step
 from ..runtime.extension_control_authority import AuthorityPhase, layers_to_json
 from ..runtime.extension_control_proof import ExtensionControlMutation
 from ..runtime.generated_command_catalog import GeneratedCommandCatalog
 from . import activation_store, active_security, lifecycle
 from .cache_io import Lease
+
+# Who hears the migration's own steps. Only the daemon's worker host sets it,
+# for its first attempt: the daemon timestamps each step in its lifecycle
+# journal, so a slow startup names the step that spent the time.
+_STEP_REPORTER: ContextVar[Callable[[str], None] | None] = ContextVar(
+    "installed_authority_migration_step_reporter", default=None
+)
+
+
+@contextmanager
+def reporting_migration_steps(report: Callable[[str], None] | None) -> Generator[None]:
+    """Send each ``report_migration_step`` inside this block to ``report``."""
+
+    token = _STEP_REPORTER.set(report)
+    try:
+        yield
+    finally:
+        _STEP_REPORTER.reset(token)
+
+
+def report_migration_step(step: str) -> None:
+    """Tell the listening caller, if any, that a migration step finished."""
+
+    report = _STEP_REPORTER.get()
+    if report is not None:
+        report(step)
 
 
 @lifecycle.one_runtime

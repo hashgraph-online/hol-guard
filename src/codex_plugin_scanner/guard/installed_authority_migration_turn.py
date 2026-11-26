@@ -14,41 +14,14 @@ from __future__ import annotations
 
 import os
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from contextlib import contextmanager, suppress
-from contextvars import ContextVar
 from pathlib import Path
 
 from .native_resident_update_lock import _is_lock_contention, _try_lock, _unlock, open_private_lock_file
 
 TURN_FILE_NAME = "installed-authority-migration.v1.lock"
 _POLL_SECONDS = 0.05
-
-# Who hears the migration's own steps. Only the daemon's worker host sets it,
-# for its first attempt: the daemon timestamps each step in its lifecycle
-# journal, so a slow startup names the step that spent the time.
-_STEP_REPORTER: ContextVar[Callable[[str], None] | None] = ContextVar(
-    "installed_authority_migration_step_reporter", default=None
-)
-
-
-@contextmanager
-def reporting_migration_steps(report: Callable[[str], None] | None) -> Generator[None]:
-    """Send each ``report_migration_step`` inside this block to ``report``."""
-
-    token = _STEP_REPORTER.set(report)
-    try:
-        yield
-    finally:
-        _STEP_REPORTER.reset(token)
-
-
-def report_migration_step(step: str) -> None:
-    """Tell the listening caller, if any, that a migration step finished."""
-
-    report = _STEP_REPORTER.get()
-    if report is not None:
-        report(step)
 
 
 @contextmanager
