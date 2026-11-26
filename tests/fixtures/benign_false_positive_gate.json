@@ -27978,6 +27978,89 @@
       "requires_sandbox": true
     },
     {
+      "id": "python-heredoc-probe-then-lists-a-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 - <<'PY'\nimport json\nprint(json.dumps({'ok': True}))\nPY\nls README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "python-heredoc-probe-then-searches-a-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 - <<'PY'\nfrom pathlib import Path\nprint(len(Path('README.md').read_text()))\nPY\nrg -n -i 'title|name' README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "python-heredoc-probe-then-counts-and-prints",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 - <<'PY'\nimport re\nprint(bool(re.match(r'a+', 'aaa')))\nPY\nwc -l README.md; printf 'done\\n'"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "neg-python-heredoc-probe-then-reads-private-key",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 - <<'PY'\nimport json\nprint(json.dumps({'ok': True}))\nPY\ncat ${HOME}/.ssh/id_rsa"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-python-heredoc-probe-then-reads-cloud-credentials",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "python3 - <<'PY'\nimport json\nprint(json.dumps({'ok': True}))\nPY\nhead -5 ${HOME}/.aws/credentials"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-python-heredoc-process-kill",
       "fix_area": "shell",
       "harnesses": [

@@ -19,8 +19,19 @@
 //! Git's abbreviations of a blocked option count as the option. ripgrep is a
 //! reader only when no inherited configuration file can add options to it.
 //! A `cd` changes where the program's
-//! imports resolve, so it is never a reader here. Anything after the program
-//! keeps the chain's bar.
+//! imports resolve, so it is never a reader here.
+//!
+//! Agents also look after they probe: `python3 - <<'EOF' … EOF` followed by
+//! `ls`, `rg -n x README.md` or `echo done`. Those readers run after the
+//! program, so it could prepare what they run. A plain reader runs nothing it
+//! reads, though: `ls`, `cat`, `head`, `tail`, `wc`, `grep` and `pwd` only
+//! print, `echo` and `printf` print their own words, and ripgrep counts only
+//! when no inherited configuration file can add options to it, the same bar
+//! the lead meets. Git stays out of the tail: its configuration and
+//! attributes can name a pager, a diff driver or a monitor that the program
+//! may just have written. The trailing readers take no redirect either, so
+//! nothing they print reaches a file. The whole command still runs in the
+//! workspace sandbox.
 
 use serde_json::Value;
 
@@ -49,7 +60,7 @@ const RG_STARTS: &[&str] = &["--pre", "--search-zip", "--hostname-bin"];
 /// hook's directory or after plain readers, the two chains the projection
 /// hands to the workspace route.
 pub(super) fn python_after_lead(projected: &str) -> bool {
-    super::cd::python_after_cd(projected) || program_after_readers(projected).is_some()
+    super::cd::python_after_cd(projected) || python_beside_readers(projected)
 }
 
 /// Whether the lead of `projected` leaves the program where the checks on
@@ -62,10 +73,10 @@ pub(super) fn lead_admitted(
     command: &str,
     context: crate::pretool::PathContext<'_>,
 ) -> bool {
-    match program_after_readers(projected) {
-        Some(cut) => {
-            command.trim_start().starts_with(&projected[..cut])
-                && (context.ripgrep_config_absent || !runs_configured_ripgrep(&projected[..cut]))
+    match readers_text(projected) {
+        Some(readers) => {
+            readers.spelled_in(command)
+                && (context.ripgrep_config_absent || !runs_configured_ripgrep(readers.text()))
         }
         None => super::cd::enters_cwd(projected, context),
     }
@@ -76,8 +87,8 @@ pub(super) fn lead_admitted(
 /// `workspace` itself. The sandbox confines whatever the readers start, so the
 /// ripgrep configuration the decision checked needs no second look here.
 pub(super) fn lead_runs_in(projected: &str, command: &str, workspace: &std::path::Path) -> bool {
-    match program_after_readers(projected) {
-        Some(cut) => command.trim_start().starts_with(&projected[..cut]),
+    match readers_text(projected) {
+        Some(readers) => readers.spelled_in(command),
         None => super::cd::enters_workspace(projected, workspace),
     }
 }
@@ -103,13 +114,79 @@ fn shell_words(segment: &str) -> Vec<String> {
         .collect()
 }
 
-/// The byte offset where the program starts when `projected` is plain
-/// readers followed by Python fed on standard input as the whole last
-/// command.
-pub(super) fn program_after_readers(projected: &str) -> Option<usize> {
+/// Programs that only print their own words, read after the program.
+const PRINTERS: &[&str] = &["echo", "printf"];
+
+/// Whether `projected` is Python fed on standard input standing next to
+/// plain readers, before them or after them.
+pub(super) fn python_beside_readers(projected: &str) -> bool {
+    program_after_readers(projected).is_some() || readers_after_program(projected).is_some()
+}
+
+/// The readers `projected` runs around the program, as the raw text spells
+/// them: the lead before it, or the tail after it.
+fn readers_text(projected: &str) -> Option<Readers<'_>> {
+    if let Some(cut) = program_after_readers(projected) {
+        return Some(Readers::Lead(&projected[..cut]));
+    }
+    readers_after_program(projected).map(|cut| Readers::Tail(&projected[cut..]))
+}
+
+enum Readers<'a> {
+    Lead(&'a str),
+    Tail(&'a str),
+}
+
+impl Readers<'_> {
+    /// Whether `command` runs exactly these readers, at the same end.
+    fn spelled_in(&self, command: &str) -> bool {
+        match self {
+            Readers::Lead(lead) => command.trim_start().starts_with(lead),
+            Readers::Tail(tail) => command.trim_end().ends_with(tail.trim_end()),
+        }
+    }
+
+    fn text(&self) -> &str {
+        match self {
+            Readers::Lead(text) | Readers::Tail(text) => text,
+        }
+    }
+}
+
+/// The byte offset where the readers start when `projected` is Python fed on
+/// standard input as the whole first command, followed only by plain readers
+/// and printers. The offset is the separator that ends the program, so the
+/// tail is spelled exactly as the raw text ends.
+pub(super) fn readers_after_program(projected: &str) -> Option<usize> {
+    let commands = plain_commands(projected)?;
+    let ((program_start, program_end, _), tail) = commands.split_first()?;
+    let program = projected[*program_start..*program_end].trim();
+    (!tail.is_empty()
+        && crate::native_command_controls::python_stdin(program)
+        && tail
+            .iter()
+            .all(|(start, end, _)| trailing_reader(&projected[*start..*end])))
+    .then_some(*program_end)
+}
+
+/// Whether one command after the program is a plain reader or a printer.
+/// Git is not: see the module note.
+fn trailing_reader(segment: &str) -> bool {
+    let words = shell_words(segment);
+    match words.first().map(String::as_str) {
+        Some("git") => false,
+        Some(program) if PRINTERS.contains(&program) => true,
+        _ => reader(segment),
+    }
+}
+
+/// The commands of `projected` as `(start, end, piped)`, where `piped` says
+/// a pipe feeds the command. `None` when anything but plain words, quotes and
+/// the separators `;`, `&&`, a newline and a pipe appears.
+fn plain_commands(projected: &str) -> Option<Vec<(usize, usize, bool)>> {
     let bytes = projected.as_bytes();
-    let (mut quote, mut start, mut cut, mut piped) = (None, 0usize, None, false);
-    let mut lead: Vec<&str> = Vec::new();
+    let (mut quote, mut start, mut piped) = (None, 0usize, false);
+    let mut commands = Vec::new();
     let mut index = 0usize;
     while index < bytes.len() {
         let byte = bytes[index];
@@ -136,20 +213,33 @@ pub(super) fn program_after_readers(projected: &str) -> Option<usize> {
             _ => 0,
         };
         if width > 0 {
-            lead.push(&projected[start..index]);
+            commands.push((start, index, piped));
             start = index + width;
             piped = byte == b'|';
-            if !piped {
-                cut = Some(start);
-            }
         }
         index += width.max(1);
     }
-    let cut = cut.filter(|_| quote.is_none() && !piped)?;
-    let program = projected[cut..].trim();
-    (crate::native_command_controls::python_stdin(program)
-        && lead.iter().all(|segment| reader(segment)))
-    .then_some(cut)
+    if quote.is_some() {
+        return None;
+    }
+    commands.push((start, bytes.len(), piped));
+    Some(commands)
+}
+
+/// The byte offset where the program starts when `projected` is plain
+/// readers followed by Python fed on standard input as the whole last
+/// command.
+pub(super) fn program_after_readers(projected: &str) -> Option<usize> {
+    let commands = plain_commands(projected)?;
+    let ((start, end, piped), lead) = commands.split_last()?;
+    let program = projected[*start..*end].trim();
+    (!lead.is_empty()
+        && !piped
+        && crate::native_command_controls::python_stdin(program)
+        && lead
+            .iter()
+            .all(|(start, end, _)| reader(&projected[*start..*end])))
+    .then_some(*start)
 }
 
 /// Whether one command of the lead is a plain reader. Empty commands, as
@@ -192,10 +282,13 @@ pub(super) fn reviewed_payload(
     projected: &str,
     entered: bool,
 ) -> Value {
-    let program = program_after_readers(projected)
+    let program = readers_text(projected)
         .filter(|_| entered)
-        .and_then(|cut| command.trim_start().strip_prefix(&projected[..cut]))
-        .map(str::trim_start);
+        .and_then(|readers| match readers {
+            Readers::Lead(lead) => command.trim_start().strip_prefix(lead),
+            Readers::Tail(tail) => command.trim_end().strip_suffix(tail.trim_end()),
+        })
+        .map(str::trim);
     match program {
         Some(program) => {
             super::super::command_rewrite::payload_with_command(payload, command, program)
@@ -206,7 +299,10 @@ pub(super) fn reviewed_payload(
 
 #[cfg(test)]
 mod tests {
-    use super::{program_after_readers, runs_configured_ripgrep};
+    use super::{
+        program_after_readers, readers_after_program, readers_text, runs_configured_ripgrep,
+        Readers,
+    };
 
     #[test]
     fn readers_before_the_program_are_taken() {
@@ -265,6 +361,54 @@ mod tests {
         ] {
             assert_eq!(program_after_readers(projected), None, "{projected}");
         }
+    }
+
+    #[test]
+    fn readers_after_the_program_are_taken() {
+        for projected in [
+            "python3 -\nls",
+            "python3 - && rg -n x README.md",
+            "python3 - | head -20",
+            "python3 -; echo done",
+            "python3 -\nprintf 'x\\n'",
+            "python3 - && wc -l pkg/a.py; cat pkg/b.py",
+        ] {
+            assert!(readers_after_program(projected).is_some(), "{projected}");
+        }
+    }
+
+    #[test]
+    fn a_tail_that_runs_git_writes_or_starts_programs_keeps_the_chain_bar() {
+        for projected in [
+            "python3 -",
+            "python3 -\ngit status",
+            "python3 - && git diff",
+            "python3 - || ls",
+            "python3 -\nls > x",
+            "python3 -\nbash x.sh",
+            "python3 -\nls $HOME",
+            "python3 -\nrg --pre ./run x",
+            "python3 -\nfd .",
+            "python3 -\ncurl -s example.com",
+            "python3 - & ls",
+            "ls; python3 -; ls",
+            "python3 -c 'import os'; ls",
+            "sh -; ls",
+        ] {
+            assert_eq!(readers_after_program(projected), None, "{projected}");
+        }
+    }
+
+    #[test]
+    fn the_readers_after_the_program_are_its_tail() {
+        let projected = "python3 -\nls pkg";
+        assert_eq!(readers_after_program(projected), Some("python3 -".len()));
+        let Some(Readers::Tail(tail)) = readers_text(projected) else {
+            panic!("a tail");
+        };
+        assert_eq!(tail, "\nls pkg");
+        assert!(Readers::Tail(tail).spelled_in("python3 - <<'PY'\nprint(1)\nPY\nls pkg"));
+        assert!(!Readers::Tail(tail).spelled_in("python3 - <<'PY'\nprint(1)\nPY\nls pkg2"));
     }
 
     #[test]
