@@ -21,7 +21,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-from .installed_authority_migration_turn import installed_authority_migration_turn
+from .installed_authority_migration_turn import installed_authority_migration_turn, reporting_migration_steps
 from .native_policy_snapshot_constants import NativePolicySnapshotError
 from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
@@ -128,7 +128,8 @@ def migrate_installed_authority(
                         on_busy()
                 return False
             report("turn_held")
-            store.migrate_installed_command_pack_authority()
+            with reporting_migration_steps(report):
+                store.migrate_installed_command_pack_authority()
     except Exception as error:
         elapsed_ms = round((time.monotonic() - started) * 1000)
         # Every new library process retries this, so an unchanged failure is

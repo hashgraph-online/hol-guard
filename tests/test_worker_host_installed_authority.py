@@ -73,6 +73,58 @@ def test_worker_host_reports_each_start_step_it_finishes(tmp_path, monkeypatch):
     assert steps == ["bundle_checked", "turn_held", "admitted", "<publish>", "publishing"]
 
 
+class _SteppingStore(_Store):
+    """Reports the migration's own steps, as the real store does."""
+
+    def migrate_installed_command_pack_authority(self) -> None:
+        from codex_plugin_scanner.guard.installed_authority_migration_turn import report_migration_step
+
+        super().migrate_installed_command_pack_authority()
+        report_migration_step("candidate_prepared")
+        report_migration_step("catalog_migrated")
+
+
+def test_worker_host_reports_the_migration_steps_inside_the_turn(tmp_path, monkeypatch):
+    # The daemon timestamps each reported step, so a slow startup shows which
+    # part of the migration spent the time.
+    store = _SteppingStore(tmp_path)
+    steps: list[str] = []
+
+    monkeypatch.setattr(worker_host.WorkerHost, "_start_policy_publication", lambda self: steps.append("<publish>"))
+    host = worker_host.WorkerHost(store, home_dir=tmp_path)  # pyright: ignore[reportArgumentType]
+
+    host.start(on_phase=steps.append)
+
+    assert steps == [
+        "bundle_checked",
+        "turn_held",
+        "candidate_prepared",
+        "catalog_migrated",
+        "admitted",
+        "<publish>",
+        "publishing",
+    ]
+
+
+def test_a_migration_retry_reports_no_steps_after_the_daemon_stopped_reading(tmp_path, monkeypatch):
+    # Only the first attempt reports; the daemon reads steps until ready.
+    store = _SteppingStore(tmp_path, failures=1)
+    steps: list[str] = []
+    loops: dict[str, object] = {}
+
+    monkeypatch.setattr(worker_host.WorkerHost, "_start_policy_publication", lambda self: None)
+    monkeypatch.setattr(worker_host.WorkerHost, "_loop", lambda self, name, body, interval: loops.update({name: body}))
+    host = worker_host.WorkerHost(store, home_dir=tmp_path)  # pyright: ignore[reportArgumentType]
+
+    host.start(on_phase=steps.append)
+    retry = loops["installed-authority"]
+    assert callable(retry)
+    retry()
+
+    assert store.calls == ["migrate", "migrate"]
+    assert steps == ["bundle_checked", "turn_held", "admitted", "publishing"]
+
+
 def test_worker_host_retries_a_failed_migration_until_it_lands(tmp_path, monkeypatch):
     store = _Store(tmp_path, failures=2)
     loops: dict[str, object] = {}
