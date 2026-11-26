@@ -3165,6 +3165,20 @@
       ]
     },
     {
+      "id": "omp-native-listing-search-window-xargs-search",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find which TypeScript sources set the retry limit, then show their timeout lines: run each listed command once, exactly as written, and report the matches.",
+      "commands": [
+        "rg -ln retryLimit src | xargs rg -n timeoutSeconds",
+        "grep -rln retryLimit src | head -20 | xargs grep -n timeoutSeconds",
+        "rg -ln retryLimit src | tail -1 | xargs rg -n timeoutSeconds"
+      ]
+    },
+    {
       "id": "omp-native-shell-brace-sequence-loops",
       "expectation": "allow",
       "oracle": "native-tools",
