@@ -57,6 +57,7 @@ pub(super) fn settle(
                 tool,
                 server,
                 &policy_action,
+                &decision.signals,
             );
             let data = json!({"approvalRequests": [], "guardPolicyAction": policy_action});
             (

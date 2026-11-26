@@ -420,6 +420,10 @@ pub(super) fn safe_stat_arguments(arguments: &[String], context: super::PathCont
                         context.home_dir,
                         context.cwd,
                     )
+                    // `stat ../next-worktree` before adding a worktree there
+                    // prints only an error, as `ls -ld` of the same name
+                    // does, so a missing name takes the listing rule.
+                    || super::listing_reads::absent_listing_operand(operand, context)
             })
 }
 
