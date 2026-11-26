@@ -190,6 +190,7 @@ fn stamps_transition_probe_observation_on_the_edge_result() {
         }),
     );
     request.harness = "codex".to_owned();
+    request.request_id = None;
     let edge: GuardHookEdgeResultV2 =
         serde_json::from_slice(&evaluate_isolated(request).unwrap()).unwrap();
     assert_eq!(edge.receipt.request_id, request_id);

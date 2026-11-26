@@ -8,6 +8,14 @@ from typing import TYPE_CHECKING
 
 from .native_hook_direct import native_hook_direct
 
+
+def _transition_probe_request_id(payload: Mapping[str, object]) -> str | None:
+    probe = payload.get("guard_transition_probe")
+    if not isinstance(probe, Mapping):
+        return None
+    request_id = probe.get("request_id")
+    return request_id if isinstance(request_id, str) else None
+
 if TYPE_CHECKING:
     from .hook_review.hook_worker_native import _HookWorkerNativeHost
 
@@ -55,6 +63,7 @@ def native_or_daemon_edge(
         observe_mode=recording_only,
         deadline=deadline,
         policy_snapshot=policy_snapshot,
+        request_id=_transition_probe_request_id(payload),
         local_cli_rules=True,
         observe_local_cli=True,
         record_receipt=(

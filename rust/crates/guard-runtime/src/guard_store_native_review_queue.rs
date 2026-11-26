@@ -214,12 +214,16 @@ pub(crate) fn delegate(
     let ask: Option<HintAsk> = take_ask(&mut delegated, "hint")?;
     let respond: Option<RespondAsk> = take_ask(&mut delegated, "respond")?;
     let lookup: Option<LookupAsk> = take_ask(&mut delegated, "connector_lookup")?;
+    let fallback_mode = delegated
+        .remove("blocked_request_mode")
+        .and_then(|value| value.as_str().map(str::to_owned));
     let mut silent = take_flag(&mut delegated, "silent")?;
     let mut claude_notice = take_flag(&mut delegated, "claude_notice")?;
     let respond = match respond {
         Some(RespondAsk::NativeReview(NativeAsk {})) => {
             let ask = owner
                 .and_then(PolicySnapshotStore::blocked_request_mode)
+                .or(fallback_mode)
                 .ok_or(INVALID)?
                 .as_str()
                 == ASK_MODE;

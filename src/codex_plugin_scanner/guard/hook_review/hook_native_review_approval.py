@@ -165,6 +165,15 @@ def pause_native_pre_tool_for_approval(
         home_dir=home_dir,
         deadline=deadline,
     )
+    from ..blocked_request_mode import asks_for_approval
+    from ..config import load_guard_config
+
+    try:
+        blocked_request_mode = (
+            "ask" if asks_for_approval(load_guard_config(guard_home, workspace=workspace)) else "safe-alternative"
+        )
+    except (OSError, RuntimeError, TypeError, ValueError):
+        blocked_request_mode = None
     queued = queue_native_pre_tool_review(
         store,
         harness=harness,
@@ -186,6 +195,7 @@ def pause_native_pre_tool_for_approval(
         codex_live_wait=canonical_harness(harness) == "codex",
         silent=None,
         respond={"native_review": {}},
+        blocked_request_mode=blocked_request_mode,
     )
     if queued is None:
         failed = dict(native_result)
@@ -233,6 +243,7 @@ def queue_native_pre_tool_review(
     codex_live_wait: bool = False,
     silent: bool | None = False,
     respond: dict[str, object] | None = None,
+    blocked_request_mode: str | None = None,
 ) -> dict[str, object] | None:
     if not policy_binding_verified:
         try:
@@ -295,6 +306,7 @@ def queue_native_pre_tool_review(
             claude_key=claude_key,
             codex_live_wait=live_wait,
             respond=respond,
+            blocked_request_mode=blocked_request_mode,
             connector_lookup=connector_lookup,
             bound_bash=bound_bash is not None,
         )
