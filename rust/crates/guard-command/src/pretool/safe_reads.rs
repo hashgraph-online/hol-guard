@@ -37,6 +37,7 @@ pub(crate) use jq_filter::rendering_format as jq_rendering_format;
 pub(crate) use jq_filter::variables_bound as jq_variables_bound;
 pub(super) use read_globs::{
     directory_glob_file_matches, glob_file_matches, wildcard_matches, wildcard_may_match,
+    wildcard_sure_match,
 };
 pub(super) use sed_reads::{safe_sed_arguments, safe_sed_stdin_arguments, sed_writes_nothing};
 
