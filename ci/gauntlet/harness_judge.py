@@ -32,12 +32,12 @@ from .catalog import Scenario
 from .codex_contained import routed_calls, shell_script
 from .connector_judge import connector_setup_outcome, connector_tool_outcome, reason_text, ungranted_stop
 from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
-from .interruptions import case_interruptions, describe
+from .interruptions import PRE_TOOL_EVENTS, case_interruptions, describe
 from .mixed_reads import PUBLIC_READS
 from .proofs import BLOCK_REASONS, block_reasons, required_checks
 from .safety_guide_reads import is_guide_read
 
-_PRE_EVENTS = frozenset({"PreToolUse", "preToolUse", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"})
+_PRE_EVENTS = PRE_TOOL_EVENTS
 _PROMPT_EVENTS = frozenset({"UserPromptSubmit", "beforeSubmitPrompt"})
 # Lifecycle callbacks Guard only observes (its _LIFECYCLE_OBSERVE_EVENTS, plus
 # Cursor's lowercase stop). The resident worker answers them with no receipt and

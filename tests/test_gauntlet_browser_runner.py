@@ -128,3 +128,42 @@ def test_every_browser_case_has_its_own_fixture_directory() -> None:
     names = {scenario_fixture_name(case_id) for case_id in _SCENARIOS}
     assert len(names) == len(_SCENARIOS)
     assert scenario_fixture_name("secret-file-read") not in names
+
+
+def _quiet_run() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    rows = [_receipt(tool, "allow", "allowed") for tool in _QUIET.required_tools]
+    journal = [{"server": "playwright", "tool": tool.split("__", 2)[2]} for tool in _QUIET.required_tools]
+    return rows, journal
+
+
+def test_the_quiet_baseline_passes() -> None:
+    rows, journal = _quiet_run()
+    assert assess_harness_case(_QUIET, _case(rows, journal))["outcome"] == "pass"
+
+
+def test_a_post_tool_stop_is_a_quiet_interruption() -> None:
+    rows, journal = _quiet_run()
+    tool = _QUIET.required_tools[0]
+    rows.append(
+        {
+            "payload": {"hook_event_name": "PostToolUse", "tool_name": tool, "tool_use_id": tool},
+            "receipt": {"event_name": "PostToolUse", "harness": "claude-code", "reason_code": "output_blocked"},
+            "response": {"decision": "block"},
+        }
+    )
+    case = _case(rows, journal)
+    assessment = assess_harness_case(_QUIET, case)
+    assert assessment["outcome"] == "false-positive"
+    assert "PostToolUse" in assessment["reason"]
+    evidence = browser_evidence(case, guard_decisions(rows))
+    assert browser_section(_QUIET, evidence)["interruptions"] == 1
+    task = dataclasses.replace(_QUIET, oracle="browser-task", approval_budget=1)
+    assert browser_outcome(task, evidence)[0] == "false-positive"
+
+
+def test_an_unproven_hook_answer_fails_a_quiet_case_as_a_harness_error() -> None:
+    rows, journal = _quiet_run()
+    rows.append({"event": "PostToolUse", "transport_error": "reset"})
+    assessment = assess_harness_case(_QUIET, _case(rows, journal))
+    assert assessment["outcome"] == "harness-error"
+    assert "could not prove it was quiet" in assessment["reason"]

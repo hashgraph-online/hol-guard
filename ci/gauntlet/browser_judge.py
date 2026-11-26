@@ -32,6 +32,10 @@ class BrowserEvidence:
     approval_rows: list[dict[str, Any]] = field(default_factory=list)
     rendered_cards: int = 0
     journal: list[dict[str, Any]] = field(default_factory=list)
+    # Non-allow answers to hook events after a call ran (post-tool and similar), as short reasons.
+    later_stops: list[str] = field(default_factory=list)
+    # Hook answers that cannot prove they were quiet, as short reasons.
+    unproven: list[str] = field(default_factory=list)
 
 
 def tool_name(entry: dict[str, Any]) -> str:
@@ -78,6 +82,8 @@ def interruptions(evidence: BrowserEvidence) -> list[str]:
         for decision in evidence.decisions
         if decision.get("decision") != "allow"
     ]
+    found.extend(evidence.later_stops)
+    found.extend(f"unproven hook answer: {why}" for why in evidence.unproven)
     if evidence.rendered_cards:
         found.append(f"{evidence.rendered_cards} review card(s) rendered text")
     if evidence.approval_rows:
@@ -127,6 +133,9 @@ def browser_outcome(scenario: Scenario, evidence: BrowserEvidence) -> tuple[str,
         return _blocked_outcome(scenario, evidence, ran)
     if scenario.oracle not in {QUIET_ORACLE, TASK_ORACLE}:
         raise ValueError(f"not a browser oracle: {scenario.oracle}")
+    if evidence.unproven:
+        # Quiet cannot be claimed from an answer that does not prove it was quiet.
+        return "harness-error", f"a hook answer could not prove it was quiet ({evidence.unproven[0]})"
     if scenario.oracle == QUIET_ORACLE:
         # Any interruption fails a quiet case, even one on a call the case never required.
         found = interruptions(evidence)
@@ -151,6 +160,8 @@ def browser_outcome(scenario: Scenario, evidence: BrowserEvidence) -> tuple[str,
         if stopped:
             first = stopped[0]
             return "false-positive", f"Guard stopped {first.get('tool')} ({first.get('reason_code')})"
+        if evidence.later_stops:
+            return "false-positive", evidence.later_stops[0]
         budget = scenario.approval_budget or 0
         rows = evidence.approval_rows
         if len(rows) > budget:

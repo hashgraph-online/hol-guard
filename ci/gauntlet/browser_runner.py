@@ -18,7 +18,7 @@ from .browser_cases import BROWSER_PROFILE, TASK_ORACLE
 from .browser_fixtures import BrowserFixture, stage_browser_fixture
 from .browser_judge import BrowserEvidence, interruptions, repeated_rows, rows_missing_a_choice, tool_name
 from .catalog import Scenario
-from .interruptions import observation_interruptions
+from .interruptions import PRE_TOOL_EVENTS, observation_interruptions
 
 # State presets the lane can seed today. The rest need the grant, saved-decision and provider
 # fixtures of later phases.
@@ -49,15 +49,38 @@ def rendered_cards(rows: list[dict[str, Any]], harness: str | None) -> int:
     )
 
 
+def later_stops_and_unproven(rows: list[dict[str, Any]], harness: str | None) -> tuple[list[str], list[str]]:
+    """Non-allow answers to hook events after the pre-tool review, and answers that prove nothing.
+
+    Pre-tool decisions reach the judge as ``decisions``; every other hook event (post-tool and the
+    like) can still stop or warn the agent, so its non-allow answers count as interruptions too.
+    """
+    stops: list[str] = []
+    unproven: list[str] = []
+    for row in rows:
+        for event in observation_interruptions(row, harness):
+            if event["kind"] == "unproven":
+                unproven.append(f"{event.get('event') or 'unknown event'}: {event.get('why')}")
+            elif event["kind"] == "decision" and event.get("event") not in PRE_TOOL_EVENTS:
+                stops.append(
+                    f"Guard decided {event.get('decision')} on {event.get('event')} for {event.get('tool')}"
+                    f" ({event.get('reason_code')})"
+                )
+    return stops, unproven
+
+
 def browser_evidence(case: dict[str, Any], decisions: list[dict[str, Any]]) -> BrowserEvidence:
     """What one browser case left behind, as the browser judge reads it."""
     transcript = case.get("transcript") or {}
+    stops, unproven = later_stops_and_unproven(case.get("guard_rows") or [], case.get("harness"))
     return BrowserEvidence(
         finished=bool(transcript.get("terminal")) and not transcript.get("failed") and case.get("returncode") == 0,
         decisions=decisions,
         approval_rows=list(case.get("approval_rows") or []),
         rendered_cards=rendered_cards(case.get("guard_rows") or [], case.get("harness")),
         journal=list(case.get("browser_journal") or []),
+        later_stops=stops,
+        unproven=unproven,
     )
 
 
