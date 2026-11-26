@@ -202,12 +202,17 @@ pub(super) fn is_https_url(value: &str) -> bool {
             .any(|ch| ch.is_whitespace() || ch.is_control() || matches!(ch, '?' | '#' | '\\'))
 }
 
-/// `^(none|[A-Z][A-Za-z0-9]{1,63})$`: an allowlisted icon component name, never a URL.
+/// The icon names a manifest may use: the same closed `react-icons` set command sources accept.
+pub(super) const ICON_NAMES: [&str; 6] = [
+    "HiMiniBolt",
+    "HiMiniCommandLine",
+    "HiMiniCube",
+    "HiMiniFolder",
+    "HiMiniGlobeAlt",
+    "HiMiniCloud",
+];
+
+/// `none` or one of [`ICON_NAMES`]: an allowlisted icon component name, never a URL.
 pub(super) fn is_icon(value: &str) -> bool {
-    let bytes = value.as_bytes();
-    value == "none"
-        || (bytes.len() >= 2
-            && bytes.len() <= 64
-            && bytes[0].is_ascii_uppercase()
-            && bytes.iter().all(u8::is_ascii_alphanumeric))
+    value == "none" || ICON_NAMES.contains(&value)
 }

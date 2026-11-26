@@ -201,8 +201,20 @@ fn identity_and_display_fields_are_checked() {
     let mut icon = manifest();
     icon["icon"] = json!("https://exampleshield.example/icon.png");
     refused(icon.clone(), E::IconInvalid);
-    icon["icon"] = json!("FiShield");
-    assert!(compile(&icon).is_ok());
+    for unknown in [
+        "FiShield",
+        "NotARealIconComponent",
+        "HiMiniBoltX",
+        "himinibolt",
+        "",
+    ] {
+        icon["icon"] = json!(unknown);
+        refused(icon.clone(), E::IconInvalid);
+    }
+    for known in ["none", "HiMiniGlobeAlt", "HiMiniCloud"] {
+        icon["icon"] = json!(known);
+        assert!(compile(&icon).is_ok(), "{known}");
+    }
     refused(
         with("/privacyUrl", json!("https://exampleshield.example/p?x=1")),
         E::PolicyUrlInvalid,

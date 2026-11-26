@@ -231,7 +231,15 @@
     },
     "icon": {
       "type": "string",
-      "pattern": "^(none|[A-Z][A-Za-z0-9]{1,63})(?![\\s\\S])"
+      "enum": [
+        "none",
+        "HiMiniBolt",
+        "HiMiniCommandLine",
+        "HiMiniCube",
+        "HiMiniFolder",
+        "HiMiniGlobeAlt",
+        "HiMiniCloud"
+      ]
     }
   },
   "$defs": {
