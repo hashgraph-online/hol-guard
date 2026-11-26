@@ -199,10 +199,6 @@ fn chdir_route(
     })
 }
 
-/// The identity settings a leading `-c` pair may carry without changing
-/// what the Git step runs.
-const IDENTITY_KEYS: [&str; 2] = ["user.name", "user.email"];
-
 /// `model` without the leading `-c user.name=<v>` and `-c user.email=<v>`
 /// pairs of its Git steps, or `None` when no step has one. A leading
 /// `-C <dir>` pair stays where it is; the scan stops at the first other word.
@@ -218,12 +214,7 @@ pub(super) fn without_identity(model: &CanonicalCommandV1) -> Option<CanonicalCo
         };
         let mut index = 0;
         while let [flag, value, ..] = &segment.arguments[index..] {
-            let identity = flag == "-c"
-                && value.split_once('=').is_some_and(|(key, _)| {
-                    IDENTITY_KEYS
-                        .iter()
-                        .any(|identity| key.eq_ignore_ascii_case(identity))
-                });
+            let identity = flag == "-c" && super::forms::names_the_author(value);
             let aligned = segment.tokens.get(offset + index) == Some(flag)
                 && segment.tokens.get(offset + index + 1) == Some(value);
             if identity && aligned {

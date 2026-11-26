@@ -80,6 +80,37 @@ pub(crate) fn message_from_standard_input(rest: &[&str]) -> bool {
     commit_options(rest).is_some_and(|form| form.standard_input)
 }
 
+/// The identity settings a leading `-c` pair may carry without changing
+/// what the Git step runs: they name the commit's author and nothing else.
+const IDENTITY_KEYS: [&str; 2] = ["user.name", "user.email"];
+
+/// Whether the value of one `-c <key>=<value>` pair only names the commit's
+/// author. The key is matched without regard to case, as Git reads it; a
+/// pair with no `=` sets the key to true and is not an identity.
+pub(crate) fn names_the_author(setting: &str) -> bool {
+    setting.split_once('=').is_some_and(|(key, _)| {
+        IDENTITY_KEYS
+            .iter()
+            .any(|identity| key.eq_ignore_ascii_case(identity))
+    })
+}
+
+/// The words of a Git step after its leading `-c user.name=<v>` and
+/// `-c user.email=<v>` pairs. The scan stops at the first other word, so a
+/// `-C <dir>` or any other setting in front of the subcommand stays where it
+/// is and keeps the step unrecognised by a caller that wants the subcommand
+/// first.
+pub(crate) fn after_named_author<'a>(words: &'a [&'a str]) -> &'a [&'a str] {
+    let mut rest = words;
+    while let [flag, setting, tail @ ..] = rest {
+        if *flag != "-c" || !names_the_author(setting) {
+            break;
+        }
+        rest = tail;
+    }
+    rest
+}
+
 /// What the option scan found. `message` covers every spelling that supplies
 /// one; `standard_input` narrows that to the spellings that read it from
 /// standard input.
@@ -370,7 +401,7 @@ pub(super) fn moves_head(original: &CommandSegmentV1) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{commit_form, message_from_standard_input};
+    use super::{after_named_author, commit_form, message_from_standard_input};
 
     /// The commit forms that take their message from standard input.
     ///
@@ -404,6 +435,39 @@ mod tests {
             &["--allow-empty"][..],
         ] {
             assert_eq!(commit_form(rest), None, "{rest:?}");
+        }
+    }
+
+    /// Only leading `-c user.name=<v>` and `-c user.email=<v>` pairs are
+    /// skipped; the first other word ends the scan.
+    #[test]
+    fn only_leading_author_pairs_are_skipped() {
+        let cases: [(&[&str], &[&str]); 7] = [
+            (&["-c", "user.name=A", "commit"], &["commit"]),
+            (
+                &["-c", "user.name=A", "-c", "USER.EMAIL=a", "commit"],
+                &["commit"],
+            ),
+            (
+                &["-c", "user.name", "commit"],
+                &["-c", "user.name", "commit"],
+            ),
+            (
+                &["-c", "user.name=A", "-C", "x", "commit"],
+                &["-C", "x", "commit"],
+            ),
+            (
+                &["-c", "core.hooksPath=x", "-c", "user.name=A", "commit"],
+                &["-c", "core.hooksPath=x", "-c", "user.name=A", "commit"],
+            ),
+            (
+                &["-c", "user.signingkey=k", "commit"],
+                &["-c", "user.signingkey=k", "commit"],
+            ),
+            (&["-cuser.name=A", "commit"], &["-cuser.name=A", "commit"]),
+        ];
+        for (words, rest) in cases {
+            assert_eq!(after_named_author(words), rest, "{words:?}");
         }
     }
 
