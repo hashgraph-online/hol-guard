@@ -221,19 +221,19 @@ place to put its cases.
 - [x] **BP-T012** Add the verb-to-intent table and `BrowserActionV2` projection in
   `rust/crates/guard-command/src/browser_action_project.rs`, including discriminator tools (`action`
   argument) and `cdpPassthrough` tools (resolved by BP-T080 when present, `Other` until then).
-- [ ] **BP-T013** Move `CHROME_DEVTOOLS_*` and `PLAYWRIGHT_*` tables and the profile flag lists out of
+- [x] **BP-T013** Move `CHROME_DEVTOOLS_*` and `PLAYWRIGHT_*` tables and the profile flag lists out of
   `browser_mcp_patterns.rs` into `contributions/browser-drivers/browser.chrome-devtools-mcp.json` and
   `browser.playwright-mcp.json` (trust class first-party). Keep the generic regex fallback native.
   Evidence: `tests/test_guard_browser_mcp_intent.py`,
   `tests/fixtures/mcp_tool_policy/parity_vectors.json` and
   `tests/fixtures/mcp_proxy_decision/call_projection_vectors.json` pass unchanged.
-- [ ] **BP-T014** Keep native sensitive-surface screens authoritative: run `visit_sensitive_surfaces`
+- [x] **BP-T014** Keep native sensitive-surface screens authoritative: run `visit_sensitive_surfaces`
   and the `SENSITIVE_*` patterns on every browser call after profile projection and union the result.
   Test: a profile that labels a script-evaluating tool `Read` still yields `script_eval` and
   `browser.privileged`.
-- [ ] **BP-T015** Unlisted tool on a matched driver is `unclassified`: normal MCP review, no grant
+- [x] **BP-T015** Unlisted tool on a matched driver is `unclassified`: normal MCP review, no grant
   eligibility, card says Guard does not know this tool. Test.
-- [ ] **BP-T016** External profiles are inert until a local-admin enable; signed-cloud enable cannot
+- [x] **BP-T016** External profiles are inert until a local-admin enable; signed-cloud enable cannot
   turn one on; a this-device custom MCP grant still wins. Mirror the tests in
   `tests/test_guard_mcp_server_contribution.py`.
 
