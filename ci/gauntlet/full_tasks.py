@@ -549,7 +549,7 @@ def _reads_only(command: str, planted: set[str]) -> bool:
             count = False
             for word in rest:
                 if count:
-                    if not word.isdigit():
+                    if not re.fullmatch(r"[+-]?[0-9]+(?:b|[kKMGTPEZYRQ](?:B|iB)?)?", word):
                         return False
                     count = False
                 elif options and word == "--":
