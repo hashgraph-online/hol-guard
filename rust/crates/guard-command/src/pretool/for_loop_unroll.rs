@@ -173,10 +173,8 @@ fn unrolled<'a>(
             let last_negated = items
                 .last()
                 .is_some_and(|(text, _)| text.trim_start().starts_with('!'));
-            let changes_state = !prefix.is_empty()
-                || items
-                    .iter()
-                    .any(|(text, _)| item_changes_state(text));
+            let changes_state =
+                !prefix.is_empty() || items.iter().any(|(text, _)| item_changes_state(text));
             if (joined && last_negated) || (gated && changes_state) {
                 return None;
             }

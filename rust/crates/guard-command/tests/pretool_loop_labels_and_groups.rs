@@ -126,4 +126,3 @@ fn a_labelled_or_grouped_loop_keeps_the_review_of_what_it_does() {
         }
     }
 }
-
