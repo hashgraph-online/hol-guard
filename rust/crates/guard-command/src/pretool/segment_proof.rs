@@ -528,6 +528,7 @@ pub(super) fn exact_safe_segment_with_context(
         || super::shell_limits::safe_shell_limit(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
         || super::liveness_probes::safe_liveness_probe(basename, &segment.arguments)
+        || super::headless_browser_reads::safe_headless_browser_read(basename, &segment.arguments)
         || super::property_list_reads::safe_property_list_read(
             basename,
             &segment.arguments,

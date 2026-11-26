@@ -204,6 +204,7 @@ mod guard_diagnostics;
 mod guard_home_option;
 pub use guard_home_option::{guard_approval_inspection_command, guard_safety_guide_read_command};
 mod guard_names;
+mod headless_browser_reads;
 mod helm_usage;
 pub(crate) mod help_probes;
 mod home_program_metadata;
