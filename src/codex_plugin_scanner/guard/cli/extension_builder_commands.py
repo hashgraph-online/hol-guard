@@ -55,6 +55,12 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
         action="store_true",
         help="Draft a cloud action pack from an OpenAPI document or MCP tool list; --output names a new file",
     )
+    generate.add_argument(
+        "--browser",
+        action="store_true",
+        help="Draft a browser driver profile from an MCP tool list; --output names a new file",
+    )
+    generate.add_argument("--server", help="MCP server name the --browser driver matches")
     generate.add_argument("--host", help="API host for --cloud drafts; required for MCP tool lists")
     generate.add_argument("--auth-mode", choices=("none", "oauth2", "api-key"), help="Auth mode for MCP --cloud drafts")
     generate.add_argument(
@@ -63,8 +69,9 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     validate = commands.add_parser(
         "validate", help="Rebuild a kit and verify every byte without importing generated code"
     )
-    validate.add_argument("kit", type=Path, help="Kit directory, or a pack file with --cloud")
+    validate.add_argument("kit", type=Path, help="Kit directory, or a pack or profile file with --cloud or --browser")
     validate.add_argument("--cloud", action="store_true", help="Validate a cloud action pack and run its fixtures")
+    validate.add_argument("--browser", action="store_true", help="Compile a browser driver profile as a contribution")
     diff = commands.add_parser("diff", help="Compare valid kits; exit 1 when their inventories or reviews differ")
     diff.add_argument("previous", type=Path)
     diff.add_argument("current", type=Path)
@@ -93,6 +100,12 @@ def _generate(args: argparse.Namespace) -> dict[str, object]:
     from ..extension_builder.models import Metadata
     from ..extension_builder.review import default_review, load_review
 
+    if args.cloud and args.browser:
+        raise BuilderError("builder_mode", "Choose --cloud or --browser, not both.")
+    if args.browser:
+        from .extension_builder_browser import generate_browser_draft
+
+        return generate_browser_draft(args)
     if args.cloud:
         from .extension_builder_cloud import generate_cloud_draft
 
@@ -219,6 +232,12 @@ def _operate(args: argparse.Namespace) -> dict[str, object]:
     if command == "handoff":
         return _handoff(args)
     if command == "validate":
+        if args.cloud and args.browser:
+            raise BuilderError("builder_mode", "Choose --cloud or --browser, not both.")
+        if args.browser:
+            from .extension_builder_browser import validate_browser_driver
+
+            return validate_browser_driver(args.kit)
         if args.cloud:
             from .extension_builder_cloud import validate_cloud_pack
 
@@ -247,6 +266,10 @@ def _emit(result: dict[str, object], command: str, output: TextIO) -> None:
         print("Kits differ." if result["changed"] else "Kits are identical.", file=output)
         for name in ("addedOperations", "removedOperations", "changedOperations", "changedReviews"):
             print(f"{name}: {result[name]}", file=output)
+    elif command in ("generate", "validate") and result.get("browser"):
+        from .extension_builder_browser import emit_browser_summary
+
+        emit_browser_summary(command, result, output)
     elif command == "generate" and result.get("cloud"):
         from .extension_builder_cloud import emit_cloud_summary
 
