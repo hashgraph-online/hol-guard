@@ -5753,7 +5753,8 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate
         activeProjectCount,
         " of ",
         maxActiveWorkspaces,
-        " projects used. Remove a project or raise Active workspaces under Custom limits."
+        " projects used.",
+        activeProjectCount >= maxActiveWorkspaces ? " Remove a project or raise Active workspaces under Custom limits." : ""
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Choose a folder and tick the files CIGAR should read. Secret files, like passwords and keys, are always skipped." })
     ] }),

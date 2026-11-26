@@ -38,6 +38,9 @@ assert.match(renderToStaticMarkup(<AddProjectPanel {...props} documentsAllowed={
   "reading files off still lets the person start");
 assert.match(renderToStaticMarkup(<AddProjectPanel {...props} first={false} active={["/workspace/one", "/workspace/two"]} maxActiveWorkspaces={2} />),
   /2 of 2 projects used\. Remove a project or raise Active workspaces under Custom limits\./);
+const availableCapacity = renderToStaticMarkup(<AddProjectPanel {...props} first={false} active={["/workspace/one"]} maxActiveWorkspaces={2} />);
+assert.match(availableCapacity, /1 of 2 projects used\./);
+assert.doesNotMatch(availableCapacity, /Remove a project or raise Active workspaces/);
 
 
 // Saved folders stay on the page while CIGAR rests or starts: shown loading, read-only, never "No projects yet".
