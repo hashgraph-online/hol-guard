@@ -702,3 +702,70 @@ fn a_heredoc_the_shell_could_run_is_never_folded() {
         assert!(reviewable_substitutions(text).is_none(), "{text}");
     }
 }
+
+/// `find` groups its tests with `\(` and `\)` and negates one with `\!`. The
+/// backslash makes each a literal word find reads, so a loop over such a walk
+/// reads like the same loop over an ungrouped walk: a review, not a block
+/// with no approval to give.
+#[test]
+fn escaped_find_operators_in_a_substitution_are_words_not_subshells() {
+    let bounded = bounded_substitutions(
+        "for f in $(find . -type f \\( -name '*.js' -o -name '*.ts' \\) \\! -path './node_modules/*' -print | sort); do sed -n '1,260p' \"$f\"; done",
+    )
+    .unwrap();
+    assert_eq!(
+        bounded.programs.into_iter().collect::<Vec<_>>(),
+        ["find", "for", "sort"]
+    );
+    for (command, receiver) in [
+        ("echo $(find . \\( -name x \\); printf ok)", "printf"),
+        ("echo $(find . \\( -name x \\)|sort)", "sort"),
+    ] {
+        let bounded = bounded_substitutions(command).unwrap();
+        assert!(bounded.programs.contains("find"), "{command}");
+        assert!(bounded.programs.contains(receiver), "{command}");
+    }
+    let controls = controls(serde_json::json!([]), false);
+    for command in [
+        "for f in $(find . -type f \\( -name '*.js' -o -name '*.ts' \\) -print); do cat \"$f\"; done",
+        "find . -maxdepth 3 -type f -not -path './node_modules/*' -print | sort; printf '\\n--- package.json ---\\n'; sed -n '1,240p' package.json; printf '\\n--- source/test files ---\\n'; for f in $(find . -maxdepth 3 -type f \\( -name '*.js' -o -name '*.cjs' -o -name '*.mjs' -o -name '*.ts' \\) -not -path './node_modules/*' -print | sort); do echo \"### $f\"; sed -n '1,260p' \"$f\"; done",
+        "wc -l $(find src \\! -name '*.map' -type f)",
+    ] {
+        let (action, code) = decision(&controls, command);
+        assert_ne!(code, FAILED, "{command}");
+        assert_ne!(action, "block", "{command}: {code}");
+    }
+}
+
+#[test]
+fn quoted_find_text_does_not_make_a_substitution_a_walk() {
+    let command = "echo $(printf '%s' 'x; find' \\( x \\))";
+    assert!(bounded_substitutions(command).is_none(), "{command}");
+    assert!(reviewable_substitutions(command).is_none(), "{command}");
+}
+
+/// Only a whole unquoted operator word beside a `find` walk changes. A
+/// parenthesis that starts a command, sits in another word or quote, or
+/// stands in a substitution with no walk keeps the failure, and so does a
+/// walk whose `-exec` runs a shell.
+#[test]
+fn other_parentheses_in_a_substitution_keep_the_evaluation_failure() {
+    for command in [
+        "echo $(\\( rm -rf build \\))",
+        "echo $(find . -name x; \\( rm -rf build \\))",
+        "echo $(find . -name x \\(rm \\))",
+        "echo $(find . \"\\(\" -name x \"\\)\")",
+        "echo $(ls \\( src \\))",
+        "echo $(find . \\( -name x \\) ; (rm -rf build))",
+    ] {
+        assert!(bounded_substitutions(command).is_none(), "{command}");
+    }
+    let controls = controls(serde_json::json!([]), false);
+    // A program a parenthesis starts is still read as the program it is.
+    assert_eq!(
+        decision(&controls, "echo $(\\( rm -rf build \\))").0,
+        "block"
+    );
+    let shell_exec = "for f in $(find . \\( -name '*.js' \\) -exec sh -c 'cat \"$1\"' _ {} \\;); do echo \"$f\"; done";
+    assert_eq!(decision(&controls, shell_exec).1, FAILED, "{shell_exec}");
+}
