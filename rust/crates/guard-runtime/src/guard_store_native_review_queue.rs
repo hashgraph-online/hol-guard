@@ -83,6 +83,7 @@ const REPLY_BUDGET_BYTES: usize = MAX_NATIVE_RESPONSE_BYTES - 128 * 1024;
 const MIN_HINT_BUDGET_MS: u64 = 150;
 /// The `local_cli_hook` action the lookup refines.
 const REVIEW_ACTION: &str = "review";
+const ASK_MODE: &str = "ask";
 
 /// The launch a non-recognition review paused, as the daemon's
 /// `local_cli_setup_connector` named it to the resident.
@@ -128,6 +129,8 @@ impl LookupAsk {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum RespondAsk {
+    /// Let the bound resident review facts choose paused or silent rendering.
+    NativeReview(NativeAsk),
     /// A prompted review.
     PausedReview(PausedAsk),
     /// A review the agent never sees.
@@ -139,6 +142,9 @@ enum RespondAsk {
 /// the connector up itself, so any field is ignored.
 #[derive(Deserialize)]
 struct PausedAsk {}
+
+#[derive(Deserialize)]
+struct NativeAsk {}
 
 /// The silent block's facts that do not come from the review or its row.
 /// The daemon also names the setup and binding facts an older resident
@@ -208,8 +214,27 @@ pub(crate) fn delegate(
     let ask: Option<HintAsk> = take_ask(&mut delegated, "hint")?;
     let respond: Option<RespondAsk> = take_ask(&mut delegated, "respond")?;
     let lookup: Option<LookupAsk> = take_ask(&mut delegated, "connector_lookup")?;
-    let silent = take_flag(&mut delegated, "silent")?;
+    let mut silent = take_flag(&mut delegated, "silent")?;
     let claude_notice = take_flag(&mut delegated, "claude_notice")?;
+    let respond = match respond {
+        Some(RespondAsk::NativeReview(NativeAsk {})) => {
+            let ask = owner
+                .and_then(PolicySnapshotStore::blocked_request_mode)
+                .ok_or(INVALID)?
+                .as_str()
+                == ASK_MODE;
+            if ask {
+                Some(RespondAsk::PausedReview(PausedAsk {}))
+            } else {
+                silent = true;
+                Some(RespondAsk::SilentReviewBlock(SilentAsk {
+                    ask: false,
+                    home_dir: query.envelope.home_dir.clone().unwrap_or_default(),
+                }))
+            }
+        }
+        other => other,
+    };
     let silent_response = matches!(respond, Some(RespondAsk::SilentReviewBlock(_)));
     if (silent && claude_notice) || (respond.is_some() && silent_response != silent) {
         return Err(INVALID);
@@ -303,6 +328,7 @@ pub(crate) fn delegate(
     let setup_reason = |ask: bool| connector.as_ref().and_then(|c| c.reason(ask, bound, exact));
     let respond = respond.map(|ask| Respond {
         setup_reason: setup_reason(match &ask {
+            RespondAsk::NativeReview(_) => false,
             RespondAsk::PausedReview(_) => true,
             RespondAsk::SilentReviewBlock(silent) => silent.ask,
         }),
@@ -321,6 +347,7 @@ pub(crate) fn delegate(
             respond.setup_reason.is_some(),
             respond.connector_is_local,
         ),
+        RespondAsk::NativeReview(_) => false,
         RespondAsk::PausedReview(_) => false,
     });
     if silent && !silent_links {
@@ -395,6 +422,7 @@ impl Delegated {
         let text = |key: &str| row.get(key).and_then(Value::as_str).map(str::to_owned);
         let (request_id, approval_url) = (text("request_id"), text("approval_url"));
         let response = match &respond.ask {
+            RespondAsk::NativeReview(_) => return reply,
             RespondAsk::PausedReview(PausedAsk {}) => {
                 let mut verdict = respond.result.clone();
                 if let Some(reason) = &respond.setup_reason {

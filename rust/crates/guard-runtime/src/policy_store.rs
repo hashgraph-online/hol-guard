@@ -238,6 +238,14 @@ pub(crate) struct PolicySnapshotStore {
 }
 
 impl PolicySnapshotStore {
+    /// The bound blocked-request mode for daemon review rendering.
+    pub(crate) fn blocked_request_mode(&self) -> Option<String> {
+        self.direct_lane.lock().ok().and_then(|binding| {
+            binding
+                .as_ref()
+                .and_then(|binding| binding.review.blocked_request_mode.clone())
+        })
+    }
     #[cfg(test)]
     pub(crate) fn new(state_base: &Path, runtime_identity: &str) -> Result<Self, String> {
         Self::new_with_resident_generation(state_base, runtime_identity, 0)

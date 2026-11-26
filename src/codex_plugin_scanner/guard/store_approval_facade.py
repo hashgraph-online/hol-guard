@@ -76,7 +76,7 @@ class StoreApprovalsMixin:
         now: str,
         *,
         hint: dict[str, object] | None = None,
-        silent: bool = False,
+        silent: bool | None = False,
         claude_key: dict[str, str] | None = None,
         codex_live_wait: dict[str, object] | None = None,
         respond: dict[str, object] | None = None,
@@ -131,9 +131,10 @@ class StoreApprovalsMixin:
             "review": review,
             "hint": hint,
             "now": now,
-            "silent": silent,
             "claude_notice": claude_key is not None,
         }
+        if silent is not None:
+            args["silent"] = silent
         if claude_key is not None:
             args["integrity_key_b64"] = claude_key["integrity_key_b64"]
             args["integrity_key_id"] = claude_key["integrity_key_id"]
