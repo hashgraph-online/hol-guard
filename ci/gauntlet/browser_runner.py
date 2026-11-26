@@ -23,6 +23,9 @@ from .interruptions import observation_interruptions
 # State presets the lane can seed today. The rest need the grant, saved-decision and provider
 # fixtures of later phases.
 WIRED_PRESETS = frozenset({"none"})
+# A browser prompt that names Guard's own approval center uses this placeholder; the lane renders
+# it once the daemon has a port.
+GUARD_PORT_PLACEHOLDER = "{{guard_port}}"
 
 
 def is_browser_case(scenario: Scenario) -> bool:

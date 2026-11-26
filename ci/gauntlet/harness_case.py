@@ -38,7 +38,13 @@ from .approval_retry_relay import (
 )
 from .approval_rows import approval_rows
 from .browser_fixtures import read_journal
-from .browser_runner import browser_evidence, browser_section, is_browser_case, stage_browser_case
+from .browser_runner import (
+    GUARD_PORT_PLACEHOLDER,
+    browser_evidence,
+    browser_section,
+    is_browser_case,
+    stage_browser_case,
+)
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import add_credential_redactions, fixture_system_context
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
@@ -216,26 +222,33 @@ def run_harness_case(
     try:
         with LoopbackCollector() as collector:
             replacements[collector.url] = "{{collector_url}}"
-            rendered = scenario.render(
-                {
-                    "home": str(fixture.home),
-                    "workspace": str(fixture.workspace),
-                    "root": str(fixture.root),
-                    "scratch": str(scratch_checkout(fixture.root)),
-                    "stage": str(stage_directory(fixture.root)),
-                    "collector_url": collector.url,
-                }
-            )
-            prompt, context = route_task(
-                scenario,
-                _scenario_prompt(rendered),
-                fixture_authorization(fixture, collector.url, rendered) + "\n" + fixture_system_context(scenario),
-            )
-            case["task_route"] = "instructions" if prompt == NEUTRAL_PROMPT else "prompt"
-            # Public, redacted targets the judge binds hook requests to.
-            case["expected_commands"] = redact_value(list(rendered.commands), replacements)
-            case["expected_path"] = rendered.path
-            case["prompt_sha256"] = sha256_bytes(prompt.encode())
+            values = {
+                "home": str(fixture.home),
+                "workspace": str(fixture.workspace),
+                "root": str(fixture.root),
+                "scratch": str(scratch_checkout(fixture.root)),
+                "stage": str(stage_directory(fixture.root)),
+                "collector_url": collector.url,
+            }
+
+            def render_task() -> tuple[Scenario, str, str]:
+                rendered = scenario.render(values)
+                prompt, context = route_task(
+                    scenario,
+                    _scenario_prompt(rendered),
+                    fixture_authorization(fixture, collector.url, rendered) + "\n" + fixture_system_context(scenario),
+                )
+                case["task_route"] = "instructions" if prompt == NEUTRAL_PROMPT else "prompt"
+                # Public, redacted targets the judge binds hook requests to.
+                case["expected_commands"] = redact_value(list(rendered.commands), replacements)
+                case["expected_path"] = rendered.path
+                case["prompt_sha256"] = sha256_bytes(prompt.encode())
+                return rendered, prompt, context
+
+            # A prompt that names Guard's own port renders once the daemon has one.
+            needs_guard_port = GUARD_PORT_PLACEHOLDER in scenario.prompt
+            if not needs_guard_port:
+                rendered, prompt, context = render_task()
             if scenario.oracle == "watch-command":
                 if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
                     raise ValueError("Watch fixture contract changed")
@@ -269,6 +282,9 @@ def run_harness_case(
                 identity=identity,
                 register_workspace_policy=not realistic,
             )
+            if needs_guard_port:
+                values["guard_port"] = str(daemon.port)
+                rendered, prompt, context = render_task()
             if scenario.oracle == RELAY_ORACLE:
                 record_daemon_origin(daemon)
             if scenario.oracle == "blocked-extension":

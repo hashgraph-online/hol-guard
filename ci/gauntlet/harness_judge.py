@@ -141,6 +141,18 @@ def _patch_tool(payload: dict[str, Any]) -> str | None:
     return target[0] if target else None
 
 
+def _risk_categories(*sources: dict[str, Any]) -> list[str]:
+    """Risk categories a hook response or receipt reports, at the top level or under ``risk``."""
+    found: list[str] = []
+    for source in sources:
+        nested = source.get("risk")
+        for holder in (source, nested if isinstance(nested, dict) else {}):
+            categories = holder.get("risk_categories")
+            if isinstance(categories, list):
+                found.extend(str(category) for category in categories if str(category) not in found)
+    return found
+
+
 def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EVENTS) -> list[dict[str, Any]]:
     """Decisions for the selected hook events, one per reviewed hook request."""
     decisions = []
@@ -165,6 +177,7 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
                 "call_id": payload.get("tool_use_id") or payload.get("tool_call_id"),
                 "policy_action": response.get("policy_action") or receipt.get("policy_action"),
                 "reason_code": response.get("reason_code") or receipt.get("reason_code"),
+                "risk_categories": _risk_categories(response, receipt),
                 "receipt_decision": receipt.get("decision"),
                 "receipt_harness": receipt.get("harness"),
                 "observe_mode": receipt.get("observe_mode"),
