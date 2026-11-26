@@ -1,6 +1,42 @@
 {
   "_comment": "Coverage gaps of shipped browser driver profiles that the benign gate cannot close yet: the driver stand-in serves only the recorded tool list, and no grant state preset is wired. test_browser_driver_gate_coverage fails on a gap missing from this file and on an entry that is no longer a gap.",
   "profiles": {
+    "browser.browsermcp": {
+      "missing_tools": [
+        "browser",
+        "browser_click",
+        "browser_drag",
+        "browser_get_console_logs",
+        "browser_go_back",
+        "browser_go_forward",
+        "browser_hover",
+        "browser_navigate",
+        "browser_press_key",
+        "browser_screenshot",
+        "browser_select_option",
+        "browser_snapshot",
+        "browser_type",
+        "browser_wait"
+      ],
+      "verb_gaps": [
+        "Click: no allow row under a grant",
+        "Click: no row that is not allow",
+        "Key: no allow row under a grant",
+        "Key: no row that is not allow",
+        "Navigate: no allow row under a grant",
+        "Navigate: no row that is not allow",
+        "Other: no allow row under a grant",
+        "Other: no row that is not allow",
+        "Read: no allow row under a grant",
+        "Read: no row that is not allow",
+        "Screenshot: no allow row under a grant",
+        "Screenshot: no row that is not allow",
+        "Select: no allow row under a grant",
+        "Select: no row that is not allow",
+        "Type: no allow row under a grant",
+        "Type: no row that is not allow"
+      ]
+    },
     "browser.chrome-devtools-mcp": {
       "missing_tools": [
         "accept_dialog",

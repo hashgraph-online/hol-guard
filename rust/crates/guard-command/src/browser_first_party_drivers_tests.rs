@@ -194,12 +194,12 @@ fn oracle_names(oracle: &[(BrowserIntentV1, &[&str])]) -> Vec<String> {
 #[test]
 fn first_party_profiles_compile_as_first_party() {
     let drivers = compile_first_party().expect("first-party profiles compile");
-    assert_eq!(drivers.len(), 3);
+    assert_eq!(drivers.len(), 4);
     for driver in &drivers {
         assert_eq!(driver.trust_class, BrowserDriverTrustClassV1::FirstParty);
         assert!(driver.publisher_verified);
     }
-    assert_eq!(first_party_browser_drivers().len(), 3);
+    assert_eq!(first_party_browser_drivers().len(), 4);
 }
 
 #[test]
@@ -253,6 +253,33 @@ fn the_puppeteer_profile_lists_the_reference_server_tools() {
         first_party_operation_intent(PUPPETEER_DRIVER_ID, "browser_navigate"),
         None
     );
+}
+
+#[test]
+fn the_browsermcp_profile_lists_the_script_tool_and_the_legacy_tools() {
+    use BrowserIntentV1::*;
+    for (name, intent) in [
+        ("browser", Privileged),
+        ("browser_click", Interact),
+        ("browser_drag", Interact),
+        ("browser_get_console_logs", Inspect),
+        ("browser_go_back", Navigation),
+        ("browser_go_forward", Navigation),
+        ("browser_hover", Interact),
+        ("browser_navigate", Navigation),
+        ("browser_press_key", Interact),
+        ("browser_screenshot", Inspect),
+        ("browser_select_option", Interact),
+        ("browser_snapshot", Inspect),
+        ("browser_type", Interact),
+        ("browser_wait", Inspect),
+    ] {
+        assert_eq!(
+            first_party_operation_intent(BROWSERMCP_DRIVER_ID, name),
+            Some(intent),
+            "{name}"
+        );
+    }
 }
 
 #[test]

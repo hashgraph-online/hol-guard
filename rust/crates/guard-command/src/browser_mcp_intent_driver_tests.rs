@@ -56,3 +56,21 @@ fn a_navigate_that_passes_launch_options_is_raw_protocol_access() {
             .contains(&BrowserSensitiveSurfaceV1::Cdp));
     }
 }
+
+#[test]
+fn browsermcp_runs_a_command_script_as_privileged() {
+    let script = intent(
+        "browsermcp",
+        "browser",
+        json!({"commands": "goto https://example.com/\nsnapshot"}),
+    )
+    .expect("browser server");
+    assert_eq!(script.intent, BrowserIntentV1::Privileged);
+    let navigate = intent(
+        "browsermcp",
+        "browser_navigate",
+        json!({"url": "https://example.com/"}),
+    )
+    .unwrap();
+    assert_eq!(navigate.intent, BrowserIntentV1::Navigation);
+}
