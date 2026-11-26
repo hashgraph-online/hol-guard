@@ -27,11 +27,6 @@
       "trust": "contracts/extensions/trust/command.backup.velero.v1.json"
     },
     {
-      "extension_id": "command.browser-automation",
-      "source": "contributions/command-sources/command.browser-automation.json",
-      "trust": "contracts/extensions/trust/command.browser-automation.v1.json"
-    },
-    {
       "extension_id": "command.cdn",
       "source": "contributions/command-sources/command.cdn.json",
       "trust": "contracts/extensions/trust/command.cdn.v1.json"
