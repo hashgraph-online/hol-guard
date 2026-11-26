@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { normalizeApprovalRequest } from "./guard-api";
 import {
@@ -128,6 +129,24 @@ const nvmAdvice = {
     assert(finishedSwitchVersion(refreshed, done) === null, "a refreshed review drops the finished switch");
     assert(finishedSwitchVersion(first, null) === null, "no switch, no finished version");
   }
+}
+
+{
+  // Siblings that share a React key are not reconciled one to one: a review
+  // refresh left extra copies of the Node.js card, each with its own switch
+  // state. Every key in the decision card must name one child.
+  const source = readFileSync(new URL("./review-decision-card.tsx", import.meta.url), "utf8");
+  const keys = [...source.matchAll(/\bkey=\{(`[^`]*`|[^}]*)\}/g)].map((match) => match[1]);
+  assert(keys.length >= 5, "the decision card's keys are found");
+  const repeated = keys.filter((key, index) => keys.indexOf(key) !== index);
+  assert(repeated.length === 0, `decision card keys repeat: ${repeated.join(", ")}`);
+}
+
+{
+  // The card follows the HOL palette: brand attention, not amber or orange.
+  const markup = renderToStaticMarkup(<RuntimeUpgradeCard requestId="r1" advice={normalizeRuntimeUpgradeAdvice(nvmAdvice) ?? undefined} />);
+  assert(markup.includes("brand-attention"), "the card uses the brand attention tone");
+  assert(!/\b(?:amber|orange|yellow)-\d/.test(markup), "the card uses no off-brand warning palette");
 }
 
 console.log("runtime-upgrade-advice tests passed");

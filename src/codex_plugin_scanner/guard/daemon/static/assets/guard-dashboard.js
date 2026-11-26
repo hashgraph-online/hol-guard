@@ -37622,13 +37622,13 @@ function RuntimeUpgradeCard(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "section",
     {
-      className: "mt-5 rounded-xl border border-amber-200 bg-amber-50/60 p-4",
+      className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.04] p-4",
       "aria-labelledby": "runtime-upgrade-title",
       "data-testid": "runtime-upgrade",
       children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "mt-0.5 h-5 w-5 shrink-0 text-amber-600", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-amber-700", children: "Why this is paused" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-brand-dark/75", children: "Why this is paused" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "runtime-upgrade-title", className: "mt-1 text-sm font-semibold text-brand-dark", children: "Update Node.js to stop these reviews" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: [
             "This command runs Node.js ",
@@ -38607,7 +38607,7 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone, children: badgeLabel })
       ] }),
       !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
-      nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, item.request_id),
+      nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, `business-summary:${item.request_id}`),
       resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: retryCannotReuseApprovalHint(item, harnessName) }) : null,
       mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -38631,7 +38631,7 @@ function ReviewDecisionCard(props) {
           ) : null
         ] })
       ] }) }),
-      topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
+      topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, `top-alerts:${item.request_id}`) }),
       whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
@@ -38649,7 +38649,7 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
-      resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeUpgradeCard, { requestId: item.request_id, advice: item.runtime_upgrade }, item.request_id),
+      resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeUpgradeCard, { requestId: item.request_id, advice: item.runtime_upgrade }, `runtime-upgrade:${item.request_id}`),
       resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionRecommendationCard,
         {
@@ -38662,7 +38662,7 @@ function ReviewDecisionCard(props) {
           onApproved: handleExtensionApproved,
           onDialogActiveChange: setExtensionDialogActive
         },
-        item.request_id
+        `extension-recommendation:${item.request_id}`
       ),
       resolutionBlockReason === null && resolved === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionCoverageCard,
@@ -38761,13 +38761,13 @@ function ReviewDecisionCard(props) {
           ]
         }
       ),
-      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
+      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, `evidence:${item.request_id}`) })
     ] }),
-    mcpCall === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) : (
+    mcpCall === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `context-review:${item.request_id}:${decisionSubjectKey}`) : (
       // The MCP card answers the question on its own; extra context is there for anyone who wants it.
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-100 px-4 py-3 sm:px-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80", children: "Prepare more context for this decision" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `mcp-context-review:${item.request_id}:${decisionSubjectKey}`) })
       ] })
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewLastTimeCard, { detail }),
@@ -40911,6 +40911,23 @@ function queuePageSyncTarget(input) {
   const activeOnPage = activeRequestId !== null && (pagedRequests.some((item) => item.request_id === activeRequestId) || detailRequestId === activeRequestId);
   return activeOnPage ? null : pagedRequests[0].request_id;
 }
+function pinAfterActiveChange(input) {
+  const { activeRequestId, selfSelectedRequestId, pinnedRequestId } = input;
+  if (activeRequestId === null || activeRequestId === selfSelectedRequestId) {
+    return pinnedRequestId;
+  }
+  return activeRequestId;
+}
+function missingActiveFallback(input) {
+  const { filteredRequests, requests, activeRequestId, detailRequestId, pinnedRequestId, detailGone } = input;
+  if (filteredRequests.length === 0) return null;
+  if (activeRequestId !== null) {
+    const loaded = requests.some((item) => item.request_id === activeRequestId) || detailRequestId === activeRequestId;
+    if (loaded) return null;
+    if (activeRequestId === pinnedRequestId && !detailGone) return null;
+  }
+  return filteredRequests[0].request_id;
+}
 const QUEUE_PAGE_SIZE = 10;
 function ReviewWorkspace(props) {
   const businessQueueReadFailed2 = useBusinessQueueReadFailure();
@@ -40926,23 +40943,34 @@ function ReviewWorkspace(props) {
   const [dateTo, setDateTo] = reactExports.useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const [page, setPage] = reactExports.useState(1);
-  const [setupPinnedRequestId, setSetupPinnedRequestId] = reactExports.useState(null);
+  const [pinnedRequestId, setPinnedRequestId] = reactExports.useState(activeRequestId);
+  const selfSelectedRef = reactExports.useRef(null);
+  const [seenActiveRequestId, setSeenActiveRequestId] = reactExports.useState(activeRequestId);
+  if (activeRequestId !== seenActiveRequestId) {
+    setSeenActiveRequestId(activeRequestId);
+    setPinnedRequestId(pinAfterActiveChange({
+      activeRequestId,
+      selfSelectedRequestId: selfSelectedRef.current,
+      pinnedRequestId
+    }));
+  }
   const selectRequest = reactExports.useCallback((id2) => {
+    selfSelectedRef.current = id2;
     props.onOpenRequest(id2);
     setMobileQueueOpen(false);
   }, [props.onOpenRequest]);
   const handleOpenRequest = reactExports.useCallback((id2) => {
-    setSetupPinnedRequestId(null);
+    setPinnedRequestId(null);
     selectRequest(id2);
     readState.markRead(id2);
   }, [selectRequest, readState]);
   const handleOpenSetupEvidence = reactExports.useCallback((id2) => {
-    setSetupPinnedRequestId(id2);
+    setPinnedRequestId(id2);
     selectRequest(id2);
     readState.markRead(id2);
   }, [selectRequest, readState]);
   const handlePageChange = reactExports.useCallback((nextPage) => {
-    setSetupPinnedRequestId(null);
+    setPinnedRequestId(null);
     setPage(nextPage);
   }, []);
   const handleToggleMobileQueue = reactExports.useCallback(() => {
@@ -40965,10 +40993,14 @@ function ReviewWorkspace(props) {
     const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
   }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, setupFilter, sortDirection, semanticFilter]);
+  const filterSignature = JSON.stringify([searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
+  const appliedFilterSignatureRef = reactExports.useRef(filterSignature);
   reactExports.useEffect(() => {
-    setSetupPinnedRequestId(null);
+    if (appliedFilterSignatureRef.current === filterSignature) return;
+    appliedFilterSignatureRef.current = filterSignature;
+    setPinnedRequestId(null);
     setPage(1);
-  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
+  }, [filterSignature]);
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
@@ -40998,25 +41030,27 @@ function ReviewWorkspace(props) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [pagedRequests, activeRequestId, handleOpenRequest]);
+  const detailGone = props.detailGone ?? false;
   reactExports.useEffect(() => {
-    if (filteredRequests.length === 0) {
-      return;
-    }
-    const activeInRequests = requests.some((item) => item.request_id === activeRequestId) || detail?.item.request_id === activeRequestId;
-    if (activeRequestId !== null && activeInRequests) {
-      return;
-    }
-    selectRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
+    const target2 = missingActiveFallback({
+      filteredRequests,
+      requests,
+      activeRequestId,
+      detailRequestId: detail?.item.request_id ?? null,
+      pinnedRequestId,
+      detailGone
+    });
+    if (target2 !== null) selectRequest(target2);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, pinnedRequestId, detailGone, selectRequest]);
   reactExports.useEffect(() => {
     const target2 = queuePageSyncTarget({
       pagedRequests,
       activeRequestId,
       detailRequestId: detail?.item.request_id ?? null,
-      pinnedRequestId: setupPinnedRequestId
+      pinnedRequestId
     });
     if (target2 !== null) selectRequest(target2);
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, setupPinnedRequestId, selectRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, pinnedRequestId, selectRequest]);
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
@@ -42505,6 +42539,7 @@ function renderInboxContent(props) {
       activeRequestId: props.activeRequestId,
       detailError: props.detail.kind === "error" ? props.detail.message : null,
       detailLoading: props.detail.kind === "loading",
+      detailGone: props.detail.kind === "stale",
       onRetryDetail: props.onRetryDetail,
       detail: props.detail.kind === "ready" ? {
         item: props.detail.item,

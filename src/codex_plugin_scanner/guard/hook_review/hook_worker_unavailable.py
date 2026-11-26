@@ -13,9 +13,13 @@ from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, cast
 
-from ..native_hook_render import native_render_cli, native_unavailable_event_response
+from ..native_hook_render import (
+    availability_harness_response,
+    canonical_hook_event_name,
+    native_render_cli,
+    native_unavailable_event_response,
+)
 from ..native_policy_snapshot_direct_lane_structured import structured_output_view
-from .hook_availability_policy import availability_harness_response, canonical_hook_event_name
 
 if TYPE_CHECKING:
     from .hook_worker import HookWorker

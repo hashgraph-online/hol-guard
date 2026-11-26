@@ -6,10 +6,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..native_hook_render import availability_harness_response
 from ..native_resident_client import native_resident_client_failure_code
 from ..native_resident_revival import native_unavailable_reason
 from ..resident_evidence_dispatch import run_resident_evidence
-from .hook_availability_policy import availability_harness_response
 from .hook_fail_closed import render_recording_only_pre_tool
 
 if TYPE_CHECKING:

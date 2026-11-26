@@ -692,6 +692,19 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     } else {
         inner
     };
+    // `find . \( -name '*.js' -o -name '*.ts' \) -print` groups its tests
+    // with escaped parentheses, and `\!` negates one. The backslash makes each
+    // a literal word that find reads, not a subshell, so the loop that walks
+    // such a list was refused here and blocked with no approval to give. Those
+    // words are read as the find operators they are; any other parenthesis or
+    // escape keeps the refusal below.
+    let regrouped;
+    let inner = if runs_a_find_walk(inner) {
+        regrouped = with_find_operators_as_words(inner);
+        regrouped.as_str()
+    } else {
+        inner
+    };
     if inner.contains(['`', '<', '>', '(', ')', '\n', '#'])
         || inner.contains("$(")
         || !expansions_are_names(inner)
@@ -719,21 +732,7 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
         && super::EXEC_ACTIONS
             .iter()
             .any(|action| named.contains(*action))
-        && inner
-            .split(['\n', ';', '&', '|', '(', ')', '`'])
-            .any(|piece| {
-                let words: Vec<&str> = piece.split_whitespace().collect();
-                super::xargs::command_index(&words).is_some_and(|index| {
-                    // `"find"` and `fi\nd` run the same walk, so the quoting
-                    // comes off before the name is read, exactly as
-                    // `named_words` reads the rest of the text.
-                    let unquoted: String = words[index]
-                        .chars()
-                        .filter(|character| !matches!(character, '\'' | '"' | '\\'))
-                        .collect();
-                    super::command_basename(&unquoted).ends_with("find")
-                })
-            });
+        && runs_a_find_walk(inner);
     if inner.contains(['{', '}', '\\']) {
         // `{}` is find's placeholder for the path it found and `\;` ends an
         // `-exec` body: neither opens a brace group nor hides punctuation, and
@@ -793,6 +792,147 @@ fn inner_programs(inner: &str, flow: ValueFlow) -> Option<Vec<String>> {
     }
     programs.extend(filters);
     (!programs.is_empty()).then_some(programs)
+}
+
+/// Whether a command in the substitution's text is a `find` walk.
+fn runs_a_find_walk(inner: &str) -> bool {
+    split_find_commands(inner).into_iter().any(|piece| {
+        let words: Vec<&str> = piece.split_whitespace().collect();
+        super::xargs::command_index(&words).is_some_and(|index| {
+            // `"find"` and `fi\nd` run the same walk, so the quoting
+            // comes off before the name is read, exactly as
+            // `named_words` reads the rest of the text.
+            let unquoted: String = words[index]
+                .chars()
+                .filter(|character| !matches!(character, '\'' | '"' | '\\'))
+                .collect();
+            super::command_basename(&unquoted).ends_with("find")
+        })
+    })
+}
+
+/// Split shell command positions without treating separators inside quotes or
+/// escaped separators as command boundaries. This keeps text such as
+/// `printf '%s' 'x; find'` from making `find` look like a walker.
+fn split_find_commands(inner: &str) -> Vec<String> {
+    let chars: Vec<char> = inner.chars().collect();
+    let mut commands = vec![String::new()];
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    for character in chars {
+        if escaped {
+            escaped = false;
+            commands
+                .last_mut()
+                .expect("command segment")
+                .push(character);
+            continue;
+        }
+        if single {
+            single = character != '\'';
+            commands
+                .last_mut()
+                .expect("command segment")
+                .push(character);
+            continue;
+        }
+        if double {
+            if character == '"' {
+                double = false;
+            } else if character == '\\' {
+                escaped = true;
+            }
+            commands
+                .last_mut()
+                .expect("command segment")
+                .push(character);
+            continue;
+        }
+        match character {
+            '\\' => {
+                escaped = true;
+                commands
+                    .last_mut()
+                    .expect("command segment")
+                    .push(character);
+            }
+            '\'' => {
+                single = true;
+                commands
+                    .last_mut()
+                    .expect("command segment")
+                    .push(character);
+            }
+            '"' => {
+                double = true;
+                commands
+                    .last_mut()
+                    .expect("command segment")
+                    .push(character);
+            }
+            '\n' | ';' | '&' | '|' | '(' | ')' | '`' => {
+                commands.push(String::new());
+            }
+            _ => commands
+                .last_mut()
+                .expect("command segment")
+                .push(character),
+        }
+    }
+    commands
+}
+
+/// The text with each whole unquoted `\(`, `\)` and `\!` word read as a
+/// plain operator word. One that starts a command keeps its backslash, so a
+/// program named by it is still refused.
+fn with_find_operators_as_words(inner: &str) -> String {
+    const OPERATOR: &str = "guard_find_operator";
+    let chars: Vec<char> = inner.chars().collect();
+    let mut out = String::with_capacity(inner.len());
+    let (mut single, mut double, mut command_start) = (false, false, true);
+    let mut index = 0;
+    while index < chars.len() {
+        let character = chars[index];
+        let word_start = index == 0 || chars[index - 1].is_whitespace();
+        let word_end = chars
+            .get(index + 2)
+            .is_none_or(|next| next.is_whitespace() || matches!(next, ';' | '&' | '|'));
+        if !single
+            && !double
+            && !command_start
+            && character == '\\'
+            && word_start
+            && word_end
+            && matches!(chars.get(index + 1), Some('(' | ')' | '!'))
+        {
+            out.push_str(OPERATOR);
+            index += 2;
+            continue;
+        }
+        if single {
+            single = character != '\'';
+        } else if character == '\\' && !single {
+            // An escape keeps the next character literal, whatever it is.
+            out.push(character);
+            if let Some(&next) = chars.get(index + 1) {
+                out.push(next);
+            }
+            command_start = false;
+            index += 2;
+            continue;
+        } else if character == '\'' && !double {
+            single = true;
+        } else if character == '"' {
+            double = !double;
+        }
+        if !single && !double && matches!(character, '\n' | ';' | '&' | '|') {
+            command_start = true;
+        } else if !character.is_whitespace() {
+            command_start = false;
+        }
+        out.push(character);
+        index += 1;
+    }
+    out
 }
 
 /// The commands of a substitution's text, split on `|`, `||`, `&&` and `;`

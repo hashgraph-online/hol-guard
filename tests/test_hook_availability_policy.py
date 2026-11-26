@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
+from codex_plugin_scanner.guard.native_hook_render import (
     availability_harness_response,
 )
 
@@ -33,7 +33,7 @@ def test_availability_denies_inspection_and_high_impact_without_review(tmp_path:
 
 
 def test_runtime_availability_reuses_the_rust_answer(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+    from codex_plugin_scanner.guard import native_hook_availability as policy
 
     calls: list[object] = []
 

@@ -32,6 +32,45 @@ fn a_quoted_heredoc_that_carries_a_commit_message_is_quiet() {
     }
 }
 
+/// An agent in a checkout with no identity names the author on the command
+/// line. Those two settings change only who the commit records, so the
+/// heredoc is still the commit's message.
+#[test]
+fn a_heredoc_message_with_a_named_author_is_quiet() {
+    let session = session("heredoc-message-author");
+    let quiet = |command: &str| session.quiet_at(command, &session.worktree, WRITE);
+    for command in [
+        "git -c user.name=Agent commit -q -F - <<'MSG'\nfeat(report): add the lane\nMSG",
+        "git -c user.name=\"Guard Agent\" -c user.email=agent@example.com commit -q -F - <<'MSG'\nfeat(report): add the lane\n\nSecond paragraph.\nMSG",
+        "git add -A && git -c User.Name=Agent commit -F - <<'MSG'\nfeat(report): add the lane\nMSG",
+        "git -c user.name=Agent commit -q -F - <<'MSG'\nfeat(report): add the lane\nMSG\ngit log --stat -1 && git status --short",
+    ] {
+        quiet(command).unwrap();
+    }
+}
+
+/// Only the author's name and address are skipped. Any other setting or a
+/// repository chosen in front of the subcommand, a body that expands, a
+/// command that is not a commit, and a command after the body keep the
+/// review.
+#[test]
+fn a_named_author_does_not_open_other_heredoc_shapes() {
+    let session = session("heredoc-message-author-refused");
+    for command in [
+        "git -c user.name=Agent -C ../org/app-portal commit -F - <<'MSG'\nfeat(report): add the lane\nMSG",
+        "git -c user.name=Agent -c core.hooksPath=/tmp/hooks commit -F - <<'MSG'\nfeat(report): add the lane\nMSG",
+        "git -c core.hooksPath=/tmp/hooks -c user.name=Agent commit -F - <<'MSG'\nfeat(report): add the lane\nMSG",
+        "git -c user.signingkey=/tmp/key commit -F - <<'MSG'\nfeat(report): add the lane\nMSG",
+        "git -c user.name commit -F - <<'MSG'\nfeat(report): add the lane\nMSG",
+        "git -c user.name=Agent commit -F - <<MSG\n$(cat ~/.ssh/id_rsa)\nMSG",
+        "git -c user.name=Agent apply <<'MSG'\ndiff --git a/x b/x\nMSG",
+        "git -c user.name=Agent commit -F - <<'MSG'\nfeat(report): add the lane\nMSG\nrm -rf build",
+        "git -c user.name=Agent commit -m 'feat(report): add the lane' <<'MSG'\nunused\nMSG",
+    ] {
+        session.assert_not_allow(command);
+    }
+}
+
 /// Only the command that reads the bytes may receive them.
 #[test]
 fn literal_standard_input_fed_to_anything_else_stays_reviewed() {
@@ -187,6 +226,10 @@ fn cursor_settles_a_heredoc_message_and_a_named_author() {
             &session.primary,
         ),
         (format!("git {id} commit -m 'fix: thing'"), &session.primary),
+        (
+            format!("git {id} commit -q -F - <<'MSG'\nfix: thing\n\nit's the body\nMSG"),
+            &session.primary,
+        ),
         (
             format!("git -c User.Email=agent@example.com commit -m {msg}"),
             &session.primary,

@@ -1,10 +1,15 @@
 //! Text a command matches against names it already lists or collects: the
-//! pattern of a `find` name test and the expression of `pytest -k`.
+//! pattern of a `find` name test, the expression of `pytest -k`, and the
+//! test-name filter of a contained Vitest or Jest run (`-t`,
+//! `--testNamePattern`).
 //!
 //! `find examples -name "*password*"` prints the names the walk visits that
 //! match the pattern, and `pytest -k password` selects which collected tests
 //! run. Neither opens a file the pattern names, so a credential word there is
-//! not a secret read. The rest of the command still meets every screen.
+//! not a secret read. `vitest run -t "masks the secret field"` and its Jest
+//! twin likewise choose among the test titles the runner collects. The rest
+//! of the command still meets every screen, and the run itself still goes to
+//! its contained runner.
 //!
 //! The names `find` prints can still be handed to a program that opens them,
 //! as in `find . -name "*password*" | xargs cat`. The patterns are therefore
@@ -46,7 +51,8 @@ pub(super) fn segment_without_patterns(model: &CanonicalCommandV1, index: usize)
     }
     let masked = match executable {
         "find" => find_patterns(&segment.arguments)?,
-        _ => pytest_keyword_values(executable, &segment.arguments)?,
+        _ => pytest_keyword_values(executable, &segment.arguments)
+            .or_else(|| runner_test_name_values(segment))?,
     };
     if masked.is_empty()
         || masked
@@ -104,6 +110,53 @@ fn pytest_keyword_values(executable: &str, arguments: &[String]) -> Option<Vec<u
             .filter(|&position| position < end)
             .collect(),
     )
+}
+
+/// Options of Vitest and Jest whose value filters collected tests by title.
+const TEST_NAME_OPTIONS: &[&str] = &["-t", "--testNamePattern", "--test-name-pattern"];
+
+/// The argument positions holding a test-name filter of a Vitest or Jest run
+/// the contained runner recognises. A value that could be read as a file
+/// operand instead (a path separator, or a leading `.` or `~`) is never
+/// masked, so `vitest run -t .env` keeps its screen whatever the runner
+/// makes of it. A `-t=value` spelling masks the whole word.
+fn runner_test_name_values(segment: &CommandSegmentV1) -> Option<Vec<usize>> {
+    let (tool, tail) = crate::contained_argv::contained_runner_invocation(&segment.tokens).ok()?;
+    if !matches!(tool, "vitest" | "jest") || tail.len() > segment.arguments.len() {
+        return None;
+    }
+    let start = segment.arguments.len() - tail.len();
+    if segment.arguments[start..] != tail[..] {
+        return None;
+    }
+    let end = segment.arguments[start..]
+        .iter()
+        .position(|argument| argument == "--")
+        .map_or(segment.arguments.len(), |offset| start + offset);
+    let mut masked = Vec::new();
+    for position in start..end {
+        let argument = segment.arguments[position].as_str();
+        if TEST_NAME_OPTIONS.contains(&argument) {
+            let value = position + 1;
+            if value >= end || !title_filter(&segment.arguments[value]) {
+                return None;
+            }
+            masked.push(value);
+        } else if let Some((option, value)) = argument.split_once('=') {
+            if TEST_NAME_OPTIONS.contains(&option) {
+                if !title_filter(value) {
+                    return None;
+                }
+                masked.push(position);
+            }
+        }
+    }
+    Some(masked)
+}
+
+/// Whether a test-name value reads only as a title pattern, never as a path.
+fn title_filter(value: &str) -> bool {
+    !value.is_empty() && !value.starts_with(['.', '~', '-']) && !value.contains(['/', '\\'])
 }
 
 fn python(name: &str) -> bool {
