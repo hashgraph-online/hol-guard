@@ -28778,7 +28778,7 @@
       "enabled_extensions": [
         "command.browser-automation"
       ],
-      "expected_action": "review",
+      "expected_action": "allow",
       "expected_effective_segments": [],
       "id": "debug-not-echo",
       "rule_id": "command.browser-automation.remote-debugging-launch"
