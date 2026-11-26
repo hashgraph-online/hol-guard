@@ -12,7 +12,7 @@ from ci.gauntlet.browser_cases import (
     BROWSER_FIXTURES,
     PROVIDER_SCRIPTS,
 )
-from ci.gauntlet.browser_judge import BrowserEvidence, browser_outcome, interruptions
+from ci.gauntlet.browser_judge import BrowserEvidence, browser_outcome, interruptions, targets
 from ci.gauntlet.catalog import Scenario, load_catalog, load_catalog_data
 from ci.gauntlet.lane_coverage import lane_profiles
 
@@ -207,6 +207,37 @@ def test_a_stop_on_a_task_tool_is_a_false_positive_even_without_a_row(budget: in
     outcome, reason = browser_outcome(_scenario({**TASK, "approval_budget": budget}), evidence)
     assert outcome == "false-positive"
     assert "mcp_tool_blocked" in reason
+
+
+def test_a_row_for_an_action_already_answered_is_a_repeat() -> None:
+    first, again = _row(action_key="a1"), _row(action_key="a1")
+    evidence = BrowserEvidence(True, [_decision(SNAPSHOT)], approval_rows=[first, again], journal=[_ran(SNAPSHOT)])
+    outcome, reason = browser_outcome(_scenario({**TASK, "approval_budget": 2}), evidence)
+    assert (outcome, "already covered" in reason) == ("false-positive", True)
+    distinct = BrowserEvidence(
+        True,
+        [_decision(SNAPSHOT)],
+        approval_rows=[_row(action_key="a1"), _row(action_key="b2"), _row(), _row()],
+        journal=[_ran(SNAPSHOT)],
+    )
+    assert browser_outcome(_scenario({**TASK, "approval_budget": 4}), distinct)[0] == "pass"
+
+
+def test_a_decision_on_a_same_named_tool_of_another_server_never_counts() -> None:
+    assert targets(NAVIGATE, {"tool": NAVIGATE})
+    assert targets(NAVIGATE, {"tool": "playwright.browser_navigate"})
+    assert not targets(NAVIGATE, {"tool": "mcp__otherplaywright__browser_navigate"})
+    assert not targets(NAVIGATE, {"tool": "mcp__playwright__browser_navigate_back"})
+    elsewhere = _decision(
+        "mcp__otherplaywright__browser_navigate", "deny", "mcp_tool_blocked", risk_categories=["browser_guard_origin"]
+    )
+    assert browser_outcome(_scenario(BLOCKED), BrowserEvidence(True, [elsewhere]))[0] == "not-exercised"
+
+
+def test_a_quiet_case_interrupted_on_a_call_it_never_required_is_a_false_positive() -> None:
+    asked = BrowserEvidence(True, [_decision(NAVIGATE, "ask", "mcp_review")])
+    assert browser_outcome(_scenario(QUIET), asked)[0] == "false-positive"
+    assert browser_outcome(_scenario(QUIET), BrowserEvidence(True))[0] == "not-exercised"
 
 
 def test_a_review_row_without_always_allow_fails_a_task() -> None:

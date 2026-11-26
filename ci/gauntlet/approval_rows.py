@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
@@ -29,6 +30,18 @@ def _opaque_group(value: Any) -> str:
     """Keep a queue group only when it is a connector digest id; any other text is not evidence."""
     group = str(value or "")
     return group if not group or CONNECTOR_GROUP_ID.fullmatch(group) else REDACTED_GROUP
+
+
+def _action_key(row: dict[str, Any]) -> str:
+    """An opaque key equal for two rows about the same reviewed action; empty when the row names none.
+
+    Guard binds an answer to the artifact hash, so a row with the same artifact after an answer is a
+    repeat even though its ``dedupe_count`` starts again at 1. Only a short digest is kept.
+    """
+    artifact = str(row.get("artifact_hash") or "")
+    if not artifact:
+        return ""
+    return hashlib.sha256(f"{row.get('artifact_id') or ''}\0{artifact}".encode()).hexdigest()[:16]
 
 
 def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
@@ -67,6 +80,7 @@ def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
                 "always_available": contract.exact_action_persistence_eligible is True
                 or any(scope in PERSISTENT_SCOPES for scope in scopes),
                 "dedupe_count": int(row.get("dedupe_count") or 1),
+                "action_key": _action_key(row),
             }
         )
         rows[-1]["connector_class"] = connector_class(rows[-1], envelope, observations)
