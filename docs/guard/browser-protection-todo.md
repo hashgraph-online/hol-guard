@@ -186,6 +186,9 @@ place to put its cases.
   responses, share set, no added prompt, bounded prompt. CI runs it for every manifest under
   `contributions/provider-integrations/`. Add `hol-guard extensions generate --provider` and
   `validate --provider` so a manifest is generated with its fixtures and gate rows.
+  - Kit done: `guard-provider-integrations/src/conformance.rs` runs the five checks over a manifest,
+    its recorded responses and the corpus decisions. Still open: the CLI command, recorded fixtures
+    under `tests/fixtures/provider_integrations/`, the CI job and `extensions generate/validate --provider`.
 - [x] **BP-T181** Calibration for `verified` (D12): document the report format, the public list named
   by digest and the starting thresholds in the provider contributing guide. No list is checked in.
 - [ ] **BP-T182** Noise view on the provider detail page and in `hol-guard integrations status <id>`:

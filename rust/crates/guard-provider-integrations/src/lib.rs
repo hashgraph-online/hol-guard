@@ -27,6 +27,7 @@ pub mod adapter;
 pub mod answer;
 pub mod client;
 pub mod compose;
+pub mod conformance;
 pub mod fixture_origin;
 pub mod noise;
 pub mod overrides;
