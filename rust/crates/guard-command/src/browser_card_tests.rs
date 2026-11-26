@@ -161,6 +161,24 @@ fn an_origin_with_hidden_characters_is_not_shown() {
 }
 
 #[test]
+fn a_backslash_origin_cannot_borrow_another_site() {
+    for origin in [
+        "https://evil.test\\@shop.example.test",
+        "https://evil.test\\path@shop.example.test/",
+    ] {
+        let mut request = first_valid_request();
+        request.action.target.origin = Some(origin.to_owned());
+        let card = browser_card(&request).expect("card");
+        assert_eq!(card.site.origin, None, "{origin}");
+        assert!(
+            !card.headline.contains("shop.example.test"),
+            "{}",
+            card.headline
+        );
+    }
+}
+
+#[test]
 fn a_display_request_returns_the_card_beside_its_target() {
     let card_request = first_valid_request();
     let expected = browser_card(&card_request).expect("card");

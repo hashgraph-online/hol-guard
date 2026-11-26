@@ -57,17 +57,18 @@ fn agent_name(raw: &str) -> String {
 /// The origin the card shows: any userinfo (`user:password@`) is dropped, and an
 /// origin with whitespace or unsafe display characters is not shown at all.
 fn display_origin(origin: &str) -> Option<String> {
-    if origin
-        .chars()
-        .any(|character| character.is_whitespace() || is_unsafe_display_char(character))
-    {
+    // A browser reads `\` as a path separator, so `https://evil.test\@shop.test` opens
+    // evil.test; stripping userinfo past it would name the wrong site. Show none instead.
+    if origin.chars().any(|character| {
+        character == '\\' || character.is_whitespace() || is_unsafe_display_char(character)
+    }) {
         return None;
     }
     let (scheme, rest) = match origin.split_once("://") {
         Some((scheme, rest)) => (Some(scheme), rest),
         None => (None, origin),
     };
-    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority_end = rest.find(['/', '\\', '?', '#']).unwrap_or(rest.len());
     let (authority, tail) = rest.split_at(authority_end);
     let host = authority
         .rsplit_once('@')
