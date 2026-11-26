@@ -37,6 +37,8 @@ from .approval_retry_relay import (
     write_relay_config,
 )
 from .approval_rows import approval_rows
+from .browser_fixtures import read_journal
+from .browser_runner import browser_evidence, browser_section, is_browser_case, stage_browser_case
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import add_credential_redactions, fixture_system_context
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
@@ -207,6 +209,7 @@ def run_harness_case(
     stage_approval_persistent(fixture.workspace, scenario.id, case, fixture.protected)
     daemon = None
     connector = None
+    browser = None
     seed: CredentialSeed | None = None
     started = time.monotonic()
     replacements = _fixture_replacements(fixture)
@@ -257,6 +260,8 @@ def run_harness_case(
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
                 connector_state = state_digest(connector.state_dir)
+            if is_browser_case(scenario):
+                browser = stage_browser_case(scenario, fixture.home, private / "browser", harness)
             daemon = probe._start_installed_daemon(
                 guard_home=guard_home,
                 home=fixture.home,
@@ -321,6 +326,8 @@ def run_harness_case(
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             if connector is not None:
                 environment["PATH"] = connector.path_prefix + environment["PATH"]
+            if browser is not None:
+                environment["PATH"] = browser.path_prefix + os.pathsep + environment["PATH"]
             keep_login_shell_path(fixture.home, environment["PATH"])
             spec.prepare_context(fixture.workspace, context)
             command = spec.command(
@@ -330,7 +337,13 @@ def run_harness_case(
                 context=context,
                 workspace=fixture.workspace,
                 model=model,
-                mcp_config=connector.mcp_configs[0] if connector is not None else None,
+                mcp_config=(
+                    connector.mcp_configs[0]
+                    if connector is not None
+                    else browser.mcp_configs[0]
+                    if browser is not None
+                    else None
+                ),
             )
             # The approve-then-retry lane needs a second phase: an operator granting the
             # review row while the agent is still running, so the agent issues its own retry.
@@ -381,6 +394,9 @@ def run_harness_case(
             case["contained_request_proofs"] = codex_request_proofs(tap_rows) if harness == "codex" else []
             case["guard_rows"] = redact_value(tap_rows, replacements)
             case["guard_decisions"] = guard_decisions(case["guard_rows"])
+            if browser is not None:
+                case["browser_journal"] = redact_value(read_journal(browser.call_journal), replacements)
+                case["browser"] = browser_section(scenario, browser_evidence(case, case["guard_decisions"]))
             if scenario.oracle == BASH_LIFECYCLE_ORACLE:
                 case["bash_lifecycle"] = bash_lifecycle_evidence(
                     fixture.home, fixture.workspace, scenario.id, worker.store

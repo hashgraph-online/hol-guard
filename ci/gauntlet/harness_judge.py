@@ -25,6 +25,9 @@ from .approval_retry_marker import assessment as marker_assessment
 from .approval_retry_persistent import assessment as persistent_assessment
 from .approval_retry_relay import RELAY_ORACLE
 from .approval_retry_relay import assessment as relay_assessment
+from .browser_cases import BROWSER_ORACLES
+from .browser_judge import browser_outcome
+from .browser_runner import browser_evidence
 from .catalog import Scenario
 from .codex_contained import routed_calls, shell_script
 from .connector_judge import connector_setup_outcome, connector_tool_outcome, reason_text, ungranted_stop
@@ -286,6 +289,9 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
     if routed_error:
         return routed_error
     stops = [d for d in decisions if d["decision"] != "allow" and d.get("call_id") not in routed]
+    if scenario.oracle in BROWSER_ORACLES:
+        # The driver's call journal, not the transcript, says which browser call actually ran.
+        return browser_outcome(scenario, browser_evidence(case, decisions))
     if scenario.expectation == "setup":
         return connector_setup_outcome(scenario, case, decisions, calls)
     if (unexercised := ungranted_stop(scenario, decisions)) is not None:
