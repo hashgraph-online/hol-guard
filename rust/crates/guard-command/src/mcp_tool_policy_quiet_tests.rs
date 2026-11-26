@@ -43,6 +43,21 @@ fn loopback_dev_pages_are_quiet_under_a_stricter_default() {
         (quiet.action.as_str(), quiet.source.as_str()),
         ("allow", "browser-loopback-quiet")
     );
+    // The relay renders evidence from the verdict's summary code; an unknown code fails the
+    // whole decision.
+    let input: guard_contracts::McpToolRiskInputV1 = serde_json::from_value(serde_json::json!({
+        "artifact": {"name": "playwright:browser_click", "command": "browser_click",
+            "metadata": {"server_name": "playwright"}},
+        "arguments": {"format": "other", "value": click.clone()},
+        "risk_categories": quiet.risk_categories.clone(),
+        "summary_code": quiet.summary_code.clone(),
+    }))
+    .unwrap();
+    let evidence = crate::mcp_tool_signals::evaluate_risk_evidence(&input).unwrap();
+    assert!(evidence["summary"]
+        .as_str()
+        .unwrap()
+        .contains("local development server"));
     let navigate = decide(browser_request(
         "browser_navigate",
         serde_json::json!({"url": "http://localhost:3000/"}),
