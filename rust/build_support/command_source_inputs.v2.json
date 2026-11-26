@@ -408,6 +408,7 @@
       "src/pretool/generic_omp.rs",
       "src/pretool/generic_omp_bash_cwd.rs",
       "src/pretool/generic_omp_bash_cwd_tests.rs",
+      "src/pretool/generic_omp_bash_cwd_windows_tests.rs",
       "src/pretool/generic_omp_eval.rs",
       "src/pretool/generic_omp_eval_browser.rs",
       "src/pretool/generic_omp_eval_browser_flow.rs",

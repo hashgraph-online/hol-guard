@@ -51,6 +51,9 @@ pub fn omp_bash_execution_directory(
 #[cfg(all(test, unix))]
 #[path = "generic_omp_bash_cwd_tests.rs"]
 mod omp_bash_cwd_tests;
+#[cfg(all(test, windows))]
+#[path = "generic_omp_bash_cwd_windows_tests.rs"]
+mod omp_bash_cwd_windows_tests;
 #[path = "open_quote.rs"]
 mod open_quote;
 #[path = "process_substitution.rs"]
