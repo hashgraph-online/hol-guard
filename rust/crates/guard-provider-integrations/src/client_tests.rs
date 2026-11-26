@@ -102,6 +102,27 @@ fn a_bad_credential_header_or_key_is_refused_before_connect() {
         checked_url(&bad, &pinned),
         Err(ProviderClientError::CredentialInvalid)
     );
+    for header in [
+        "accept",
+        "content-type",
+        "content-length",
+        "transfer-encoding",
+        "host",
+        "connection",
+        "proxy-authorization",
+        "cookie",
+    ] {
+        let mut bad = request(HOST, "/v1/check");
+        bad.header = header.to_owned();
+        assert_eq!(
+            checked_url(&bad, &pinned),
+            Err(ProviderClientError::CredentialInvalid),
+            "{header}"
+        );
+    }
+    let mut good = request(HOST, "/v1/check");
+    good.header = "authorization".to_owned();
+    assert!(checked_url(&good, &pinned).is_ok());
     let mut bad = request(HOST, "/v1/check");
     bad.key = Zeroizing::new("line\nbreak".to_owned());
     assert_eq!(

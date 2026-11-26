@@ -115,9 +115,29 @@ pub(crate) fn is_request_path(path: &str) -> bool {
             }))
 }
 
+/// Header names the transport sets itself, that frame the message, or that a proxy reads. A
+/// credential under one of these would replace the JSON headers or mis-frame the request.
+const RESERVED_HEADERS: &[&str] = &[
+    "accept",
+    "connection",
+    "content-length",
+    "content-type",
+    "cookie",
+    "expect",
+    "host",
+    "keep-alive",
+    "proxy-authorization",
+    "proxy-connection",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+];
+
 fn is_header_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
+        && !RESERVED_HEADERS.contains(&name)
         && name
             .bytes()
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
