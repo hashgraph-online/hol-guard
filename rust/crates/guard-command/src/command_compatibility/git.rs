@@ -224,7 +224,12 @@ pub(super) fn read_operand_directory(
 /// has to be a present in-tree pathspec. `directory` is where git resolves
 /// those operands: where the segment's native proofs ran, or the `-C` route it
 /// entered first.
+/// `-G` and `-S` with their patterns only choose which staged files are
+/// reported, so they are set aside before the rest is bounded.
 fn bounded_cached_diff(arguments: &[String], directory: Option<&std::path::Path>) -> bool {
+    let Some(arguments) = crate::sfrs_git_cached_diff::without_search_filters(arguments) else {
+        return false;
+    };
     let operands: Vec<&String> = arguments
         .iter()
         .take_while(|argument| argument.as_str() != "--")

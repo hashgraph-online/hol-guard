@@ -60,6 +60,10 @@ fn present_pathspec_operands_do_not_raise_the_index_owner() {
         "git diff --cached .",
         "git diff --cached --stat web/package.json",
         "git diff --cached ':!web/package.json'",
+        // A search filter only chooses which staged files are reported.
+        "git diff --cached -G'status|note' --stat",
+        "git diff --cached -S 'release note' --name-only web/package.json",
+        "git diff --cached -Gnote --pickaxe-all --stat -- docs",
     ] {
         assert!(!owns_index(command), "{command}");
     }
@@ -71,6 +75,9 @@ fn present_pathspec_operands_do_not_raise_the_index_owner() {
         "git diff --cached missing/report.json",
         "git diff --cached --output=/tmp/staged.diff web/package.json",
         "git diff --cached web/package.json --ext-diff",
+        "git diff --cached --stat -G",
+        "git diff --cached -Gnote origin/main",
+        "git diff --cached -Snote --output=/tmp/staged.diff",
     ] {
         assert!(owns_index(command), "{command}");
     }
