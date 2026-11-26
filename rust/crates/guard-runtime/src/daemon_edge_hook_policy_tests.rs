@@ -43,7 +43,7 @@ fn a_policy_refusal_renders_recovery_from_the_publisher_facts() {
             "policy_failure": {"last_error": last_error, "resident_failure_streak": streak},
         });
         assert_eq!(
-            prepare_refusal("cursor", "PreToolUse", &refused, &Map::new()),
+            prepare_refusal("cursor", "PreToolUse", &refused, &Map::new(), false),
             Some(fail_safe("cursor", "PreToolUse", &reason, "native_policy_not_ready")),
         );
     }
@@ -54,7 +54,7 @@ fn an_older_publisher_refusal_keeps_its_preformatted_reason() {
     let refused =
         json!({"reason": "Compatibility refusal.", "reason_code": "native_policy_not_ready"});
     assert_eq!(
-        prepare_refusal("cursor", "PreToolUse", &refused, &Map::new()),
+        prepare_refusal("cursor", "PreToolUse", &refused, &Map::new(), false),
         Some(fail_safe(
             "cursor",
             "PreToolUse",
@@ -152,7 +152,13 @@ fn a_claude_session_can_repair_a_daemon_that_cannot_publish_policy() {
         "hol-guard doctor",
     ] {
         let payload = claude_bash(json!({"command": command, "description": "Repair Guard"}));
-        let reply = prepare_refusal("claude-code", "PreToolUse", &policy_not_ready(), &payload);
+        let reply = prepare_refusal(
+            "claude-code",
+            "PreToolUse",
+            &policy_not_ready(),
+            &payload,
+            false,
+        );
         assert_eq!(permission(&reply), Some("allow"), "{command}");
     }
 }
@@ -169,7 +175,13 @@ fn only_word_for_word_recovery_commands_pass_a_policy_refusal() {
         json!({"command": "hol-guard daemon repair", "run_in_background": true}),
     ] {
         let payload = claude_bash(input.clone());
-        let reply = prepare_refusal("claude-code", "PreToolUse", &policy_not_ready(), &payload);
+        let reply = prepare_refusal(
+            "claude-code",
+            "PreToolUse",
+            &policy_not_ready(),
+            &payload,
+            false,
+        );
         assert_eq!(permission(&reply), Some("deny"), "{input}");
     }
 }
@@ -178,15 +190,79 @@ fn only_word_for_word_recovery_commands_pass_a_policy_refusal() {
 fn a_recovery_command_keeps_a_real_verdict_and_other_harnesses_keep_the_refusal() {
     let payload = claude_bash(json!({"command": "hol-guard daemon repair"}));
     let verdict = json!({"reason": "Blocked.", "reason_code": "native_policy_rollback_detected"});
-    let reply = prepare_refusal("claude-code", "PreToolUse", &verdict, &payload);
+    let reply = prepare_refusal("claude-code", "PreToolUse", &verdict, &payload, false);
     assert_eq!(permission(&reply), Some("deny"));
-    let reply = prepare_refusal("cursor", "PreToolUse", &policy_not_ready(), &payload);
+    let reply = prepare_refusal("cursor", "PreToolUse", &policy_not_ready(), &payload, false);
     assert_ne!(permission(&reply), Some("allow"));
     let reply = prepare_refusal(
         "claude-code",
         "PermissionRequest",
         &policy_not_ready(),
         &payload,
+        false,
     );
     assert_ne!(permission(&reply), Some("allow"));
+}
+
+#[test]
+fn a_starting_daemon_names_the_start_on_a_refusal_without_a_verdict() {
+    let reply = prepare_refusal(
+        "cursor",
+        "PreToolUse",
+        &policy_not_ready(),
+        &Map::new(),
+        true,
+    );
+    assert_eq!(
+        reply,
+        Some(fail_safe(
+            "cursor",
+            "PreToolUse",
+            STARTING_REASON,
+            "native_policy_not_ready"
+        )),
+    );
+    let verdict = json!({"reason": "Blocked.", "reason_code": "native_policy_rollback_detected"});
+    assert_eq!(
+        prepare_refusal("cursor", "PreToolUse", &verdict, &Map::new(), true),
+        Some(fail_safe(
+            "cursor",
+            "PreToolUse",
+            "Blocked.",
+            "native_policy_rollback_detected"
+        )),
+    );
+    let payload = claude_bash(json!({"command": "hol-guard daemon repair"}));
+    let reply = prepare_refusal(
+        "claude-code",
+        "PreToolUse",
+        &policy_not_ready(),
+        &payload,
+        true,
+    );
+    assert_eq!(permission(&reply), Some("allow"));
+}
+
+#[test]
+fn a_starting_daemon_renames_only_refusals_that_reached_no_verdict() {
+    for code in [
+        hook_scheduler::DEADLINE_EXHAUSTED,
+        hook_scheduler::QUEUE_CAPACITY,
+        WORKER_UNAVAILABLE_CODE,
+        "native_policy_not_ready",
+    ] {
+        assert_eq!(
+            startup_reason(true, "cause", code),
+            STARTING_REASON,
+            "{code}"
+        );
+        assert_eq!(startup_reason(false, "cause", code), "cause", "{code}");
+    }
+    for code in [
+        MISSING_WORKDIR_CODE,
+        REFERENCE_CODE,
+        "native_policy_rollback_detected",
+    ] {
+        assert_eq!(startup_reason(true, "cause", code), "cause", "{code}");
+    }
 }

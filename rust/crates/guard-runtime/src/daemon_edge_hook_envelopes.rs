@@ -18,11 +18,29 @@ pub(super) fn refusal(refused: &Value) -> Option<(&str, &str)> {
     ))
 }
 
+/// The reason a refusal that reached no verdict carries while the daemon is
+/// still starting. Each update restarts the daemon, and until its worker host
+/// has migrated the installed authority and published policy, hooks cannot
+/// be reviewed. The refusal stays a deny; this only says why and when to
+/// retry, instead of pointing at a repair a few seconds of waiting fixes.
+pub(super) const STARTING_REASON: &str = "HOL Guard is still starting (it restarts after each update), so it could not review this action and did not run it. Retry in a few seconds.";
+
+/// `reason`, or `STARTING_REASON` when the daemon is starting and `code`
+/// says no verdict was reached. A verdict keeps its own reason.
+pub(super) fn startup_reason<'a>(starting: bool, reason: &'a str, code: &str) -> &'a str {
+    if starting && crate::codex_hook_bridge::recovery::is_no_verdict(code) {
+        STARTING_REASON
+    } else {
+        reason
+    }
+}
+
 pub(super) fn prepare_refusal(
     harness: &str,
     event: &str,
     refused: &Value,
     payload: &Map<String, Value>,
+    starting: bool,
 ) -> Option<Value> {
     let (fallback, code) = refusal(refused)?;
     if let Some(allowed) = claude_recovery(harness, event, code, payload) {
@@ -36,7 +54,7 @@ pub(super) fn prepare_refusal(
     Some(fail_safe(
         harness,
         event,
-        reason.as_deref().unwrap_or(fallback),
+        startup_reason(starting, reason.as_deref().unwrap_or(fallback), code),
         code,
     ))
 }
