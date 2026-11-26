@@ -407,39 +407,8 @@ fn redacted_url(parts: &UrlSplit) -> String {
     )
 }
 
-/// The server's launch arguments, from every place the metadata may carry them.
-fn launch_args<'a>(metadata: &'a Map<String, Value>) -> impl Iterator<Item = &'a str> + Clone + 'a {
-    let identity_args = metadata
-        .get("mcp_server_identity")
-        .and_then(Value::as_object)
-        .and_then(|identity| identity.get("args"))
-        .and_then(Value::as_array)
-        .map(Vec::as_slice);
-    let direct_args = metadata
-        .get("args")
-        .and_then(Value::as_array)
-        .map(Vec::as_slice);
-    let server_args = metadata
-        .get("server_args")
-        .and_then(Value::as_array)
-        .map(Vec::as_slice);
-    // The relay records the server's launch only as `server_fingerprint.command`: the
-    // executable, then its arguments. The identity above carries just a hash of them.
-    let relay_args = metadata
-        .get("server_fingerprint")
-        .and_then(Value::as_object)
-        .and_then(|fingerprint| fingerprint.get("command"))
-        .and_then(Value::as_array)
-        .and_then(|command| command.get(1..));
-    [identity_args, direct_args, server_args, relay_args]
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(Value::as_str)
-}
-
 fn profile_mode(metadata: &Map<String, Value>) -> BrowserProfileModeV1 {
-    first_party_profile_mode(launch_args(metadata))
+    first_party_profile_mode(crate::browser_launch_args::launch_args(metadata))
 }
 
 /// The native sensitive-surface screens for one browser call. Driver profile projection unions
@@ -786,8 +755,8 @@ pub(crate) struct BrowserRiskFacts {
     /// The URL the action targets: its own URL argument, else the page the driver reports.
     pub target: Option<String>,
     pub profile: BrowserProfileModeV1,
-    /// Ports the server's launch arguments name for remote debugging.
-    pub debugging_ports: Vec<u16>,
+    /// The server's launch arguments name a remote-debugging or shared-profile flag.
+    pub debugging_or_shared_launch: bool,
 }
 
 pub(crate) fn browser_risk_facts(
@@ -845,8 +814,8 @@ pub(crate) fn browser_risk_facts(
         guard_origin,
         target: target.map(str::to_owned),
         profile,
-        debugging_ports: crate::browser_loopback_quiet::debugging_ports(launch_args(
-            &artifact.metadata,
-        )),
+        debugging_or_shared_launch: crate::browser_launch_args::debugging_or_shared_launch(
+            crate::browser_launch_args::launch_args(&artifact.metadata),
+        ),
     })
 }

@@ -10,7 +10,7 @@ struct Vector {
     categories: &'static [&'static str],
     target: Option<&'static str>,
     profile: BrowserProfileModeV1,
-    debugging_ports: &'static [u16],
+    debugging_or_shared_launch: bool,
     quiet: bool,
 }
 
@@ -23,7 +23,7 @@ const VECTORS: &[Vector] = &[
         categories: CLICK,
         target: LOCAL,
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: true,
     },
     Vector {
@@ -31,7 +31,7 @@ const VECTORS: &[Vector] = &[
         categories: &["browser_navigation"],
         target: Some("http://localhost:3000/settings"),
         profile: BrowserProfileModeV1::Dedicated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: true,
     },
     Vector {
@@ -39,7 +39,7 @@ const VECTORS: &[Vector] = &[
         categories: &["browser_inspection"],
         target: Some("http://[::1]:5180/"),
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: true,
     },
     Vector {
@@ -47,7 +47,7 @@ const VECTORS: &[Vector] = &[
         categories: CLICK,
         target: Some("http://127.0.0.1:8001/"),
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -55,15 +55,15 @@ const VECTORS: &[Vector] = &[
         categories: CLICK,
         target: Some("http://127.0.0.1:9222/json"),
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
-        name: "port the launch records for remote debugging",
+        name: "isolated launch beside a remote-debugging or shared flag",
         categories: CLICK,
         target: Some("http://127.0.0.1:3001/"),
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[3001],
+        debugging_or_shared_launch: true,
         quiet: false,
     },
     Vector {
@@ -71,7 +71,7 @@ const VECTORS: &[Vector] = &[
         categories: &["browser_interaction", "browser_sensitive_surface"],
         target: LOCAL,
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -79,7 +79,7 @@ const VECTORS: &[Vector] = &[
         categories: CLICK,
         target: LOCAL,
         profile: BrowserProfileModeV1::Shared,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -87,7 +87,7 @@ const VECTORS: &[Vector] = &[
         categories: CLICK,
         target: LOCAL,
         profile: BrowserProfileModeV1::RemoteDebugging,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -95,7 +95,7 @@ const VECTORS: &[Vector] = &[
         categories: CLICK,
         target: LOCAL,
         profile: BrowserProfileModeV1::Unknown,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -103,7 +103,7 @@ const VECTORS: &[Vector] = &[
         categories: CLICK,
         target: Some("https://docs.example.test/guide"),
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -111,7 +111,7 @@ const VECTORS: &[Vector] = &[
         categories: CLICK,
         target: None,
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -119,7 +119,7 @@ const VECTORS: &[Vector] = &[
         categories: CLICK,
         target: Some("http://127.0.0.1:6379/"),
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -127,7 +127,7 @@ const VECTORS: &[Vector] = &[
         categories: &["browser_transfer"],
         target: LOCAL,
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -135,7 +135,7 @@ const VECTORS: &[Vector] = &[
         categories: &["browser_privileged"],
         target: LOCAL,
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -143,7 +143,7 @@ const VECTORS: &[Vector] = &[
         categories: &["browser_interaction", "secret_access"],
         target: LOCAL,
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
     Vector {
@@ -151,15 +151,49 @@ const VECTORS: &[Vector] = &[
         categories: &["browser_navigation"],
         target: Some("ws://127.0.0.1:4173/"),
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
+    },
+    Vector {
+        name: "user name and password in a loopback URL",
+        categories: &["browser_navigation"],
+        target: Some("http://dev:pw@127.0.0.1:4173/"),
+        profile: BrowserProfileModeV1::Isolated,
+        debugging_or_shared_launch: false,
+        quiet: false,
+    },
+    Vector {
+        name: "user name alone in a loopback URL",
+        categories: &["browser_navigation"],
+        target: Some("http://dev@localhost:3000/"),
+        profile: BrowserProfileModeV1::Isolated,
+        debugging_or_shared_launch: false,
+        quiet: false,
+    },
+    Vector {
+        name: "opaque-token query on a loopback URL",
+        categories: &["browser_navigation"],
+        target: Some(
+            "http://127.0.0.1:4173/callback?state=Q7rVm2XkP9wLs4TnB8yHc3JdF6gZa1Ne5uRt0WqYb",
+        ),
+        profile: BrowserProfileModeV1::Isolated,
+        debugging_or_shared_launch: false,
+        quiet: false,
+    },
+    Vector {
+        name: "readable query on a loopback URL",
+        categories: &["browser_navigation"],
+        target: Some("http://127.0.0.1:4173/search?q=release-notes&page=2"),
+        profile: BrowserProfileModeV1::Isolated,
+        debugging_or_shared_launch: false,
+        quiet: true,
     },
     Vector {
         name: "no categories",
         categories: &[],
         target: LOCAL,
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
         quiet: false,
     },
 ];
@@ -175,7 +209,7 @@ fn quiet_set_vectors() {
             categories: &categories,
             target: vector.target,
             profile: vector.profile,
-            debugging_ports: vector.debugging_ports,
+            debugging_or_shared_launch: vector.debugging_or_shared_launch,
         };
         assert_eq!(
             with_guard_home(&home.0, || loopback_dev_quiet(&facts)),
@@ -195,7 +229,7 @@ fn guard_origin_is_never_quiet() {
         categories: &categories,
         target: Some(target),
         profile: BrowserProfileModeV1::Isolated,
-        debugging_ports: &[],
+        debugging_or_shared_launch: false,
     };
     with_guard_home(&home.0, || {
         assert!(!loopback_dev_quiet(&facts(
@@ -206,20 +240,23 @@ fn guard_origin_is_never_quiet() {
 }
 
 #[test]
-fn debugging_ports_read_every_flag_spelling() {
-    let ports = debugging_ports(
-        [
-            "--isolated",
-            "--remote-debugging-port=9333",
-            "--cdp-endpoint",
-            "http://127.0.0.1:3002",
-            "--browserUrl=http://localhost:4000/",
-            "--ws-endpoint",
-            "ws://127.0.0.1:8080/devtools/browser/abc",
-            "--port=3005",
-        ]
-        .into_iter(),
-    );
-    assert_eq!(ports, vec![3002, 4000, 8080, 9333]);
-    assert!(debugging_ports(["--isolated", "--port", "3000"].into_iter()).is_empty());
+fn the_daemon_fallback_range_is_never_quiet_while_no_state_records_a_port() {
+    let categories = names(CLICK);
+    let facts = |target| LoopbackQuietFacts {
+        categories: &categories,
+        target: Some(target),
+        profile: BrowserProfileModeV1::Isolated,
+        debugging_or_shared_launch: false,
+    };
+    let unrecorded = guard_home("quiet-no-state", None);
+    with_guard_home(&unrecorded.0, || {
+        assert!(!loopback_dev_quiet(&facts("http://127.0.0.1:5173/")));
+        assert!(!loopback_dev_quiet(&facts("http://127.0.0.1:5000/")));
+        assert!(loopback_dev_quiet(&facts("http://127.0.0.1:3000/")));
+        assert!(loopback_dev_quiet(&facts("http://127.0.0.1:4173/")));
+    });
+    let recorded = guard_home("quiet-recorded", Some(51236));
+    with_guard_home(&recorded.0, || {
+        assert!(loopback_dev_quiet(&facts("http://127.0.0.1:5173/")));
+    });
 }

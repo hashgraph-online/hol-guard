@@ -159,4 +159,28 @@ fn a_relayed_isolated_launch_is_read_from_the_server_fingerprint() {
         ],
     ));
     assert_eq!(debugging.action, "block");
+    // An unsupported flag that only starts like an isolation flag does not outrank `--shared`.
+    let conflicting = decide(relay_request(
+        "browser_navigate",
+        navigate.clone(),
+        &[
+            "npx",
+            "@playwright/mcp@latest",
+            "--isolated-profile-cache",
+            "--shared",
+        ],
+    ));
+    assert_eq!(conflicting.action, "block");
+    let shared_beside_isolated = decide(relay_request(
+        "browser_navigate",
+        navigate.clone(),
+        &["npx", "@playwright/mcp@latest", "--isolated", "--shared"],
+    ));
+    assert_eq!(shared_beside_isolated.action, "block");
+    let userinfo = decide(relay_request(
+        "browser_navigate",
+        serde_json::json!({"url": "http://dev:pw@127.0.0.1:4173/"}),
+        &["npx", "@playwright/mcp@latest", "--isolated"],
+    ));
+    assert_eq!(userinfo.action, "block");
 }

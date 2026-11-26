@@ -332,6 +332,15 @@ fn profile_mode_reads_the_profile_flag_lists_in_priority_order() {
     assert_eq!(mode(&[]), BrowserProfileModeV1::Unknown);
     assert_eq!(mode(&["--headless"]), BrowserProfileModeV1::Unknown);
     assert_eq!(mode(&["--isolated"]), BrowserProfileModeV1::Isolated);
+    // A flag matches whole or before `=`, never as a prefix of a longer flag.
+    assert_eq!(
+        mode(&["--isolated-profile-cache"]),
+        BrowserProfileModeV1::Unknown
+    );
+    assert_eq!(
+        mode(&["--isolated-profile-cache", "--shared"]),
+        BrowserProfileModeV1::Shared
+    );
     assert_eq!(
         mode(&["--user-data-dir=/tmp/p", "--isolated-context"]),
         BrowserProfileModeV1::Isolated

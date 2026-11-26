@@ -177,7 +177,7 @@ fn loopback_dev_quiet_call(request: &McpToolPolicyRequestV1, categories: &[Strin
         categories,
         target: facts.target.as_deref(),
         profile: facts.profile,
-        debugging_ports: &facts.debugging_ports,
+        debugging_or_shared_launch: facts.debugging_or_shared_launch,
     })
 }
 

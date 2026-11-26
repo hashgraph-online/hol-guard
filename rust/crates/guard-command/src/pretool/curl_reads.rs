@@ -30,7 +30,7 @@ mod bound;
 #[path = "curl_output_targets.rs"]
 pub(in crate::pretool) mod output_targets;
 #[path = "url_secrets.rs"]
-pub(super) mod url_secrets;
+pub(crate) mod url_secrets;
 pub use bound::bound_curl_read_destinations;
 
 pub(crate) const NETWORK_READ_REASON: &str = "native_exact_safe_network_read";

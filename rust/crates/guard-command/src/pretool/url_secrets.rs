@@ -15,7 +15,7 @@ static JWT_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// Shortest run of token characters treated as an opaque blob.
 const MIN_BLOB_CHARS: usize = 40;
 
-pub(super) fn carries_secret(url: &url::Url) -> bool {
+pub(crate) fn carries_secret(url: &url::Url) -> bool {
     let mut tail = url.path().to_owned();
     for part in [url.query(), url.fragment()].into_iter().flatten() {
         tail.push('?');

@@ -57,7 +57,8 @@ pub fn first_party_operation_intent(driver_id: &str, operation: &str) -> Option<
     }
 }
 
-/// Profile mode from launch arguments, using the first-party profiles' flag lists. Isolation wins
+/// Profile mode from launch arguments, using the first-party profiles' flag lists. A flag matches
+/// only as a whole argument or before `=`, so `--isolated-x` is not `--isolated`. Isolation wins
 /// over remote debugging, then a dedicated profile directory, then an explicit shared flag.
 pub fn first_party_profile_mode<'a>(
     arguments: impl Iterator<Item = &'a str> + Clone,
@@ -68,7 +69,7 @@ pub fn first_party_profile_mode<'a>(
             drivers
                 .iter()
                 .flat_map(pick)
-                .any(|flag| argument.starts_with(flag.as_str()))
+                .any(|flag| crate::browser_launch_args::flag_name(argument) == flag.as_str())
         })
     };
     if any(|driver| &driver.profile_flags.isolated) {

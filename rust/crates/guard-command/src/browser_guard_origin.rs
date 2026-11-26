@@ -40,11 +40,32 @@ pub fn set_process_guard_home(guard_home: PathBuf) {
 /// Whether `target` points at a port Guard's daemon may answer on, on a loopback host, for the
 /// process Guard home.
 pub fn is_guard_origin(target: &str) -> bool {
+    let (guard_home, env_port) = current_daemon_inputs();
+    is_guard_origin_in(target, guard_home.as_deref(), env_port)
+}
+
+/// Whether Guard's daemon may answer on loopback `port`, read conservatively: while neither
+/// `GUARD_DAEMON_PORT` nor a state file names its port, every port of its fallback range counts,
+/// the way the shell loopback check reads it.
+pub(crate) fn daemon_port_possible(port: u16) -> bool {
+    let (guard_home, env_port) = current_daemon_inputs();
+    let guard_home = guard_home.as_deref();
+    if guard_daemon_ports(guard_home, env_port).contains(&port) {
+        return true;
+    }
+    env_port.is_none()
+        && guard_home.and_then(daemon_state_port).is_none()
+        && (u32::from(GUARD_DAEMON_DEFAULT_PORT)..u32::from(GUARD_DAEMON_DEFAULT_PORT) + PORT_RANGE)
+            .contains(&u32::from(port))
+}
+
+/// The process Guard home and `GUARD_DAEMON_PORT`, or a test's override home.
+fn current_daemon_inputs() -> (Option<PathBuf>, Option<u16>) {
     #[cfg(test)]
     if let Some(home) = tests::override_home() {
-        return is_guard_origin_in(target, Some(&home), None);
+        return (Some(home), None);
     }
-    is_guard_origin_in(target, process_guard_home().as_deref(), daemon_env_port())
+    (process_guard_home(), daemon_env_port())
 }
 
 /// [`is_guard_origin`] for an explicit Guard home and `GUARD_DAEMON_PORT` value.
