@@ -1335,8 +1335,12 @@ version = "0.1.0"
 dependencies = [
  "guard-command",
  "guard-contracts",
+ "rcgen",
+ "rustls",
  "serde",
  "serde_json",
+ "time",
+ "ureq",
  "zeroize",
 ]
 

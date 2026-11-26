@@ -16,6 +16,14 @@ serde.workspace = true
 serde_json.workspace = true
 zeroize = "1.9.0"
 
+[dev-dependencies]
+# Real TLS tests (tests/https_client.rs): the same pins as guard-command's
+# HTTPS tests, and `ureq` only to name the policy's trust roots.
+rcgen = { version = "=0.13.2", default-features = false, features = ["crypto", "ring"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+time = "=0.3.47"
+ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
+
 [lints]
 workspace = true
 

@@ -454,11 +454,14 @@ transcript in the pull request (after BP-T052).
   - HTTPS runs through `guard_command::egress_caller::policy_send`, which already pins `ureq` with
     `rustls` and applies the managed network policy, so the crate adds no transport dependency of
     its own. `zeroize` matches the workspace's single resolved version.
-- [ ] **BP-T111** Client rules: HTTPS only, host pin checked before connect, no redirects, capped
+- [x] **BP-T111** Client rules: HTTPS only, host pin checked before connect, no redirects, capped
   body, connect, read and wall-clock deadlines, managed network policy through
   `guard_command::egress_caller` (`ManagedEgressPolicy::resolve`, `policy_send`). Tests against the
   testkit server: redirect refused, wrong host refused, oversize body, slow body, TLS failure,
   managed-policy refusal.
+  - `tests/https_client.rs` runs each case against a real TLS server on the loopback interface,
+    reached through the policy's proxy with a `CONNECT` tunnel and a certificate the policy's trust
+    roots pin, so the synthetic provider host never resolves.
 - [ ] **BP-T112** Strict JSON parse and pointer mapping. Lift `strict_json.rs` from
   `guard-yanez-pulse` into a shared location only if Pulse behavior and tests stay byte-identical;
   otherwise copy with attribution in a comment. Unknown verdict values map to `unknown`; undeclared
