@@ -75,6 +75,11 @@ fn a_recorded_debugging_port_is_held_for_review() {
         "curl -s localhost:9333/json",
         "curl -s 'http://[::1]:9333/json/list'",
         "wget -qO- http://localhost.:9333/json",
+        "(curl localhost:9333/json)",
+        "x=$(curl localhost:9333)",
+        "echo `curl 127.0.0.1:9333`",
+        "{ curl localhost:9333; }",
+        "curl localhost:9333>out.json",
     ] {
         let reached = run(home.path(), &bash("session-a", command), "allow");
         assert_eq!(reached.reason_code, DEBUG_PORT_REVIEW, "{command}");
@@ -150,6 +155,16 @@ fn debugging_port_flags_are_read_in_each_spelling() {
     assert_eq!(
         debugging_ports_in("firefox -start-debugger-server 6080"),
         (vec![6080], false)
+    );
+    assert_eq!(
+        debugging_ports_in(
+            "firefox --start-debugger-server ws:6081 & firefox --start-debugger-server=localhost:6082"
+        ),
+        (vec![6081, 6082], false)
+    );
+    assert_eq!(
+        debugging_ports_in("(firefox --start-debugger-server \"127.0.0.1:6083\")"),
+        (vec![6083], false)
     );
     assert_eq!(
         debugging_ports_in("chrome --remote-debugging-port=0"),

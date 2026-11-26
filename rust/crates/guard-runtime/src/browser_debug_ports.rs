@@ -175,9 +175,18 @@ fn command_text(payload: &Value) -> Option<String> {
         .and_then(|context| context.command)
 }
 
+/// Words of the command text. Shell grouping, substitution and redirection
+/// characters end a word as separators do, so `(curl localhost:9333)` and
+/// `x=$(curl localhost:9333)` still name `localhost:9333` on its own.
 fn command_words(command: &str) -> Vec<&str> {
     command
-        .split(|character: char| character.is_whitespace() || matches!(character, ';' | '&' | '|'))
+        .split(|character: char| {
+            character.is_whitespace()
+                || matches!(
+                    character,
+                    ';' | '&' | '|' | '(' | ')' | '{' | '}' | '<' | '>' | '`'
+                )
+        })
         .map(|word| word.trim_matches(|character| matches!(character, '"' | '\'' | '`')))
         .filter(|word| !word.is_empty())
         .collect()
@@ -216,8 +225,11 @@ pub(crate) fn debugging_ports_in(command: &str) -> (Vec<u16>, bool) {
         {
             continue;
         }
+        // Firefox's debugger server also takes `ws:PORT` and `HOST:PORT`; the
+        // port is the last part either way.
         let port = value
             .map(|value| value.trim_matches(|character| matches!(character, '"' | '\'')))
+            .and_then(|value| value.rsplit(':').next())
             .and_then(|value| value.parse::<u16>().ok())
             .filter(|port| *port != 0);
         if let Some(port) = port {
