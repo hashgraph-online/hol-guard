@@ -1,7 +1,7 @@
 //! An installed release may replace policy compiled by an older engine, but
 //! cannot use that migration to change the user's controls or pack selection.
 //! The one addition it may make is a pack the installed release turns on by
-//! default.
+//! default and the previous release did not.
 use super::layers::{layers_from_json, layers_from_values, layers_to_values};
 use super::records::{
     canonical, field, query_row, row_text, tampered, verify_record, Fault, Res, Row,
@@ -43,14 +43,23 @@ fn hash(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+/// The default packs an installed upgrade is judged against: those of the
+/// installed release and those of the release the previous activation used.
+struct Defaults {
+    installed: BTreeSet<String>,
+    previous: BTreeSet<String>,
+}
+
 /// The upgrade keeps every pack the user's selection held. It may add only a
-/// pack the authenticated installed release turns on by default, such as a new
-/// core protection; it never drops one or adds any other.
+/// pack the authenticated installed release turns on by default and the
+/// previous release did not, such as a new core protection. A default the
+/// previous release already had and the selection lacks is one the user
+/// turned off, so the upgrade never turns it back on. It never drops a pack
+/// or adds any other.
 fn selection_kept(
     previous: &Value,
     candidate: &Value,
-    release: &Value,
-    directory: &Path,
+    defaults: impl FnOnce() -> Res<Defaults>,
 ) -> Res<()> {
     let changed = || tampered("installed command pack upgrade changed selection");
     let ids = |value: &Value| -> Option<BTreeSet<String>> {
@@ -69,11 +78,10 @@ fn selection_kept(
     if previous.len() == candidate.len() {
         return Ok(());
     }
-    let defaults =
-        crate::pack_preparation::release_default_ids(directory, release).map_err(|_| changed())?;
+    let defaults = defaults().map_err(|_| changed())?;
     if candidate
         .difference(&previous)
-        .all(|id| defaults.contains(id))
+        .all(|id| defaults.installed.contains(id) && !defaults.previous.contains(id))
     {
         Ok(())
     } else {
@@ -308,8 +316,17 @@ impl Ctx<'_> {
         selection_kept(
             &previous_open["selected"],
             &candidate_open["selected"],
-            &release,
-            &directory,
+            || {
+                let defaults = |release: &Value| {
+                    crate::pack_preparation::release_default_ids(&directory, release)
+                        .map_err(|_| refused("release default packs unreadable"))
+                };
+                let publication = legacy::previous_publication(previous, &directory)?;
+                Ok(Defaults {
+                    installed: defaults(&release)?,
+                    previous: defaults(&publication)?,
+                })
+            },
         )?;
         Ok(Some(
             evidence["candidate"]["digest"]
@@ -324,35 +341,69 @@ impl Ctx<'_> {
 mod selection_tests {
     use super::*;
 
-    fn release(count: u64) -> Value {
-        json!({"policy":{"defaults":{"count":count,"index":null}}})
+    fn ids(values: &[&str]) -> BTreeSet<String> {
+        values.iter().map(|id| (*id).to_owned()).collect()
+    }
+
+    fn defaults(installed: &[&str], previous: &[&str]) -> impl FnOnce() -> Res<Defaults> {
+        let defaults = Defaults {
+            installed: ids(installed),
+            previous: ids(previous),
+        };
+        move || Ok(defaults)
+    }
+
+    fn unread() -> Res<Defaults> {
+        Err(refused("release default packs unreadable"))
     }
 
     #[test]
     fn an_unchanged_selection_is_kept() {
-        let ids = json!(["command.alpha", "command.beta"]);
-        assert!(selection_kept(&ids, &ids, &release(0), Path::new("unused")).is_ok());
+        let selection = json!(["command.alpha", "command.beta"]);
+        assert!(selection_kept(&selection, &selection, unread).is_ok());
     }
 
     #[test]
     fn a_dropped_pack_is_refused() {
         let previous = json!(["command.alpha", "command.beta"]);
         let candidate = json!(["command.alpha"]);
-        assert!(selection_kept(&previous, &candidate, &release(0), Path::new("unused")).is_err());
+        let all = ["command.alpha", "command.beta"];
+        assert!(selection_kept(&previous, &candidate, defaults(&all, &[])).is_err());
     }
 
     #[test]
     fn a_pack_the_release_does_not_default_is_refused() {
         let previous = json!(["command.alpha"]);
         let candidate = json!(["command.alpha", "command.beta"]);
-        assert!(selection_kept(&previous, &candidate, &release(0), Path::new("unused")).is_err());
+        assert!(selection_kept(&previous, &candidate, defaults(&["command.alpha"], &[])).is_err());
+    }
+
+    #[test]
+    fn a_newly_shipped_default_is_added() {
+        let previous = json!(["command.alpha"]);
+        let candidate = json!(["command.alpha", "command.beta"]);
+        let installed = ["command.alpha", "command.beta"];
+        let kept = selection_kept(
+            &previous,
+            &candidate,
+            defaults(&installed, &["command.alpha"]),
+        );
+        assert!(kept.is_ok());
+    }
+
+    #[test]
+    fn a_default_the_user_turned_off_stays_off() {
+        // command.beta was already a default, so its absence is the user's choice.
+        let previous = json!(["command.alpha"]);
+        let candidate = json!(["command.alpha", "command.beta"]);
+        let both = ["command.alpha", "command.beta"];
+        assert!(selection_kept(&previous, &candidate, defaults(&both, &both)).is_err());
     }
 
     #[test]
     fn unreadable_default_metadata_is_refused() {
         let previous = json!(["command.alpha"]);
         let candidate = json!(["command.alpha", "command.beta"]);
-        let missing = Path::new("missing-pack-cache");
-        assert!(selection_kept(&previous, &candidate, &release(1), missing).is_err());
+        assert!(selection_kept(&previous, &candidate, unread).is_err());
     }
 }
