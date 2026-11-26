@@ -106,11 +106,23 @@ def _summed(cases: list[dict[str, Any]], name: str, oracles: frozenset[str]) -> 
 
 
 def _provider_added(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Prompts a provider case adds over its no-provider twin.
+
+    A provider case whose twin is missing, or whose twin was lost to the model, inference or the
+    harness, has no baseline to compare against, so it stays inconclusive instead of being dropped
+    or graded against zero.
+    """
     by_id = {str(case.get("id")): case for case in cases}
     pairs = []
+    unpaired = []
     for case in _by_oracle(cases, QUIET):
-        twin = by_id.get(str((_section(case) or {}).get("provider_twin") or ""))
-        if twin is not None and _section(twin) is not None:
+        twin_id = (_section(case) or {}).get("provider_twin")
+        if not twin_id:
+            continue
+        twin = by_id.get(str(twin_id))
+        if twin is None or _section(twin) is None or _inconclusive(twin):
+            unpaired.append(str(case.get("id")))
+        else:
             pairs.append((case, twin))
     added = {
         str(case.get("id")): max(
@@ -118,10 +130,8 @@ def _provider_added(cases: list[dict[str, Any]]) -> dict[str, Any]:
         )
         for case, twin in pairs
     }
-    inconclusive = [
-        str(case.get("id"))
-        for case, twin in pairs
-        if not added[str(case.get("id"))] and (_inconclusive(case) or _inconclusive(twin))
+    inconclusive = unpaired + [
+        str(case.get("id")) for case, _ in pairs if not added[str(case.get("id"))] and _inconclusive(case)
     ]
     measured = [case for case, _ in pairs]
     return _row(sum(added.values()), measured, [case_id for case_id, more in added.items() if more], inconclusive)
@@ -174,7 +184,7 @@ def browser_budgets(cases: list[dict[str, Any]], known_gaps: set[str] | None = N
         "browser_approvals_over_budget": _over_budget(cases),
         "browser_repeat_prompts": _summed(cases, "repeat_prompts", frozenset({QUIET, TASK, BLOCKED})),
         "browser_provider_added_prompts": _provider_added(cases),
-        "browser_rows_missing_a_choice": _summed(cases, "rows_missing_choice", frozenset({TASK})),
+        "browser_rows_missing_a_choice": _summed(cases, "rows_missing_choice", frozenset({QUIET, TASK, BLOCKED})),
         "browser_protection_cases": _protection(cases, gaps),
     }
     return {

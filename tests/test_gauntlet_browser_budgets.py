@@ -92,6 +92,35 @@ def test_a_provider_case_without_its_twin_is_unmeasured() -> None:
     assert row["status"] == "unmeasured"
 
 
+def test_a_provider_case_with_a_missing_twin_keeps_a_measured_pair_unmeasured() -> None:
+    cases = [
+        _quiet(),
+        _quiet("browser-quiet-provider-ok", provider_twin="browser-quiet-a"),
+        _quiet("browser-quiet-provider-danger", provider_twin="browser-quiet-gone"),
+    ]
+    row = browser_budgets(cases)["browser_provider_added_prompts"]
+    assert (row["status"], row["cases"], row["inconclusive"]) == ("unmeasured", 1, ["browser-quiet-provider-danger"])
+
+
+def test_an_unexercised_twin_is_no_zero_prompt_baseline() -> None:
+    cases = [
+        _quiet(outcome="not-exercised"),
+        _quiet("browser-quiet-provider-ok", provider_twin="browser-quiet-a", interruptions=1),
+    ]
+    row = browser_budgets(cases)["browser_provider_added_prompts"]
+    assert (row["status"], row["regressions"], row["inconclusive"]) == (
+        "unmeasured",
+        [],
+        ["browser-quiet-provider-ok"],
+    )
+
+
+@pytest.mark.parametrize("oracle", ["browser-quiet", "browser-task", "browser-blocked"])
+def test_a_row_missing_a_choice_counts_for_every_browser_oracle(oracle: str) -> None:
+    row = browser_budgets([_case("browser-a", oracle, rows_missing_choice=1)])["browser_rows_missing_a_choice"]
+    assert (row["status"], row["observed"]) == ("over", 1)
+
+
 def test_a_budget_without_cases_in_a_browser_run_does_not_blame_the_lane() -> None:
     lines = browser_budget_lines(browser_budgets([_quiet()]))
     provider = next(line for line in lines if line.startswith("| Provider-added prompts"))
