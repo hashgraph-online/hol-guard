@@ -45,6 +45,11 @@ pub(super) fn inline_setting_is_inert(
                 || (!lowered.is_empty() && lowered.chars().all(|c| c.is_ascii_digit()))
         }
         "credential.helper" => value.is_empty(),
+        // The identity settings say what a commit would record and which key
+        // would sign it. They name no program, and a read records and signs
+        // nothing, so an agent that passes its identity on every Git command
+        // keeps its reads.
+        "user.name" | "user.email" | "user.signingkey" => true,
         "protocol.version" => matches!(lowered.as_str(), "0" | "1" | "2"),
         _ if key.starts_with("pager.") => disabled || paging_off,
         // A colour setting chooses a mode or a colour. Holding it to the

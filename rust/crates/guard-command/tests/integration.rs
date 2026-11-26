@@ -107,6 +107,7 @@ pub mod pretool_extension_allow_cd_sequence;
 pub mod pretool_extension_allow_filtered_search;
 pub mod pretool_extension_allow_git_config_pattern;
 pub mod pretool_extension_allow_git_order;
+pub mod pretool_extension_allow_git_signing_key;
 pub mod pretool_extension_allow_github_compound;
 pub mod pretool_extension_allow_guard_named_checkout;
 pub mod pretool_extension_allow_merge;
