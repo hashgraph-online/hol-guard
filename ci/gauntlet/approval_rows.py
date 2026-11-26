@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from typing import Any
 
@@ -32,6 +33,25 @@ def _opaque_group(value: Any) -> str:
     return group if not group or CONNECTOR_GROUP_ID.fullmatch(group) else REDACTED_GROUP
 
 
+# A browser row keeps only the normalized verb class and tool operation of its intent: no origin,
+# domain, URL, selector or text, so the projection stays redacted by construction.
+BROWSER_INTENT_FIELDS = ("intent", "operation")
+
+
+def _browser_intent(row: dict[str, Any]) -> dict[str, str] | None:
+    """The redacted browser intent a row was reviewed under, or None when the row carries none."""
+    value = row.get("browser_intent")
+    if value is None:
+        raw = row.get("browser_intent_json")
+        try:
+            value = json.loads(raw) if isinstance(raw, str) and raw else None
+        except ValueError:
+            value = None
+    intent = _mapping(value)
+    kept = {field: str(intent[field]) for field in BROWSER_INTENT_FIELDS if intent.get(field)}
+    return kept if kept.get("intent") else None
+
+
 def _action_key(row: dict[str, Any]) -> str:
     """An opaque key equal for two rows about the same reviewed action; empty when the row names none.
 
@@ -47,8 +67,9 @@ def _action_key(row: dict[str, Any]) -> str:
 def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
     """Return redacted-by-construction facts for rows added during the run.
 
-    Only the tool, reason, queue group and whether an Always option is offered are kept; commands and
-    paths are already in the redacted tool evidence, so they are not copied again. The queue group
+    Only the tool, reason, queue group, browser intent class and whether an Always option is offered
+    are kept; commands and paths are already in the redacted tool evidence, so they are not copied
+    again. The queue group
     is kept only as an opaque ``connector:<hash>:<digest>`` id; any other stored value is replaced.
     """
     from codex_plugin_scanner.guard.approval_scope_support import _native_scopes
@@ -81,6 +102,7 @@ def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
                 or any(scope in PERSISTENT_SCOPES for scope in scopes),
                 "dedupe_count": int(row.get("dedupe_count") or 1),
                 "action_key": _action_key(row),
+                "browser_intent": _browser_intent(row),
             }
         )
         rows[-1]["connector_class"] = connector_class(rows[-1], envelope, observations)
