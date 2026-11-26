@@ -230,6 +230,9 @@ fn a_summary_glob_outside_the_working_directory_takes_the_listing_proof() {
         format!("du -h -d 2 {builds}/run-*"),
         format!("du -h {builds}/run-*"),
         "du -sh ~/.ssh/*".to_owned(),
+        // Only a looser match than the shell's: still nothing with case.
+        format!("du -h -d 1 {builds}/RUN-*"),
+        format!("du -sh {builds}/run-[x]"),
     ] {
         let seen = decision(&home, &portal, &command);
         assert!(!seen.contains("allow"), "{command}: {seen}");
