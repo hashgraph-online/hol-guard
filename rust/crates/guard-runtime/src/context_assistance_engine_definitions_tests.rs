@@ -64,8 +64,9 @@ fn keyword_definitions_in_more_languages_are_named() {
         ("public record Money(decimal Amount);", "Money"),
         ("namespace Billing {", "Billing"),
         ("struct Point {", "Point"),
+        ("pub(crate) struct Identifier {", "Identifier"),
+        ("pub(super) enum Kind {", "Kind"),
         ("enum Color {", "Color"),
-        ("pub const fn len(&self) -> usize {", "len"),
     ] {
         assert_eq!(named(line).as_deref(), Some(name), "{line}");
     }

@@ -281,15 +281,21 @@ pub(crate) fn method(line: &str) -> Option<&str> {
 
 /// The name a definition line gives, as the code writes it.
 pub(crate) fn written_name(line: &str) -> Option<String> {
-    let method_name = method(line);
-    let mut words = unmodified(line).split_whitespace();
+    let rest = unmodified(line);
+    let mut words = rest.split_whitespace();
     let definer = words.next().unwrap_or_default();
     // A C function whose return type starts with a keyword is named by its
-    // parameters, not by the word after the keyword.
-    if !keyword_definition(line) || RETURN_TYPE_WORDS.contains(&definer) {
-        if let Some(name) = method_name {
-            return Some(name.to_owned());
-        }
+    // parameters, not by the word after the keyword. Its modifiers are read
+    // off first: `pub(crate) struct Id {` is no call to `pub`.
+    let method_name = if !keyword_definition(line) {
+        method(line)
+    } else if RETURN_TYPE_WORDS.contains(&definer) {
+        method(rest)
+    } else {
+        None
+    };
+    if let Some(name) = method_name {
+        return Some(name.to_owned());
     }
     if definer.is_empty() {
         return None;
