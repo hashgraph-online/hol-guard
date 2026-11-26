@@ -189,13 +189,21 @@ pub(super) fn cd_target(
     entered_directory(value, context)
 }
 
-/// On Windows only a drive-absolute operand is proved: the shell skips the
+/// On Windows a drive-absolute operand is proved: the shell skips the
 /// CDPATH search for it and does not resolve it against its logical
 /// directory. Its parent must be spelled exactly as its canonical path, so
 /// case, short names, junctions and links all stay reviewed, and a `:` past
-/// the drive (an alternate data stream) is refused.
+/// the drive (an alternate data stream) is refused. A `../` operand is
+/// proved as the drive path [`relative_drive_target`] spells for it.
 #[cfg(windows)]
-fn entered_directory(value: &str, _context: super::super::PathContext<'_>) -> Option<PathBuf> {
+fn entered_directory(value: &str, context: super::super::PathContext<'_>) -> Option<PathBuf> {
+    let lexical;
+    let value = if Path::new(value).is_absolute() {
+        value
+    } else {
+        lexical = relative_drive_target(value, context)?;
+        lexical.as_str()
+    };
     if value.get(2..).is_none_or(|rest| rest.contains(':')) {
         return None;
     }
@@ -206,6 +214,43 @@ fn entered_directory(value: &str, _context: super::super::PathContext<'_>) -> Op
     (supplied.is_absolute()
         && super::super::directory_targets::exact_drive_spelling(parent.to_str()?, &canonical))
     .then(|| canonical.join(leaf))
+}
+
+/// The drive path a `../` operand names from the shell's directory. Git
+/// Bash skips the CDPATH search for such an operand and PowerShell has
+/// none, and both resolve `..` against the directory they report, lexically.
+/// That lands where Git put the checkout only when the reported directory
+/// is spelled exactly as its canonical path: no junction, link, short name
+/// or case difference sits in it. A backslash, which Git Bash would read
+/// differently from PowerShell, stays reviewed.
+#[cfg(windows)]
+fn relative_drive_target(value: &str, context: super::super::PathContext<'_>) -> Option<String> {
+    if !value.starts_with("../") || value.contains('\\') {
+        return None;
+    }
+    let cwd = context.cwd?;
+    let canonical = std::fs::canonicalize(cwd).ok()?;
+    if !super::super::directory_targets::exact_drive_spelling(cwd, &canonical) {
+        return None;
+    }
+    let mut names: Vec<&str> = cwd
+        .split(['/', '\\'])
+        .filter(|name| !name.is_empty())
+        .collect();
+    for name in value.split('/') {
+        match name {
+            "" => {}
+            ".." => {
+                // The drive itself is never popped.
+                if names.len() < 2 {
+                    return None;
+                }
+                names.pop();
+            }
+            name => names.push(name),
+        }
+    }
+    (names.len() > 1).then(|| names.join("\\"))
 }
 
 #[cfg(not(windows))]

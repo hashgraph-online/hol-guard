@@ -153,6 +153,59 @@ impl Parser {
         valid.then_some(())
     }
 
+    /// `for (const NAME of [PATH, ...]) await DRAFT.take(NAME);`, braced or
+    /// not, and the same with `drop`: one `take` or `drop` per listed path,
+    /// written as a loop. The list holds only non-empty string literals and
+    /// the body is that one awaited call with the loop name as its only
+    /// argument, so the loop selects exactly the listed paths, as the
+    /// unrolled calls would. The draft's repository is already recorded.
+    pub(super) fn draft_path_loop(&mut self) -> Option<()> {
+        self.eat_ident("for")?;
+        self.eat('(')?;
+        if !matches!(self.ident()?.as_str(), "const" | "let") {
+            return None;
+        }
+        let name = self.binding_name()?;
+        if self.declared.contains(&name) || self.drafts.contains(&name) {
+            return None;
+        }
+        self.eat_ident("of")?;
+        let Value::Array(paths) = self.literal(0)? else {
+            return None;
+        };
+        if paths.is_empty()
+            || !paths
+                .iter()
+                .all(|path| path.as_str().is_some_and(|path| !path.is_empty()))
+        {
+            return None;
+        }
+        self.eat(')')?;
+        let braced = self.at('{');
+        if braced {
+            self.pos += 1;
+        }
+        self.eat_ident("await")?;
+        let draft = self.ident()?;
+        if !self.drafts.contains(&draft) {
+            return None;
+        }
+        self.eat('.')?;
+        if !matches!(self.ident()?.as_str(), "take" | "drop") {
+            return None;
+        }
+        self.eat('(')?;
+        self.eat_ident(&name)?;
+        self.eat(')')?;
+        if braced {
+            if self.at(';') {
+                self.pos += 1;
+            }
+            self.eat('}')?;
+        }
+        Some(())
+    }
+
     /// `draft.id`, `draft.details` and `draft.text` are plain fields the
     /// prelude sets. A method named without a call is taken only as its
     /// source text through `toString()`, never as a value: placed under

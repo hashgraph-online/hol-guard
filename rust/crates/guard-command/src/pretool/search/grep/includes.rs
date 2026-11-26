@@ -58,9 +58,29 @@ impl Includes {
         let Some(targets) = shell_roots(targets, context) else {
             return false;
         };
-        let targets: Vec<&str> = targets.iter().map(String::as_str).collect();
-        crate::pretool::search_scope::grep_include_scope_proven(
-            &targets,
+        // A skill tree whose search opens only skill files selects no
+        // sensitive file either, under every glob the line gives.
+        targets.iter().all(|target| {
+            crate::pretool::search_scope::grep_include_scope_proven(
+                &[target.as_str()],
+                &globs,
+                context.home_dir,
+                context.cwd,
+            ) || self.skill_tree_root(target, context)
+        })
+    }
+
+    /// True when `target` is a user skill tree and the search opens only the
+    /// skill documents and scripts a direct read already allows there.
+    pub(super) fn skill_tree(&self, target: &str, context: ReadContext<'_>) -> bool {
+        shell_roots(&[target], context)
+            .is_some_and(|roots| self.skill_tree_root(&roots[0], context))
+    }
+
+    fn skill_tree_root(&self, root: &str, context: ReadContext<'_>) -> bool {
+        let globs: Vec<&str> = self.all.iter().map(String::as_str).collect();
+        crate::pretool::search_scope::grep_skill_tree_proven(
+            root,
             &globs,
             context.home_dir,
             context.cwd,

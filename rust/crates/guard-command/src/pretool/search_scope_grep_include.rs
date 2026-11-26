@@ -2,9 +2,9 @@
 //! directory operand, and whether any of them is sensitive.
 
 use super::verified_directory_root;
-use crate::pretool::search_scope_filter::SearchFilter;
+use crate::pretool::search_scope_filter::{Override, SearchFilter};
 use crate::pretool::search_scope_walk::{include_scope_proven, walk_scope, Ignores};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Shell `grep` with `--include` globs the name screen cannot clear, such as
 /// `*.md` or `*.rs`: true when below each directory root no sensitive file
@@ -142,4 +142,117 @@ fn directory_include_proven(root: &Path, filter: &SearchFilter, home_dir: Option
     crate::pretool::search::count_walk("include-scope", root);
     !crate::pretool::read_paths::inside_agent_state_tree(root, home_dir)
         && walk_scope(root, filter, Ignores::None, false, home_dir, &mut None).is_ok()
+}
+
+/// True when a recursive `grep` of `root`, a user skill tree such as
+/// `~/.agents/skills/<skill>`, opens only files a direct read already allows.
+///
+/// A skill's documents and the scripts beside them are readable one at a
+/// time, but the tree sits below a hidden home directory, so every generic
+/// walk refused it and `grep -rn TODO ~/.agents/skills/<skill> --include
+/// '*.md'` asked while `cat` of each of those documents did not. The walk
+/// below follows no link and counts every entry. Each file the include globs
+/// select, or every file when there is no include, must be a skill document
+/// or script that clears the credential-name and sensitive-family screens. A
+/// data file, a hidden file or a key the search would open keeps the review;
+/// a file no glob selects is never opened, so it cannot be printed.
+///
+/// A project keeps skills of its own in the same layout, such as
+/// `<checkout>/.agents/skills/<skill>`, so the working directory is a second
+/// base the skill roots are measured from. That tree must resolve inside the
+/// working directory: a link out of the checkout leaves it reviewed.
+pub(in crate::pretool) fn grep_skill_tree_proven(
+    root: &str,
+    globs: &[&str],
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let filter = match globs {
+        [] => None,
+        globs => match include_filter(globs, root) {
+            Some(filter) => Some(filter),
+            None => return false,
+        },
+    };
+    if !crate::pretool::safe_reads::verified_path_context(home_dir, cwd)
+        || root.split(['/', '\\']).any(|part| part == "..")
+    {
+        return false;
+    }
+    let candidate = if Path::new(root).is_absolute() {
+        PathBuf::from(root)
+    } else {
+        match cwd {
+            Some(cwd) => Path::new(cwd).join(root),
+            None => return false,
+        }
+    };
+    let Ok(canonical) = std::fs::canonicalize(candidate) else {
+        return false;
+    };
+    if !canonical.is_dir() {
+        return false;
+    }
+    let workspace = cwd
+        .and_then(|cwd| std::fs::canonicalize(cwd).ok())
+        .filter(|cwd| canonical.starts_with(cwd))
+        .and_then(|cwd| cwd.to_str().map(str::to_owned));
+    let proven = [home_dir, workspace.as_deref()]
+        .into_iter()
+        .flatten()
+        .any(|base| {
+            crate::pretool::read_paths::agent_skill_listing_directory(&canonical, Some(base))
+                && skill_tree_opens_only_skill_files(&canonical, filter.as_ref(), Some(base))
+        });
+    proven
+}
+
+fn skill_tree_opens_only_skill_files(
+    root: &Path,
+    filter: Option<&SearchFilter>,
+    home_dir: Option<&str>,
+) -> bool {
+    let mut pending = vec![root.to_path_buf()];
+    let mut seen = 0usize;
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else {
+            return false;
+        };
+        for entry in entries {
+            seen += 1;
+            let Ok(entry) = entry else {
+                return false;
+            };
+            // `file_type` reads the entry itself, so a link is seen as one.
+            let Ok(kind) = entry.file_type() else {
+                return false;
+            };
+            if seen > 4096 || kind.is_symlink() {
+                return false;
+            }
+            if kind.is_dir() {
+                pending.push(entry.path());
+                continue;
+            }
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                return false;
+            };
+            // `include_filter` refuses a glob with a separator, so the name
+            // alone decides whether the search opens this file.
+            let opened = filter
+                .is_none_or(|filter| filter.override_for(name, name, false) == Override::Searched);
+            if opened && !(kind.is_file() && skill_file_readable(&entry.path(), home_dir)) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn skill_file_readable(path: &Path, home_dir: Option<&str>) -> bool {
+    guard_secure_fs::sensitive_path_family(path).is_none()
+        && !guard_secure_fs::credential_named_path(path)
+        && (crate::pretool::read_paths::agent_skill_document(path, home_dir)
+            || crate::pretool::read_paths::agent_skill_script(path, home_dir))
 }

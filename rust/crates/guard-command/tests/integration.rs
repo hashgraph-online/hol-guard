@@ -220,6 +220,7 @@ pub mod pretool_grep_reader_glob;
 pub mod pretool_grep_recursive_file_operand;
 pub mod pretool_grep_repository_metadata;
 pub mod pretool_grep_sibling_tree;
+pub mod pretool_grep_skill_tree;
 pub mod pretool_grep_unmatched_glob_operand;
 pub mod pretool_grok_native_tool_names;
 pub mod pretool_guard_diagnostics;
