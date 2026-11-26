@@ -67,8 +67,9 @@ fn browser_context(
             target_origin: intent.target_origin.clone(),
         },
         arguments,
+        card: None,
     })?;
-    let BrowserMcpResultV1::Display { target } = displayed else {
+    let BrowserMcpResultV1::Display { target, .. } = displayed else {
         return Err("native_mcp_tool_evidence_browser_display_invalid");
     };
     let surfaces = intent
