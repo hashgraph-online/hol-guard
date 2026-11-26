@@ -36,6 +36,10 @@ fn methods_without_a_keyword_open_definitions_and_are_named() {
         ("std::string Box::name() const {", "name"),
         ("Box::Box(int size) : size_(size) {", "Box"),
         ("int main(int argc, char **argv) {", "main"),
+        ("struct node *new_node(int v) {", "new_node"),
+        ("enum color parse_color(const char *s) {", "parse_color"),
+        ("static const char *label(void) {", "label"),
+        ("const std::string& Box::name() const {", "name"),
     ] {
         assert_eq!(named(line).as_deref(), Some(name), "{line}");
     }
@@ -59,6 +63,9 @@ fn keyword_definitions_in_more_languages_are_named() {
         ),
         ("public record Money(decimal Amount);", "Money"),
         ("namespace Billing {", "Billing"),
+        ("struct Point {", "Point"),
+        ("enum Color {", "Color"),
+        ("pub const fn len(&self) -> usize {", "len"),
     ] {
         assert_eq!(named(line).as_deref(), Some(name), "{line}");
     }
@@ -83,6 +90,10 @@ fn calls_statements_and_blocks_are_not_definitions() {
         "module.exports = function (x) {",
         "  parse(url: string): URL;",
         "    run(task)",
+        "        withContext(Dispatchers.IO) {",
+        "    repeat(3) {",
+        "        launch(start = CoroutineStart.LAZY) {",
+        "        withAnimation(.spring) {",
         "[HttpGet(\"items\")]",
     ] {
         assert!(!definition(line), "{line}");

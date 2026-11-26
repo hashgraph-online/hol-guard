@@ -108,6 +108,29 @@ const STATEMENTS: [&str; 34] = [
 /// Words that mark a member of a class even when its brace is on the next
 /// line, as C# and some Java code write it.
 const ACCESS: [&str; 4] = ["public", "private", "protected", "internal"];
+/// Kotlin and Swift functions that take a trailing block: `repeat(3) {` is
+/// a call, though it is shaped like a method.
+const BLOCK_CALLS: [&str; 16] = [
+    "launch",
+    "withContext",
+    "runBlocking",
+    "repeat",
+    "withAnimation",
+    "coroutineScope",
+    "supervisorScope",
+    "withTimeout",
+    "withTimeoutOrNull",
+    "measureTimeMillis",
+    "assertFailsWith",
+    "assertThrows",
+    "takeIf",
+    "onAppear",
+    "onChange",
+    "onDisappear",
+];
+/// Keywords that, in C and C++, may begin a function's return type:
+/// `struct node *new_node(int v) {`, `const char *label(void) {`.
+const RETURN_TYPE_WORDS: [&str; 4] = ["struct", "enum", "union", "const"];
 
 /// The line with its modifiers taken off: `pub(in crate::x)`, `extern "C"`
 /// and `const` before `fn` included.
@@ -236,7 +259,7 @@ pub(crate) fn method(line: &str) -> Option<&str> {
     if STATEMENTS.contains(&name) || STATEMENTS.contains(&words[0]) {
         return None;
     }
-    if ACCESS.contains(&name) {
+    if ACCESS.contains(&name) || (words.len() == 1 && BLOCK_CALLS.contains(&name)) {
         return None;
     }
     let close = open + closing(&text[open..])?;
@@ -258,13 +281,19 @@ pub(crate) fn method(line: &str) -> Option<&str> {
 
 /// The name a definition line gives, as the code writes it.
 pub(crate) fn written_name(line: &str) -> Option<String> {
-    if !keyword_definition(line) {
-        if let Some(name) = method(line) {
+    let method_name = method(line);
+    let mut words = unmodified(line).split_whitespace();
+    let definer = words.next().unwrap_or_default();
+    // A C function whose return type starts with a keyword is named by its
+    // parameters, not by the word after the keyword.
+    if !keyword_definition(line) || RETURN_TYPE_WORDS.contains(&definer) {
+        if let Some(name) = method_name {
             return Some(name.to_owned());
         }
     }
-    let mut words = unmodified(line).split_whitespace();
-    let definer = words.next()?;
+    if definer.is_empty() {
+        return None;
+    }
     let mut word = words.next()?;
     // A Go method's name follows its receiver: `func (r *Route) Name()`.
     if definer == "func" && word.starts_with('(') {
