@@ -2,8 +2,8 @@
 //! explicit allow answers every part.
 
 use super::{
-    after_git_read_prefix, allowable_review, requires_review, AllowableReview, CanonicalCommandV1,
-    Instant,
+    after_git_read_prefix, allowable_review, proven_reads, requires_review, AllowableReview,
+    CanonicalCommandV1, Instant,
 };
 
 /// Whether an explicit user allow answers every question this floor leaves
@@ -98,5 +98,20 @@ pub(super) fn split(
             reported_tail: true,
         });
     }
-    None
+    // `cd <a> && git status && cd <b> && git log`: each run of steps between
+    // `cd`s runs only in the directory the `cd`s before it entered. A run
+    // that is not the last must be proven reads there, which change nothing
+    // the reads after the next `cd` pick up; the last is judged in full.
+    let parts = super::super::safe_reads::and_chained_cds(model, context)?;
+    let (_, earlier) = parts.split_last()?;
+    earlier
+        .iter()
+        .all(|(part, cwd)| {
+            let part_context = super::super::PathContext {
+                cwd: cwd.as_deref().or(context.cwd),
+                ..context
+            };
+            proven_reads(part, part_context, deadline, execution_environment)
+        })
+        .then(|| Split::whole(parts))
 }

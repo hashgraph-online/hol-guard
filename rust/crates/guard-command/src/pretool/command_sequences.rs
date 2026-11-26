@@ -90,7 +90,46 @@ pub(in crate::pretool) fn exact_safe_sequence(
 ) -> bool {
     exact_model(model)
         && (cd_then_read_sequence(model, allow_git_helper_context, context)
+            || and_chained_cd_reads(model, allow_git_helper_context, context)
             || created_file_probe(model, context))
+}
+
+/// `cd <a> && git status && cd <b> && git log -1 && cat README.md`: every
+/// run of steps between `cd`s is a read in the one directory it runs in.
+/// The Git floor makes the same split and probes each Git read there.
+fn and_chained_cd_reads(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    and_chained_cds(model, context).is_some_and(|parts| {
+        parts.iter().all(|(part, cwd)| {
+            let there = PathContext {
+                cwd: cwd.as_deref().or(context.cwd),
+                ..context
+            };
+            part.segments
+                .iter()
+                .all(|segment| read_step(part, segment, allow_git_helper_context, there))
+        })
+    })
+}
+
+/// A plain read a cd sequence may run: no directory change, and a GitHub
+/// read names its repository.
+fn read_step(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    let executable = segment.executable.as_deref().map(executable_basename);
+    plain_segment(segment)
+        && !changes_directory(segment)
+        && (cwd_read_executable(segment.executable.as_deref())
+            || crate::pretool::version_probes::lone_probe_segment(segment))
+        && executable.is_some_and(|name| name != "gh" || selects_repository(segment))
+        && exact_safe_segment_with_context(model, segment, allow_git_helper_context, context)
 }
 
 /// The verified directory a leading plain `cd <dir>` moves to.
@@ -306,6 +345,66 @@ pub(in crate::pretool) fn nested_cd_proof(
     false
 }
 
+/// `[<steps> &&] cd <a> && <steps> && cd <b> && <steps>`: a chain joined
+/// only by `&&` and `|` that changes directory with two or more plain `cd`s,
+/// each joined to its neighbours with `&&`. Every step runs only once every
+/// step before it succeeded, so each run of steps between `cd`s runs in the
+/// directory the `cd`s before it entered, each target resolved from the one
+/// before. Returns those runs in order, each with its directory (`None` for
+/// the one the command started in) and without the `cd`s; they keep the
+/// original text and spans.
+pub(in crate::pretool) fn and_chained_cds(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<Vec<(CanonicalCommandV1, Option<String>)>> {
+    if !exact_model(model) {
+        return None;
+    }
+    let separators = separators(model)?;
+    if !separators
+        .iter()
+        .all(|separator| matches!(separator.as_str(), "&&" | "|"))
+    {
+        return None;
+    }
+    let changes: Vec<usize> = model
+        .segments
+        .iter()
+        .enumerate()
+        .filter(|(_, segment)| changes_directory(segment))
+        .map(|(index, _)| index)
+        .collect();
+    if changes.len() < 2 {
+        return None;
+    }
+    let part = |range: std::ops::Range<usize>| {
+        let mut part = model.clone();
+        part.segments = model.segments[range].to_vec();
+        part
+    };
+    let mut parts = Vec::new();
+    let mut cwd: Option<String> = None;
+    let mut start = 0;
+    for index in changes {
+        if separators.get(index).map(String::as_str) != Some("&&")
+            || (index > 0 && separators[index - 1] != "&&")
+        {
+            return None;
+        }
+        if index > start {
+            parts.push((part(start..index), cwd.clone()));
+        }
+        let from = PathContext {
+            cwd: cwd.as_deref().or(context.cwd),
+            ..context
+        };
+        cwd = Some(leading_cd_target(&part(index..index + 1), from)?);
+        start = index + 1;
+    }
+    parts.push((part(start..model.segments.len()), cwd));
+    Some(parts)
+}
+
 fn cd_then_read_sequence(
     model: &CanonicalCommandV1,
     allow_git_helper_context: bool,
@@ -340,13 +439,7 @@ fn cd_then_read_sequence(
         .zip(&separators)
         .all(|(segment, separator)| {
             after_fork |= forks(separator);
-            let executable = segment.executable.as_deref().map(executable_basename);
-            plain_segment(segment)
-                && !changes_directory(segment)
-                && (cwd_read_executable(segment.executable.as_deref())
-                    || crate::pretool::version_probes::lone_probe_segment(segment))
-                && executable.is_some_and(|name| name != "gh" || selects_repository(segment))
-                && exact_safe_segment_with_context(model, segment, allow_git_helper_context, moved)
+            read_step(model, segment, allow_git_helper_context, moved)
                 && (!after_fork
                     || exact_safe_segment_with_context(
                         model,

@@ -308,10 +308,19 @@ def false_positive_report(cases: list[dict[str, Any]]) -> dict[str, Any]:
         for row in case.get("would_have_stopped", [])
         if row.get("kind") == "contain"
     ]
+    # Output scans that kept a task fixture's planted credential from the model: the protection
+    # working on a file the task makes the agent read, so listed for review but never a stop.
+    withheld = [
+        {"task": case["id"], **row}
+        for case in cases
+        for row in case.get("would_have_stopped", [])
+        if row.get("kind") == "withheld"
+    ]
     return {
         "counts": dict(Counter({reason: len(rows) for reason, rows in by_reason.items()}).most_common()),
         "by_reason": by_reason,
         "would_contain": contain,
+        "withheld_planted_credential": withheld,
     }
 
 

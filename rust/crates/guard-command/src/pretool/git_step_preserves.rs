@@ -10,6 +10,10 @@
 use super::git_output_target::{names_an_output_file, points_output_at_a_protected_file};
 use super::git_read_after_allow::{git_segment, CONFIG_STABLE_STEPS, REF_READS};
 
+#[cfg(test)]
+#[path = "git_step_preserves_rebase_tests.rs"]
+mod rebase_tests;
+
 /// Git operations that rewrite no tracked file. Any other step the Git floor
 /// leaves unsettled may replace a file a configuration include names.
 const TREE_PRESERVING_STEPS: &[&str] = &["add", "branch", "commit", "fetch", "push", "tag"];
@@ -80,12 +84,52 @@ pub(super) fn preserves_configuration(arguments: &[String]) -> bool {
             .get(index + 1)
             .is_some_and(|action| TREE_PRESERVING_WORKTREE_ACTIONS.contains(&action.as_str())),
         Some(operation) => {
-            CONFIG_STABLE_STEPS.contains(&operation)
+            config_stable_step(operation, &arguments[index + 1..])
                 || WRITES_NOTHING_STEPS.contains(&operation)
                 || REF_READS.contains(&operation)
         }
         None => false,
     }
+}
+
+/// Whether `git <operation> <rest>` writes no configuration a later read
+/// obeys: a verb on [`CONFIG_STABLE_STEPS`], or a `git rebase` that runs no
+/// command of its own.
+///
+/// A rebase replays commits onto another base, the same work
+/// `git pull --rebase` does after its fetch, and records no configuration.
+/// `--exec` and `-x` run a shell command after each commit, and an interactive
+/// rebase (`-i`, `--edit-todo`) hands the todo list to an editor that can add
+/// such commands. Resuming a stopped rebase (`--continue`, `--skip`) also runs
+/// any `exec` lines left in its todo, so any of these options could write the
+/// configuration the next read obeys. A non-default merge strategy can invoke
+/// an external `git-merge-<strategy>` command, so `--strategy` and `-s` keep
+/// the review as well. Git accepts a unique prefix of a long option and
+/// bundles short ones, so every spelling that could reach those options keeps
+/// the review.
+pub(super) fn config_stable_step(operation: &str, rest: &[String]) -> bool {
+    CONFIG_STABLE_STEPS.contains(&operation)
+        || (operation == "rebase" && !rest.iter().any(|word| rebase_runs_commands(word)))
+}
+
+/// Whether a `git rebase` word may spell an option that can run a command.
+fn rebase_runs_commands(word: &str) -> bool {
+    if let Some(long) = word.strip_prefix("--") {
+        let name = long.split_once('=').map_or(long, |(name, _)| name);
+        return !name.is_empty()
+            && [
+                "exec",
+                "interactive",
+                "edit-todo",
+                "continue",
+                "skip",
+                "strategy",
+            ]
+            .iter()
+            .any(|option| option.starts_with(name));
+    }
+    word.strip_prefix('-')
+        .is_some_and(|letters| letters.contains(['i', 'x', 's']))
 }
 
 /// Whether a Git step, wherever its global options route it, rewrites no

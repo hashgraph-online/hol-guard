@@ -52,3 +52,40 @@ fn a_pattern_that_can_reach_a_file_keeps_its_screen() {
         assert!(sensitive(command), "{command} lost a signal to the mask");
     }
 }
+
+/// A Vitest or Jest test-name filter selects among collected test titles.
+/// A credential word there names a test, not a file the run opens.
+#[test]
+fn a_runner_test_name_filter_is_not_a_sensitive_target() {
+    for command in [
+        "npx vitest run -t \"masks the secret field\"",
+        "npx vitest run src/form.test.ts -t \"rejects a short password\"",
+        "node ./node_modules/vitest/vitest.mjs run -t \"keeps the secret hidden\"",
+        "./node_modules/.bin/vitest run --testNamePattern \"password reset\"",
+        "npx vitest run --testNamePattern=secret",
+        "npx jest -t \"stores the token hash\"",
+        "npx vitest run -t secret | tail -20",
+    ] {
+        assert!(!sensitive(command), "{command} still reads as sensitive");
+    }
+}
+
+/// The filter is set aside only while it cannot name a file. A path-shaped
+/// value, a credential operand beside it, shell text, or a runner the
+/// contained lane does not know all keep the screen.
+#[test]
+fn a_runner_filter_that_can_name_a_file_keeps_its_screen() {
+    for command in [
+        "npx vitest run -t .env",
+        "npx vitest run -t secrets/key.pem",
+        "npx vitest run -t ~/.aws/credentials",
+        "npx vitest run -t password .env",
+        "npx vitest run -t \"password $(cat .env)\"",
+        "npx vitest run -t secret | xargs cat",
+        "npx vitest run -- -t secret",
+        "npx mocha -g secret",
+        "cat .env && npx vitest run -t secret",
+    ] {
+        assert!(sensitive(command), "{command} lost a signal to the mask");
+    }
+}

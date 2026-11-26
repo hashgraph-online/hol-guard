@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 from uuid import uuid4
 
+from . import native_hook_availability as _native_hook_availability
 from .native_context import _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_store_policy import _payload
@@ -43,6 +44,10 @@ _CURSOR_ROUTE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _DAEMON_REPLY_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _FAIL_CLOSED_RENDER_TIMEOUT_SECONDS = 0.25
 _LOGGER = logging.getLogger(__name__)
+availability_harness_response = _native_hook_availability.availability_harness_response
+canonical_hook_event_name = _native_hook_availability.canonical_hook_event_name
+hook_event_is_permission_request = _native_hook_availability.hook_event_is_permission_request
+hook_event_pauses_when_unavailable = _native_hook_availability.hook_event_pauses_when_unavailable
 
 
 def _render_payload(

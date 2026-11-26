@@ -131,6 +131,11 @@ WORKSPACE_VITEST_SUMMARY_CASE = "omp-native-workspace-runner-summary-line"
 # agent sees, so the runner prints a different number of lines when the
 # single-pass invocation and its quiet reporter flags reach it.
 WORKSPACE_VITEST_LINE_COUNT_CASE = "omp-native-workspace-runner-line-count"
+# A run narrowed to one test by its title, where the title happens to contain a
+# credential word. The title selects among collected tests and opens nothing,
+# so the run is the same contained single pass. The runner prints its line
+# only when the title arrives intact behind `-t`.
+WORKSPACE_VITEST_TITLE_FILTER_CASE = "omp-native-workspace-vitest-title-filter"
 # A bare run through the link npm writes, its tail followed by the word that
 # says how it went. Only the installed runner prints the line the case checks.
 WORKSPACE_VITEST_OUTCOME_REPORT_CASE = "omp-native-workspace-runner-outcome-report"
@@ -192,6 +197,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_VITEST_FILTER_CASE,
         WORKSPACE_VITEST_SUMMARY_CASE,
         WORKSPACE_VITEST_LINE_COUNT_CASE,
+        WORKSPACE_VITEST_TITLE_FILTER_CASE,
         WORKSPACE_VITEST_OUTCOME_REPORT_CASE,
         WORKSPACE_VITEST_BIN_LINK_CASE,
         WORKSPACE_VITEST_BUN_ENTRY_CASE,
@@ -742,6 +748,20 @@ _VITEST_LINE_COUNT_FILES = {
     ),
 }
 
+# The title the case filters by and the line the runner prints when it arrives.
+VITEST_TITLE = "masks the secret field"
+VITEST_TITLE_MARKER = f"vitest {_VITEST_VERSION} ran the titled test once"
+_VITEST_TITLE_FILES = {
+    **_VITEST_RUN_FILES,
+    "node_modules/vitest/vitest.mjs": (
+        "#!/usr/bin/env node\n"
+        "const argv = process.argv.slice(2);\n"
+        "const at = argv.indexOf('-t');\n"
+        f"const once = argv[0] === 'run' && at > 0 && argv[at + 1] === '{VITEST_TITLE}';\n"
+        f"console.log(once ? '{VITEST_TITLE_MARKER}' : 'vitest: the titled run was not forwarded');\n"
+    ),
+}
+
 
 _LINT_STAGED_VERSION = "16.1.2"
 # The one line the workspace's own commit hook prints.
@@ -957,6 +977,12 @@ _INSTALLS = {
         "vitest",
         _VITEST_LINE_COUNT_FILES,
         VITEST_LINE_COUNT_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_TITLE_FILTER_CASE: _Install(
+        "vitest",
+        _VITEST_TITLE_FILES,
+        VITEST_TITLE_MARKER,
         entry="vitest.mjs",
     ),
     WORKSPACE_VITEST_OUTCOME_REPORT_CASE: _Install(
