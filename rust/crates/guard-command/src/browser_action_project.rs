@@ -214,7 +214,7 @@ fn case_operation(tool: &str, case: &str) -> String {
 }
 
 /// A flagged surface never leaves the action in a weaker intent than the flag implies.
-fn stronger_intent(
+pub(crate) fn stronger_intent(
     intent: BrowserIntentV1,
     surfaces: &[BrowserSensitiveSurfaceV1],
 ) -> BrowserIntentV1 {
@@ -238,7 +238,7 @@ fn stronger_intent(
     }
 }
 
-fn verb_surfaces(verb: BrowserVerbV1) -> &'static [BrowserSensitiveSurfaceV1] {
+pub(crate) fn verb_surfaces(verb: BrowserVerbV1) -> &'static [BrowserSensitiveSurfaceV1] {
     use BrowserSensitiveSurfaceV1 as S;
     match verb {
         BrowserVerbV1::Evaluate => &[S::ScriptEval],

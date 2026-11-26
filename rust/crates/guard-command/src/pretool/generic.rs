@@ -15,7 +15,12 @@ pub(in crate::pretool) mod cursor_project_reads;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
 pub use env_prefix_projection::bindable_setting;
+#[cfg(test)]
+pub(crate) use omp::loopback_browser_program;
 pub use omp::omp_eval_commit_drafts;
+pub(crate) use omp::{
+    tokenize_browser_eval, BrowserEvalToken, BROWSER_EVAL_MAX_CODE_BYTES, BROWSER_EVAL_OPEN_KEYS,
+};
 #[path = "generic_cline_view.rs"]
 mod cline_view;
 #[path = "generic_extract.rs"]

@@ -36,6 +36,7 @@ pub mod browser_driver_match;
 pub mod browser_first_party_drivers;
 pub mod browser_guard_origin;
 pub mod browser_mcp_intent;
+pub mod browser_omp_eval_action;
 pub mod browser_provider_switches;
 mod bundle_metadata;
 pub mod business_gmail_plain;
