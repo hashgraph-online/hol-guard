@@ -35835,12 +35835,8 @@ function BrowserCallCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:p-5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(McpAppMark, { name: mcpMarkName(explanation), size: "md" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "break-words text-base font-semibold leading-snug text-brand-dark", children: card.headline }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 break-words text-sm text-brand-dark/70", children: [
-              explanation.title,
-              " · ",
-              subtitleOf(explanation, actingApp(explanation))
-            ] })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "break-words text-base font-semibold leading-snug text-brand-dark", children: explanation.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-words text-sm text-brand-dark/70", children: subtitleOf(explanation, actingApp(explanation)) })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "col-start-2 row-start-2 sm:col-start-3 sm:row-start-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EffectPill, { effect: explanation.effect }) })
         ] }),

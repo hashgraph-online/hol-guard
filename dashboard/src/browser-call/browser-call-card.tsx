@@ -11,8 +11,9 @@ import { BrowserRiskChips } from "./browser-risk-chips";
 import { BrowserSiteLine } from "./browser-site-line";
 
 /**
- * A browser step, drawn from Core's native card (PRD 5.8 items 1 to 5 and 7):
- * the headline, the site, the browser, the element and input, and what the
+ * A browser step, drawn from Core's native card (PRD 5.8 items 1 to 5 and 7).
+ * The page heading already says Core's headline, so the card names the step and
+ * then the site, the browser, the element and input, and what the
  * step can reach. The decision choices sit below the card, unchanged.
  */
 export function BrowserCallCard(props: {
@@ -30,9 +31,9 @@ export function BrowserCallCard(props: {
       <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:p-5">
         <McpAppMark name={mcpMarkName(explanation)} size="md" />
         <div className="min-w-0">
-          <h3 className="break-words text-base font-semibold leading-snug text-brand-dark">{card.headline}</h3>
+          <h3 className="break-words text-base font-semibold leading-snug text-brand-dark">{explanation.title}</h3>
           <p className="mt-0.5 break-words text-sm text-brand-dark/70">
-            {explanation.title} · {subtitleOf(explanation, actingApp(explanation))}
+            {subtitleOf(explanation, actingApp(explanation))}
           </p>
         </div>
         <div className="col-start-2 row-start-2 sm:col-start-3 sm:row-start-1">

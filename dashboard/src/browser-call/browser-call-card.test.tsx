@@ -80,11 +80,13 @@ function item(tool: string, input: unknown, browserCard: GuardBrowserCardV1 | nu
 
 const render = (request: GuardApprovalRequest) => renderToStaticMarkup(PrimaryActionCard({ item: request }));
 
-// The card leads with Core's headline and names the site and browser.
+// The card names the step, the site and the browser.
 {
   const markup = render(item("page_open", { url: "https://shop.example.test/cart" }, card({})));
   assert(markup.includes('data-browser-card="navigate"'), "T-BCC-1: a browser card renders the browser layout");
-  assert(markup.includes("Claude Code wants to open shop.example.test"), "T-BCC-2: the headline is Core's");
+  // The page heading says Core's headline; the card names the step instead of repeating it.
+  assert(!markup.includes("Claude Code wants to open shop.example.test"), "T-BCC-2: the card does not repeat the headline");
+  assert(/<h3[^>]*>[^<]+<\/h3>/.test(markup), "T-BCC-2b: the card names the step");
   assert(markup.includes(">Site<") && markup.includes(">shop.example.test<"), "T-BCC-3: the site line names the host");
   assert(markup.includes("A throwaway browser"), "T-BCC-4: the browser line names the profile");
   assert(!markup.includes("signed-in sites"), "T-BCC-5: a throwaway browser is not flagged");
@@ -115,19 +117,19 @@ const render = (request: GuardApprovalRequest) => renderToStaticMarkup(PrimaryAc
   const markup = render(
     item(
       "page_fill",
-      { element: "Password", text: "correct-horse-battery" },
+      { element: "Password", text: "typed-sample-value" },
       card({
         headline: "Claude Code wants to type into a form on shop.example.test",
         verb: "type",
-        detail: { element_preview: "Password", input_kind: "text", input_length: 21, input_masked: true },
+        detail: { element_preview: "Password", input_kind: "text", input_length: 18, input_masked: true },
         risk_chips: ["password_field", "cookies", "password_field"],
       }),
     ),
   );
   const visible = markup.split("See the exact input")[0] ?? "";
-  assert(!visible.includes("correct-horse-battery"), "T-BCC-11: typed text is not on the card face");
+  assert(!visible.includes("typed-sample-value"), "T-BCC-11: typed text is not on the card face");
   assert(visible.includes(">On<") && visible.includes(">Password<"), "T-BCC-12: the element is named");
-  assert(visible.includes("Hidden · 21 characters"), "T-BCC-13: masked input shows only its length");
+  assert(visible.includes("Hidden · 18 characters"), "T-BCC-13: masked input shows only its length");
   assert(visible.includes("Guard does not show what it types here."), "T-BCC-14: masking is explained");
   const chips = visible.match(/data-browser-surface="[a-z_]+"/g) ?? [];
   assert(chips.length === 2, `T-BCC-15: duplicate chips collapse (${chips.length})`);
