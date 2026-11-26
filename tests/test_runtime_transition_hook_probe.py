@@ -87,3 +87,27 @@ def test_omp_receipt_is_bound_to_fresh_probe_id():
     assert observation is not None
     assert observation["native_receipt"]["harness"] == "omp"
     assert observation["native_receipt"]["decision_id"] == receipt["decision_id"]
+
+
+def test_probe_spends_no_more_than_the_hook_has_left(monkeypatch):
+    import time
+
+    from codex_plugin_scanner.guard import runtime_transition_hook_probe as module
+
+    calls = []
+
+    def digest(kind, material, **kwargs):
+        calls.append(kwargs)
+        return None
+
+    monkeypatch.setattr(module, "native_context_digest", digest)
+    deadline = time.monotonic() + 0.4
+
+    assert transition_hook_probe(probe_payload(), deadline_monotonic=deadline) is None
+    assert calls[-1]["hard_deadline_monotonic"] == deadline
+    # The digest grants a cold resident a multi-second allowance on top of its
+    # timeout; the hard deadline is what keeps that inside the hook's answer.
+    assert 0 < calls[-1]["timeout_seconds"] <= 0.4
+
+    transition_hook_probe(probe_payload())
+    assert "hard_deadline_monotonic" not in calls[-1]
