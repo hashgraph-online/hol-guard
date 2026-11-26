@@ -222,6 +222,7 @@ fn raw_paging(
             | "rev-parse"
             | "ls-files"
             | "apply"
+            | "merge-file"
             | "bisect"
             | "notes"
             | "replace"
@@ -284,6 +285,11 @@ fn raw_paging(
     // Only the patch check reads; every other apply writes, and its own
     // review decides it.
     if operation == "apply" && !super::git_apply_check::is_check_only(&remaining[1..]) {
+        return Raw::NotModelled;
+    }
+    // Only the printing merge reads; without `-p` it writes the first file,
+    // and its own review decides it.
+    if operation == "merge-file" && !super::git_merge_file_read::is_read_only(&remaining[1..]) {
         return Raw::NotModelled;
     }
     // A plain configuration write is no read; its own proof decides it.
@@ -645,11 +651,11 @@ fn probe(
         // plumbing: Git starts no pager for any of them, so only their own
         // `pager.*` key can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
-        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
-        | "check-attr" | "fsck" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
-        | "diff-index" | "diff-files" | "name-rev" | "show-branch" | "check-ref-format"
-        | "symbolic-ref" | "var" | "patch-id" | "stripspace" | "check-mailmap"
-        | "interpret-trailers" => false,
+        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "merge-file"
+        | "count-objects" | "check-attr" | "fsck" | "sparse-checkout" | "submodule"
+        | "rev-parse" | "ls-files" | "diff-index" | "diff-files" | "name-rev" | "show-branch"
+        | "check-ref-format" | "symbolic-ref" | "var" | "patch-id" | "stripspace"
+        | "check-mailmap" | "interpret-trailers" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };

@@ -32904,6 +32904,86 @@
       "expect": "allow"
     },
     {
+      "id": "gauntlet-cd-git-merge-file-stdout-tmp-copy",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git merge-file -p src/report.ts ${SCRATCH}-report-main.ts src/report.ts | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-cd-git-merge-file-stdout-labels",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git merge-file -p --diff3 -L ours -L base -L theirs src/report.ts ${SCRATCH}-report-main.ts src/report.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-merge-file-stdout-worktree",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git merge-file -p src/report-window.ts src/one.ts src/report-window.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-merge-file-writes-first-file",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git merge-file src/report.ts ${SCRATCH}-report-main.ts src/report.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-merge-file-stdout-object-ids",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git merge-file -p --object-id HEAD:src/one.ts HEAD:src/one.ts HEAD:src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gauntlet-tail-follow-tmp-copy",
       "fix_area": "line-range",
       "harnesses": [
@@ -35733,6 +35813,70 @@
       "tool": "shell",
       "tool_input": {
         "command": "grep -n Synthetic ${HOME}/.claude/projects/p/memory/note.md"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-codex-plans-sed-note",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && sed -n 1,5p acme-plan-todo.md"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-codex-plans-wc-then-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && wc -l acme-plan-findings.md && ls"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-claude-memory-sed-then-grep",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.claude/projects/p/memory && sed -n 1,20p note.md; grep -n Synthetic note.md"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-claude-plans-head-note",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.claude/plans && head -20 acme-plan.md"
       },
       "cwd": "org",
       "expect": "allow"
@@ -47275,6 +47419,86 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-cd-codex-plans-read-parent-auth",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && cat ../auth.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-plans-grep-parent",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && grep -rn tokens .."
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-home-read-auth",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex && cat auth.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-claude-memory-parent-list",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.claude/projects/p && ls -la"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-plans-redirect-parent-hooks",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && echo '{}' > ../hooks.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-cat-claude-credentials-merged-stderr",
       "fix_area": "negative",
       "harnesses": [
@@ -55255,6 +55479,39 @@
       "tool": "shell",
       "tool_input": {
         "command": "stat ${HOME}/.aws/credentials-backup"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "test-symlink-predicate-shared-node-modules",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short && test -L dashboard/node_modules && echo linked"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "test-symlink-predicate-bracket-h",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "[ -h dashboard/node_modules ] || echo plain"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-test-symlink-predicate-credential-store",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test -L ${HOME}/.ssh/id_ed25519 && echo linked"
       },
       "cwd": "worktree",
       "expect": "not_allow"

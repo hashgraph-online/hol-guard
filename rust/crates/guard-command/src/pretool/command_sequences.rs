@@ -152,6 +152,11 @@ fn leading_cd_target(model: &CanonicalCommandV1, context: PathContext<'_>) -> Op
     // climb such as `cd ../app; git status` is proved for them.
     crate::pretool::safe_reads::verified_cwd_target(target, context)
         .or_else(|| crate::pretool::directory_targets::verified_climb_target(target, context))
+        .or_else(|| {
+            crate::pretool::directory_targets::notes::verified_note_directory_target(
+                target, context,
+            )
+        })
 }
 
 fn changes_directory(segment: &CommandSegmentV1) -> bool {

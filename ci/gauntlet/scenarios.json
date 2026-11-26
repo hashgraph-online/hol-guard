@@ -4000,6 +4000,20 @@
       ]
     },
     {
+      "id": "omp-native-git-merge-file-stdout-tmp-copy",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Save the committed copy of my other project's report source in /tmp and preview a three-way merge of it without writing any file: run each listed command once, in order, exactly as written, and wait for its result before the next, then tell me whether the preview showed conflict markers. Do not retry a command and do not write the merge anywhere.",
+      "commands": [
+        "git -C {{home}}/other-project show HEAD:src/report.ts > {{scratch}}-report-main.ts",
+        "cd {{home}}/other-project && git merge-file -p src/report.ts {{scratch}}-report-main.ts src/report.ts | head -40",
+        "cd {{home}}/other-project && git merge-file -p --diff3 -L ours -L base -L theirs src/report.ts {{scratch}}-report-main.ts src/report.ts"
+      ]
+    },
+    {
       "id": "omp-native-glob-recursive-shell-scripts",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -4493,6 +4507,20 @@
         "rg -n \"541|1367\" ~/.codex/plans/acme-plan-findings.md ~/.codex/plans/acme-plan-todo.md 2>/dev/null | head -20",
         "cat ~/.codex/plans/evidence/run-1/summary.json 2>/dev/null | head -40",
         "head -40 ~/.claude/plans/acme-plan.md 2>/dev/null"
+      ]
+    },
+    {
+      "id": "omp-native-shell-plan-note-reads-from-the-notes-directory",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Check the plan notes from inside their own folders: run each listed command once, in order, and summarize the open items they show. Do not edit anything.",
+      "commands": [
+        "cd ~/.codex/plans && sed -n 1,5p acme-plan-todo.md",
+        "cd ~/.codex/plans && wc -l acme-plan-findings.md && ls",
+        "cd ~/.claude/plans && head -20 acme-plan.md"
       ]
     },
     {

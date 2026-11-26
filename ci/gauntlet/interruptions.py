@@ -34,6 +34,10 @@ LOUD_NOTICES = frozenset({"warning", "excerpt"})
 REVIEW_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
 # Decision strings that mean the harness proceeds; any other non-empty value is a decision event.
 ALLOW_DECISIONS = frozenset({"allow", "allowed", "approve", "approved"})
+# Hook events that review a call before it runs, across harness spellings.
+PRE_TOOL_EVENTS = frozenset(
+    {"PreToolUse", "preToolUse", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"}
+)
 # Keys where the harness-specific payload is authoritative over the top-level duplicate.
 KNOWN_GAPS = Path(__file__).with_name("known_gaps.json")
 

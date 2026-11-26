@@ -7,6 +7,8 @@
 
 #[path = "directory_targets_home_variable.rs"]
 pub(crate) mod home_variable;
+#[path = "directory_targets_notes.rs"]
+pub(crate) mod notes;
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
 #[path = "directory_targets_tmp_alias.rs"]
