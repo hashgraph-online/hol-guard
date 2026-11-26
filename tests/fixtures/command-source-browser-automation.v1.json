@@ -28789,7 +28789,7 @@
       "enabled_extensions": [
         "command.browser-automation"
       ],
-      "expected_action": "review",
+      "expected_action": "allow",
       "expected_effective_segments": [],
       "id": "safe-headless-temp-posix",
       "rule_id": "command.browser-automation.remote-debugging-launch"
@@ -28800,7 +28800,7 @@
       "enabled_extensions": [
         "command.browser-automation"
       ],
-      "expected_action": "review",
+      "expected_action": "allow",
       "expected_effective_segments": [],
       "id": "safe-headless-temp-posix-profile",
       "rule_id": "command.browser-automation.real-profile-launch"
