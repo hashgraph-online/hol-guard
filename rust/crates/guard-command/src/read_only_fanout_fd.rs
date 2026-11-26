@@ -29,6 +29,7 @@
 use super::{
     child_listed, child_reads_contents, source_extension, without_stderr_merge, MAX_ROOTS,
 };
+use crate::CommandSegmentV1;
 
 /// Options that take a value and cannot move the walk outside the roots.
 ///
@@ -94,37 +95,44 @@ pub(crate) struct FdExec<'a> {
     pub child: &'a [String],
 }
 
-/// `fd ... -x CHILD` or `fd ... -X CHILD`, with a child from the read-only
-/// list and nothing between the walk and the command it runs.
-pub(crate) fn fd_exec(arguments: &[String]) -> Option<FdExec<'_>> {
-    let arguments = without_stderr_merge(arguments);
-    // A pathname glob is one word here and several, or different ones, by the
-    // time fd is called: `fd -t f -e ts . * -x cat` walks whatever the shell
-    // found beside the working directory, not the roots this reader saw. The
-    // shape is refused rather than guessed at, which costs a pattern written
-    // as a glob its reading and keeps the walk the proof judged.
-    if arguments
-        .iter()
-        .any(|argument| argument.contains(['*', '?', '[']))
-    {
-        return None;
-    }
-    let mut positionals: Vec<&str> = Vec::new();
-    let mut types: Vec<&str> = Vec::new();
-    let mut extensions: Vec<&str> = Vec::new();
+/// The words of an `fd` command read as its walk, and the child an exec mode
+/// hands each name to, if one is written.
+struct Walk<'a> {
+    positionals: Vec<&'a str>,
+    types: Vec<&'a str>,
+    extensions: Vec<&'a str>,
+    child: Option<&'a [String]>,
+}
+
+/// Read fd's options up to an exec mode, or to the end when none is written.
+fn walk(arguments: &[String]) -> Option<Walk<'_>> {
+    let mut walk = Walk {
+        positionals: Vec::new(),
+        types: Vec::new(),
+        extensions: Vec::new(),
+        child: None,
+    };
     let mut index = 0;
-    let mut child: Option<&[String]> = None;
     while let Some(word) = arguments.get(index).map(String::as_str) {
         index += 1;
         if word == "--" {
             return None;
         }
         if matches!(word, "-x" | "-X" | "--exec" | "--exec-batch") {
-            child = Some(&arguments[index..]);
+            walk.child = Some(&arguments[index..]);
             break;
         }
+        // A pathname glob is one word here and several, or different ones, by
+        // the time fd is called: `fd -t f -e ts . * -x cat` walks whatever the
+        // shell found beside the working directory, not the roots this reader
+        // saw. The shape is refused rather than guessed at, which costs a
+        // pattern written as a glob its reading and keeps the walk the proof
+        // judged.
+        if word.contains(['*', '?', '[']) {
+            return None;
+        }
         if !word.starts_with('-') || word == "-" {
-            positionals.push(word);
+            walk.positionals.push(word);
             continue;
         }
         let (name, inline) = match word.split_once('=') {
@@ -149,42 +157,106 @@ pub(crate) fn fd_exec(arguments: &[String]) -> Option<FdExec<'_>> {
                 value
             }
         };
+        if value.contains(['*', '?', '[']) {
+            return None;
+        }
         match name {
-            "-t" | "--type" => types.push(value),
-            "-e" | "--extension" => extensions.push(value),
+            "-t" | "--type" => walk.types.push(value),
+            "-e" | "--extension" => walk.extensions.push(value),
             _ => {}
         }
     }
-    let child = child?;
+    Some(walk)
+}
+
+impl<'a> Walk<'a> {
+    /// The walk in the terms the fan-out proof reads, given its roots.
+    fn shape(&self, roots: Vec<&'a str>) -> Option<FdShape<'a>> {
+        if roots.len() > MAX_ROOTS {
+            return None;
+        }
+        // Several `--type` values are a union, so every one of them has to be
+        // the regular-file type for the result to hold regular files only.
+        let regular_files_only = !self.types.is_empty()
+            && self
+                .types
+                .iter()
+                .all(|value| matches!(*value, "f" | "file"));
+        Some(FdShape {
+            roots,
+            regular_files_only,
+            extensions: self.extensions.clone(),
+        })
+    }
+}
+
+/// `fd ... -x CHILD` or `fd ... -X CHILD`, with a child from the read-only
+/// list and nothing between the walk and the command it runs.
+pub(crate) fn fd_exec(arguments: &[String]) -> Option<FdExec<'_>> {
+    let arguments = without_stderr_merge(arguments);
+    let walk = walk(arguments)?;
+    let child = walk.child?;
     if child.is_empty()
-        || child
-            .iter()
-            .any(|word| word.contains(['{', '}']) || matches!(word.as_str(), ";" | r"\;" | "+"))
+        || child.iter().any(|word| {
+            word.contains(['{', '}', '*', '?', '[']) || matches!(word.as_str(), ";" | r"\;" | "+")
+        })
         || !child_listed(child)
     {
         return None;
     }
     // fd reads the first positional as the pattern and the rest as roots; with
     // none, or only a pattern, it walks the working directory.
-    let roots = match positionals.len() {
+    let roots = match walk.positionals.len() {
         0 | 1 => vec!["."],
-        _ => positionals[1..].to_vec(),
+        _ => walk.positionals[1..].to_vec(),
     };
-    if roots.len() > MAX_ROOTS {
-        return None;
-    }
-    // Several `--type` values are a union, so every one of them has to be the
-    // regular-file type for the result to hold regular files only.
-    let regular_files_only =
-        !types.is_empty() && types.iter().all(|value| matches!(*value, "f" | "file"));
     Some(FdExec {
-        shape: FdShape {
-            roots,
-            regular_files_only,
-            extensions,
-        },
+        shape: walk.shape(roots)?,
         child,
     })
+}
+
+/// `fd [OPTIONS] PATTERN ROOT...` with no exec mode, read as the walk whose
+/// names it prints.
+///
+/// The roots have to be written. fd prints a name under a written root with
+/// that root as its prefix (`src/a.ts`, `./a.ts` under `.`), but with no root
+/// it prints names bare (`-x.ts`), and a name beginning with a dash would
+/// reach the child as an option. A root beginning with a dash is refused for
+/// the same reason.
+pub(crate) fn fd_listing(arguments: &[String]) -> Option<FdShape<'_>> {
+    let walk = walk(without_stderr_merge(arguments))?;
+    if walk.child.is_some() || walk.positionals.len() < 2 {
+        return None;
+    }
+    let roots = walk.positionals[1..].to_vec();
+    if roots.iter().any(|root| root.starts_with('-')) {
+        return None;
+    }
+    walk.shape(roots)
+}
+
+/// `fd -t f ... ROOT | xargs CHILD`: a bounded walk whose printed names the
+/// child of the next stage of the same pipeline fans out over.
+///
+/// The same reading as an `fd` exec: regular files only, roots the line
+/// keeps below the working directory, and source extensions for a child
+/// that reads contents.
+pub(crate) fn xargs_follows(
+    previous: &CommandSegmentV1,
+    pipeline_index: usize,
+    execution_context: &str,
+    arguments: &[String],
+) -> bool {
+    previous.pipeline_index + 1 == pipeline_index
+        && previous.execution_context == execution_context
+        && previous.environment_names.is_empty()
+        && previous.wrapper_chain.is_empty()
+        && !previous.path_overridden
+        && previous.executable.as_deref() == Some("fd")
+        && super::xargs(arguments).is_some_and(|xargs| {
+            fd_listing(&previous.arguments).is_some_and(|shape| walk_proven(&shape, xargs.child))
+        })
 }
 
 /// Whether the walk itself is bounded, leaving only the roots to place.
@@ -194,9 +266,14 @@ pub(crate) fn fd_exec(arguments: &[String]) -> Option<FdExec<'_>> {
 /// nested command executor: a shape that fails here has to stay uncertain,
 /// because nothing further along would look at it again.
 pub(crate) fn producer_shape_proven(exec: &FdExec<'_>) -> bool {
-    exec.shape.regular_files_only
-        && exec.shape.roots.iter().all(|root| root_bounded(root))
-        && (!child_reads_contents(exec.child) || source_extensions_only(&exec.shape.extensions))
+    walk_proven(&exec.shape, exec.child)
+}
+
+/// [`producer_shape_proven`] for a walk and the child its names reach.
+fn walk_proven(shape: &FdShape<'_>, child: &[String]) -> bool {
+    shape.regular_files_only
+        && shape.roots.iter().all(|root| root_bounded(root))
+        && (!child_reads_contents(child) || source_extensions_only(&shape.extensions))
 }
 
 /// Whether a root is one the line alone shows to stay below the working

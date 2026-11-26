@@ -27,6 +27,8 @@ pub(crate) mod fd;
 mod group;
 #[path = "read_only_fanout_listing.rs"]
 pub(crate) mod listing;
+#[path = "read_only_fanout_window.rs"]
+pub(crate) mod window;
 
 /// Placeholder operand the child proof stands in for the unknown file names.
 pub(crate) const PLACEHOLDER: &str = "guard-fanout-result";
