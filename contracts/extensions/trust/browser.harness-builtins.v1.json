@@ -1,0 +1,5 @@
+{
+  "extension": "browser.harness-builtins",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "first-party"
+}

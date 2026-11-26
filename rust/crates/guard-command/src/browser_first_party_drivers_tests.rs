@@ -282,12 +282,12 @@ fn oracle_names(oracle: &[(BrowserIntentV1, &[&str])]) -> Vec<String> {
 #[test]
 fn first_party_profiles_compile_as_first_party() {
     let drivers = compile_first_party().expect("first-party profiles compile");
-    assert_eq!(drivers.len(), 7);
+    assert_eq!(drivers.len(), 8);
     for driver in &drivers {
         assert_eq!(driver.trust_class, BrowserDriverTrustClassV1::FirstParty);
         assert!(driver.publisher_verified);
     }
-    assert_eq!(first_party_browser_drivers().len(), 7);
+    assert_eq!(first_party_browser_drivers().len(), 8);
 }
 
 #[test]

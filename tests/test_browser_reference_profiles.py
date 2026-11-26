@@ -21,6 +21,7 @@ REFERENCE_PROFILES = (
     ("browser.computer-use", "computer-use", "shared"),
     ("browser.browserbase", "browserbase", "remote-debugging"),
     ("browser.browser-use", "browser-use", "unknown"),
+    ("browser.harness-builtins", "harness-builtins", "unknown"),
 )
 
 
@@ -62,7 +63,10 @@ def test_the_profile_is_bundled_and_tracked_upstream(identity: str, vector: str,
     profile = _profile(identity)
     assert f"contributions/browser-drivers/{identity}.json" in _BUNDLE.read_text(encoding="utf-8")
     assert (_ROOT / "contracts" / "extensions" / "trust" / f"{identity}.v1.json").is_file()
-    assert profile["referenceVersion"]
+    # The drift check reads a profile's npm package. Harness built-ins have none, so the report
+    # lists them as unpinned instead of tracking a version.
+    if profile["match"]["packages"]:
+        assert profile["referenceVersion"]
     assert profile["publisher"]["verified"] is True
     assert profile["profileMode"] == {"default": mode}
 
@@ -106,3 +110,18 @@ def test_no_agent_framework_tool_outside_the_instruction_list_takes_free_text_as
         for tool in _profile(identity)["tools"]:
             if tool.get("script"):
                 assert (identity, tool["name"]) in listed, tool["name"]
+
+
+def test_harness_built_ins_cover_every_routed_network_browser_tool() -> None:
+    routed = {"browser", "browser_action", "open_url", "visit_url"}
+    profile = _profile("browser.harness-builtins")
+    assert set(profile["match"]["harnessTools"]) == routed
+    assert {tool["name"] for tool in profile["tools"]} == routed
+
+
+def test_every_published_headless_browser_action_has_a_case() -> None:
+    for name in ("browser", "browser_action"):
+        recorded = next(tool for tool in recorded_tools("harness-builtins") if tool["name"] == name)
+        published = set(recorded["inputSchema"]["properties"]["action"]["enum"])
+        tool = next(tool for tool in _profile("browser.harness-builtins")["tools"] if tool["name"] == name)
+        assert published == set(tool["cases"]), name

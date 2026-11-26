@@ -1,7 +1,7 @@
 //! First-party browser driver profiles shipped with Guard.
 //!
 //! The Chrome DevTools MCP, Playwright MCP, Puppeteer MCP, Browser MCP, computer-use, Browserbase
-//! (Stagehand) and browser-use tool lists live in `contributions/browser-drivers/` as ordinary
+//! (Stagehand), browser-use and harness built-in browser tool lists live in `contributions/browser-drivers/` as ordinary
 //! driver profiles. They compile once, with the same compiler and limits as a contributed profile,
 //! and replace the hand-kept operation tables that used to sit in `browser_mcp_patterns.rs`. Server-name detection and the generic operation-name
 //! fallback for other browser servers stay native.
@@ -21,6 +21,7 @@ pub const BROWSERMCP_DRIVER_ID: &str = "browser.browsermcp";
 pub const COMPUTER_USE_DRIVER_ID: &str = "browser.computer-use";
 pub const BROWSERBASE_DRIVER_ID: &str = "browser.browserbase";
 pub const BROWSER_USE_DRIVER_ID: &str = "browser.browser-use";
+pub const HARNESS_BUILTINS_DRIVER_ID: &str = "browser.harness-builtins";
 
 const CHROME_DEVTOOLS: &str =
     include_str!("../../../../contributions/browser-drivers/browser.chrome-devtools-mcp.json");
@@ -36,6 +37,8 @@ const BROWSERBASE: &str =
     include_str!("../../../../contributions/browser-drivers/browser.browserbase.json");
 const BROWSER_USE: &str =
     include_str!("../../../../contributions/browser-drivers/browser.browser-use.json");
+const HARNESS_BUILTINS: &str =
+    include_str!("../../../../contributions/browser-drivers/browser.harness-builtins.json");
 
 /// The publisher first-party profiles name. Only first-party profiles are compiled against it.
 const FIRST_PARTY_PUBLISHERS: &[&str] = &["HOL Guard"];
@@ -57,6 +60,7 @@ pub(crate) fn compile_first_party() -> Result<Vec<CompiledBrowserDriverV1>, Stri
         (COMPUTER_USE.as_bytes(), BrowserDriverOrigin::FirstParty),
         (BROWSERBASE.as_bytes(), BrowserDriverOrigin::FirstParty),
         (BROWSER_USE.as_bytes(), BrowserDriverOrigin::FirstParty),
+        (HARNESS_BUILTINS.as_bytes(), BrowserDriverOrigin::FirstParty),
     ];
     compile_browser_driver_set(&sources, FIRST_PARTY_PUBLISHERS)
         .map_err(|error| error.code().to_owned())

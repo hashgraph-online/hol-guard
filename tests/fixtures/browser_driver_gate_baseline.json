@@ -271,6 +271,38 @@
         "Type: no row that is not allow"
       ]
     },
+    "browser.harness-builtins": {
+      "missing_tools": [
+        "browser",
+        "browser_action",
+        "open_url",
+        "visit_url"
+      ],
+      "verb_gaps": [
+        "Attach: no allow row under a grant",
+        "Attach: no row that is not allow",
+        "Click: no allow row under a grant",
+        "Click: no row that is not allow",
+        "Download: no allow row under a grant",
+        "Download: no row that is not allow",
+        "Navigate: no allow row under a grant",
+        "Navigate: no row that is not allow",
+        "Other: no allow row under a grant",
+        "Other: no row that is not allow",
+        "Read: no allow row under a grant",
+        "Read: no row that is not allow",
+        "Screenshot: no allow row under a grant",
+        "Screenshot: no row that is not allow",
+        "Scroll: no allow row under a grant",
+        "Scroll: no row that is not allow",
+        "TabControl: no allow row under a grant",
+        "TabControl: no row that is not allow",
+        "Type: no allow row under a grant",
+        "Type: no row that is not allow",
+        "Upload: no allow row under a grant",
+        "Upload: no row that is not allow"
+      ]
+    },
     "browser.playwright-mcp": {
       "missing_tools": [
         "browser_accessibility_snapshot",
