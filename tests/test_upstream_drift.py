@@ -362,6 +362,25 @@ def test_browser_driver_pins_use_the_first_package_and_reference_version(tmp_pat
     assert "command source pin" not in text
 
 
+def test_a_stale_profile_beside_a_discovery_pin_does_not_ask_for_a_source_pin(tmp_path):
+    write_gmail_pins(tmp_path, gmail_document())
+    [discovery] = discovery_pins(tmp_path)
+    _profile(tmp_path, "pilot", referenceVersion="1.2.0")
+    [profile] = browser_driver_pins(tmp_path)
+    url = "https://registry.npmjs.org/@example-org%2Fpilot"
+    findings = check(
+        [discovery, profile],
+        fake_fetch({GMAIL_URL: nested_change(), url: {"dist-tags": {"latest": "1.3.0"}}}),
+        {},
+        {},
+    )
+    assert {finding.status for finding in findings} == {"drifted"}
+    text = summary(findings)
+    assert "--refresh-discovery-pins" in text
+    assert "referenceVersion" in text
+    assert "command source pin" not in text
+
+
 def test_first_party_profile_without_a_version_is_reported_unpinned(tmp_path):
     _profile(tmp_path, "pilot")
     [pin] = browser_driver_pins(tmp_path)

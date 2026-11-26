@@ -339,7 +339,7 @@ def summary(findings: list[Finding]) -> str:
         )
     lines.append("")
     browser = [item for item in stale if item.pin.source.startswith("contributions/browser-drivers/")]
-    if len(browser) < len(stale) and any(item.pin.kind != "discovery" for item in stale):
+    if any(item.pin.kind != "discovery" and item not in browser for item in stale):
         lines.append("Review the upstream change, then update the command source pin and rerun the listed proofs.")
     if browser:
         lines.append(
