@@ -115,7 +115,7 @@ place to put its cases.
   browser protection cases. Each reports `within`, `over` or `unmeasured` in `summary.json` and
   `qualification.json`, plus approvals per completed task and quiet-case rate per driver id.
   Evidence: unit tests with synthetic case results for each state.
-- [ ] **BP-T167** Document the profile, oracles, fields, fixtures, budgets and the release-time step in
+- [x] **BP-T167** Document the profile, oracles, fields, fixtures, budgets and the release-time step in
   `ci/gauntlet/README.md`. Add a **Regression cases** section (gate row ids, live case ids, direction
   check) to the browser driver and provider integration pull-request templates.
 
