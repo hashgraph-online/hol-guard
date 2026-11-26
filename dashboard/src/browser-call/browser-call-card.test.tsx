@@ -137,6 +137,22 @@ const render = (request: GuardApprovalRequest) => renderToStaticMarkup(PrimaryAc
   assert(/<ul aria-labelledby="[^"]+"/.test(visible) && visible.includes(">Password field</li>"), "T-BCC-16: each chip is a labelled list item with its own text");
 }
 
+// A chip named after an inherited object property is dropped, not rendered.
+{
+  const markup = render(
+    item(
+      "page_fill",
+      { element: "Search" },
+      card({
+        verb: "type",
+        risk_chips: ["__proto__", "constructor", "toString", "cookies"] as unknown as GuardBrowserCardV1["risk_chips"],
+      }),
+    ),
+  );
+  const chips = markup.match(/data-browser-surface="[a-z_]+"/g) ?? [];
+  assert(chips.length === 1 && markup.includes('data-browser-surface="cookies"'), `T-BCC-16b: only own surface keys become chips (${chips.length})`);
+}
+
 // Script steps show their code; a missing site is said, not guessed.
 {
   const markup = render(

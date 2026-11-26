@@ -14637,7 +14637,7 @@ function parseBrowserCard(value) {
   const site = isRecord$d(value.site) ? value.site : {};
   const detail = isRecord$d(value.detail) ? value.detail : {};
   const inputKind = detail.input_kind;
-  const chips = Array.isArray(value.risk_chips) ? value.risk_chips.filter((chip) => typeof chip === "string" && chip in SURFACES) : [];
+  const chips = Array.isArray(value.risk_chips) ? value.risk_chips.filter((chip) => typeof chip === "string" && Object.hasOwn(SURFACES, chip)) : [];
   return {
     headline: value.headline.trim(),
     verb,

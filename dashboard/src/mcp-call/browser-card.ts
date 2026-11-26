@@ -88,7 +88,7 @@ export function parseBrowserCard(value: unknown): GuardBrowserCardV1 | null {
   const detail = isRecord(value.detail) ? value.detail : {};
   const inputKind = detail.input_kind;
   const chips = Array.isArray(value.risk_chips)
-    ? value.risk_chips.filter((chip): chip is GuardBrowserSurfaceV1 => typeof chip === "string" && chip in SURFACES)
+    ? value.risk_chips.filter((chip): chip is GuardBrowserSurfaceV1 => typeof chip === "string" && Object.hasOwn(SURFACES, chip))
     : [];
   return {
     headline: value.headline.trim(),
