@@ -27,7 +27,9 @@ mod cursor;
 use cursor::cursor_grep_directory_scope_proven;
 #[path = "search_scope_grep_include.rs"]
 mod grep_include;
-pub(super) use grep_include::{grep_include_scope_proven, grep_include_walk_proven};
+pub(super) use grep_include::{
+    grep_include_scope_proven, grep_include_walk_proven, grep_skill_tree_proven,
+};
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
