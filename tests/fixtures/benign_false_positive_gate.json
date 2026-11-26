@@ -72744,7 +72744,7 @@
       "arguments": {
         "text": "Getting started"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72782,7 +72782,7 @@
       "arguments": {
         "action": "list"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72794,7 +72794,7 @@
         "width": 1280,
         "height": 800
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72822,7 +72822,7 @@
       "arguments": {
         "accept": false
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
