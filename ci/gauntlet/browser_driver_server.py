@@ -5,7 +5,11 @@ It speaks newline-delimited JSON-RPC on stdio like a real browser driver and ser
 tool list, but there is no browser and no socket: navigation moves between named, scripted pages
 and every tool call is appended to a journal so a judge can tell which calls actually ran.
 
-Usage: browser_driver_server.py <tools.json> <journal.jsonl> [<server-name>]
+Usage: browser_driver_server.py <tools.json> <journal.jsonl> [<server-name>] [<start-page>]
+
+Without a ``<start-page>`` argument, a ``start-page`` file next to the journal names the start page.
+That keeps the launch argv, and with it the connector identity Guard hashes, the same as the
+configured server while a test picks the page per call.
 
 Every page, origin and element here is invented for the Gauntlet.
 """
@@ -21,6 +25,9 @@ from urllib.parse import urlsplit
 
 PROTOCOL_VERSION = "2025-06-18"
 BLANK = "about:blank"
+
+# Read next to the journal when no start page is passed in argv.
+START_PAGE_FILE = "start-page"
 
 # Named pages. Each element has a ref the agent passes back, as in an accessibility snapshot.
 PAGES: dict[str, dict[str, Any]] = {
@@ -282,9 +289,18 @@ def load_tools(path: Path) -> list[dict[str, Any]]:
 
 def main(argv: list[str]) -> int:
     if len(argv) < 3:
-        sys.stderr.write("usage: browser_driver_server.py <tools.json> <journal.jsonl> [server-name]\n")
+        sys.stderr.write("usage: browser_driver_server.py <tools.json> <journal.jsonl> [server-name] [start-page]\n")
         return 2
     state = BrowserState(load_tools(Path(argv[1])), Path(argv[2]), argv[3] if len(argv) > 3 else "browser")
+    start_file = Path(argv[2]).with_name(START_PAGE_FILE)
+    start = argv[4] if len(argv) > 4 else None
+    if start is None and start_file.exists():
+        start = start_file.read_text(encoding="utf-8").strip()
+    if start is not None:
+        if start not in PAGES:
+            sys.stderr.write(f"unknown start page: {start}\n")
+            return 2
+        state.url = PAGES[start]["url"]
     for line in sys.stdin:
         try:
             message = json.loads(line)

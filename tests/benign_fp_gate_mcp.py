@@ -40,6 +40,14 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.benign_fp_gate_browser import (
+    BROWSER_SERVERS,
+    browser_server_command,
+    start_page,
+    unwired_state,
+    validate_browser_fields,
+    write_browser_servers,
+)
 
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
@@ -94,14 +102,26 @@ class McpCase:
     tool: str
     arguments: dict[str, object]
     expect: str
+    state: str = "none"
+    page: str | None = None
 
 
 def mcp_cases(document: dict[str, Any]) -> list[McpCase]:
-    """The ``mcp_cases`` of the gate's case document."""
-    return [
-        McpCase(entry["id"], entry["server"], entry["tool"], entry["arguments"], entry["expect"])
-        for entry in document["mcp_cases"]
-    ]
+    """The ``mcp_cases`` of the gate's case document; a browser row's ``state`` and ``page`` must be known."""
+    cases = []
+    for entry in document["mcp_cases"]:
+        case = McpCase(
+            entry["id"],
+            entry["server"],
+            entry["tool"],
+            entry["arguments"],
+            entry["expect"],
+            entry.get("state", "none"),
+            entry.get("page"),
+        )
+        validate_browser_fields(case.case_id, case.server, case.state, case.page)
+        cases.append(case)
+    return cases
 
 
 def server_script(home: Path) -> Path:
@@ -110,13 +130,15 @@ def server_script(home: Path) -> Path:
 
 def server_command(home: Path, server: str) -> list[str]:
     """The command a harness config launches for ``server``; the name in argv keeps each server's identity apart."""
+    if server in BROWSER_SERVERS:
+        return browser_server_command(home, server)
     return [sys.executable, "-u", str(server_script(home)), server]
 
 
 def mcp_config(home: Path, remote_url: str) -> str:
     """Codex ``config.toml`` naming both stdio servers and a remote one."""
     sections = []
-    for server in SERVERS:
+    for server in (*SERVERS, *BROWSER_SERVERS):
         command, *args = server_command(home, server)
         sections.append(f"[mcp_servers.{server}]\ncommand = {json.dumps(command)}\nargs = {json.dumps(args)}\n")
     sections.append(f'[mcp_servers.remote-example]\nurl = "{remote_url}"\n')
@@ -127,6 +149,7 @@ def write_server(home: Path) -> None:
     script = server_script(home)
     script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text(_SERVER, encoding="utf-8")
+    write_browser_servers(home)
 
 
 def _identity(case: McpCase, fixture: BenignFixture) -> McpServerIdentity:
@@ -377,6 +400,9 @@ def replay(
     case: McpCase, fixture: BenignFixture, store: GuardStore
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     """Run one call through the relay: its answer, the approval rows it queued and the server's identity hash."""
+    unwired = unwired_state(case.state)
+    if unwired is not None:
+        return {"unwired_state": unwired}, [], ""
     provision_native_verifier_key_for_store(store)
     identity = _identity(case, fixture)
     if case.server == READY_SERVER:
@@ -386,12 +412,13 @@ def replay(
     # The first session reports the server's catalog; a call refused while the
     # resident still records it is sent again in a later session.
     deadline = time.monotonic() + _WARM_SECONDS
-    while True:
-        responses, defers = _session(command, fixture, _messages(case))
-        response = responses.get(3, {})
-        if not _warming(response) or time.monotonic() > deadline:
-            break
-        time.sleep(0.25)
+    with start_page(fixture.home, case.page):
+        while True:
+            responses, defers = _session(command, fixture, _messages(case))
+            response = responses.get(3, {})
+            if not _warming(response) or time.monotonic() > deadline:
+                break
+            time.sleep(0.25)
     if _warming(response):
         # Name why the relay never decided, so a failing case says more than the refusal.
         response = {**response, "relay_defer": defers}
@@ -409,6 +436,8 @@ def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, An
     """Why a replayed call is not what its case expects, or None when it is."""
     error = response.get("error")
     data = error.get("data", {}) if isinstance(error, dict) else {}
+    if "unwired_state" in response:
+        return str(response["unwired_state"])
     if "relay_defer" in response:
         return f"the relay never decided the call: {response['relay_defer']}"
     if case.expect == "allow":
@@ -419,6 +448,16 @@ def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, An
         return f"the call must not reach the server: {response}"
     is_setup = data.get("guardReasonCode") == RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED
     groups = [CONNECTOR_GROUP_ID.fullmatch(str(row["queue_group_id"])) for row in rows]
+    if case.expect == "block":
+        # A baseline row for a call main answers with a policy block: never forwarded, not held as
+        # setup, and the agent is told not to retry while one per-call review row is still queued.
+        if is_setup or any(groups):
+            return f"expected a policy block, got connector setup: {error} {rows}"
+        if data.get("transportOutcome") != "not-forwarded" or data.get("guardPolicyAction") != "block":
+            return f"expected a Guard policy block, got {error}"
+        if len(rows) != 1 or not rows[0].get("allow_scopes"):
+            return f"expected the block to queue one per-call review row, got {rows}"
+        return None
     if case.expect != "setup":
         if is_setup or any(groups):
             return "a server with an admin decision must not be held as setup"
