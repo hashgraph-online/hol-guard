@@ -40,6 +40,12 @@ fn methods_without_a_keyword_open_definitions_and_are_named() {
         ("enum color parse_color(const char *s) {", "parse_color"),
         ("static const char *label(void) {", "label"),
         ("const std::string& Box::name() const {", "name"),
+        (
+            "  pick<T, K extends keyof T>(obj: T, key: K): T[K] {",
+            "pick",
+        ),
+        ("    synchronized void flush() {", "flush"),
+        ("    int size() const { return size_; }", "size"),
     ] {
         assert_eq!(named(line).as_deref(), Some(name), "{line}");
     }
@@ -67,6 +73,8 @@ fn keyword_definitions_in_more_languages_are_named() {
         ("pub(crate) struct Identifier {", "Identifier"),
         ("pub(super) enum Kind {", "Kind"),
         ("enum Color {", "Color"),
+        ("object Registry extends Base {", "Registry"),
+        ("extension Array where Element: Equatable {", "Array"),
     ] {
         assert_eq!(named(line).as_deref(), Some(name), "{line}");
     }
@@ -119,6 +127,8 @@ fn python_lines_read_as_before() {
         "@app.route(\"/items\")",
         "    open(path).read()",
         "    private(x)",
+        "object and refresh()",
+        "object in seen",
     ] {
         assert!(!definition(line), "{line}");
     }
@@ -126,4 +136,21 @@ fn python_lines_read_as_before() {
     assert!(definition("const LIMIT = 3"));
     assert!(!definition("    const limit = 3"));
     assert_eq!(written_name("const LIMIT = 3").as_deref(), Some("LIMIT"));
+}
+
+#[test]
+fn a_c_function_with_its_brace_on_the_next_line_is_named() {
+    assert_eq!(
+        written_name("struct node *new_node(int v)").as_deref(),
+        Some("new_node")
+    );
+    assert_eq!(written_name("struct node {").as_deref(), Some("node"));
+}
+
+#[test]
+fn many_const_words_on_one_line_are_read_in_linear_time() {
+    let line = "const ".repeat(4096) + "fn late() {";
+    let started = std::time::Instant::now();
+    assert_eq!(written_name(&line).as_deref(), Some("late"));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
 }

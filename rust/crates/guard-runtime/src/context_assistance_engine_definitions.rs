@@ -132,39 +132,72 @@ const BLOCK_CALLS: [&str; 16] = [
 /// `struct node *new_node(int v) {`, `const char *label(void) {`.
 const RETURN_TYPE_WORDS: [&str; 4] = ["struct", "enum", "union", "const"];
 
+/// The text after one leading modifier other than `const`, if there is one.
+fn after_modifier(rest: &str) -> Option<&str> {
+    if let Some(after) = MODIFIERS.iter().find_map(|m| rest.strip_prefix(m)) {
+        return Some(after);
+    }
+    if let Some(after) = rest.strip_prefix("pub(") {
+        return after.split_once(") ").map(|(_, after)| after);
+    }
+    let after = rest.strip_prefix("extern ")?;
+    Some(
+        after
+            .strip_prefix('"')
+            .and_then(|abi| abi.split_once("\" "))
+            .map_or(after, |(_, after)| after),
+    )
+}
+
 /// The line with its modifiers taken off: `pub(in crate::x)`, `extern "C"`
-/// and `const` before `fn` included.
+/// and `const` before `fn` included. One pass over the line, so a line of
+/// many `const` words costs no more than its length.
 fn unmodified(line: &str) -> &str {
     let mut rest = line.trim_start();
     loop {
-        if let Some(after) = MODIFIERS.iter().find_map(|m| rest.strip_prefix(m)) {
+        if let Some(after) = after_modifier(rest) {
             rest = after;
-        } else if let Some(after) = rest.strip_prefix("pub(") {
-            let Some((_, after)) = after.split_once(") ") else {
-                return rest;
-            };
-            rest = after;
-        } else if let Some(after) = rest.strip_prefix("extern ") {
-            rest = after
-                .strip_prefix('"')
-                .and_then(|abi| abi.split_once("\" "))
-                .map_or(after, |(_, after)| after);
-        } else if let Some(after) = rest.strip_prefix("const ") {
-            // `const fn` in Rust; `const x = 1` stays a binding.
-            if !unmodified(after).starts_with("fn ") {
-                return rest;
-            }
-            rest = after;
-        } else {
+            continue;
+        }
+        if !rest.starts_with("const ") {
             return rest;
         }
+        // `const fn` in Rust; `const x = 1` stays a binding.
+        let mut ahead = rest;
+        while let Some(after) = ahead
+            .strip_prefix("const ")
+            .or_else(|| after_modifier(ahead))
+        {
+            ahead = after;
+        }
+        if !ahead.starts_with("fn ") {
+            return rest;
+        }
+        rest = ahead;
     }
 }
 
+/// Words that may follow a declared name: `extension Array where ...`,
+/// `object Foo extends Bar`.
+const DECLARATION_WORDS: [&str; 4] = ["where", "extends", "implements", "with"];
+
+/// The definer followed by a name, then what a declaration has next: the
+/// end of the line, a brace, parameters, a type, or a declaration word.
+/// `object and refresh()` in Python is an expression, not a declaration.
 fn named(rest: &str, definer: &str) -> bool {
-    rest.strip_prefix(definer)
-        .and_then(|name| name.chars().next())
-        .is_some_and(|c| c.is_alphabetic() || c == '_')
+    let Some(name) = rest.strip_prefix(definer) else {
+        return false;
+    };
+    if !name.starts_with(|c: char| c.is_alphabetic() || c == '_') {
+        return false;
+    }
+    let after = name.trim_start_matches(|c: char| c.is_alphanumeric() || c == '_');
+    let next = after.trim_start();
+    next.is_empty()
+        || next.starts_with(['{', '(', ':', '<', '[', '.', '='])
+        || DECLARATION_WORDS
+            .iter()
+            .any(|word| next.split_whitespace().next() == Some(word))
 }
 
 /// A line that opens a definition by its keyword.
@@ -224,6 +257,28 @@ fn signature_tail(text: &str) -> bool {
         .all(|c| c.is_alphanumeric() || c.is_whitespace() || "_:<>[],.?*&|()-$".contains(c))
 }
 
+/// The text before a method's parameters with its trailing type
+/// parameters, `<T, K extends keyof T>`, taken off.
+fn generic_free(head: &str) -> &str {
+    if !head.ends_with('>') {
+        return head;
+    }
+    let mut depth = 0usize;
+    for (at, c) in head.char_indices().rev() {
+        match c {
+            '>' => depth += 1,
+            '<' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &head[..at];
+                }
+            }
+            _ => {}
+        }
+    }
+    head
+}
+
 /// The name a method line defines, when the line is a name and its
 /// parameters followed by the body's brace: `parse(url: string): Url {`,
 /// `public static int count(List<T> items) throws IOException {`,
@@ -238,7 +293,8 @@ pub(crate) fn method(line: &str) -> Option<&str> {
         return None;
     }
     let open = text.find('(')?;
-    let head = &text[..open];
+    // Type parameters may hold spaces: `pick<T, K extends keyof T>(`.
+    let head = generic_free(&text[..open]);
     if !head
         .chars()
         .all(|c| c.is_alphanumeric() || c.is_whitespace() || "_<>[],.?*&:$~".contains(c))
@@ -256,7 +312,10 @@ pub(crate) fn method(line: &str) -> Option<&str> {
     if last.contains('.') || !identifier(name) {
         return None;
     }
-    if STATEMENTS.contains(&name) || STATEMENTS.contains(&words[0]) {
+    // `synchronized void flush() {` is a Java method; `synchronized (x) {`
+    // is a statement, caught by its name.
+    let leading_statement = STATEMENTS.contains(&words[0]) && words[0] != "synchronized";
+    if STATEMENTS.contains(&name) || leading_statement {
         return None;
     }
     if ACCESS.contains(&name) || (words.len() == 1 && BLOCK_CALLS.contains(&name)) {
@@ -268,7 +327,14 @@ pub(crate) fn method(line: &str) -> Option<&str> {
         .split_once("//")
         .map_or(after, |(code, _)| code)
         .trim_end();
-    let braced = after.strip_suffix('{').map(str::trim_end);
+    // A body may open and close on the line: `int size() const { return n; }`.
+    let braced = after.strip_suffix('{').map(str::trim_end).or_else(|| {
+        after
+            .ends_with('}')
+            .then(|| after.split_once('{'))
+            .flatten()
+            .map(|(tail, _)| tail.trim_end())
+    });
     let member = words.iter().any(|word| ACCESS.contains(word));
     let shaped = match braced {
         Some(tail) => signature_tail(tail),
@@ -288,14 +354,22 @@ pub(crate) fn written_name(line: &str) -> Option<String> {
     // parameters, not by the word after the keyword. Its modifiers are read
     // off first: `pub(crate) struct Id {` is no call to `pub`.
     let method_name = if !keyword_definition(line) {
-        method(line)
+        method(line).map(str::to_owned)
     } else if RETURN_TYPE_WORDS.contains(&definer) {
-        method(rest)
+        // The body's brace may be on the next line: `struct node *f(int v)`.
+        let header = rest.trim_end();
+        method(rest).map(str::to_owned).or_else(|| {
+            let opened = format!("{header} {{");
+            header
+                .ends_with(')')
+                .then(|| method(&opened).map(str::to_owned))
+                .flatten()
+        })
     } else {
         None
     };
     if let Some(name) = method_name {
-        return Some(name.to_owned());
+        return Some(name);
     }
     if definer.is_empty() {
         return None;
