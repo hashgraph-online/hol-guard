@@ -125,6 +125,14 @@ fn undeclared_codes_ahead_of_declared_ones_do_not_crowd_them_out() {
         serde_json::to_string(&reasons).unwrap()
     );
     assert_eq!(map(&body).unwrap().reason_codes, ["phishing"]);
+
+    let mut crowded: Vec<String> = (0..64).map(|n| format!("n{n}")).collect();
+    crowded.push("phishing".to_owned());
+    let body = format!(
+        r#"{{"result":{{"verdict":"malicious","reasons":{}}}}}"#,
+        serde_json::to_string(&crowded).unwrap()
+    );
+    assert_eq!(map(&body).unwrap().reason_codes, ["phishing"]);
 }
 
 #[test]
@@ -151,7 +159,8 @@ fn the_lifetime_is_clamped_into_the_declared_bounds() {
         ("12.5", 60),
         (r#""600""#, 60),
         ("null", 60),
-        ("18446744073709551616", 60),
+        ("18446744073709551616", 3600),
+        ("1e3", 60),
     ] {
         let answer = map(&format!(
             r#"{{"result":{{"verdict":"clean"}},"ttl":{ttl}}}"#
