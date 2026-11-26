@@ -4,7 +4,8 @@
 use guard_command::browser_mcp_intent::evaluate_browser_mcp;
 use guard_command::mcp_tool_signals::browser_arguments;
 use guard_contracts::{
-    BrowserAutomationIntentV1, BrowserMcpRequestV1, BrowserMcpResultV1, McpToolPolicySubjectV1,
+    BrowserAutomationIntentV1, BrowserMcpArtifactV1, BrowserMcpRequestV1, BrowserMcpResultV1,
+    McpToolArgumentsV1, McpToolPolicySubjectV1,
 };
 use serde_json::{json, Value};
 
@@ -16,9 +17,17 @@ pub(crate) const INFORMATIONAL_CATEGORY: &str = "browser_external_domain";
 pub(crate) fn browser_intent(
     subject: &McpToolPolicySubjectV1,
 ) -> Result<Option<BrowserAutomationIntentV1>, &'static str> {
+    normalized_browser_intent(&subject.artifact, &subject.arguments)
+}
+
+/// The normalized browser intent the grant path reads for one call of `artifact`.
+pub(crate) fn normalized_browser_intent(
+    artifact: &BrowserMcpArtifactV1,
+    arguments: &McpToolArgumentsV1,
+) -> Result<Option<BrowserAutomationIntentV1>, &'static str> {
     let result = evaluate_browser_mcp(&BrowserMcpRequestV1::Normalize {
-        artifact: subject.artifact.clone(),
-        arguments: browser_arguments(&subject.arguments),
+        artifact: artifact.clone(),
+        arguments: browser_arguments(arguments),
     })?;
     match result {
         BrowserMcpResultV1::Normalize { intent } => Ok(intent.map(|boxed| *boxed)),
@@ -64,6 +73,11 @@ pub(crate) fn exact_match_context(intent: Option<&BrowserAutomationIntentV1>) ->
     String::from_utf8(bytes).ok()
 }
 
+/// The routine grant category of a normalized browser intent, if it has one.
+pub(crate) fn grant_category(intent: &BrowserAutomationIntentV1) -> Option<&'static str> {
+    enum_text(&intent.intent).as_deref().and_then(category_for)
+}
+
 pub(crate) fn category_for(intent: &str) -> Option<&'static str> {
     match intent {
         "browser.navigation" => Some("browser_navigation"),
@@ -100,7 +114,7 @@ pub(crate) fn grant_selectors(
         .map(python_strip)
         .filter(|hash| !hash.is_empty());
     let named = python_strip(&intent.mcp_server_name);
-    let category = enum_text(&intent.intent).as_deref().and_then(category_for);
+    let category = grant_category(intent);
     let (Some(identity), Some(category)) = (identity, category) else {
         return Vec::new();
     };
