@@ -326,7 +326,7 @@ transcript in the pull request (after BP-T052).
   `src/codex_plugin_scanner/guard/extension_builder/listing.py` and
   `scripts/notify_merged_extension_claimants.py`. Add the surface filter to Protection Center
   (`dashboard/src/protection-center/`).
-- [ ] **BP-T052** CLI `hol-guard browser explain --driver <id> --tool <name> --args <json>`: native,
+- [x] **BP-T052** CLI `hol-guard browser explain --driver <id> --tool <name> --args <json>`: native,
   side-effect free, prints the `BrowserActionV2`, the decision, and grant eligibility. Python is
   argument parsing and rendering.
 - [ ] **BP-T053** Extension Builder: `hol-guard extensions generate --browser` and
