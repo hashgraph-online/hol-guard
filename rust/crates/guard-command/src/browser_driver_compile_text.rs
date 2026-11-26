@@ -169,7 +169,7 @@ pub(super) fn is_display_text(value: &str, max_chars: usize) -> bool {
 
 /// An `https://` URL with a lowercase DNS host, no port, userinfo, query or fragment.
 pub(super) fn is_https_url(value: &str) -> bool {
-    if value.len() > 256 {
+    if value.chars().count() > 256 {
         return false;
     }
     let Some(rest) = value.strip_prefix("https://") else {

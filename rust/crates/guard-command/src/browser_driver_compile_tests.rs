@@ -201,6 +201,55 @@ fn rejects_unknown_fields() {
 }
 
 #[test]
+fn rejects_explicit_null_for_optional_fields() {
+    for (pointer, field) in [
+        ("", "referenceVersion"),
+        ("", "icon"),
+        ("/publisher", "url"),
+        ("/profileMode", "flags"),
+    ] {
+        let mut value = example();
+        value.pointer_mut(pointer).unwrap()[field] = Value::Null;
+        rejects(value, BrowserDriverCompileError::JsonInvalid);
+    }
+    for tool in [
+        json!({"name": "open_page", "verb": "Navigate", "url": null}),
+        json!({"name": "open_page", "verb": null, "url": ["url"]}),
+        json!({"name": "press", "verb": "Click", "element": null}),
+        json!({"name": "act", "discriminator": "action", "cases": null}),
+        json!({"name": "send_protocol", "cdpPassthrough": {"method": ["method"], "params": null}}),
+        json!({"name": "act", "discriminator": "action", "cases": {"go": {"verb": "Navigate", "url": null}}}),
+    ] {
+        rejects(tool_with(tool), BrowserDriverCompileError::JsonInvalid);
+    }
+}
+
+#[test]
+fn urls_follow_the_schema_length_and_domain_rules() {
+    let long_path = format!("https://example.org/{}", "\u{e9}".repeat(120));
+    assert_eq!(long_path.chars().count(), 140);
+    assert!(long_path.len() > 256);
+    for url in [
+        long_path.as_str(),
+        "https://example.a1",
+        "https://example.org/x-1",
+    ] {
+        compile(&with("/referenceUrls", json!([url])))
+            .unwrap_or_else(|error| panic!("{url}: {error:?}"));
+    }
+    let too_long = format!("https://example.org/{}", "a".repeat(237));
+    assert_eq!(too_long.chars().count(), 257);
+    rejects(
+        with("/referenceUrls", json!([too_long])),
+        BrowserDriverCompileError::ReferenceInvalid,
+    );
+    rejects(
+        with("/referenceUrls", json!(["https://example.1a"])),
+        BrowserDriverCompileError::ReferenceInvalid,
+    );
+}
+
+#[test]
 fn rejects_header_fields() {
     use BrowserDriverCompileError as E;
     rejects(

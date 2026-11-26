@@ -17,7 +17,7 @@ pub(super) struct RawDriver {
     pub publisher: RawPublisher,
     #[serde(default)]
     pub reference_urls: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub reference_version: Option<String>,
     #[serde(rename = "match")]
     pub matches: RawMatch,
@@ -25,7 +25,7 @@ pub(super) struct RawDriver {
     pub tools: Vec<RawTool>,
     #[serde(default)]
     pub volatile_fields: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub icon: Option<String>,
 }
 
@@ -33,7 +33,7 @@ pub(super) struct RawDriver {
 #[serde(deny_unknown_fields)]
 pub(super) struct RawPublisher {
     pub name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub url: Option<String>,
     pub verified: bool,
 }
@@ -51,7 +51,7 @@ pub(super) struct RawMatch {
 #[serde(deny_unknown_fields)]
 pub(super) struct RawProfileMode {
     pub default: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub flags: Option<RawProfileFlags>,
 }
 
@@ -79,23 +79,23 @@ pub(super) struct RawElement {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub(super) struct RawTool {
     pub name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub verb: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub url: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub element: Option<RawElement>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub text: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub script: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub file: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub discriminator: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub cases: Option<UniqueMap<RawOperation>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub cdp_passthrough: Option<RawCdpPassthrough>,
 }
 
@@ -136,17 +136,17 @@ impl RawTool {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct RawOperation {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub verb: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub url: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub element: Option<RawElement>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub text: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub script: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub file: Option<Vec<String>>,
 }
 
@@ -154,8 +154,16 @@ pub(super) struct RawOperation {
 #[serde(deny_unknown_fields)]
 pub(super) struct RawCdpPassthrough {
     pub method: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
     pub params: Option<Vec<String>>,
+}
+
+/// An optional property that, when present, must hold a value. Absent decodes to `None` through
+/// `#[serde(default)]`; an explicit `null` is refused, as the schema allows only absence.
+fn present<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    T::deserialize(deserializer).map(Some)
 }
 
 /// An object whose keys are unique. A repeated key is a decode error, never a silent overwrite.
