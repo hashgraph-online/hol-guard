@@ -293,13 +293,28 @@ fn generate(request: &Map<String, Value>) -> Value {
     });
     notes.push(json!({"code": "profile_mode_unknown"}));
     let bytes = serde_json::to_vec(&profile).unwrap_or_default();
-    if let Err(error) = compile_browser_driver(&bytes, BrowserDriverOrigin::Contributed, &[]) {
-        return json!({
-            "ok": false,
-            "error": {"code": error.code(), "message": "The draft does not compile; adjust the flags."},
-        });
+    match compile_browser_driver(&bytes, BrowserDriverOrigin::Contributed, &[]) {
+        Err(error) => {
+            return json!({
+                "ok": false,
+                "error": {"code": error.code(), "message": "The draft does not compile; adjust the flags."},
+            })
+        }
+        Ok(driver) if is_shipped_id(&driver) => {
+            return refusal(
+                "browser_driver_id_duplicate",
+                "A shipped first-party profile already uses this id; choose another --slug.",
+            )
+        }
+        Ok(_) => {}
     }
     json!({"ok": true, "profile": profile, "proposals": proposals, "notes": notes})
+}
+
+fn is_shipped_id(driver: &CompiledBrowserDriverV1) -> bool {
+    first_party_browser_drivers()
+        .iter()
+        .any(|shipped| shipped.id == driver.id)
 }
 
 fn verb_name(tool: &CompiledBrowserToolV1) -> Vec<String> {
@@ -362,10 +377,7 @@ fn validate(request: &Map<String, Value>) -> Value {
     };
     match compile_browser_driver(profile.as_bytes(), BrowserDriverOrigin::Contributed, &[]) {
         Ok(driver) => {
-            if first_party_browser_drivers()
-                .iter()
-                .any(|shipped| shipped.id == driver.id)
-            {
+            if is_shipped_id(&driver) {
                 return refusal(
                     "browser_driver_id_duplicate",
                     "A shipped first-party profile already uses this id.",

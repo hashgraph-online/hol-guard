@@ -118,6 +118,11 @@ fn generate_refuses_missing_flags_and_reserved_names() {
         run(request)["error"]["code"],
         "browser_driver_reserved_name_claimed"
     );
+    let mut request = generate_request();
+    request["slug"] = json!("browsermcp");
+    let result = run(request);
+    assert_eq!(result["ok"], false);
+    assert_eq!(result["error"]["code"], "browser_driver_id_duplicate");
 }
 
 #[test]
