@@ -288,8 +288,12 @@ def load_tools(path: Path) -> list[dict[str, Any]]:
 
 
 def main(argv: list[str]) -> int:
+    # Profile flags such as ``--isolated`` belong to the launch Guard reads; the stand-in ignores them.
+    argv = [argument for argument in argv if not argument.startswith("--")]
     if len(argv) < 3:
-        sys.stderr.write("usage: browser_driver_server.py <tools.json> <journal.jsonl> [server-name] [start-page]\n")
+        sys.stderr.write(
+            "usage: browser_driver_server.py <tools.json> <journal.jsonl> [server-name] [start-page] [--flag ...]\n"
+        )
         return 2
     state = BrowserState(load_tools(Path(argv[1])), Path(argv[2]), argv[3] if len(argv) > 3 else "browser")
     start_file = Path(argv[2]).with_name(START_PAGE_FILE)

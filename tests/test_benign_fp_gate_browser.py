@@ -87,8 +87,8 @@ def test_the_start_page_never_changes_the_configured_launch(tmp_path: Path) -> N
     assert set(PAGE_NAMES) >= {"docs-article", "local-dev"}
     launch = browser_server_command(tmp_path, "playwright")
     assert server_command(tmp_path, "playwright") == launch
-    assert launch[-1] == "playwright"
-    marker = Path(launch[-2]).with_name(START_PAGE_FILE)
+    assert launch[-2:] == ["playwright", "--isolated"]
+    marker = Path(launch[-3]).with_name(START_PAGE_FILE)
     with start_page(tmp_path, "docs-article"):
         assert marker.read_text(encoding="utf-8") == "docs-article"
         assert server_command(tmp_path, "playwright") == launch

@@ -73,7 +73,7 @@ def _journal(home: Path) -> Path:
 def browser_server_command(home: Path, server: str) -> list[str]:
     """The launch a harness config writes for one browser stand-in; the start page is not part of it."""
     root = _root(home)
-    return [
+    command = [
         sys.executable,
         "-u",
         str(root / "server.py"),
@@ -81,6 +81,8 @@ def browser_server_command(home: Path, server: str) -> list[str]:
         str(_journal(home)),
         server,
     ]
+    # The reference driver runs in an isolated profile, the shape the loopback quiet set (D10) needs.
+    return [*command, "--isolated"] if server == REFERENCE_DRIVER else command
 
 
 @contextmanager

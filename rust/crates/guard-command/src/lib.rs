@@ -36,6 +36,8 @@ pub mod browser_driver_enablement;
 pub mod browser_driver_match;
 pub mod browser_first_party_drivers;
 pub mod browser_guard_origin;
+pub(crate) mod browser_launch_args;
+pub(crate) mod browser_loopback_quiet;
 pub mod browser_mcp_intent;
 pub mod browser_omp_eval_action;
 pub mod browser_provider_switches;

@@ -416,20 +416,7 @@ fn redacted_url(parts: &UrlSplit) -> String {
 }
 
 fn profile_mode(metadata: &Map<String, Value>) -> BrowserProfileModeV1 {
-    let identity_args = metadata
-        .get("mcp_server_identity")
-        .and_then(Value::as_object)
-        .and_then(|identity| identity.get("args"))
-        .and_then(Value::as_array);
-    let direct_args = metadata.get("args").and_then(Value::as_array);
-    let server_args = metadata.get("server_args").and_then(Value::as_array);
-    first_party_profile_mode(
-        [identity_args, direct_args, server_args]
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(Value::as_str),
-    )
+    first_party_profile_mode(crate::browser_launch_args::launch_args(metadata))
 }
 
 /// The native sensitive-surface screens for one browser call. Driver profile projection unions
@@ -790,6 +777,24 @@ pub(crate) struct BrowserRiskFacts {
     pub sensitive_surface: bool,
     /// The action targets Guard's own approval center (R-SELF).
     pub guard_origin: bool,
+    /// Where the action lands, when Guard knows: its own URL argument, else the reported page for
+    /// an action on that page. A history step or a tab switch with no URL leaves the reported
+    /// page, so its destination is unknown.
+    pub destination: Option<String>,
+    pub profile: BrowserProfileModeV1,
+    /// The server's launch arguments name a remote-debugging or shared-profile flag.
+    pub debugging_or_shared_launch: bool,
+}
+
+/// Whether the page the driver reports is where this action lands. Inspection and interaction act
+/// on it; of the navigations, only a reload or a wait stays on it.
+fn current_page_is_destination(intent: &BrowserIntentV1, operation: &str) -> bool {
+    if !matches!(intent, BrowserIntentV1::Navigation) {
+        return true;
+    }
+    let name = operation.to_ascii_lowercase();
+    let name = name.strip_prefix("browser_").unwrap_or(&name);
+    name.starts_with("reload") || name.starts_with("wait_for")
 }
 
 pub(crate) fn browser_risk_facts(
@@ -813,17 +818,21 @@ pub(crate) fn browser_risk_facts(
         }
         _ => ArgumentValues::Parsed(Map::new()),
     };
-    let target = target_url(&values)
-        .or_else(|| optional_str(artifact.metadata.get("browser_current_page_url")));
-    let external_domain = target
-        .and_then(|target| urlsplit(target).ok())
-        .is_some_and(|parts| {
-            hostname(&parts).is_some_and(|domain| {
-                !domain.is_empty()
-                    && !domain.eq_ignore_ascii_case("localhost")
-                    && !matches!(domain, "127.0.0.1" | "::1")
+    let argument_target = target_url(&values);
+    let current_page = optional_str(artifact.metadata.get("browser_current_page_url"));
+    let target = argument_target.or(current_page);
+    let destination = argument_target
+        .or_else(|| current_page.filter(|_| current_page_is_destination(&intent, operation)));
+    let external_domain = target.is_some_and(|target| {
+        !crate::browser_guard_origin::loopback_port(target).is_some_and(|(loopback, _)| loopback)
+            && urlsplit(target).ok().is_some_and(|parts| {
+                hostname(&parts).is_some_and(|domain| {
+                    !domain.is_empty()
+                        && !domain.eq_ignore_ascii_case("localhost")
+                        && !matches!(domain, "127.0.0.1" | "::1")
+                })
             })
-        });
+    });
     let guard_origin = [
         target,
         optional_str(artifact.metadata.get("browser_current_page_url")),
@@ -835,15 +844,21 @@ pub(crate) fn browser_risk_facts(
     visit_sensitive_surfaces(operation, &values, &artifact.metadata, |_| {
         sensitive_surface = true
     });
+    let profile = profile_mode(&artifact.metadata);
     Some(BrowserRiskFacts {
         intent,
         external_domain,
         shared_profile: matches!(
-            profile_mode(&artifact.metadata),
+            profile,
             BrowserProfileModeV1::Shared | BrowserProfileModeV1::RemoteDebugging
         ),
         sensitive_surface,
         guard_origin,
+        destination: destination.map(str::to_owned),
+        profile,
+        debugging_or_shared_launch: crate::browser_launch_args::debugging_or_shared_launch(
+            crate::browser_launch_args::launch_args(&artifact.metadata),
+        ),
     })
 }
 
