@@ -7,6 +7,9 @@ browser review card and to scope approvals to an origin instead of a raw argumen
 
 A profile only describes a driver. It cannot allow anything, lower a review, or add a verb.
 
+To write or change one, follow
+[Contribute a browser driver profile](../../docs/guard/extensions/browser-driver-contributing.md).
+
 ## Files
 
 - Name the file `<id>.json`, for example `browser.example-pilot.json`.
