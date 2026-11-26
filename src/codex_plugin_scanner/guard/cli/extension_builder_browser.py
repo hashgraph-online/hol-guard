@@ -115,10 +115,22 @@ def validate_browser_driver(path: Path) -> dict[str, object]:
 
 
 _OMISSION_NOTES = {
-    "tool_name_unsupported": "Skipped {tool}: Guard tool names use lowercase letters, digits, '.', '_' or '-'.",
+    "tool_name_unsupported": (
+        "Skipped {tool}: Guard tool names are at most 64 characters of lowercase letters, digits, '.', '_' or '-'."
+    ),
     "tool_limit": "Skipped {tool}: a profile holds at most 256 tools.",
     "tool_skipped": "Skipped a tool list entry: {detail}.",
 }
+
+
+_SHOWN_NAME_LIMIT = 80
+
+
+def _shown(value: object) -> str:
+    """A tool list value made safe to print: control characters become '?' and long text is cut."""
+    text = str(value)
+    shown = "".join(character if character.isprintable() else "?" for character in text[:_SHOWN_NAME_LIMIT])
+    return shown + ("..." if len(text) > _SHOWN_NAME_LIMIT else "")
 
 
 def _emit_omissions(notes: object, output: TextIO) -> None:
@@ -129,7 +141,10 @@ def _emit_omissions(notes: object, output: TextIO) -> None:
         template = _OMISSION_NOTES.get(code) if isinstance(code, str) else None
         if template:
             print(
-                "  " + template.format(tool=note.get("tool", "a tool"), detail=note.get("detail", "unreadable")),
+                "  "
+                + template.format(
+                    tool=_shown(note.get("tool", "a tool")), detail=_shown(note.get("detail", "unreadable"))
+                ),
                 file=output,
             )
 

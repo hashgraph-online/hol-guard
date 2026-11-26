@@ -99,6 +99,22 @@ def test_browser_generate_text_output_names_skipped_tools(
     assert "Skipped page_extra: a profile holds at most 256 tools." in text
 
 
+def test_browser_generate_text_output_escapes_rejected_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    hostile = "Bad\x1b[2K\rName" + "x" * 200
+    draft = {**DRAFT, "notes": [{"code": "tool_name_unsupported", "tool": hostile}]}
+    monkeypatch.setattr(extension_builder_browser, "native_browser_request", lambda request, *, code: draft)
+    output = tmp_path / "browser.example-pilot.json"
+    status = cli.main(["guard", "extensions", "generate", *generate_args(tmp_path, output)])
+    text = capsys.readouterr().out
+    assert status == 0, text
+    assert "\x1b" not in text
+    assert "Skipped Bad?[2K?Name" in text
+    assert "x" * 81 not in text
+    assert "...: Guard tool names are at most 64 characters" in text
+
+
 def test_browser_generate_refuses_a_reply_without_profile_text(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
