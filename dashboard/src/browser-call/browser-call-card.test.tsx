@@ -158,6 +158,24 @@ const render = (request: GuardApprovalRequest) => renderToStaticMarkup(PrimaryAc
   assert(markup.includes("Guard treats it as your own profile."), "T-BCC-19: an unknown browser is treated as shared");
 }
 
+// A masked script keeps its code off the card: only its length shows.
+{
+  const markup = render(
+    item(
+      "page_eval",
+      { script: "() => 'masked-sample-script'" },
+      card({
+        headline: "Claude Code wants to run a script in the browser",
+        verb: "evaluate",
+        detail: { element_preview: null, input_kind: "script", input_length: 27, input_masked: true },
+        risk_chips: ["script_eval"],
+      }),
+    ),
+  );
+  assert(!markup.includes("masked-sample-script"), "T-BCC-19b: a masked script appears nowhere on the card");
+  assert(markup.includes("Hidden · 27 characters"), "T-BCC-19c: a masked script shows only its length");
+}
+
 // Without a card, the ordinary MCP card renders.
 {
   const markup = render(item("page_open", { url: "https://shop.example.test/" }, null));

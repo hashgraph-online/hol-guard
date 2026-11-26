@@ -14690,7 +14690,7 @@ function explainBrowserCard(card, context) {
     ...fact$1("Browser", PROFILES[card.profile_line], "browser_profile"),
     ...fact$1("Touches", card.risk_chips.map((chip) => SURFACES[chip]).join(", "), "browser_surfaces")
   ];
-  const codeKey = card.verb === "evaluate" && input !== null ? CODE_KEYS.find((key) => typeof input[key] === "string" && input[key].trim().length > 0) ?? null : null;
+  const codeKey = card.verb === "evaluate" && input !== null && card.detail.input_masked !== true ? CODE_KEYS.find((key) => typeof input[key] === "string" && input[key].trim().length > 0) ?? null : null;
   const code = codeKey !== null ? codeOf(input?.[codeKey]) : null;
   const thought = textOf(input?.thought, 300);
   const site = browserSiteLabel(card.site.origin);

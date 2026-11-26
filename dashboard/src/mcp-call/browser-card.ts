@@ -153,7 +153,7 @@ export function explainBrowserCard(
     ...fact("Browser", PROFILES[card.profile_line], "browser_profile"),
     ...fact("Touches", card.risk_chips.map((chip) => SURFACES[chip]).join(", "), "browser_surfaces"),
   ];
-  const codeKey = card.verb === "evaluate" && input !== null
+  const codeKey = card.verb === "evaluate" && input !== null && card.detail.input_masked !== true
     ? (CODE_KEYS.find((key) => typeof input[key] === "string" && (input[key] as string).trim().length > 0) ?? null)
     : null;
   const code = codeKey !== null ? codeOf(input?.[codeKey]) : null;
