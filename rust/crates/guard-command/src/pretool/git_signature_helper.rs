@@ -82,8 +82,9 @@ fn user_programs(output: &[u8]) -> Option<Vec<String>> {
         return None;
     }
     let mut fields = output.split('\0');
-    let mut programs = Vec::new();
-    let mut configured = [false; PROGRAM_KEYS.len()];
+    // Git keeps the last value it reads for each signature format, and
+    // `gpg.program` and `gpg.openpgp.program` set the same OpenPGP program.
+    let mut chosen: [Option<String>; 3] = [None, None, None];
     while let Some(scope) = fields.next() {
         if scope.is_empty() {
             // Only the empty tail after the final NUL ends the reply.
@@ -111,21 +112,14 @@ fn user_programs(output: &[u8]) -> Option<Vec<String>> {
             if value.is_empty() || !program.is_absolute() && program.components().count() != 1 {
                 return None;
             }
-            configured[index] = true;
-            programs.push(value.to_owned());
+            chosen[index.saturating_sub(1)] = Some(value.to_owned());
         }
     }
-    // `gpg.program` and `gpg.openpgp.program` name the same program.
-    let openpgp = configured[0] || configured[1];
-    for (default, set) in [
-        ("gpg", openpgp),
-        ("gpgsm", configured[2]),
-        ("ssh-keygen", configured[3]),
-    ] {
-        if !set {
-            programs.push(default.to_owned());
-        }
-    }
+    let programs = chosen
+        .into_iter()
+        .zip(["gpg", "gpgsm", "ssh-keygen"])
+        .map(|(program, default)| program.unwrap_or_else(|| default.to_owned()))
+        .collect();
     Some(programs)
 }
 

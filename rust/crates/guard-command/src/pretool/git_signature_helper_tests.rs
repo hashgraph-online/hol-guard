@@ -8,7 +8,7 @@ fn user_and_system_settings_name_the_programs_a_check_can_start() {
             b"global\0gpg.format\nssh\0global\0gpg.ssh.program\n/opt/signer/bin/ssh-sign\0"
         )
         .unwrap(),
-        ["/opt/signer/bin/ssh-sign", "gpg", "gpgsm"]
+        ["gpg", "gpgsm", "/opt/signer/bin/ssh-sign"]
     );
     assert_eq!(
         user_programs(b"system\0gpg.program\n/usr/local/bin/gpg2\0").unwrap(),
@@ -41,5 +41,53 @@ fn a_program_git_cannot_place_keeps_the_review() {
         b"global\0gpg.program\n/usr/bin/gpg",
     ] {
         assert!(user_programs(reply).is_none(), "{reply:?}");
+    }
+}
+
+#[test]
+fn a_later_setting_replaces_the_program_an_earlier_one_named() {
+    // A global setting overrides the system one, and the two OpenPGP keys
+    // name the same program, so only the last one counts.
+    assert_eq!(
+        user_programs(
+            b"system\0gpg.program\n/old/missing/gpg\0global\0gpg.program\n/usr/bin/gpg\0"
+        )
+        .unwrap(),
+        ["/usr/bin/gpg", "gpgsm", "ssh-keygen"]
+    );
+    assert_eq!(
+        user_programs(
+            b"system\0gpg.program\n/old/missing/gpg\0global\0gpg.openpgp.program\n/usr/bin/gpg2\0"
+        )
+        .unwrap(),
+        ["/usr/bin/gpg2", "gpgsm", "ssh-keygen"]
+    );
+    // An overridden record still has to come from a scope the user owns.
+    assert!(
+        user_programs(b"local\0gpg.program\n/tmp/x\0global\0gpg.program\n/usr/bin/gpg\0").is_none()
+    );
+}
+
+#[test]
+fn a_program_path_the_kernel_resolves_per_process_is_never_trusted() {
+    use crate::pretool::git_config_trust::process_relative;
+    use std::path::Path;
+    for path in [
+        "/proc/self/cwd/signer",
+        "/proc/thread-self/cwd/gpg",
+        "/proc/1/root/usr/bin/gpg",
+        "/dev/fd/3",
+        "/dev/stdin",
+    ] {
+        assert!(process_relative(Path::new(path)), "{path}");
+    }
+    for path in [
+        "/usr/bin/gpg",
+        "/opt/proc/gpg",
+        "/dev/null",
+        "gpg",
+        "bin/gpg",
+    ] {
+        assert!(!process_relative(Path::new(path)), "{path}");
     }
 }
