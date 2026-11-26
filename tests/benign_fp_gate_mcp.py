@@ -421,16 +421,27 @@ def replay(
     if case.server == READY_SERVER:
         allow_ready_server(store, identity)
     command = _relay_command(case, fixture)
-    known = {str(row.get("request_id")) for row in store.list_approval_requests(status=None, limit=500)}
+    before = {
+        str(row.get("request_id")): int(row.get("dedupe_count") or 1)
+        for row in store.list_approval_requests(status=None, limit=500)
+        if isinstance(row, dict) and row.get("request_id")
+    }
+    known = set(before)
     with start_page(fixture.home, case.page):
         if case.state == PENDING_SAME_CALL:
             # The same call is made once first and left unanswered, so the measured call is a retry.
             seed = _decide(command, fixture, case)
             if "relay_defer" in seed:
                 return seed, [], identity.identity_hash
-            await_rows(store, known, waiting="error" in seed)
+            await_rows(store, known, waiting="error" in seed, changed_from=before)
         response = _decide(command, fixture, case)
-    rows = await_rows(store, known, waiting="error" in response, retried=case.state == PENDING_SAME_CALL)
+    rows = await_rows(
+        store,
+        known,
+        waiting="error" in response,
+        retried=case.state == PENDING_SAME_CALL,
+        changed_from=before,
+    )
     return response, rows, identity.identity_hash
 
 
