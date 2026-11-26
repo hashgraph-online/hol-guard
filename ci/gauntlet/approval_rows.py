@@ -84,7 +84,9 @@ def approval_rows(
             continue
         request_id = str(row.get("request_id") or "")
         dedupe_count = int(row.get("dedupe_count") or 1)
-        if request_id in known_ids and dedupe_count <= (changed_from or {}).get(request_id, 0):
+        if request_id in known_ids and (
+            changed_from is None or dedupe_count <= changed_from.get(request_id, 0)
+        ):
             continue
         # The native contract also binds a token carried in the artifact hash, not only the envelope's.
         ((contract, token),) = _native_scopes([row])
