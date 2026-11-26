@@ -10,50 +10,21 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
+#[path = "context_assistance_engine_definitions.rs"]
+mod definitions;
+pub(crate) use definitions::{definition, written_name};
+
 /// Files read for one prompt, so the read stays inside the hook's budget.
 const MAX_FILES: usize = 3;
 /// Files kept out for what they hold that one prompt reads to place lines in,
 /// and the most of each, the size Guard's own read takes.
 const MAX_WITHHELD_FILES: usize = 4;
 const MAX_WITHHELD_BYTES: usize = 262_144;
-/// Words that open a definition line, after any modifiers.
-const DEFINERS: [&str; 13] = [
-    "def ",
-    "class ",
-    "fn ",
-    "function ",
-    "func ",
-    "struct ",
-    "enum ",
-    "trait ",
-    "impl ",
-    "interface ",
-    "type ",
-    "mod ",
-    "module ",
-];
-/// Words that bind a value: a definition only at a file's top level, since
-/// inside a function they name a local.
-const BINDERS: [&str; 3] = ["const ", "let ", "var "];
 /// Marks that open and close a docstring, whose lines are text about the
 /// code, not definitions.
 const DOCSTRINGS: [&str; 2] = ["\"\"\"", "'''"];
 /// Prose files, whose lines read as words, not definitions.
 const PROSE: [&str; 6] = ["md", "markdown", "mdx", "txt", "rst", "adoc"];
-/// Modifiers that may come before a definer.
-const MODIFIERS: [&str; 11] = [
-    "export ",
-    "default ",
-    "pub ",
-    "pub(crate) ",
-    "pub(super) ",
-    "async ",
-    "static ",
-    "public ",
-    "private ",
-    "protected ",
-    "abstract ",
-];
 
 /// Files picked by hand for one project in a running worker, and the app
 /// they were picked for.
@@ -187,20 +158,6 @@ fn after_string(rest: &str, quote: char) -> &str {
         }
     }
     ""
-}
-
-/// A line that opens a function, type or top-level value definition.
-pub(crate) fn definition(line: &str) -> bool {
-    let top_level = !line.starts_with(char::is_whitespace);
-    let mut rest = line.trim_start();
-    while let Some(after) = MODIFIERS
-        .iter()
-        .find_map(|modifier| rest.strip_prefix(modifier))
-    {
-        rest = after;
-    }
-    DEFINERS.iter().any(|definer| rest.starts_with(definer))
-        || (top_level && BINDERS.iter().any(|binder| rest.starts_with(binder)))
 }
 
 /// Whether `path` names a prose file.
