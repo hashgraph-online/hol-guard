@@ -3,23 +3,35 @@ use serde_json::json;
 use std::path::{Path, PathBuf};
 
 /// A session directory inside a scratch root, canonicalized. The resolver
-/// takes only ASCII drive paths, so a temporary directory spelled with any
-/// other character (a profile named `José`) cannot host the fixture; those
-/// hosts skip the test rather than report a resolver regression.
+/// reads only ASCII local drive paths (`C:\...`) and refuses an apostrophe
+/// in a directory outside the session, so a temporary directory on a network
+/// share, or spelled with other characters (a profile named `José` or
+/// `O'Brien`), cannot host the fixture; those hosts skip the test rather
+/// than report a resolver regression.
 fn layout(name: &str) -> Option<(PathBuf, PathBuf)> {
-    let temp = std::env::temp_dir();
-    if !temp.to_str().is_some_and(|text| text.is_ascii()) {
-        eprintln!("skipped: the temporary directory is not an ASCII drive path");
-        return None;
-    }
-    let root = temp.join(format!("guard-omp-wincwd-{}-{name}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("guard-omp-wincwd-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let session = root.join("org");
     std::fs::create_dir_all(&session).unwrap();
-    Some((
-        root.canonicalize().unwrap(),
-        session.canonicalize().unwrap(),
-    ))
+    let root = root.canonicalize().unwrap();
+    if !supported_fixture(&drive_spelling(&root)) {
+        eprintln!("skipped: the temporary directory is not an ASCII local drive path without an apostrophe");
+        let _ = std::fs::remove_dir_all(&root);
+        return None;
+    }
+    Some((root, session.canonicalize().unwrap()))
+}
+
+fn supported_fixture(spelling: &str) -> bool {
+    let bytes = spelling.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && bytes[2] == b'\\'
+        && spelling.is_ascii()
+        && !spelling
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte == b'\'')
 }
 
 /// The drive spelling of a canonical directory: Windows canonicalizes to the
