@@ -80,6 +80,13 @@ fn browser_context(
     Ok(Some(BrowserSignalContext { target, surfaces }))
 }
 
+/// The reason an agent and the dashboard read for an R-SELF block. It names no address: the
+/// approval center's URL must never reach the agent that was stopped from opening it.
+pub const GUARD_ORIGIN_SUMMARY: &str = "Guard blocked this browser action because it reaches \
+     Guard's own approval center. Only the person using this computer answers Guard's requests; \
+     do not open, click or read the approval center from an agent. Ask the user to review any \
+     pending request themselves.";
+
 fn signal_for(category: &str, browser: Option<&BrowserSignalContext>) -> Option<String> {
     let fixed = match category {
         "filesystem_access" => Some("call shape implies filesystem path access"),
@@ -153,10 +160,7 @@ pub fn evaluate_risk_evidence(input: &McpToolRiskInputV1) -> Result<Value, &'sta
     let summary = match input.summary_code.as_deref() {
         None | Some("risk") => risk_summary(&signals),
         Some("no_risk") => "Guard did not detect a high-risk signal in this tool call.".to_owned(),
-        Some("guard_origin") => {
-            "Guard blocked this browser action because it reaches Guard's own approval center."
-                .to_owned()
-        }
+        Some("guard_origin") => GUARD_ORIGIN_SUMMARY.to_owned(),
         Some("configuration_stricter") => {
             "Local Guard's current configuration is stricter than the tool-call-specific recommendation."
                 .to_owned()

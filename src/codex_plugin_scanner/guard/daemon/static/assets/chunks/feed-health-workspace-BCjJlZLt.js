@@ -1,5 +1,5 @@
 import { G as HiMiniCheckCircle, d6 as HiMiniInformationCircle, aq as HiMiniExclamationTriangle, j as jsxRuntimeExports, A as ActionButton, S as SectionLabel, k as HiMiniArrowPath, fG as HiMiniSignal, aS as HiMiniXCircle, bO as HiMiniClock, s as formatRelativeTime, as as Badge, T as Tag } from "../guard-dashboard.js";
-import { u as useSupplyChainBundle } from "./supply-chain-hub-workspace-DYqi92V0.js";
+import { u as useSupplyChainBundle } from "./supply-chain-hub-workspace-BvZaLsGE.js";
 function missingBundleMessage(cloudState) {
   if (cloudState === "local_only") {
     return "Guard has not synced a supply chain bundle yet. Connect to Guard Cloud for live advisory data.";

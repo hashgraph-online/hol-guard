@@ -28,6 +28,7 @@ import type {
   GuardSupplyChainScannerEvidence,
 } from "./guard-types";
 import { isSupplyChainAuditEvidence } from "./guard-types";
+import { GUARD_ORIGIN_COPY, isGuardOriginBlock } from "./browser-guard-origin";
 import { useResolvedApprovalGate } from "./use-resolved-approval-gate";
 import {
   resolveManagerCoverageManagers,
@@ -192,6 +193,22 @@ export function deriveFrontendAuditResults(
     evidenceParams.set("harness", r.harness || "global");
     if (r.artifact_name) {
       evidenceParams.set("search", r.artifact_name);
+    }
+    if (isGuardOriginBlock(r)) {
+      results.push({
+        id: `blocked-${r.receipt_id}`,
+        severity: "medium",
+        title: GUARD_ORIGIN_COPY.title,
+        detail: GUARD_ORIGIN_COPY.detail,
+        harness: r.harness,
+        workspace: r.source_scope ?? null,
+        timestamp: r.timestamp,
+        remediation: GUARD_ORIGIN_COPY.remediation,
+        remediationAction: null,
+        resolved: true,
+        evidenceHref: `/evidence?${evidenceParams.toString()}`,
+      });
+      continue;
     }
     results.push({
       id: `blocked-${r.receipt_id}`,

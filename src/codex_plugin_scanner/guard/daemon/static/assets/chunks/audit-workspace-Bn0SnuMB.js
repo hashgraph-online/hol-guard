@@ -1,8 +1,17 @@
 import { j as jsxRuntimeExports, T as Tag, s as formatRelativeTime, r as reactExports, A as ActionButton, fB as HiMiniChevronLeft, q as HiMiniChevronRight, eM as IconActionButton, ak as HiMiniXMark, bh as GuardModalLayer, e5 as HiMiniFunnel, h as HiMiniMagnifyingGlass, fC as HiMiniArrowDown, fA as HiMiniArrowUp, c as HiMiniFolder, S as SectionLabel, k as HiMiniArrowPath, eO as HiMiniBugAnt, al as EmptyState, bn as HiMiniAdjustmentsHorizontal, eT as ConnectFlowCard, aq as HiMiniExclamationTriangle, d4 as useResolvedApprovalGate, fD as runAuditRemediation, as as Badge, fE as isBlockedGuardAction, eK as isSupplyChainAuditEvidence, G as HiMiniCheckCircle, aS as HiMiniXCircle, t as harnessDisplayName, aY as ApprovalProofModal, F as HiMiniDocumentText, cb as guardAwareHref, ad as HiMiniShieldCheck } from "../guard-dashboard.js";
 import { f as isApprovalGateRequiredError } from "./harness-action-errors-D4J9GNrk.js";
 import { r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats-BVtc2w17.js";
-import { n as normalizeSupplyChainAuditWorkspaceInput, p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, c as sortPackageWorkbenchFindings, l as listSupplyChainAuditWorkspaceChoices } from "./supply-chain-hub-workspace-DYqi92V0.js";
+import { n as normalizeSupplyChainAuditWorkspaceInput, p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, c as sortPackageWorkbenchFindings, l as listSupplyChainAuditWorkspaceChoices } from "./supply-chain-hub-workspace-BvZaLsGE.js";
 import { c as createLatestRefresh, f as fetchWorkspaceFindings, s as sameWorktree, w as worktreeStatus } from "./workspace-findings-status-2OO9RRRx.js";
+const GUARD_ORIGIN_REASON_PREFIX = "Guard blocked this browser action because it reaches Guard's own approval center.";
+const GUARD_ORIGIN_COPY = {
+  title: "Blocked: an agent's browser reached Guard's approval center",
+  detail: "An agent tried to open, click or read Guard's approval center from its browser tool. Guard always stops this, so an agent can never answer its own requests.",
+  remediation: "Nothing to change. No approval, grant or setting allows this. Review pending requests yourself in your own browser."
+};
+function isGuardOriginBlock(receipt) {
+  return typeof receipt.capabilities_summary === "string" && receipt.capabilities_summary.startsWith(GUARD_ORIGIN_REASON_PREFIX);
+}
 const STEPS = [
   { id: "preparing", label: "Prepare workspace" },
   { id: "scanning", label: "Scan manifests and lockfiles" },
@@ -1232,6 +1241,22 @@ function deriveFrontendAuditResults(receipts, snapshot) {
     evidenceParams.set("harness", r.harness || "global");
     if (r.artifact_name) {
       evidenceParams.set("search", r.artifact_name);
+    }
+    if (isGuardOriginBlock(r)) {
+      results.push({
+        id: `blocked-${r.receipt_id}`,
+        severity: "medium",
+        title: GUARD_ORIGIN_COPY.title,
+        detail: GUARD_ORIGIN_COPY.detail,
+        harness: r.harness,
+        workspace: r.source_scope ?? null,
+        timestamp: r.timestamp,
+        remediation: GUARD_ORIGIN_COPY.remediation,
+        remediationAction: null,
+        resolved: true,
+        evidenceHref: `/evidence?${evidenceParams.toString()}`
+      });
+      continue;
     }
     results.push({
       id: `blocked-${r.receipt_id}`,

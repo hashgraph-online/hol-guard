@@ -208,7 +208,19 @@ fn the_evidence_step_accepts_the_guard_origin_summary() {
     let evidence = crate::mcp_tool_signals::evaluate_risk_evidence(&input).unwrap();
     let summary = evidence["summary"].as_str().unwrap();
     assert!(summary.contains("approval center"), "{summary}");
-    assert!(!summary.contains("51234"), "{summary}");
+    assert!(summary.contains("Ask the user"), "{summary}");
+    // The stopped agent must not learn where the approval center is.
+    for leak in [
+        "51234",
+        "://",
+        "http",
+        "localhost",
+        "127.0.0.1",
+        "[::1]",
+        "/approvals",
+    ] {
+        assert!(!summary.contains(leak), "{leak} in {summary}");
+    }
     let signals = evidence["signals"].to_string();
     assert!(signals.contains("Guard's own approval center"), "{signals}");
 }
