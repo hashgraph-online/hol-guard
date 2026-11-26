@@ -1,8 +1,8 @@
-import { r as reactExports, aX as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aY as ApprovalProofModal, T as Tag, aZ as PROTECTION_POSTURE_COPY, a_ as POSTURE_OUTCOME_COLUMNS, a$ as harnessPostureRows, b0 as overrideRows, aO as harnessRowTone, b1 as harnessPostureSummary, b2 as joinNames, b3 as sortHarnessRows, b4 as globalPosture, b5 as selectHarnessPosture, b6 as restartHarnessWatch, h as HiMiniMagnifyingGlass, b7 as harnessWatchPrompt, b8 as harnessPostureOptions, b9 as canRestartHarnessWatch, aR as HiMiniEye, ad as HiMiniShieldCheck, aQ as harnessRowStatus, ba as getDefaultExportFromCjs, bb as React, bc as PULSE_FACE_SCAN_OPTIONS, bd as authorizeApprovalGatePulseSetup, be as confirmApprovalGatePulseEnrollment, bf as waitForPulseApproval, f as fetchWithGuardAuth, bg as beginApprovalGatePulseEnrollment, bh as GuardModalLayer, S as SectionLabel, ak as HiMiniXMark, bi as SelectMenu, bj as disableApprovalGatePulse, bk as setApprovalGatePulseShowCommand, bl as recoverApprovalGatePulse, e as HiMiniSquares2X2, K as HiMiniLockClosed, bm as HiMiniBellAlert, bn as HiMiniAdjustmentsHorizontal, d as HiMiniCircleStack, an as HiMiniCloud, bo as TabBar, q as HiMiniChevronRight, ap as useFocusTrap, bp as fetchCloudReviewSettings, k as HiMiniArrowPath, bq as ApprovalProofFieldInputs, br as isApprovalProofSubmitDisabled, bs as buildApprovalProofCredentials, bt as changeCloudReviewSettings, bu as isRecord$1, bv as HiMiniArrowTopRightOnSquare, p as contextStatusCopy, bw as engineLabel, G as HiMiniCheckCircle, aq as HiMiniExclamationTriangle, bx as HiMiniPauseCircle, t as harnessDisplayName, by as listContextAgentSessions, bz as HiMiniLink, bA as SettingsSaveProofModal, bB as revokeContextAgentSession, bC as grantContextWorkspace, bD as authorizeContextAgentSession, bE as ContextAssistanceApiError, bF as ask, bG as parseContextScope, bH as validContextBrokerRevision, bI as isGuardDemoMode, bJ as commitDashboardLocation, bK as HiMiniArrowUturnLeft, E as HiMiniPencilSquare, bL as HiMiniCodeBracketSquare, c as HiMiniFolder, F as HiMiniDocumentText, g as HiMiniComputerDesktop, bM as HiMiniHome, y as HiMiniCheck, bN as HiMiniFolderPlus, bO as HiMiniClock, l as listContextWorkspaces, bP as HiMiniFolderOpen, bQ as manageContextWorkspace, bR as compileWorkspaceContext, I as HiMiniArrowRight, bS as HiMiniChatBubbleLeftEllipsis, bT as HiMiniDocumentMagnifyingGlass, bU as HiMiniPower, bV as HiMiniEyeSlash, bW as HiMiniCpuChip, bX as HiMiniAcademicCap, ao as HiMiniQuestionMarkCircle, a0 as HiMiniClipboardDocument, bY as HiMiniArrowLeft, aj as HiMiniSparkles, bZ as subscribeDashboardLocation, b_ as HiMiniChatBubbleLeftRight, b$ as parseContextAssistanceStatus, c0 as fetchContextInstallations, c1 as turnOnJob, c2 as shouldResumeTurnOn, c3 as turnOnRequestedAt, c4 as forgetTurnOn, c5 as rememberTurnOn, c6 as forgetTurnOnClick, c7 as rememberTurnOnJob, a as fetchContextAssistance, o as controlContextAssistance, c8 as HiMiniArrowDownTray, c9 as downloadBlob, ca as savedEvidenceCopy, cb as guardAwareHref, cc as fetchContextData, cd as forgetContextHistory, ce as forgetSavedEvidence, cf as resolveProtectionLevelCopy, cg as fetchSettings, ch as fetchRuntimeSnapshot, ci as clearHarnessWatchOverrides, cj as withHarnessPosturePatch, ck as updateSettings, cl as clearPolicy, cm as clearReviewQueue, cn as revokeApprovalGateCooldown, co as disableApprovalGateTotp, cp as importSettings, cq as resetSettings, cr as resolveSettingsSaveProofKind, cs as requiresSettingsSaveProof, ct as enrollApprovalGateTotp, cu as verifyApprovalGateTotp, cv as clearEvidence, cw as exportDiagnostics, cx as repairApprovalCenter, cy as exportSettings, cz as setupDesktopNotifications, al as EmptyState, cA as settingsWatchBannerModel, cB as WorkspacePageHeader, aa as WatchProtectionBanner, cC as navigateFromAnchor, x as HiMiniChevronDown, cD as resolveSettingsSaveProofModalCopy, cE as humanizeList, cF as isProtectionPosture, cG as deriveProtectionPosture, cH as normalizeHarnessPostures, cI as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { r as reactExports, aX as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aY as ApprovalProofModal, T as Tag, aZ as PROTECTION_POSTURE_COPY, a_ as POSTURE_OUTCOME_COLUMNS, a$ as harnessPostureRows, b0 as overrideRows, aO as harnessRowTone, b1 as harnessPostureSummary, b2 as joinNames, b3 as sortHarnessRows, b4 as globalPosture, b5 as selectHarnessPosture, b6 as restartHarnessWatch, h as HiMiniMagnifyingGlass, b7 as harnessWatchPrompt, b8 as harnessPostureOptions, b9 as canRestartHarnessWatch, aR as HiMiniEye, ad as HiMiniShieldCheck, aQ as harnessRowStatus, ba as getDefaultExportFromCjs, bb as React, bc as PULSE_FACE_SCAN_OPTIONS, bd as authorizeApprovalGatePulseSetup, be as confirmApprovalGatePulseEnrollment, bf as waitForPulseApproval, f as fetchWithGuardAuth, bg as beginApprovalGatePulseEnrollment, bh as GuardModalLayer, S as SectionLabel, ak as HiMiniXMark, bi as SelectMenu, bj as disableApprovalGatePulse, bk as setApprovalGatePulseShowCommand, bl as recoverApprovalGatePulse, e as HiMiniSquares2X2, K as HiMiniLockClosed, bm as HiMiniBellAlert, bn as HiMiniAdjustmentsHorizontal, d as HiMiniCircleStack, an as HiMiniCloud, bo as TabBar, q as HiMiniChevronRight, ap as useFocusTrap, bp as fetchCloudReviewSettings, k as HiMiniArrowPath, bq as ApprovalProofFieldInputs, br as isApprovalProofSubmitDisabled, bs as buildApprovalProofCredentials, bt as changeCloudReviewSettings, bu as isRecord$1, bv as HiMiniArrowTopRightOnSquare, p as contextStatusCopy, bw as engineLabel, G as HiMiniCheckCircle, aq as HiMiniExclamationTriangle, bx as HiMiniPauseCircle, t as harnessDisplayName, by as listContextAgentSessions, bz as HiMiniLink, bA as SettingsSaveProofModal, bB as revokeContextAgentSession, bC as grantContextWorkspace, bD as authorizeContextAgentSession, bE as ContextAssistanceApiError, bF as ask, bG as parseContextScope, bH as validContextBrokerRevision, bI as isGuardDemoMode, bJ as commitDashboardLocation, bK as HiMiniArrowUturnLeft, E as HiMiniPencilSquare, bL as HiMiniCodeBracketSquare, c as HiMiniFolder, F as HiMiniDocumentText, g as HiMiniComputerDesktop, bM as HiMiniHome, y as HiMiniCheck, bN as HiMiniFolderPlus, bO as HiMiniClock, l as listContextWorkspaces, bP as HiMiniFolderOpen, bQ as refusal, bR as manageContextWorkspace, bS as compileWorkspaceContext, I as HiMiniArrowRight, bT as HiMiniChatBubbleLeftEllipsis, bU as HiMiniDocumentMagnifyingGlass, bV as HiMiniPower, bW as HiMiniEyeSlash, bX as HiMiniCpuChip, bY as HiMiniAcademicCap, ao as HiMiniQuestionMarkCircle, a0 as HiMiniClipboardDocument, bZ as HiMiniArrowLeft, aj as HiMiniSparkles, b_ as subscribeDashboardLocation, b$ as HiMiniChatBubbleLeftRight, c0 as parseContextAssistanceStatus, c1 as fetchContextInstallations, c2 as turnOnJob, c3 as shouldResumeTurnOn, c4 as turnOnRequestedAt, c5 as forgetTurnOn, c6 as rememberTurnOn, c7 as forgetTurnOnClick, c8 as rememberTurnOnJob, a as fetchContextAssistance, o as controlContextAssistance, c9 as HiMiniArrowDownTray, ca as downloadBlob, cb as savedEvidenceCopy, cc as guardAwareHref, cd as fetchContextData, ce as forgetContextHistory, cf as forgetSavedEvidence, cg as resolveProtectionLevelCopy, ch as fetchSettings, ci as fetchRuntimeSnapshot, cj as clearHarnessWatchOverrides, ck as withHarnessPosturePatch, cl as updateSettings, cm as clearPolicy, cn as clearReviewQueue, co as revokeApprovalGateCooldown, cp as disableApprovalGateTotp, cq as importSettings, cr as resetSettings, cs as resolveSettingsSaveProofKind, ct as requiresSettingsSaveProof, cu as enrollApprovalGateTotp, cv as verifyApprovalGateTotp, cw as clearEvidence, cx as exportDiagnostics, cy as repairApprovalCenter, cz as exportSettings, cA as setupDesktopNotifications, al as EmptyState, cB as settingsWatchBannerModel, cC as WorkspacePageHeader, aa as WatchProtectionBanner, cD as navigateFromAnchor, x as HiMiniChevronDown, cE as resolveSettingsSaveProofModalCopy, cF as humanizeList, cG as isProtectionPosture, cH as deriveProtectionPosture, cI as normalizeHarnessPostures, cJ as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, G as GuardRepairControl } from "./guard-repair-control-91tBByHP.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-C1Asj0OK.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-CzWHGND8.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-Cc2GZ_t7.js";
 import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-hR3eI7UO.js";
 function describeAffectedHarness(item) {
@@ -5720,7 +5720,7 @@ function summary$1(workspace, files, documentsAllowed) {
   if (documentsAllowed && files) return `Prompts about ${folderName(workspace)} will use these ${plural$1(files, "file")}, in every AI app.`;
   return `No files picked, so your AI apps keep finding matching files in ${folderName(workspace)} on their own.`;
 }
-function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate, error, first, allowFiles, active = [], initialWorkspace = null, onGrant }) {
+function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate, error, first, maxActiveWorkspaces, allowFiles, active = [], initialWorkspace = null, onGrant }) {
   const id2 = reactExports.useId();
   const [workspace, setWorkspace] = reactExports.useState(initialWorkspace);
   const [files, setFiles] = reactExports.useState([]);
@@ -5729,6 +5729,7 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate
   const [recent, setRecent] = reactExports.useState(() => readRecentProjects());
   const [preset, setPreset] = reactExports.useState(null);
   const shortcuts = recent.filter((project) => !active.includes(project.workspace));
+  const activeWorkspaceCount = active.length;
   const input = workspace ? { workspace, files: documentsAllowed ? files : [] } : null;
   async function grant(credentials) {
     if (!input) return;
@@ -5748,6 +5749,13 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-5 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-6", "aria-labelledby": `${id2}-add`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: `${id2}-add`, className: versionHeading, children: first && !shortcuts.length ? "Add your first project" : "Add a project" }),
+      maxActiveWorkspaces ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-brand-dark/65", children: [
+        activeWorkspaceCount,
+        " of ",
+        maxActiveWorkspaces,
+        " active workspaces used.",
+        activeWorkspaceCount >= maxActiveWorkspaces ? " Remove a project or raise Active workspaces under Custom limits." : ""
+      ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Choose a folder and tick the files CIGAR should read. Secret files, like passwords and keys, are always skipped." })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { disabled: busy || dirty, className: "space-y-6", children: [
@@ -5861,7 +5869,7 @@ function projectCardClass(revoked, selected) {
   if (selected) return "border-brand-blue/30 bg-white";
   return "border-brand-dark/10 bg-white";
 }
-function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate, allowFiles }) {
+function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, maxActiveWorkspaces, gate, allowFiles }) {
   const target = useSwarmContextTarget();
   const targetRef = reactExports.useRef(target);
   const [scopes, setScopes] = reactExports.useState([]);
@@ -5927,7 +5935,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       controller.abort();
     };
   }, [listable, ready, generation]);
-  async function perform(operation2) {
+  async function perform(operation2, action) {
     if (busy || !ready) return;
     const generation2 = ++revision.current;
     request.current?.abort();
@@ -5941,7 +5949,8 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       if (revision.current === generation2 && !controller.signal.aborted) {
         if (brief) setPrevious(brief.value);
         setBrief(null);
-        setError(cause instanceof Error ? cause.message : "CIGAR could not finish that. Try again.");
+        const capacityMessage = cause instanceof ContextAssistanceApiError && action && cause.code.endsWith("context_resource_limit") ? refusal(cause.code, action, 429, maxActiveWorkspaces) : null;
+        setError(capacityMessage ?? (cause instanceof Error ? cause.message : "CIGAR could not finish that. Try again."));
       }
     } finally {
       if (revision.current === generation2) setBusy(false);
@@ -5963,7 +5972,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
       if (activeTarget && !activeTarget.workspace && startedTarget?.id === activeTarget.id) {
         setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
       }
-    });
+    }, "grant");
     return granted;
   }
   function manage(action, scopeId, sourceId) {
@@ -6017,6 +6026,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
         error,
         first: scopes.length === 0,
         initialWorkspace: target.workspace,
+        maxActiveWorkspaces,
         active: scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace),
         onGrant: grant
       },
@@ -6150,6 +6160,7 @@ function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, docu
         gate,
         error,
         first: scopes.length === 0,
+        maxActiveWorkspaces,
         active: scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace),
         onGrant: grant
       },
@@ -8663,6 +8674,7 @@ function ContextAssistanceSettings(props) {
       dirty,
       documentsAllowed: status?.effective_preferences.sources.workspace_documents === true,
       agentsAllowed: status?.effective_preferences.features.agent_context === true,
+      maxActiveWorkspaces: status?.effective_preferences.limits.max_active_workspaces,
       executionAllowed: status?.effective_preferences.features.execution_context === true && status?.capabilities?.execution_context === true,
       sharingAllowed: status?.effective_preferences.features.shared_agents === true && status?.runtime?.shared_compile_verified === true,
       gate: props.gate ?? null,

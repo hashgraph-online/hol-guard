@@ -12,8 +12,9 @@ import { clearRecentProjects } from "./recent-projects";
 import { HiMiniArrowPath, HiMiniChevronRight, HiMiniDocumentText, HiMiniFolder, HiMiniFolderOpen } from "react-icons/hi2";
 import { Tag } from "../approval-center-primitives";
 import { versionButton, versionField, versionHeading, versionLead, versionPrimary, versionQuiet } from "./versions-view";
-import { compileWorkspaceContext, grantContextWorkspace, listContextWorkspaces, manageContextWorkspace,
+import { compileWorkspaceContext, contextRefusalMessage, grantContextWorkspace, listContextWorkspaces, manageContextWorkspace,
   type ContextBrief, type ContextWorkspaceScope } from "./workspaces-api";
+import { ContextAssistanceApiError } from "./api";
 
 const fieldLabel = "text-sm font-medium text-brand-dark";
 const empty = "rounded-2xl border border-dashed border-brand-dark/15 px-5 py-8 text-center text-sm text-brand-dark/70";
@@ -24,9 +25,9 @@ function projectCardClass(revoked: boolean, selected: boolean) {
   return "border-brand-dark/10 bg-white";
 }
 // `ready` means CIGAR is running and folders can change; `waking` lists saved folders read-only while it rests or starts.
-type Props = { ready: boolean; waking?: boolean; generation: string | null; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed?: boolean; executionAllowed?: boolean; gate: GuardApprovalGatePublicConfig | null; allowFiles?: CigarAllowFiles };
+type Props = { ready: boolean; waking?: boolean; generation: string | null; dirty: boolean; documentsAllowed: boolean; agentsAllowed: boolean; sharingAllowed?: boolean; executionAllowed?: boolean; maxActiveWorkspaces?: number; gate: GuardApprovalGatePublicConfig | null; allowFiles?: CigarAllowFiles };
 
-export function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, gate, allowFiles }: Props) {
+export function ContextWorkspacesPanel({ ready, waking = false, generation, dirty, documentsAllowed, agentsAllowed, sharingAllowed = false, executionAllowed = false, maxActiveWorkspaces, gate, allowFiles }: Props) {
   const target = useSwarmContextTarget();
   const targetRef = useRef(target);
   const [scopes, setScopes] = useState<ContextWorkspaceScope[]>([]);
@@ -72,7 +73,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
     return () => { revision.current += 1; controller.abort(); };
   }, [listable, ready, generation]);
 
-  async function perform(operation: (signal: AbortSignal) => Promise<void>) {
+  async function perform(operation: (signal: AbortSignal) => Promise<void>, action?: string) {
     if (busy || !ready) return;
     const generation = ++revision.current;
     request.current?.abort();
@@ -84,7 +85,10 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
       if (revision.current === generation && !controller.signal.aborted) {
         if (brief) setPrevious(brief.value);
         setBrief(null);
-        setError(cause instanceof Error ? cause.message : "CIGAR could not finish that. Try again.");
+        const capacityMessage = cause instanceof ContextAssistanceApiError && action
+          && cause.code.endsWith("context_resource_limit")
+          ? contextRefusalMessage(cause.code, action, 429, maxActiveWorkspaces) : null;
+        setError(capacityMessage ?? (cause instanceof Error ? cause.message : "CIGAR could not finish that. Try again."));
       }
     } finally {
       if (revision.current === generation) setBusy(false);
@@ -110,7 +114,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
       if (activeTarget && !activeTarget.workspace && startedTarget?.id === activeTarget.id) {
         setSwarmContextTarget({ ...activeTarget, workspace: scope.workspace });
       }
-    });
+    }, "grant");
     return granted;
   }
 
@@ -137,6 +141,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
       filesAllowed={documentsAllowed && agentsAllowed} allowFiles={allowFiles} /> : null}
     {ready && target && documentsAllowed && loaded && !targetScope ? <AddProjectPanel key={`${cleared}:${target.id}`} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} allowFiles={allowFiles}
       executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0} initialWorkspace={target.workspace}
+      maxActiveWorkspaces={maxActiveWorkspaces}
       active={scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace)} onGrant={grant} /> : null}
     <section className="space-y-4" aria-labelledby={`${id}-projects`} aria-busy={busy}>
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
@@ -217,6 +222,7 @@ export function ContextWorkspacesPanel({ ready, waking = false, generation, dirt
     </section>
     {ready && !target ? <AddProjectPanel key={cleared} busy={busy} dirty={dirty} documentsAllowed={documentsAllowed} allowFiles={allowFiles}
       executionAllowed={executionAllowed} gate={gate} error={error} first={scopes.length === 0}
+      maxActiveWorkspaces={maxActiveWorkspaces}
       active={scopes.filter((scope) => !scope.revoked).map((scope) => scope.workspace)} onGrant={grant} /> : null}
     <ContextAgentsPanel ready={ready} enabled={agentsAllowed} dirty={dirty} generation={generation} scopes={scopes} gate={gate}
       sharingAllowed={sharingAllowed} onGranted={(scope) => setScopes((values) => [...values, scope])} />
