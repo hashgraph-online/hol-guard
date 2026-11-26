@@ -213,7 +213,37 @@ fn a_hook_no_resident_answers_goes_to_the_daemon_as_the_extension_sent_it() {
     assert!(request
         .header(DIRECT_MISS_HEADER)
         .is_some_and(|miss| !miss.is_empty()));
-    assert_eq!(request.body, PRE_TOOL.as_bytes());
+    let mut sent: Value = serde_json::from_slice(&request.body).unwrap();
+    let hint = sent
+        .as_object_mut()
+        .unwrap()
+        .remove("guard_remaining_ms")
+        .and_then(|hint| hint.as_u64());
+    assert!(hint.is_some_and(|hint| (1..=20_000).contains(&hint)));
+    assert_eq!(sent, serde_json::from_str::<Value>(PRE_TOOL).unwrap());
+}
+
+#[test]
+fn the_daemon_hears_the_time_left_not_the_budget_the_extension_stamped() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let daemon = serve_once(listener, 200, "{}".to_owned());
+    let home = home_with_daemon("pi-bridge-rehint", port);
+    // The extension stamps its whole budget before the resident attempt; a
+    // daemon that trusted it would keep working after this bridge gave up.
+    let stamped =
+        r#"{"hook_event_name":"UserPromptSubmit","prompt":"hi","guard_remaining_ms":30000}"#;
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    assert_eq!(
+        reply(&home_config(&home, "omp"), stamped, deadline),
+        Some((200, "{}".to_owned()))
+    );
+    let request = daemon.join().unwrap().unwrap();
+    let sent: Value = serde_json::from_slice(&request.body).unwrap();
+    let hint = sent["guard_remaining_ms"].as_u64().unwrap();
+    assert!((1..=2_000).contains(&hint), "daemon was told {hint} ms");
+    assert_eq!(sent["prompt"], "hi");
 }
 
 #[test]
