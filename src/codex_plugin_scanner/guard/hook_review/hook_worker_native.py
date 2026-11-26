@@ -138,7 +138,6 @@ class HookWorkerNativeMixin:
             event_name=event_name,
             guard_home=guard_home,
             deadline=deadline,
-            load_config=lambda: self._load_config(guard_home, workspace),
         )
         return {**response, **overlay} if overlay else response
 

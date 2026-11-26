@@ -77,6 +77,17 @@ fn unavailable_event_uses_reason_overrides_from_the_daemon() {
 }
 
 #[test]
+fn structured_outage_without_python_view_stays_fail_closed() {
+    let mut req = request("structured_outage");
+    req.harness = "pi".to_owned();
+    req.cli = Some(json!({"event_name": "PostToolUse"}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    let response = &result.payload.expect("payload")["response"];
+    assert_eq!(response["action"], "withhold");
+    assert_eq!(response["reason_code"], "structured_managed_authority_unavailable");
+}
+
+#[test]
 fn accepted_allow_response_marks_reuse_in_the_native_renderer() {
     let mut req = request("accepted_allow");
     req.harness = "pi".to_owned();

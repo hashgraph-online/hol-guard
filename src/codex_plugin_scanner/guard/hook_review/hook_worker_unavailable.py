@@ -7,8 +7,6 @@ direct-lane binding.
 
 from __future__ import annotations
 
-import logging
-from collections.abc import Callable
 from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, cast
@@ -19,13 +17,11 @@ from ..native_hook_render import (
     native_render_cli,
     native_unavailable_event_response,
 )
-from ..native_policy_snapshot_direct_lane_structured import structured_output_view
 
 if TYPE_CHECKING:
     from .hook_worker import HookWorker
 
 _PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode", "muse"})
-_LOG = logging.getLogger(__name__)
 MEDIATION_FIELD = "structured_content_mediation"
 _MEDIATION_SCHEMA = "guard-structured-content-mediation.v1"
 _PI_ALIASES = {"pi-agent": "pi", "pi-coding-agent": "pi", "oh-my-pi": "omp"}
@@ -52,26 +48,17 @@ def withhold_structured_destination(response: dict[str, object]) -> dict[str, ob
     return {**response, MEDIATION_FIELD: _withheld()}
 
 
-def read_structured_view(load_config: Callable[[], object]) -> dict[str, object]:
-    """Read the managed view used only by the outage-only overlay."""
-
-    try:
-        config = load_config()
-        view = None if config is None else structured_output_view(config)
-    except Exception as exc:
-        _LOG.warning("structured managed policy read failed: %s", type(exc).__name__)
-        view = None
-    return view if view is not None else {}
-
-
 def structured_outage_overlay(
     *,
     harness: str,
     event_name: str,
     guard_home: Path,
     deadline: float | None,
-    load_config: Callable[[], object],
+    load_config: object | None = None,
 ) -> dict[str, object]:
+    # Kept for callers compiled against the previous adapter signature. Rust
+    # reads the admitted direct-lane snapshot, so this callback is ignored.
+    del load_config
     if not withholds_structured_destination(harness=harness, event_name=event_name):
         return {}
     withhold = withhold_structured_destination({})
@@ -81,7 +68,7 @@ def structured_outage_overlay(
         rendered = native_render_cli(
             "structured_outage",
             harness,
-            {"event_name": event_name, "view": read_structured_view(load_config)},
+            {"event_name": event_name},
             guard_home=guard_home,
             deadline=deadline,
         )
