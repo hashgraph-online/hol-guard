@@ -28,6 +28,7 @@ pub mod attestation_verify;
 mod attestation_verify_tests;
 pub mod bash_approval;
 pub mod benign_request_api;
+pub mod browser_driver_compile;
 pub mod browser_mcp_intent;
 pub mod browser_provider_switches;
 mod bundle_metadata;
