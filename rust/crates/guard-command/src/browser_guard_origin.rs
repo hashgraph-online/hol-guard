@@ -50,11 +50,14 @@ pub fn is_guard_origin(target: &str) -> bool {
 pub(crate) fn daemon_port_possible(port: u16) -> bool {
     let (guard_home, env_port) = current_daemon_inputs();
     let guard_home = guard_home.as_deref();
-    if guard_daemon_ports(guard_home, env_port).contains(&port) {
+    // One read of the state file decides both the candidate list and the fallback range, so a
+    // rewrite between two reads cannot drop a port from both.
+    let recorded = guard_home.and_then(daemon_state_port);
+    if daemon_ports_with(guard_home, env_port, recorded).contains(&port) {
         return true;
     }
     env_port.is_none()
-        && guard_home.and_then(daemon_state_port).is_none()
+        && recorded.is_none()
         && (u32::from(GUARD_DAEMON_DEFAULT_PORT)..u32::from(GUARD_DAEMON_DEFAULT_PORT) + PORT_RANGE)
             .contains(&u32::from(port))
 }
@@ -78,9 +81,18 @@ pub fn is_guard_origin_in(target: &str, guard_home: Option<&Path>, env_port: Opt
 
 /// Every port the daemon for `guard_home` may answer on.
 pub fn guard_daemon_ports(guard_home: Option<&Path>, env_port: Option<u16>) -> Vec<u16> {
+    daemon_ports_with(guard_home, env_port, guard_home.and_then(daemon_state_port))
+}
+
+/// [`guard_daemon_ports`] for a state-file port the caller already read.
+fn daemon_ports_with(
+    guard_home: Option<&Path>,
+    env_port: Option<u16>,
+    recorded: Option<u16>,
+) -> Vec<u16> {
     let mut ports = vec![GUARD_DAEMON_DEFAULT_PORT];
     ports.extend(env_port);
-    match guard_home.and_then(daemon_state_port) {
+    match recorded {
         Some(recorded) => ports.push(recorded),
         None if env_port.is_none() => {
             ports.extend(guard_home.map(candidate_window).unwrap_or_default())

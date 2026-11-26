@@ -125,6 +125,64 @@ fn loopback_dev_pages_are_quiet_under_a_stricter_default() {
     );
 }
 
+#[test]
+fn quiet_needs_a_known_destination_and_reads_all_of_loopback() {
+    use crate::browser_guard_origin::tests::{guard_home, with_guard_home};
+    let home = guard_home("policy-quiet-destination", Some(51234));
+    let config = || serde_json::json!({"mode": "prompt", "default_action": "block"});
+    let decide = |request: McpToolPolicyRequestV1| {
+        with_guard_home(&home.0, || evaluate_tool_policy(&request).unwrap())
+    };
+    let local = "http://127.0.0.1:4173/";
+
+    // A history step leaves the reported page; where it lands is unknown, so it is never quiet.
+    let back = decide(browser_request(
+        "browser_navigate_back",
+        serde_json::json!({}),
+        Some(local),
+        &["--isolated"],
+        config(),
+    ));
+    assert_eq!(back.action, "block");
+    // A reload lands on the page it reloads.
+    let reload = decide(browser_request(
+        "browser_reload",
+        serde_json::json!({}),
+        Some(local),
+        &["--isolated"],
+        config(),
+    ));
+    assert_eq!(
+        (reload.action.as_str(), reload.source.as_str()),
+        ("allow", "browser-loopback-quiet")
+    );
+
+    // Every 127.0.0.0/8 address is loopback, not an external domain.
+    let other_loopback = decide(browser_request(
+        "browser_navigate",
+        serde_json::json!({"url": "http://127.0.0.2:4173/"}),
+        None,
+        &["--isolated"],
+        config(),
+    ));
+    assert_eq!(other_loopback.action, "allow");
+    assert!(!other_loopback
+        .risk_categories
+        .iter()
+        .any(|category| category == "browser_external_domain"));
+
+    // A token hidden behind percent-encoding is still a secret-shaped URL.
+    let encoded = "%61".repeat(64);
+    let hidden = decide(browser_request(
+        "browser_navigate",
+        serde_json::json!({"url": format!("http://127.0.0.1:4173/{encoded}")}),
+        None,
+        &["--isolated"],
+        config(),
+    ));
+    assert_eq!(hidden.action, "block");
+}
+
 /// The relay sends no `args`; its launch reaches the policy only as `server_fingerprint.command`.
 fn relay_request(tool: &str, arguments: Value, command: &[&str]) -> McpToolPolicyRequestV1 {
     let metadata = serde_json::json!({"server_name": "playwright",

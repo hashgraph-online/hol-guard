@@ -175,7 +175,7 @@ fn loopback_dev_quiet_call(request: &McpToolPolicyRequestV1, categories: &[Strin
     };
     loopback_dev_quiet(&LoopbackQuietFacts {
         categories,
-        target: facts.target.as_deref(),
+        target: facts.destination.as_deref(),
         profile: facts.profile,
         debugging_or_shared_launch: facts.debugging_or_shared_launch,
     })
