@@ -27302,7 +27302,7 @@ function parseContextBrief(value) {
   if (!object$2(value) || value.schema !== "guard-cigar-context-brief.v1" || value.data_role !== true || !digest$4(value.snapshot_id) || !text$2(value.policy_revision) || !count$1(value.graph_revision) || !text$2(value.rendered) || value.rendered.length > 262144 || !count$1(value.rendered_tokens) || !Array.isArray(value.excerpts) || value.excerpts.length > 16 || !value.excerpts.every((excerpt) => object$2(excerpt) && text$2(excerpt.text) && Array.isArray(excerpt.citations)) || !Array.isArray(value.citations) || value.citations.length > 1024 || !value.citations.every((citation) => object$2(citation) && text$2(citation.source) && text$2(citation.node_id) && count$1(citation.start_line) && citation.start_line > 0 && count$1(citation.end_line) && citation.end_line >= citation.start_line && digest$4(citation.document_digest))) invalid$3();
   return value;
 }
-function refusal(code, action2, status) {
+function refusal(code, action2, status, maxActiveWorkspaces) {
   if (/runtime_(deadline_exceeded|not_verified|closed|crashed|cancelled|transport_failed)$/.test(code)) {
     return "CIGAR stopped before it could finish. Restart CIGAR at the top of this page, then try again. Your saved project choices are kept.";
   }
@@ -27310,6 +27310,10 @@ function refusal(code, action2, status) {
   if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
   if (code.endsWith("context_resource_limit") && action2 === "authorize_agent") {
     return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
+  }
+  if (code.endsWith("context_resource_limit") && action2 === "grant") {
+    const limit = Number.isSafeInteger(maxActiveWorkspaces) && maxActiveWorkspaces > 0 ? ` (${maxActiveWorkspaces})` : "";
+    return `CIGAR is already working with as many projects as your Context size allows${limit}. Remove a project, or raise Active workspaces under Custom limits.`;
   }
   if (code.endsWith("context_busy") || code.endsWith("_busy")) return "CIGAR is still finishing something. Try again in a moment.";
   if (code.endsWith("context_scope_denied") && action2 === "grant") {
@@ -27320,12 +27324,12 @@ function refusal(code, action2, status) {
   return `CIGAR could not finish that (${code}). Refresh and try again.`;
 }
 const refusalCode = (value) => text$2(value) && /^[a-z0-9_]{1,160}$/.test(value) ? value : null;
-function refusalFromBody(body, action2, status) {
+function refusalFromBody(body, action2, status, maxActiveWorkspaces) {
   const fields2 = object$2(body) ? body : {};
   const engineCode = refusalCode(fields2.code);
   const code = engineCode ?? refusalCode(fields2.error) ?? "context_request_refused";
   const gateMessage = !engineCode && code.includes("approval_gate") && text$2(fields2.message) && fields2.message.trim() && fields2.message.length <= 300 ? fields2.message : null;
-  return { code, message: gateMessage ?? refusal(code, action2, status) };
+  return { code, message: gateMessage ?? refusal(code, action2, status, maxActiveWorkspaces) };
 }
 async function ask(route, input, proof, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context sources require a local Guard installation.");
@@ -44318,6 +44322,7 @@ export {
   HiMiniFolderOpen as bP,
   manageContextWorkspace as bQ,
   compileWorkspaceContext as bR,
+  refusal as do,
   HiMiniChatBubbleLeftEllipsis as bS,
   HiMiniDocumentMagnifyingGlass as bT,
   HiMiniPower as bU,

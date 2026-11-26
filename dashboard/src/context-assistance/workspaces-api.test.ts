@@ -46,6 +46,8 @@ assert.match(contextRefusalMessage("native_context_assistance_context_scope_deni
 assert.match(contextRefusalMessage("native_context_assistance_context_stale", "grant", 409), /files changed/);
 assert.match(contextRefusalMessage("context_request_refused", "grant", 403), /approval password/);
 assert.match(contextRefusalMessage("native_context_assistance_runtime_deadline_exceeded", "compile", 503), /Restart CIGAR/);
+assert.equal(contextRefusalMessage("native_context_assistance_context_resource_limit", "grant", 429, 2),
+  "CIGAR is already working with as many projects as your Context size allows (2). Remove a project, or raise Active workspaces under Custom limits.");
 // An unrecognised refusal names its code, so the person can report it.
 assert.equal(contextRefusalMessage("native_context_assistance_workspace_input_invalid", "grant", 400),
   "CIGAR could not finish that (native_context_assistance_workspace_input_invalid). Refresh and try again.");
