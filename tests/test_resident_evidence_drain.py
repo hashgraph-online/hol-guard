@@ -151,3 +151,43 @@ def test_page_decoder_keeps_counters_as_diagnostics_only() -> None:
 
     assert _decode_batch(_batch(record_count=0), counters) == (1, 0, False, False)
     assert counters.observed == []
+
+
+def test_resident_drain_backs_off_while_idle_and_returns_to_base_after_records(tmp_path: Path) -> None:
+    drain = ResidentEvidenceDrain(_host(tmp_path), transport=lambda: None)
+    base = resident_evidence_drain._DRAIN_INTERVAL_SECONDS
+    ceiling = resident_evidence_drain._IDLE_INTERVAL_MAX_SECONDS
+
+    waits = [base]
+    for _ in range(8):
+        waits.append(drain._next_wait_seconds(waits[-1], drained=False))
+    assert waits[1] == base * 2
+    assert waits == sorted(waits)
+    assert waits[-1] == ceiling
+    assert drain._next_wait_seconds(ceiling, drained=True) == base
+
+
+def test_resident_drain_loop_polls_less_while_the_queue_is_empty(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    requests: list[float] = []
+    waits: list[float] = []
+
+    def client(**_values: object) -> bytes:
+        requests.append(0.0)
+        return _batch(record_count=0, pages=0)
+
+    drain = ResidentEvidenceDrain(_host(tmp_path), transport=lambda: (tmp_path / "runtime", client))
+
+    def wait(seconds: float) -> bool:
+        waits.append(seconds)
+        if len(waits) >= 5:
+            drain._stop.set()
+        return drain._stop.is_set()
+
+    monkeypatch.setattr(drain._stop, "wait", wait)
+    drain._run()
+
+    assert len(requests) == 5
+    assert waits == sorted(waits)
+    assert waits[0] > resident_evidence_drain._DRAIN_INTERVAL_SECONDS
