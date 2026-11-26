@@ -43,6 +43,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_browser import (
     BROWSER_SERVERS,
     browser_server_command,
+    start_page,
     unwired_state,
     validate_browser_fields,
     write_browser_servers,
@@ -127,10 +128,10 @@ def server_script(home: Path) -> Path:
     return home / ".echo-mcp" / "server.py"
 
 
-def server_command(home: Path, server: str, page: str | None = None) -> list[str]:
+def server_command(home: Path, server: str) -> list[str]:
     """The command a harness config launches for ``server``; the name in argv keeps each server's identity apart."""
     if server in BROWSER_SERVERS:
-        return browser_server_command(home, server, page)
+        return browser_server_command(home, server)
     return [sys.executable, "-u", str(server_script(home)), server]
 
 
@@ -152,7 +153,7 @@ def write_server(home: Path) -> None:
 
 
 def _identity(case: McpCase, fixture: BenignFixture) -> McpServerIdentity:
-    command, *args = server_command(fixture.home, case.server, case.page)
+    command, *args = server_command(fixture.home, case.server)
     return build_mcp_server_identity(
         config_path=_config_path(fixture),
         command=command,
@@ -168,7 +169,7 @@ def _config_path(fixture: BenignFixture) -> str:
 
 def _relay_command(case: McpCase, fixture: BenignFixture) -> list[str]:
     """The relay command an installer writes for ``case.server`` in the Codex config."""
-    command, *args = server_command(fixture.home, case.server, case.page)
+    command, *args = server_command(fixture.home, case.server)
     options = argparse.Namespace(
         home=str(fixture.home),
         workspace=str(fixture.worktree),
@@ -411,12 +412,13 @@ def replay(
     # The first session reports the server's catalog; a call refused while the
     # resident still records it is sent again in a later session.
     deadline = time.monotonic() + _WARM_SECONDS
-    while True:
-        responses, defers = _session(command, fixture, _messages(case))
-        response = responses.get(3, {})
-        if not _warming(response) or time.monotonic() > deadline:
-            break
-        time.sleep(0.25)
+    with start_page(fixture.home, case.page):
+        while True:
+            responses, defers = _session(command, fixture, _messages(case))
+            response = responses.get(3, {})
+            if not _warming(response) or time.monotonic() > deadline:
+                break
+            time.sleep(0.25)
     if _warming(response):
         # Name why the relay never decided, so a failing case says more than the refusal.
         response = {**response, "relay_defer": defers}

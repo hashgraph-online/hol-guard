@@ -9,14 +9,19 @@ Browser rows add two optional fields, each a closed list (PRD 8.2):
 
 - ``state`` seeds the Guard home before the call. Only ``none`` (nothing seeded) is wired so far;
   every other preset names the feature that wires it and fails the row until it lands.
-- ``page`` names the scripted page the driver starts on.
+- ``page`` names the scripted page the driver starts on. It reaches the driver through a
+  ``start-page`` file next to the call journal, not through argv, so every row relays the same
+  connector identity the harness config declares.
 """
 
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
+from ci.gauntlet.browser_driver_server import START_PAGE_FILE
 from ci.gauntlet.browser_fixtures import (
     PAGE_NAMES,
     REFERENCE_DRIVER,
@@ -74,15 +79,33 @@ def write_browser_servers(home: Path) -> None:
     install_server(home)
 
 
-def browser_server_command(home: Path, server: str, page: str | None) -> list[str]:
-    """The launch a harness config writes for one browser stand-in, optionally on a start page."""
+def _journal(home: Path) -> Path:
+    return home / ".local" / "state" / "browser-fixture" / "browser-calls.jsonl"
+
+
+def browser_server_command(home: Path, server: str) -> list[str]:
+    """The launch a harness config writes for one browser stand-in; the start page is not part of it."""
     root = _root(home)
-    command = [
+    return [
         sys.executable,
         "-u",
         str(root / "server.py"),
         str(root / f"{server}.tools.json"),
-        str(home / ".local" / "state" / "browser-fixture" / "browser-calls.jsonl"),
+        str(_journal(home)),
         server,
     ]
-    return [*command, page] if page is not None else command
+
+
+@contextmanager
+def start_page(home: Path, page: str | None) -> Iterator[None]:
+    """Start every driver launched inside the block on ``page``, or on no page, then clear it."""
+    marker = _journal(home).with_name(START_PAGE_FILE)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    if page is None:
+        marker.unlink(missing_ok=True)
+    else:
+        marker.write_text(page, encoding="utf-8")
+    try:
+        yield
+    finally:
+        marker.unlink(missing_ok=True)

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from ci.gauntlet.browser_fixtures import PAGE_NAMES, recorded_tools
-from tests.benign_fp_gate_browser import BROWSER_STATES, browser_server_command, unwired_state
+from ci.gauntlet.browser_driver_server import START_PAGE_FILE
+from ci.gauntlet.browser_fixtures import PAGE_NAMES, install_server, recorded_tools
+from tests.benign_fp_gate_browser import BROWSER_STATES, browser_server_command, start_page, unwired_state
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, server_command
 
 _DOCUMENT = json.loads((Path(__file__).parent / "fixtures" / "benign_false_positive_gate.json").read_text())
@@ -58,9 +60,30 @@ def test_a_known_preset_that_is_not_wired_fails_its_row() -> None:
     assert mcp_failure(case, {"unwired_state": unwired_state("site-grant")}, [], "") == unwired_state("site-grant")
 
 
-def test_the_start_page_reaches_the_driver_argv(tmp_path: Path) -> None:
+def test_the_start_page_never_changes_the_configured_launch(tmp_path: Path) -> None:
     assert set(PAGE_NAMES) >= {"docs-article", "local-dev"}
-    plain = browser_server_command(tmp_path, "playwright", None)
-    paged = server_command(tmp_path, "playwright", "docs-article")
-    assert paged == [*plain, "docs-article"]
-    assert plain[-1] == "playwright"
+    launch = browser_server_command(tmp_path, "playwright")
+    assert server_command(tmp_path, "playwright") == launch
+    assert launch[-1] == "playwright"
+    marker = Path(launch[-2]).with_name(START_PAGE_FILE)
+    with start_page(tmp_path, "docs-article"):
+        assert marker.read_text(encoding="utf-8") == "docs-article"
+        assert server_command(tmp_path, "playwright") == launch
+    assert not marker.exists()
+
+
+def _snapshot(launch: list[str]) -> str:
+    request = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "browser_snapshot"}}
+    done = subprocess.run(launch, input=json.dumps(request) + "\n", capture_output=True, text=True, timeout=30)
+    assert done.returncode == 0, done.stderr
+    return done.stdout
+
+
+def test_the_driver_starts_on_the_page_the_marker_names(tmp_path: Path) -> None:
+    install_server(tmp_path)
+    launch = browser_server_command(tmp_path, "playwright")
+    with start_page(tmp_path, "docs-article"):
+        paged = _snapshot(launch)
+    plain = _snapshot(launch)
+    assert "Page title:" in paged
+    assert "(empty page)" in plain
