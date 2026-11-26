@@ -702,6 +702,9 @@ def _start_installed_daemon(
         if register_workspace_policy and callable(register_workspace):
             _ = register_workspace(workspace)
         daemon.start()
+        # The agent starts next and its hooks keep a short deadline of their
+        # own; an installed daemon has its hook worker built long before then.
+        daemon.wait_for_hook_worker()
     except BaseException as startup_error:
         cleanup_failure: BaseException | None = None
         cleanup_unsafe = False

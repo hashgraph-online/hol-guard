@@ -28,15 +28,6 @@ class _LibraryCallServer:
     """
 
     def __init__(self) -> None:
-        # Load the library-call modules now, before the daemon starts. In
-        # production the library host is a resident process that has them
-        # loaded before any hook arrives; loading them lazily here put their
-        # import (several seconds on a slow host) inside the first hook's
-        # deadline, so the agent's first prompt timed out.
-        import codex_plugin_scanner.guard.cli.desktop_library_call
-        import codex_plugin_scanner.guard.library_calls
-        import codex_plugin_scanner.guard.routes.request_host  # noqa: F401
-
         self.nonce = uuid.uuid4().hex
         self._listener = socket.create_server(("127.0.0.1", 0))
         self.port = int(self._listener.getsockname()[1])
@@ -207,6 +198,11 @@ class GuardDaemonServer:
     def start(self) -> None:
         self._daemon.start()
         self.port = self._daemon.port
+
+    def wait_for_hook_worker(self, timeout_seconds: float = 60.0) -> bool:
+        """Wait for the daemon's start-time hook warm-up; see ``NativeGuardDaemon``."""
+
+        return self._daemon.wait_for_hook_worker(timeout_seconds)
 
     def stop(self) -> None:
         self._daemon.stop()

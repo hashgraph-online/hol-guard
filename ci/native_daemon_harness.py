@@ -21,6 +21,8 @@ from typing import IO
 from codex_plugin_scanner.guard.store import GuardStore
 
 _START_TIMEOUT_SECONDS = 30.0
+# The daemon gives its start-time hook warm-up this long.
+_HOOK_WARM_TIMEOUT_SECONDS = 60.0
 # Ask the kernel: tests patch ``sys.platform`` while a daemon starts.
 _HOST_IS_LINUX = hasattr(os, "uname") and os.uname().sysname == "Linux"
 
@@ -143,6 +145,32 @@ class NativeGuardDaemon:
         facts = json.loads(announced)
         self.port = int(facts["port"])
         self.pid = int(facts["pid"])
+
+    def wait_for_hook_worker(self, timeout_seconds: float = _HOOK_WARM_TIMEOUT_SECONDS) -> bool:
+        """Wait for the daemon's start-time hook warm-up; True when it built the worker.
+
+        The daemon builds the resident's hook worker in the background after it
+        reports ready. A hook that arrives first waits behind that build, and a
+        client that keeps its own short deadline gives up on it. An installed
+        daemon has long finished warming when an agent starts, so a launcher
+        that starts an agent right away waits here first.
+        """
+
+        directory = Path(self.store.guard_home) / "daemon-lifecycle"
+        pattern = f"*-{self.pid:010d}-*.json"
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            for path in sorted(directory.glob(pattern)):
+                try:
+                    record = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    continue
+                if isinstance(record, dict) and record.get("event") == "hook_worker_warmed":
+                    return record.get("reason") == "ok"
+            process = self._process
+            if process is None or process.poll() is not None or time.monotonic() >= deadline:
+                return False
+            time.sleep(0.05)
 
     def stop(self) -> None:
         process = self._process
