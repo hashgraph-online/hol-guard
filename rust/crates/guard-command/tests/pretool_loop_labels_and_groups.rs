@@ -108,6 +108,11 @@ fn a_labelled_or_grouped_loop_keeps_the_review_of_what_it_does() {
             "for f in docs/*.md; do printf \"$f %s\\n\" x; done",
             // A glued reference that is read keeps its review.
             "for f in docs/*.md; do { cat \"bak-$f\"; }; done",
+            // A `;`, space or `|` inside quotes is part of the glued word.
+            "for f in docs/*.md; do cat \"x;$f;\"; done",
+            "for f in docs/*.md; do { cat \"x;$f;\"; }; done",
+            "for f in docs/*.md; do cat \"x $f \"; done",
+            "for f in docs/*.md; do cat 'x|'$f; done",
             // `cd` inside the group moves the rest of the loop.
             "for f in docs/*.md; do { cd ~/.ssh; cat id_ed25519; }; done",
             // A body that never reads the loop variable is proved as one

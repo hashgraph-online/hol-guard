@@ -557,16 +557,49 @@ const MARKER: char = '\u{1}';
 /// The loop reads `<match>/package.json` for every match, and those that
 /// exist are exactly the words the written-out pattern expands to; the rest
 /// read nothing.
+///
+/// A space, `|` or `;` ends a word only outside quotes: in `cat "x;$f;"` they
+/// are letters of one quoted word glued to the reference.
 pub(crate) fn references_stand_alone(item: &str) -> bool {
     let chars: Vec<char> = item.chars().collect();
+    let quoted = quoted_positions(&chars);
+    let boundary_at = |at: usize| {
+        chars
+            .get(at)
+            .is_none_or(|&character| !quoted[at] && word_boundary(Some(character)))
+    };
     chars.iter().enumerate().all(|(index, &current)| {
         current != MARKER
-            || (index.checked_sub(1).is_none_or(|before| {
-                word_boundary(Some(chars[before])) && !escaped(&chars, before)
-            }) && (word_boundary(chars.get(index + 1).copied())
-                || plain_path_suffix(&chars, index + 1)
-                    .is_some_and(|end| word_boundary(chars.get(end).copied()))))
+            || (index
+                .checked_sub(1)
+                .is_none_or(|before| boundary_at(before) && !escaped(&chars, before))
+                && (boundary_at(index + 1)
+                    || plain_path_suffix(&chars, index + 1).is_some_and(boundary_at)))
     })
+}
+
+/// For each character, whether it sits inside single or double quotes. The
+/// quote characters themselves count as quoted, so neither ends a word.
+fn quoted_positions(chars: &[char]) -> Vec<bool> {
+    let (mut single, mut double) = (false, false);
+    chars
+        .iter()
+        .enumerate()
+        .map(|(index, &current)| {
+            let opens_or_closes = match current {
+                '\'' if !double && (single || !escaped(chars, index)) => {
+                    single = !single;
+                    true
+                }
+                '"' if !single && !escaped(chars, index) => {
+                    double = !double;
+                    true
+                }
+                _ => false,
+            };
+            opens_or_closes || single || double
+        })
+        .collect()
 }
 
 /// The end of a `/name/name` run that starts at `start`: one or more visible
@@ -889,4 +922,39 @@ pub(crate) fn redirect_tail(tail: &str) -> Option<String> {
         }
     }
     Some(tail.to_owned())
+}
+
+#[cfg(test)]
+mod quoted_boundary_tests {
+    use super::{references_stand_alone, MARKER};
+
+    fn item(text: &str) -> String {
+        text.replace("$f", &MARKER.to_string())
+    }
+
+    #[test]
+    fn a_reference_stands_alone_beside_an_unquoted_end_of_word() {
+        for text in [
+            "cat $f",
+            "cat $f | head",
+            "cat $f;",
+            "{ cat $f; }",
+            "cat $f/package.json",
+        ] {
+            assert!(references_stand_alone(&item(text)), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_quoted_space_bar_or_semicolon_does_not_end_the_word() {
+        for text in [
+            "cat \"x;$f;\"",
+            "cat \"x $f \"",
+            "cat \"x|$f|\"",
+            "cat 'x;'$f",
+            "cat \"x;$f/package.json;\"",
+        ] {
+            assert!(!references_stand_alone(&item(text)), "{text}");
+        }
+    }
 }
