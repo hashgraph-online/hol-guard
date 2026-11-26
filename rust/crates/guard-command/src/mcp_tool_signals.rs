@@ -82,6 +82,10 @@ fn browser_context(
 
 /// The reason an agent and the dashboard read for an R-SELF block. It names no address: the
 /// approval center's URL must never reach the agent that was stopped from opening it.
+/// The signal an R-SELF block records. Receipts carry it in `changed_capabilities`, which is
+/// how the block message and the dashboard recognise the block.
+pub const GUARD_ORIGIN_SIGNAL: &str = "browser action on Guard's own approval center";
+
 pub const GUARD_ORIGIN_SUMMARY: &str = "Guard blocked this browser action because it reaches \
      Guard's own approval center. Only the person using this computer answers Guard's requests; \
      do not open, click or read the approval center from an agent. Ask the user to review any \
@@ -96,7 +100,7 @@ fn signal_for(category: &str, browser: Option<&BrowserSignalContext>) -> Option<
         "secret_access" => Some("call arguments mention sensitive local files or secrets"),
         "privileged_system_mutation" => Some("call arguments imply privileged system mutation"),
         "tool_schema_mismatch" => Some("tool name understates dangerous schema capabilities"),
-        "browser_guard_origin" => Some("browser action on Guard's own approval center"),
+        "browser_guard_origin" => Some(GUARD_ORIGIN_SIGNAL),
         "browser_shared_profile" => {
             browser.map(|_| "browser MCP uses a shared or remote-debugging profile")
         }

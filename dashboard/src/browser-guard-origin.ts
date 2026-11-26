@@ -1,11 +1,11 @@
 import type { GuardReceipt } from "./guard-types";
 
 /**
- * R-SELF: the first sentence of the reason the native runtime records when it blocks a browser
- * action on Guard's own approval center (`GUARD_ORIGIN_SUMMARY` in `mcp_tool_signals.rs`).
+ * R-SELF: the signal the native runtime records on a receipt when it blocks a browser action on
+ * Guard's own approval center (`GUARD_ORIGIN_SIGNAL` in `mcp_tool_signals.rs`). Receipts carry
+ * their signals in `changed_capabilities`.
  */
-export const GUARD_ORIGIN_REASON_PREFIX =
-  "Guard blocked this browser action because it reaches Guard's own approval center.";
+export const GUARD_ORIGIN_SIGNAL = "browser action on Guard's own approval center";
 
 export const GUARD_ORIGIN_COPY = {
   title: "Blocked: an agent's browser reached Guard's approval center",
@@ -16,9 +16,12 @@ export const GUARD_ORIGIN_COPY = {
   breakdownLabel: "Guard's approval center",
 } as const;
 
-export function isGuardOriginBlock(receipt: Pick<GuardReceipt, "capabilities_summary">): boolean {
+export function isGuardOriginBlock(
+  receipt: Pick<GuardReceipt, "policy_decision" | "changed_capabilities">,
+): boolean {
   return (
-    typeof receipt.capabilities_summary === "string" &&
-    receipt.capabilities_summary.startsWith(GUARD_ORIGIN_REASON_PREFIX)
+    receipt.policy_decision === "block" &&
+    Array.isArray(receipt.changed_capabilities) &&
+    receipt.changed_capabilities.includes(GUARD_ORIGIN_SIGNAL)
   );
 }
