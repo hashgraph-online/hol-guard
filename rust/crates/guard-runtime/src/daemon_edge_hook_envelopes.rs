@@ -25,10 +25,26 @@ pub(super) fn refusal(refused: &Value) -> Option<(&str, &str)> {
 /// retry, instead of pointing at a repair a few seconds of waiting fixes.
 pub(super) const STARTING_REASON: &str = "HOL Guard is still starting (it restarts after each update), so it could not review this action and did not run it. Retry in a few seconds.";
 
-/// `reason`, or `STARTING_REASON` when the daemon is starting and `code`
-/// says no verdict was reached. A verdict keeps its own reason.
+/// Refusals a daemon start can cause and a short wait clears: policy not yet
+/// published, the hook worker or authority still coming up, and a hook that
+/// ran out of time or room while they did. Other refusals that reach no
+/// verdict, such as a Guard home mismatch or a command extension that failed
+/// to evaluate, are not cured by waiting and keep their own reasons.
+const STARTUP_TRANSIENT_CODES: [&str; 7] = [
+    "native_policy_not_ready",
+    "native_policy_update_in_progress",
+    "native_hook_worker_unavailable",
+    "native_hook_worker_unavailable_before_compatibility",
+    "native_approval_authority_busy",
+    hook_scheduler::QUEUE_CAPACITY,
+    hook_scheduler::DEADLINE_EXHAUSTED,
+];
+
+/// `reason`, or `STARTING_REASON` when the daemon is starting and `code` is a
+/// refusal the start itself causes. Verdicts and lasting faults keep their
+/// own reasons.
 pub(super) fn startup_reason<'a>(starting: bool, reason: &'a str, code: &str) -> &'a str {
-    if starting && crate::codex_hook_bridge::recovery::is_no_verdict(code) {
+    if starting && STARTUP_TRANSIENT_CODES.contains(&code) {
         STARTING_REASON
     } else {
         reason

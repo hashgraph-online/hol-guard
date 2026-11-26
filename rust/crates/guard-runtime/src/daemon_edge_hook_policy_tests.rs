@@ -244,7 +244,7 @@ fn a_starting_daemon_names_the_start_on_a_refusal_without_a_verdict() {
 }
 
 #[test]
-fn a_starting_daemon_renames_only_refusals_that_reached_no_verdict() {
+fn a_starting_daemon_renames_only_refusals_the_start_causes() {
     for code in [
         hook_scheduler::DEADLINE_EXHAUSTED,
         hook_scheduler::QUEUE_CAPACITY,
@@ -262,6 +262,9 @@ fn a_starting_daemon_renames_only_refusals_that_reached_no_verdict() {
         MISSING_WORKDIR_CODE,
         REFERENCE_CODE,
         "native_policy_rollback_detected",
+        "daemon_hook_process_guard_home_mismatch",
+        "native_command_extension_evaluation_failed",
+        hook_scheduler::QUEUE_BYTES,
     ] {
         assert_eq!(startup_reason(true, "cause", code), "cause", "{code}");
     }
