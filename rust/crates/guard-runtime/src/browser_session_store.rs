@@ -25,6 +25,7 @@ pub const MAX_SESSIONS_PER_HARNESS_SESSION: i64 = 64;
 const MAX_ORIGIN_CHARS: usize = 512;
 const SAVEPOINT: &str = "browser_session_schema";
 const RECORD_SAVEPOINT: &str = "browser_session_record";
+const PRUNE_SAVEPOINT: &str = "browser_session_prune";
 
 const STATEMENTS: [&str; 4] = [
     "create table if not exists guard_browser_sessions (
@@ -150,16 +151,38 @@ fn validate_objects(connection: &Connection) -> BrowserSessionResult<()> {
 /// objects match this module exactly. A failed check rolls back and leaves the
 /// store as it was.
 pub fn ensure_browser_session_schema(connection: &Connection) -> BrowserSessionResult<()> {
-    connection.execute_batch(&format!("savepoint {SAVEPOINT}"))?;
-    let outcome = STATEMENTS
-        .iter()
-        .try_for_each(|statement| connection.execute_batch(statement))
-        .map_err(BrowserSessionStoreError::from)
-        .and_then(|()| validate_objects(connection));
+    in_savepoint(connection, SAVEPOINT, || {
+        STATEMENTS
+            .iter()
+            .try_for_each(|statement| connection.execute_batch(statement))
+            .map_err(BrowserSessionStoreError::from)
+            .and_then(|()| validate_objects(connection))
+    })
+}
+
+/// Runs `body` inside a named savepoint. A failed body rolls back. A failed
+/// `release` (an outermost release is the commit, which a reader can hold off)
+/// also rolls back and removes the savepoint, so the connection never keeps an
+/// open write transaction that would swallow later writes; only this
+/// operation's savepoint is unwound, so a caller's outer transaction survives.
+fn in_savepoint<T>(
+    connection: &Connection,
+    name: &str,
+    body: impl FnOnce() -> BrowserSessionResult<T>,
+) -> BrowserSessionResult<T> {
+    connection.execute_batch(&format!("savepoint {name}"))?;
+    let outcome = body();
     if outcome.is_err() {
-        connection.execute_batch(&format!("rollback to {SAVEPOINT}"))?;
+        if let Err(error) = connection.execute_batch(&format!("rollback to {name}")) {
+            let _ = connection.execute_batch(&format!("release {name}"));
+            return Err(error.into());
+        }
     }
-    connection.execute_batch(&format!("release {SAVEPOINT}"))?;
+    if let Err(error) = connection.execute_batch(&format!("release {name}")) {
+        let _ = connection.execute_batch(&format!("rollback to {name}"));
+        let _ = connection.execute_batch(&format!("release {name}"));
+        return Err(error.into());
+    }
     outcome
 }
 
@@ -261,13 +284,9 @@ pub fn record_browser_session(
     observation: &BrowserSessionObservation<'_>,
 ) -> BrowserSessionResult<()> {
     validate(observation)?;
-    connection.execute_batch(&format!("savepoint {RECORD_SAVEPOINT}"))?;
-    let outcome = record_in_savepoint(connection, observation);
-    if outcome.is_err() {
-        connection.execute_batch(&format!("rollback to {RECORD_SAVEPOINT}"))?;
-    }
-    connection.execute_batch(&format!("release {RECORD_SAVEPOINT}"))?;
-    outcome
+    in_savepoint(connection, RECORD_SAVEPOINT, || {
+        record_in_savepoint(connection, observation)
+    })
 }
 
 /// The insert claims a new digest atomically, so two concurrent first sightings
@@ -497,21 +516,24 @@ pub fn expire_harness_session(
     )?)
 }
 
-/// Drops every browser session idle past the bound.
+/// Drops every browser session idle past the bound. Both deletes run in one
+/// savepoint, so a concurrent refresh cannot keep a session whose ports went.
 pub fn prune_idle_browser_sessions(
     connection: &Connection,
     now_unix: i64,
 ) -> BrowserSessionResult<usize> {
     let cutoff = now_unix.saturating_sub(BROWSER_SESSION_IDLE_SECONDS);
-    connection.execute(
-        "delete from guard_browser_session_ports where session_digest in \
-         (select session_digest from guard_browser_sessions where last_seen_unix < ?)",
-        [cutoff],
-    )?;
-    Ok(connection.execute(
-        "delete from guard_browser_sessions where last_seen_unix < ?",
-        [cutoff],
-    )?)
+    in_savepoint(connection, PRUNE_SAVEPOINT, || {
+        connection.execute(
+            "delete from guard_browser_session_ports where session_digest in \
+             (select session_digest from guard_browser_sessions where last_seen_unix < ?)",
+            [cutoff],
+        )?;
+        Ok(connection.execute(
+            "delete from guard_browser_sessions where last_seen_unix < ?",
+            [cutoff],
+        )?)
+    })
 }
 
 #[cfg(test)]

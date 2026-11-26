@@ -346,3 +346,36 @@ fn a_failed_sighting_leaves_no_partial_write() {
         .expect("count");
     assert_eq!(ports, 0);
 }
+
+#[test]
+fn every_write_closes_its_savepoint_and_keeps_a_caller_transaction() {
+    let connection = store();
+    record(&connection, &sighting('a')).expect("recorded");
+    assert!(connection.is_autocommit(), "no transaction stays open");
+    let mut moved = sighting('a');
+    moved.driver = digest('e');
+    assert!(record(&connection, &moved).is_err());
+    assert!(
+        connection.is_autocommit(),
+        "a failed write leaves nothing open"
+    );
+    prune_idle_browser_sessions(&connection, NOW).expect("pruned");
+    assert!(connection.is_autocommit(), "pruning leaves nothing open");
+
+    connection.execute_batch("begin").expect("outer");
+    record(&connection, &sighting('b')).expect("nested record");
+    assert!(record(&connection, &moved).is_err());
+    assert!(
+        !connection.is_autocommit(),
+        "the caller's transaction survives"
+    );
+    connection
+        .execute_batch("rollback")
+        .expect("outer rollback");
+    let rows: i64 = connection
+        .query_row("select count(*) from guard_browser_sessions", [], |row| {
+            row.get(0)
+        })
+        .expect("count");
+    assert_eq!(rows, 1, "the caller's rollback drops the nested write");
+}
