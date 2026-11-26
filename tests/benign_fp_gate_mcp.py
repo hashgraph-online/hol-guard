@@ -446,6 +446,13 @@ def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, An
         return f"the call must not reach the server: {response}"
     is_setup = data.get("guardReasonCode") == RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED
     groups = [CONNECTOR_GROUP_ID.fullmatch(str(row["queue_group_id"])) for row in rows]
+    if case.expect == "block":
+        # A baseline row for a call main stops outright: no setup, no review row, never forwarded.
+        if is_setup or rows:
+            return f"expected an outright block, got setup or review rows: {error} {rows}"
+        if data.get("transportOutcome") != "not-forwarded" or data.get("guardPolicyAction") != "block":
+            return f"expected a Guard policy block, got {error}"
+        return None
     if case.expect != "setup":
         if is_setup or any(groups):
             return "a server with an admin decision must not be held as setup"

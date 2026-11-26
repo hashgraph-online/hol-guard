@@ -72234,7 +72234,7 @@
       "server": "playwright",
       "tool": "browser_snapshot",
       "arguments": {},
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72245,7 +72245,7 @@
       "arguments": {
         "url": "https://docs.example.test/guide/configuration"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72254,7 +72254,7 @@
       "server": "playwright",
       "tool": "browser_navigate_back",
       "arguments": {},
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72266,7 +72266,7 @@
         "element": "Configuration",
         "ref": "e3"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72278,7 +72278,7 @@
         "element": "Getting started",
         "ref": "e1"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72291,7 +72291,7 @@
         "ref": "e2",
         "text": "install"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72302,7 +72302,7 @@
       "arguments": {
         "key": "Enter"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72322,7 +72322,7 @@
       "server": "playwright",
       "tool": "browser_take_screenshot",
       "arguments": {},
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72331,7 +72331,7 @@
       "server": "playwright",
       "tool": "browser_console_messages",
       "arguments": {},
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "local-dev"
     },
@@ -72340,7 +72340,7 @@
       "server": "playwright",
       "tool": "browser_network_requests",
       "arguments": {},
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "local-dev"
     },
@@ -72372,7 +72372,7 @@
       "server": "playwright",
       "tool": "browser_close",
       "arguments": {},
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72402,7 +72402,7 @@
       "arguments": {
         "function": "() => document.title"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "local-dev"
     },
@@ -72413,7 +72413,7 @@
       "arguments": {
         "paths": []
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72431,7 +72431,7 @@
           }
         ]
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "shop-basket"
     },
@@ -72445,7 +72445,7 @@
         "endElement": "Search the docs",
         "endRef": "e2"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72460,7 +72460,7 @@
           "guides"
         ]
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72471,7 +72471,7 @@
       "arguments": {
         "url": "https://docs.example.test/guide/getting-started"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none"
     },
     {
