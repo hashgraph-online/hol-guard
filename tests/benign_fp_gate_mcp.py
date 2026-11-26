@@ -259,7 +259,7 @@ def _session(
     so a relay that holds stdout open without answering fails the case instead
     of hanging the gate.
     """
-    wanted = {int(message["id"]) for message in messages}
+    wanted = {int(message["id"]) for message in messages if "id" in message}
     responses: dict[int, Any] = {}
     expired = threading.Event()
     with (
@@ -285,6 +285,8 @@ def _session(
             for message in messages:
                 session.stdin.write(json.dumps(message) + "\n")
                 session.stdin.flush()
+                if "id" not in message:
+                    continue
                 for line in session.stdout:
                     answer = json.loads(line)
                     if isinstance(answer.get("id"), int):
@@ -294,7 +296,7 @@ def _session(
                 if message["id"] not in responses:
                     break
             session.stdin.close()
-            session.wait(timeout=_SESSION_SECONDS)
+            exit_status = session.wait(timeout=_SESSION_SECONDS)
         except BaseException:
             session.kill()
             raise
@@ -304,6 +306,8 @@ def _session(
         defers = [line.removeprefix(_DEFER_PREFIX).strip() for line in stderr if line.startswith(_DEFER_PREFIX)]
     if expired.is_set():
         raise TimeoutError(f"the MCP relay session did not finish within {_SESSION_SECONDS:.0f}s")
+    if exit_status != 0:
+        raise RuntimeError(f"the MCP relay exited with status {exit_status}")
     return {key: value for key, value in responses.items() if key in wanted}, defers
 
 
@@ -439,7 +443,9 @@ def _decide(command: list[str], fixture: BenignFixture, case: McpCase) -> dict[s
     deadline = time.monotonic() + _WARM_SECONDS
     while True:
         responses, defers = _session(command, fixture, _messages(case))
-        response = responses.get(3, {})
+        if 3 not in responses:
+            raise RuntimeError("the MCP relay did not answer tools/call")
+        response = responses[3]
         if not _warming(response) or time.monotonic() > deadline:
             break
         time.sleep(0.25)
