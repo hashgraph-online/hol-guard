@@ -173,10 +173,8 @@ fn unrolled<'a>(
             let last_negated = items
                 .last()
                 .is_some_and(|(text, _)| text.trim_start().starts_with('!'));
-            let changes_state = !prefix.is_empty()
-                || items
-                    .iter()
-                    .any(|(text, _)| super::control_flow_chain::changes_shell_state(text));
+            let changes_state =
+                !prefix.is_empty() || items.iter().any(|(text, _)| item_changes_state(text));
             if (joined && last_negated) || (gated && changes_state) {
                 return None;
             }
@@ -233,7 +231,11 @@ fn unrolled<'a>(
             .into_iter()
             .map(|(text, separator)| (unquote_whole_references(&text), separator))
             .collect();
-        if !items.iter().all(|(text, _)| references_stand_alone(text)) {
+        if !items.iter().all(|(text, _)| {
+            body::grouped_commands(text).into_iter().all(|command| {
+                references_stand_alone(command) || body::prints_quoted_references(command)
+            })
+        }) {
             return None;
         }
         items
@@ -613,5 +615,17 @@ fn carries_state(item: &str) -> bool {
         .into_iter()
         .find_map(|opener| super::control_flow_flatten::keyword(text, opener))
         .unwrap_or(text);
-    super::control_flow_chain::changes_shell_state(command)
+    item_changes_state(command)
+}
+
+/// Whether an item changes shell state, looking inside a `{ …; }` group.
+/// The group runs in the current shell, so a `cd` or `export` it holds moves
+/// every later command just as a bare one would; the state check reads only
+/// the head of each stage, which for a group is the `{`.
+fn item_changes_state(item: &str) -> bool {
+    super::control_flow_chain::changes_shell_state(item)
+        || (item.contains('{')
+            && body::grouped_commands(item)
+                .into_iter()
+                .any(super::control_flow_chain::changes_shell_state))
 }

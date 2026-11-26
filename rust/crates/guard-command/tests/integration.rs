@@ -263,6 +263,7 @@ pub mod pretool_lockfile_install;
 pub mod pretool_lockfile_install_forms;
 pub mod pretool_lookup_reads;
 pub mod pretool_loop_comment_lines;
+pub mod pretool_loop_labels_and_groups;
 pub mod pretool_ls_documentation_glob_names;
 pub mod pretool_ls_temporary_operands;
 pub mod pretool_ls_tracked_secret_named_dir;
