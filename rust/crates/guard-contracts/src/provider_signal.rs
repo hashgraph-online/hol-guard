@@ -83,10 +83,79 @@ pub enum ProviderShareableFactV1 {
 }
 
 impl ProviderShareableFactV1 {
+    pub const ALL: [Self; 8] = [
+        Self::TargetOrigin,
+        Self::TargetSiteGroup,
+        Self::TargetPathPrefix,
+        Self::ActionVerb,
+        Self::ActionIntent,
+        Self::PageScriptHashes,
+        Self::DownloadSha256,
+        Self::GuardVersion,
+    ];
+
     /// Facts that are off until the user turns them on at connect.
     pub const fn opt_in_only(self) -> bool {
         matches!(self, Self::TargetPathPrefix)
     }
+}
+
+/// Every field of a serialized `BrowserActionV2`, by JSON pointer, and the fact it may be shared
+/// as. `None` means the field never leaves the device (PRD 6.4): the redacted URL, element names
+/// and digests, typed-input shape, protocol detail, harness and session identifiers, driver
+/// identity and the operation name. A field that is not in this table is a contract change: the
+/// test that enumerates `BrowserActionV2` fails until the field is classified here.
+pub const BROWSER_ACTION_FIELD_SHARING: &[(&str, Option<ProviderShareableFactV1>)] = &[
+    ("/version", None),
+    ("/driver/id", None),
+    ("/driver/kind", None),
+    ("/driver/identity_hash", None),
+    ("/driver/trust_class", None),
+    ("/session/harness", None),
+    ("/session/session_ref_digest", None),
+    ("/session/profile_mode", None),
+    ("/intent", Some(ProviderShareableFactV1::ActionIntent)),
+    ("/operation", None),
+    ("/verb", Some(ProviderShareableFactV1::ActionVerb)),
+    (
+        "/target/origin",
+        Some(ProviderShareableFactV1::TargetOrigin),
+    ),
+    (
+        "/target/site_group",
+        Some(ProviderShareableFactV1::TargetSiteGroup),
+    ),
+    (
+        "/target/path_prefix",
+        Some(ProviderShareableFactV1::TargetPathPrefix),
+    ),
+    ("/target/is_loopback", None),
+    ("/target/is_guard_origin", None),
+    ("/target/url_redacted", None),
+    ("/element/role", None),
+    ("/element/name_digest", None),
+    ("/element/name_preview", None),
+    ("/element/is_password", None),
+    ("/element/is_payment", None),
+    ("/element/is_file_input", None),
+    ("/input/kind", None),
+    ("/input/length", None),
+    ("/input/digest", None),
+    ("/input/preview_class", None),
+    ("/sensitive_surface_flags", None),
+    ("/cdp/domain", None),
+    ("/cdp/method", None),
+    ("/cdp/classified", None),
+    ("/volatile_fields_dropped", None),
+];
+
+/// The fact a `BrowserActionV2` field may be shared as, or `None` when it never leaves the device
+/// or is not a known field.
+pub fn browser_action_field_fact(pointer: &str) -> Option<ProviderShareableFactV1> {
+    BROWSER_ACTION_FIELD_SHARING
+        .iter()
+        .find(|(field, _)| *field == pointer)
+        .and_then(|(_, fact)| *fact)
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
