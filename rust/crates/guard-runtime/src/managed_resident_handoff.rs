@@ -162,6 +162,55 @@ pub(super) fn retire_foreign_resident_rejecting_request(
     }
     // Record the rejection before the retirement attempt, which may fail.
     note("client_state_foreign_rejection_seen", 1);
+    retire_foreign_resident(scope, state, deadline)
+}
+
+/// Whether only a resident of this client's runtime may answer `payload`.
+///
+/// An installed-upgrade migration replaces packs an older engine compiled
+/// with packs this runtime's engine compiled, and the resident that runs it
+/// checks the candidate against its own engine. A resident of the release
+/// being replaced therefore refuses it as unauthorized, every time, and its
+/// refusal reads like tampering. After an update the previous runtime's
+/// resident still holds the home when the daemon's worker host first
+/// migrates: nothing of the new runtime has published a snapshot yet, so
+/// nothing has had a request rejected and retired it. The first migration
+/// after an update failed that way and only the retry, once publication had
+/// retired the old resident, went through.
+pub(super) fn requires_own_runtime(payload: &[u8]) -> bool {
+    crate::strict_json_value(payload).is_ok_and(|envelope| {
+        envelope
+            .get("operation")
+            .and_then(serde_json::Value::as_str)
+            == Some("extension_control_authority")
+            && envelope
+                .get("request")
+                .and_then(|request| request.get("op"))
+                .and_then(serde_json::Value::as_str)
+                == Some("migrate")
+    })
+}
+
+/// Asks a foreign resident to make way before it is sent a request only this
+/// runtime may answer (see `requires_own_runtime`), so the caller can start a
+/// resident of its own runtime. Returns false for a resident of this runtime,
+/// for any other request, and when the resident refused or did not finish the
+/// handoff; the caller must then not send it the request either.
+pub(super) fn retire_foreign_resident_for_request(
+    scope: &Path,
+    state: &ResidentState,
+    runtime_digest: &str,
+    payload: &[u8],
+    deadline: Instant,
+) -> bool {
+    if state.runtime_sha256 == runtime_digest || !requires_own_runtime(payload) {
+        return false;
+    }
+    note("client_state_foreign_runtime_bound_seen", 1);
+    retire_foreign_resident(scope, state, deadline)
+}
+
+fn retire_foreign_resident(scope: &Path, state: &ResidentState, deadline: Instant) -> bool {
     let deadline = deadline.min(Instant::now() + MANAGED_STOP_TIMEOUT);
     let process_ids = containment::state_process_identities(std::slice::from_ref(state));
     request_shutdown(
