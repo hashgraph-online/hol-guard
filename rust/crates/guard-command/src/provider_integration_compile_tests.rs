@@ -177,6 +177,17 @@ fn identity_and_display_fields_are_checked() {
     refused(with("/name", json!("a\u{0007}b")), E::NameInvalid);
     refused(with("/summary", json!("x".repeat(201))), E::SummaryInvalid);
     refused(with("/publisher/name", json!("")), E::PublisherInvalid);
+    // A name the user reads before trusting a provider carries no invisible or reordering marks.
+    for mark in [
+        '\u{00ad}', '\u{061c}', '\u{200b}', '\u{200e}', '\u{2028}', '\u{202e}', '\u{2060}',
+        '\u{2066}', '\u{2069}', '\u{feff}',
+    ] {
+        let spoof = format!("ExampleShield{mark} Inc.");
+        refused(with("/name", json!(spoof)), E::NameInvalid);
+        refused(with("/summary", json!(spoof)), E::SummaryInvalid);
+        refused(with("/publisher/name", json!(spoof)), E::PublisherInvalid);
+    }
+    assert!(compile(&with("/publisher/name", json!("Exämple Shield, Inc."))).is_ok());
     refused(
         with("/publisher/url", json!("http://exampleshield.example")),
         E::PublisherInvalid,

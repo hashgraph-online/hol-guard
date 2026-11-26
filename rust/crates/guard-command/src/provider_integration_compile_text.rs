@@ -156,23 +156,30 @@ pub(super) fn is_provider_token(value: &str) -> bool {
 pub(super) fn is_display_text(value: &str, max_chars: usize) -> bool {
     !value.trim().is_empty()
         && value.chars().count() <= max_chars
-        && !value.chars().any(char::is_control)
+        && !value
+            .chars()
+            .any(|ch| ch.is_control() || is_invisible_mark(ch))
 }
 
-/// Display text that is also safe plain text for a card: no zero-width, bidi, line or paragraph
-/// separator code points and no markup-significant characters, as for discovery creative.
+/// Code points that reorder, hide or break text without being seen: zero-width marks, bidi
+/// embeddings, overrides and isolates, invisible operators, line and paragraph separators. A name a
+/// user reads before trusting a provider must not carry them.
+fn is_invisible_mark(ch: char) -> bool {
+    matches!(ch,
+        '\u{00ad}'
+            | '\u{061c}'
+            | '\u{180e}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{2028}'..='\u{202e}'
+            | '\u{2060}'..='\u{2064}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{feff}')
+}
+
+/// Display text that is also safe plain text for a card: no markup-significant characters, as for
+/// discovery creative.
 pub(super) fn is_safe_label(value: &str, max_chars: usize) -> bool {
-    is_display_text(value, max_chars)
-        && !value.chars().any(|ch| {
-            matches!(ch,
-                '\u{007f}'..='\u{009f}'
-                    | '\u{200b}'..='\u{200f}'
-                    | '\u{2028}'..='\u{202e}'
-                    | '\u{2066}'..='\u{2069}'
-                    | '\u{feff}'
-                    | '<'
-                    | '>')
-        })
+    is_display_text(value, max_chars) && !value.chars().any(|ch| matches!(ch, '<' | '>'))
 }
 
 /// An `https://` URL on a lowercase DNS host with no port, user info, query or fragment.
