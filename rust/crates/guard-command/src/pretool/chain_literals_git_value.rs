@@ -7,9 +7,14 @@
 //! Only lookups whose output is a hash are recognised:
 //!
 //! - `git rev-parse` with `--verify` or `--short`, which print one hash or
-//!   fail, or a bare `git rev-parse HEAD~N`. A bare `rev-parse` echoes an
-//!   operand it cannot resolve, so `git rev-parse .env` prints `.env`; only
-//!   `HEAD` and `@` with `~` / `^` steps are taken without `--verify`.
+//!   fail, or a bare `git rev-parse` of one revision. A bare `rev-parse`
+//!   prints back an operand it cannot resolve, so inside a repository it
+//!   prints a hash or that word (see [`echoed`]); outside one it prints
+//!   nothing. Without `--verify` the operand
+//!   must be `HEAD` or `@`, or spelled as a ref name (`origin/main`,
+//!   `FETCH_HEAD`, `v1.2~1`), with any `~` / `^` steps: a ref name has no
+//!   component that starts with `.`, so `git rev-parse .env` stays opaque.
+//!   A quoted `'REV^{commit}'` or `'REV^{}'` peels the same revision.
 //! - `git log -1` with `--format` or `--pretty` set to `%h` or `%H`. The
 //!   inner command is judged on its own first, and that refuses a
 //!   configuration that adds text, such as `log.showSignature`.
@@ -22,6 +27,9 @@
 //! same kind of read or write, so the stand-in is used only inside a command
 //! that runs `git`, and only where the lookup is a word of its own or one end
 //! of a range: text glued to it could turn into an option or a file name.
+//! A bare `rev-parse` that cannot resolve its operand prints the operand
+//! instead, so the command is also judged with that word in the lookup's
+//! place, as well as with nothing there.
 
 use crate::shell_structure::ShellCommandSubstitution;
 
@@ -32,10 +40,20 @@ const MAX_BODY_CHARS: usize = 160;
 
 /// The stand-in for `body` when it is a Git lookup that prints only a hash.
 pub(super) fn stand_in(body: &str) -> Option<&'static str> {
-    if body.len() > MAX_BODY_CHARS || !body.chars().all(body_character) {
+    if body.len() > MAX_BODY_CHARS {
         return None;
     }
     let words: Vec<&str> = body.split(' ').filter(|word| !word.is_empty()).collect();
+    if let ["git", "rev-parse", operand] = words.as_slice() {
+        if let Some(revision) = peeled(operand) {
+            return (revision.chars().all(body_character)
+                && (head_relative(revision) || named(revision)))
+            .then_some(COMMIT_VALUE);
+        }
+    }
+    if !body.chars().all(body_character) {
+        return None;
+    }
     let printed = match words.as_slice() {
         ["git", "rev-parse", arguments @ ..] => rev_parse(arguments),
         ["git", "log", arguments @ ..] => log(arguments),
@@ -43,6 +61,110 @@ pub(super) fn stand_in(body: &str) -> Option<&'static str> {
         _ => false,
     };
     printed.then_some(COMMIT_VALUE)
+}
+
+/// The word a bare `git rev-parse` lookup prints when it cannot resolve its
+/// operand: the operand itself, after the shell has removed the quotes
+/// around a peeled `'REV^{}'`. `None` for a lookup that prints a hash or
+/// nothing.
+pub(super) fn echoed(body: &str) -> Option<&str> {
+    stand_in(body)?;
+    match body
+        .split(' ')
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()[..]
+    {
+        ["git", "rev-parse", operand] => Some(
+            ['\'', '"']
+                .into_iter()
+                .find_map(|quote| operand.strip_prefix(quote)?.strip_suffix(quote))
+                .unwrap_or(operand),
+        ),
+        _ => None,
+    }
+}
+
+/// The printed word of [`echoed`] spelled for the place of `substitution`
+/// in `chars`, so the judged command reads that exact word. A lookup that is
+/// a whole double-quoted word takes it as written; an unquoted one takes it
+/// single-quoted when it holds a character the shell would read, such as the
+/// braces of a peel.
+pub(super) fn echoed_in(chars: &[char], substitution: &ShellCommandSubstitution) -> Option<String> {
+    let word = echoed(&substitution.body)?;
+    let quoted = substitution
+        .start
+        .checked_sub(1)
+        .is_some_and(|quote| chars[quote] == '"' && !inside_double_quotes(&chars[..quote]));
+    Some(if quoted || word.chars().all(body_character) {
+        word.to_owned()
+    } else {
+        format!("'{word}'")
+    })
+}
+
+/// A command's text around its Git lookups, with every word each lookup can
+/// print, so each combination of outcomes is judged and not only the uniform
+/// ones: one lookup can resolve while the next misses.
+#[derive(Default)]
+pub(super) struct Readings {
+    parts: Vec<Part>,
+}
+
+enum Part {
+    Text(String),
+    /// The printed words, the hash first.
+    Lookup(Vec<String>),
+}
+
+/// The most whole-command texts one projection judges: every outcome of two
+/// bare lookups, or of three that print a hash or nothing.
+const MAX_READINGS: usize = 9;
+
+impl Readings {
+    pub(super) fn text(&mut self, text: impl IntoIterator<Item = char>) {
+        if let Some(Part::Text(last)) = self.parts.last_mut() {
+            last.extend(text);
+        } else {
+            self.parts.push(Part::Text(text.into_iter().collect()));
+        }
+    }
+
+    pub(super) fn literal(&mut self, text: &str) {
+        self.text(text.chars());
+    }
+
+    pub(super) fn lookup(&mut self, printed: Vec<String>) {
+        self.parts.push(Part::Lookup(printed));
+    }
+
+    /// Every whole-command text except the one where each lookup prints its
+    /// hash, which the caller judges as the projection itself. `None` when
+    /// the combinations pass [`MAX_READINGS`].
+    pub(super) fn others(&self) -> Option<Vec<String>> {
+        let total = self
+            .parts
+            .iter()
+            .try_fold(1usize, |total, part| match part {
+                Part::Lookup(printed) => total.checked_mul(printed.len()),
+                Part::Text(_) => Some(total),
+            })?;
+        if total > MAX_READINGS {
+            return None;
+        }
+        let mut texts = vec![String::new()];
+        for part in &self.parts {
+            match part {
+                Part::Text(text) => texts.iter_mut().for_each(|done| done.push_str(text)),
+                Part::Lookup(printed) => {
+                    texts = texts
+                        .iter()
+                        .flat_map(|done| printed.iter().map(move |word| format!("{done}{word}")))
+                        .collect();
+                }
+            }
+        }
+        Some(texts.into_iter().skip(1).collect())
+    }
 }
 
 /// Whether the substitution at `start` is an argument of a command that
@@ -145,6 +267,7 @@ fn rev_parse(arguments: &[&str]) -> bool {
     }
     match operands.as_slice() {
         [operand] if single => revision(operand),
+        [operand] if arguments.len() == 1 => head_relative(operand) || named(operand),
         [operand] => head_relative(operand),
         _ => false,
     }
@@ -200,9 +323,40 @@ fn revision(word: &str) -> bool {
 
 /// `HEAD` or `@`, then any `~N` / `^N` steps.
 fn head_relative(word: &str) -> bool {
-    let Some(mut rest) = word.strip_prefix("HEAD").or_else(|| word.strip_prefix('@')) else {
+    let Some(rest) = word.strip_prefix("HEAD").or_else(|| word.strip_prefix('@')) else {
         return false;
     };
+    steps(rest)
+}
+
+/// A branch, tag or remote-tracking ref (`origin/main`, `FETCH_HEAD`,
+/// `v1.2`), then any `~N` / `^N` steps. Git refuses a ref name with a
+/// component that is empty, starts with `.` or ends in `.lock`, so the word
+/// names no dotfile, home path or absolute path.
+fn named(word: &str) -> bool {
+    let (name, rest) = word.split_at(word.find(['~', '^']).unwrap_or(word.len()));
+    steps(rest)
+        && revision(name)
+        && !name.contains([':', '@'])
+        && name
+            .split('/')
+            .all(|part| !part.is_empty() && !part.starts_with('.') && !part.ends_with(".lock"))
+}
+
+/// The revision a quoted `'REV^{commit}'` or `'REV^{}'` peels to a commit.
+/// The quotes keep the braces from the shell; the word printed back when the
+/// lookup misses is the same text without them.
+fn peeled(word: &str) -> Option<&str> {
+    let quoted = ['\'', '"']
+        .into_iter()
+        .find_map(|quote| word.strip_prefix(quote)?.strip_suffix(quote))?;
+    quoted
+        .strip_suffix("^{commit}")
+        .or_else(|| quoted.strip_suffix("^{}"))
+}
+
+/// Nothing but `~N` / `^N` steps.
+fn steps(mut rest: &str) -> bool {
     while let Some(after) = rest.strip_prefix(['~', '^']) {
         rest = after.trim_start_matches(|c: char| c.is_ascii_digit());
     }

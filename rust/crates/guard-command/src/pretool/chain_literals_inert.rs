@@ -117,9 +117,10 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         }
     }
     let mut out = String::with_capacity(command.len());
-    // The command as it runs when every Git lookup prints nothing.
-    let mut unfound = String::with_capacity(command.len());
-    let mut looked_up = false;
+    // The command with every word each Git lookup can print: its hash,
+    // nothing (outside a repository), or for a bare `rev-parse` that misses,
+    // its operand.
+    let mut readings = git_value::Readings::default();
     // The projection's shell text, heredoc bodies still blanked.
     let mut shell = String::with_capacity(command.len());
     let mut cursor = 0usize;
@@ -205,23 +206,26 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
             judged.push(judged_text);
         }
         temporary |= value == TEMPORARY_VALUE;
-        looked_up |= value == git_value::COMMIT_VALUE;
         out.extend(&chars[cursor..substitution.start]);
-        unfound.extend(&chars[cursor..substitution.start]);
+        readings.text(chars[cursor..substitution.start].iter().copied());
         out.push_str(&value);
-        if value != git_value::COMMIT_VALUE {
-            unfound.push_str(&value);
+        if value == git_value::COMMIT_VALUE {
+            let mut printed = vec![value.clone(), String::new()];
+            printed.extend(git_value::echoed_in(&masked, substitution));
+            readings.lookup(printed);
+        } else {
+            readings.literal(&value);
         }
         shell.extend(&masked[cursor..substitution.start]);
         cursor = substitution.end;
     }
     out.extend(&chars[cursor..]);
-    unfound.extend(&chars[cursor..]);
+    readings.text(chars[cursor..].iter().copied());
     shell.extend(&masked[cursor..]);
-    // An empty lookup shifts the words after it, so that command must pass too.
-    if looked_up {
-        judged.push(unfound);
-    }
+    // An empty lookup shifts the words after it, so that command must pass
+    // too; so must the one a bare `rev-parse` that misses prints into, in
+    // every combination with the other lookups.
+    judged.extend(readings.others()?);
     // A substitution the scan did not delimit is still in the text.
     if shell.contains("$(") || shell.contains('`') {
         return None;

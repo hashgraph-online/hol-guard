@@ -125,6 +125,100 @@ fn each_value_producer_is_judged_once_as_its_own_command() {
 }
 
 #[test]
+fn a_bare_lookup_is_also_judged_with_the_operand_it_prints_back() {
+    let seen = RefCell::new(Vec::new());
+    let opened = project("git diff $(git rev-parse origin/main) --stat", |body| {
+        seen.borrow_mut().push(body.to_owned());
+        true
+    });
+    assert_eq!(
+        opened.as_deref(),
+        Some("git diff 0123456789abcdef0123456789abcdef01234567 --stat")
+    );
+    assert_eq!(
+        *seen.borrow(),
+        [
+            "git rev-parse origin/main",
+            "git diff  --stat",
+            "git diff origin/main --stat"
+        ]
+    );
+    // Outside a repository the lookup prints nothing, and that reading
+    // must pass as well.
+    assert_eq!(
+        project("git log -1 $(git rev-parse release/x)", |body| {
+            body != "git log -1 "
+        }),
+        None
+    );
+    // The reading with the operand in place must pass as well.
+    assert_eq!(
+        project("git log -1 $(git rev-parse release/x)", |body| {
+            body != "git log -1 release/x"
+        }),
+        None
+    );
+    // A lookup that prints a hash or nothing still drops the word.
+    let seen = RefCell::new(Vec::new());
+    project("git log -1 $(git rev-parse --verify origin/main)", |body| {
+        seen.borrow_mut().push(body.to_owned());
+        true
+    });
+    assert_eq!(
+        *seen.borrow(),
+        ["git rev-parse --verify origin/main", "git log -1 "]
+    );
+}
+
+#[test]
+fn each_combination_of_lookup_outcomes_is_judged() {
+    let command = "git diff $(git rev-parse origin/main) $(git rev-parse release/x) --stat";
+    let seen = RefCell::new(Vec::new());
+    project(command, |body| {
+        seen.borrow_mut().push(body.to_owned());
+        true
+    });
+    let hash = "0123456789abcdef0123456789abcdef01234567";
+    for mixed in [
+        format!("git diff {hash}  --stat"),
+        "git diff  release/x --stat".to_owned(),
+        format!("git diff origin/main {hash} --stat"),
+        "git diff   --stat".to_owned(),
+        "git diff origin/main release/x --stat".to_owned(),
+    ] {
+        assert!(seen.borrow().contains(&mixed), "{mixed}");
+    }
+    // A mixed outcome that a control refuses refuses the projection.
+    assert_eq!(
+        project(command, |body| body != format!("git diff {hash}  --stat")),
+        None
+    );
+    // Past the bound the projection is not attempted.
+    assert_eq!(
+        project(
+            "git diff $(git rev-parse a/x) $(git rev-parse b/x) $(git rev-parse c/x)",
+            |_| true
+        ),
+        None
+    );
+}
+
+#[test]
+fn a_printed_back_peel_is_judged_without_its_quotes() {
+    let seen = RefCell::new(Vec::new());
+    project("git show \"$(git rev-parse 'HEAD^{}')\" --stat", |body| {
+        seen.borrow_mut().push(body.to_owned());
+        true
+    });
+    assert!(
+        seen.borrow()
+            .contains(&"git show \"HEAD^{}\" --stat".to_owned()),
+        "{:?}",
+        seen.borrow()
+    );
+}
+
+#[test]
 fn a_substitution_beside_a_pattern_character_stays_opaque() {
     for command in [
         // The shell globs `2026*`; the projection would glob the stand-in's
