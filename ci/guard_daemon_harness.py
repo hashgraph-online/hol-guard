@@ -28,6 +28,15 @@ class _LibraryCallServer:
     """
 
     def __init__(self) -> None:
+        # Load the library-call modules now, before the daemon starts. In
+        # production the library host is a resident process that has them
+        # loaded before any hook arrives; loading them lazily here put their
+        # import (several seconds on a slow host) inside the first hook's
+        # deadline, so the agent's first prompt timed out.
+        import codex_plugin_scanner.guard.cli.desktop_library_call
+        import codex_plugin_scanner.guard.library_calls
+        import codex_plugin_scanner.guard.routes.request_host  # noqa: F401
+
         self.nonce = uuid.uuid4().hex
         self._listener = socket.create_server(("127.0.0.1", 0))
         self.port = int(self._listener.getsockname()[1])
