@@ -50747,7 +50747,7 @@
       "expect": "allow"
     },
     {
-      "id": "neg-metadata-du-summary-glob-sibling-follows-links",
+      "id": "neg-metadata-du-summary-glob-org-env-files",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -50758,13 +50758,13 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "du -sH ${HOME}/other-project/*.json"
+        "command": "du -sh ${ORG}/*/.env"
       },
-      "cwd": "worktree",
+      "cwd": "org_app",
       "expect": "not_allow"
     },
     {
-      "id": "neg-metadata-du-walk-glob-sibling",
+      "id": "neg-metadata-du-summary-glob-credential-store",
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -50775,7 +50775,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "du -h ${HOME}/other-project/s*"
+        "command": "du -sh ${HOME}/.aws/*"
       },
       "cwd": "worktree",
       "expect": "not_allow"
