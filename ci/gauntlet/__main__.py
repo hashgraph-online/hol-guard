@@ -12,6 +12,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from .browser_cases import BROWSER_CATALOG
 from .catalog import CATALOG, CONNECTOR_CATALOG, load_catalog
 from .parallel import qualification_jobs
 from .provider import REASONING_EFFORTS
@@ -22,7 +23,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Guard Gauntlet: real agents, real tools, observed protection")
     sub = parser.add_subparsers(dest="command", required=True)
     listing = sub.add_parser("list", help="List the fixed required scenarios without running them")
-    listing.add_argument("--catalog", choices=("core", "connector-setup"), default="core")
+    listing.add_argument("--catalog", choices=("core", "connector-setup", "browser"), default="core")
     run = sub.add_parser("run", help="Run actual Oh My Pi with a live inference provider")
     run.add_argument("--expected-source-sha")
     run.add_argument("--candidate-sha", help="PR head when testing its exact two-parent merge")
@@ -109,10 +110,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--work-root", type=Path, help="Parent for newly created disposable fixtures")
     run.add_argument(
         "--profile",
-        choices=("core", "contained-bun-vitest", "full-tasks", "approval-retry", "connector-setup"),
+        choices=("core", "contained-bun-vitest", "full-tasks", "approval-retry", "connector-setup", "browser"),
         default="core",
         help="Complete core qualification, the additive contained Bun/Vitest profile, full developer tasks, "
-        "the approve-then-retry lane or the connector-setup lane (only core qualifies a merge)",
+        "the approve-then-retry lane, the connector-setup lane or the browser lane (only core qualifies a merge)",
     )
     run.add_argument(
         "--full-task-mode",
@@ -267,7 +268,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "list":
-            catalog = load_catalog(CONNECTOR_CATALOG if args.catalog == "connector-setup" else CATALOG)
+            catalog = load_catalog(
+                {"connector-setup": CONNECTOR_CATALOG, "browser": BROWSER_CATALOG}.get(args.catalog, CATALOG)
+            )
             rows = [{"id": s.id, "expectation": s.expectation, "oracle": s.oracle} for s in catalog]
             print(json.dumps(rows, indent=2))
             return 0
@@ -337,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:
 
             return qualify_main(args)
         full_task_cli.validate(args)
-        if args.profile == "connector-setup" and args.harness == "omp":
+        if args.profile in {"connector-setup", "browser"} and args.harness == "omp":
             raise ValueError(f"--profile {args.profile} runs through an installed harness CLI, not the omp lane")
         if args.harness != "omp":
             return _run_harness(args)
@@ -517,6 +520,8 @@ def _run_harness(args: argparse.Namespace) -> int:
         raise ValueError(
             "--fail-fast, --case-retries, --host-slots and --max-load are only supported by the omp harness"
         )
+    if args.profile == "browser":
+        raise ValueError("the browser lane's case runner is not wired yet; `list --catalog browser` shows its cases")
     if args.profile not in {"core", "full-tasks", "approval-retry", "connector-setup"}:
         raise ValueError("--harness supports only the core, full-tasks, approval-retry and connector-setup profiles")
     if args.profile != "full-tasks" and args.full_task_mode != "enforce":
