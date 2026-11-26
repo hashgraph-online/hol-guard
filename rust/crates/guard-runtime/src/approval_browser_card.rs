@@ -18,8 +18,11 @@ use guard_contracts::{BrowserCardRequestV1, BrowserInputPreviewClassV1};
 
 /// Where the harness payload keeps the tool input, in the order the dashboard reads them.
 const TOOL_INPUT_KEYS: [&str; 4] = ["tool_input", "toolInput", "toolArgs", "arguments"];
-/// What hook and serializer redaction leave in place of a value.
-const REDACTION_MARKERS: [&str; 2] = ["[redacted]", "[REDACTED]"];
+/// What hook and serializer redaction leave in place of a value: the key-based marker and the
+/// asterisk masks the hook writes over secret-looking text (`*****`, `sk-*****`, `Bearer *****`).
+const REDACTION_MARKERS: [&str; 3] = ["[redacted]", "[REDACTED]", "*****"];
+/// What the hook appends to a stored excerpt it cut short; the stored length is not the real one.
+const TRUNCATION_MARKER: char = '\u{2026}';
 
 fn text<'a>(envelope: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     envelope
@@ -49,7 +52,10 @@ fn tool_input(envelope: &Map<String, Value>) -> Map<String, Value> {
 
 fn holds_redaction(value: &Value) -> bool {
     match value {
-        Value::String(text) => REDACTION_MARKERS.iter().any(|marker| text.contains(marker)),
+        Value::String(text) => {
+            REDACTION_MARKERS.iter().any(|marker| text.contains(marker))
+                || text.ends_with(TRUNCATION_MARKER)
+        }
         Value::Array(items) => items.iter().any(holds_redaction),
         Value::Object(fields) => fields.values().any(holds_redaction),
         _ => false,
@@ -100,7 +106,8 @@ pub(crate) fn approval_browser_card(envelope: &Value, harness: &str) -> Option<V
         return None;
     };
     // A redacted value was a secret when the hook saw it. Its stored stand-in has neither the
-    // secret's class nor its length, so the card masks the input and names no length.
+    // secret's class nor its length, so the card masks the input and names no length. A value the
+    // hook cut short is treated the same way, because its stored length is not the real one.
     let redacted = holds_redaction(&Value::Object(arguments));
     if redacted {
         if let Some(input) = action.input.as_mut() {

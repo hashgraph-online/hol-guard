@@ -69,6 +69,29 @@ fn a_redacted_value_is_masked_and_names_no_length() {
 }
 
 #[test]
+fn an_asterisk_mask_or_a_cut_short_value_names_no_length() {
+    let long = format!("{}\u{2026}", "a".repeat(239));
+    for text in [
+        "*****",
+        "sk-*****",
+        "Bearer *****",
+        "HLG-******",
+        long.as_str(),
+    ] {
+        let card = approval_browser_card(
+            &hook_envelope(
+                "browser_type",
+                json!({"element": "Account code", "text": text}),
+            ),
+            "claude-code",
+        )
+        .expect("card");
+        assert_eq!(card["detail"]["input_masked"], true, "{text}");
+        assert_eq!(card["detail"]["input_length"], Value::Null, "{text}");
+    }
+}
+
+#[test]
 fn server_and_tool_fields_and_json_text_input_are_read() {
     let envelope = json!({
         "action_type": "mcp_tool",
