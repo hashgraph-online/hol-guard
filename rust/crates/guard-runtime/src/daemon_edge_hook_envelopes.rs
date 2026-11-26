@@ -18,11 +18,45 @@ pub(super) fn refusal(refused: &Value) -> Option<(&str, &str)> {
     ))
 }
 
+/// The reason a refusal that reached no verdict carries while the daemon is
+/// still starting. Each update restarts the daemon, and until its worker host
+/// has migrated the installed authority and published policy, hooks cannot
+/// be reviewed. The refusal stays a deny; this only says why and when to
+/// retry, instead of pointing at a repair a few seconds of waiting fixes.
+pub(super) const STARTING_REASON: &str = "HOL Guard is still starting (it restarts after each update), so it could not review this action and did not run it. Retry in a few seconds.";
+
+/// Refusals a daemon start can cause and a short wait clears: policy not yet
+/// published, the hook worker or authority still coming up, and a hook that
+/// ran out of time or room while they did. Other refusals that reach no
+/// verdict, such as a Guard home mismatch or a command extension that failed
+/// to evaluate, are not cured by waiting and keep their own reasons.
+const STARTUP_TRANSIENT_CODES: [&str; 7] = [
+    "native_policy_not_ready",
+    "native_policy_update_in_progress",
+    "native_hook_worker_unavailable",
+    "native_hook_worker_unavailable_before_compatibility",
+    "native_approval_authority_busy",
+    hook_scheduler::QUEUE_CAPACITY,
+    hook_scheduler::DEADLINE_EXHAUSTED,
+];
+
+/// `reason`, or `STARTING_REASON` when the daemon is starting and `code` is a
+/// refusal the start itself causes. Verdicts and lasting faults keep their
+/// own reasons.
+pub(super) fn startup_reason<'a>(starting: bool, reason: &'a str, code: &str) -> &'a str {
+    if starting && STARTUP_TRANSIENT_CODES.contains(&code) {
+        STARTING_REASON
+    } else {
+        reason
+    }
+}
+
 pub(super) fn prepare_refusal(
     harness: &str,
     event: &str,
     refused: &Value,
     payload: &Map<String, Value>,
+    starting: bool,
 ) -> Option<Value> {
     let (fallback, code) = refusal(refused)?;
     if let Some(allowed) = claude_recovery(harness, event, code, payload) {
@@ -36,7 +70,7 @@ pub(super) fn prepare_refusal(
     Some(fail_safe(
         harness,
         event,
-        reason.as_deref().unwrap_or(fallback),
+        startup_reason(starting, reason.as_deref().unwrap_or(fallback), code),
         code,
     ))
 }
