@@ -361,6 +361,16 @@ fn surfaces_derive_from_identity_mcp_surface_and_delegation() {
         derived_surfaces("command.mcp-filesystem", Some("mcp"), None),
         ["mcp"]
     );
+    let profiled: BTreeSet<&str> =
+        crate::browser_first_party_drivers::first_party_browser_drivers()
+            .iter()
+            .flat_map(|driver| driver.matches.mcp_server_names.iter().map(String::as_str))
+            .collect();
+    let listed: BTreeSet<&str> = crate::catalog_read_projection::FIRST_PARTY_BROWSER_MCP_SERVERS
+        .iter()
+        .copied()
+        .collect();
+    assert_eq!(listed, profiled);
     // A first-party driver profile names the `playwright` MCP server.
     assert_eq!(
         derived_surfaces("command.mcp-playwright", Some("mcp"), None),

@@ -245,6 +245,19 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
     })
 }
 
+/// MCP server names the first-party browser driver profiles in `contributions/browser-drivers/`
+/// match. The catalog projection is also compiled into the bootstrap build crate, which does not
+/// carry the driver compiler, so the names are listed here and a test pins them to the profiles.
+pub(crate) const FIRST_PARTY_BROWSER_MCP_SERVERS: &[&str] = &[
+    "browser-use",
+    "browserbase",
+    "browsermcp",
+    "chrome-devtools",
+    "computer-use",
+    "playwright",
+    "puppeteer",
+];
+
 /// The catalog surfaces an extension covers, in a fixed order. An MCP extension is `mcp`, and also
 /// `browser` when a first-party browser driver profile names the same server. Any other command
 /// extension is `terminal`; package-firewall delegation adds `package`.
@@ -257,16 +270,7 @@ pub(crate) fn derived_surfaces(
     if surface == Some("mcp") {
         surfaces.push("mcp");
         let server = id.strip_prefix("command.mcp-").unwrap_or(id);
-        if crate::browser_first_party_drivers::first_party_browser_drivers()
-            .iter()
-            .any(|driver| {
-                driver
-                    .matches
-                    .mcp_server_names
-                    .iter()
-                    .any(|name| name == server)
-            })
-        {
+        if FIRST_PARTY_BROWSER_MCP_SERVERS.contains(&server) {
             surfaces.push("browser");
         }
     } else if id.starts_with("command.") {
