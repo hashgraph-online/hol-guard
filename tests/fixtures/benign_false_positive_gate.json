@@ -9337,6 +9337,51 @@
       "expect": "allow"
     },
     {
+      "id": "omp-eval-commit-draft-take-loop",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); for (const path of ['README.md', 'docs/guide.md']) await d.take(path); return await d.commit('docs: record the lane', ['- Add the lane note.']);",
+        "language": "js",
+        "title": "Commit the lane note"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-omp-eval-commit-draft-take-loop-then-amend",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); for (const path of ['README.md']) await d.take(path); return await d.commit('docs: record the lane', {amend: true});",
+        "language": "js",
+        "title": "Amend the lane note"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-eval-commit-draft-loop-shows-dotenv",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const d = await commit.draft(); for (const path of ['.env']) { await d.take(path); } return await d.show('.env');",
+        "language": "js",
+        "title": "Show the environment file hunks"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "omp-eval-commit-draft-show-document",
       "fix_area": "omp",
       "harnesses": [
@@ -53993,6 +54038,51 @@
         "language": "js",
         "title": "Key",
         "timeout": 300
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "omp-eval-sh-timeout",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const r = await sh('git status --short', {timeout: 30}); print(r);",
+        "language": "js",
+        "title": "Status"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-omp-eval-sh-timeout-ssh-key",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const r = await sh('cat ~/.ssh/id_rsa', {timeout: 30}); print(r);",
+        "language": "js",
+        "title": "Key"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-eval-sh-timeout-and-cwd",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const r = await sh('cat id_rsa', {timeout: 30, cwd: '~/.ssh'}); print(r);",
+        "language": "js",
+        "title": "Key"
       },
       "cwd": "worktree",
       "expect": "not_allow"
