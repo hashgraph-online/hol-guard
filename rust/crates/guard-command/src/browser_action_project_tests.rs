@@ -194,6 +194,33 @@ fn non_http_urls_have_no_origin_and_javascript_urls_flag_script_eval() {
 }
 
 #[test]
+fn a_javascript_url_split_or_prefixed_the_way_browsers_accept_still_flags_script_eval() {
+    for url in [
+        "java\tscript:alert(1)",
+        "java\nscript:alert(1)",
+        "\r\njavascript:alert(1)",
+        "\u{1}javascript:alert(1)",
+        "\u{0}\u{1f} jAvAsCrIpT\t:alert(1)",
+    ] {
+        let action = action_of("mcp__example-pilot__open_page", json!({ "url": url }));
+        assert_eq!(
+            action.sensitive_surface_flags,
+            vec![BrowserSensitiveSurfaceV1::ScriptEval],
+            "{url:?}"
+        );
+        assert_eq!(action.intent, BrowserIntentV1::Privileged, "{url:?}");
+    }
+    for url in [
+        "https://docs.example.test/javascript:guide",
+        "javascripts:alert(1)",
+        "\u{a0}javascript:alert(1)",
+    ] {
+        let action = action_of("mcp__example-pilot__open_page", json!({ "url": url }));
+        assert!(action.sensitive_surface_flags.is_empty(), "{url:?}");
+    }
+}
+
+#[test]
 fn element_and_input_keep_digests_never_content() {
     let action = action_of(
         "mcp__example-pilot__fill",

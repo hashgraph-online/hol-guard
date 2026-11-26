@@ -53,10 +53,21 @@ pub(crate) fn browser_target(url: &str, guard_origins: &[&str]) -> BrowserTarget
 }
 
 /// True for a `javascript:` URL, which runs script in the page instead of navigating.
+///
+/// The scheme is read the way a browser reads it (WHATWG URL parsing): leading C0 control
+/// characters and spaces are dropped, and ASCII tab and newline are removed wherever they appear,
+/// so `java<TAB>script:` and a control-character prefix still count.
 pub(crate) fn url_runs_script(url: &str) -> bool {
-    url.trim_start()
-        .get(..11)
-        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("javascript:"))
+    const SCHEME: &[u8] = b"javascript:";
+    let mut scheme = url
+        .bytes()
+        .skip_while(|byte| *byte <= b' ')
+        .filter(|byte| !matches!(byte, b'\t' | b'\n' | b'\r'));
+    SCHEME.iter().all(|expected| {
+        scheme
+            .next()
+            .is_some_and(|byte| byte.eq_ignore_ascii_case(expected))
+    })
 }
 
 struct HttpUrl {
