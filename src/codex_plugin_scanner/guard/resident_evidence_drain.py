@@ -198,12 +198,15 @@ class ResidentEvidenceDrain:
         return cast("tuple[Path, Callable[..., bytes | None]] | None", transport())
 
     def _run(self) -> None:
-        while not self._stop.is_set():
-            more = False
-            with suppress(Exception):
-                more = self.drain_once()
-            if not more:
-                self._stop.wait(self._interval_seconds)
+        from .native_resident_client_pool import background_resident_lane
+
+        with background_resident_lane():
+            while not self._stop.is_set():
+                more = False
+                with suppress(Exception):
+                    more = self.drain_once()
+                if not more:
+                    self._stop.wait(self._interval_seconds)
 
 
 __all__ = ["EVIDENCE_BATCH_FEATURE", "ResidentEvidenceDrain"]

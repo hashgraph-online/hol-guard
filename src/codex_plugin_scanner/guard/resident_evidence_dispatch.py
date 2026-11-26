@@ -37,7 +37,7 @@ import time
 from collections.abc import Callable
 from typing import Final
 
-from .native_resident_client_pool import background_resident_requests
+from .native_resident_client_pool import background_resident_lane, background_resident_requests
 
 # The label the resident request log counts this traffic under. The hook
 # budget test reads it to tell a hook's own round trips from the ones a
@@ -123,7 +123,7 @@ class ResidentEvidenceDispatch:
         return not self._thread.is_alive()
 
     def _run(self) -> None:
-        with background_resident_requests(BACKGROUND_LABEL):
+        with background_resident_requests(BACKGROUND_LABEL), background_resident_lane():
             while True:
                 work = self._queue.get()
                 if work is None:
