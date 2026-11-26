@@ -37,6 +37,8 @@ pub enum ProviderIntegrationCompileError {
     PolicyUrlInvalid,
     IconInvalid,
     ProviderIdDuplicate,
+    /// A manifest under `contributions/` claims the id prefix reserved for the fixture origin.
+    FixtureIdContributed,
 }
 
 impl ProviderIntegrationCompileError {
@@ -79,6 +81,7 @@ impl ProviderIntegrationCompileError {
             Self::PolicyUrlInvalid => "provider_integration_policy_url_invalid",
             Self::IconInvalid => "provider_integration_icon_invalid",
             Self::ProviderIdDuplicate => "provider_integration_id_duplicate",
+            Self::FixtureIdContributed => "provider_integration_fixture_id_contributed",
         }
     }
 }
