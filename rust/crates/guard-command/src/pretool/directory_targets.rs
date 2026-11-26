@@ -465,8 +465,20 @@ impl<'a> super::PathContext<'a> {
                 .then(|| std::fs::canonicalize(path).ok())
                 .flatten()
         };
+        // The shell's own spelling is the text `~` expands to. A spelling
+        // the shell would split or glob once a variable holding it is used
+        // unquoted (`/work/alias extra`) names other paths than the declared
+        // home, even when the directory it resolves to is the same, so only a
+        // plain literal spelling counts.
+        let plain = |path: &str| {
+            path.chars().all(|c| {
+                c.is_ascii_alphanumeric()
+                    || matches!(c, '_' | '.' | '/' | '@' | '%' | '+' | ':' | ',' | '-')
+            })
+        };
         home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
-            canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
+            plain(&shell)
+                && canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
         })
     }
 
@@ -1022,6 +1034,10 @@ mod tests_relative_cd;
 #[cfg(test)]
 #[path = "tests_relative_cd_windows.rs"]
 mod tests_relative_cd_windows;
+
+#[cfg(all(test, unix))]
+#[path = "tests_shell_home_spelling.rs"]
+mod tests_shell_home_spelling;
 
 /// The runtime's own environment, read once for every command one batch
 /// evaluates.
