@@ -79,8 +79,11 @@ fn generate_drafts_a_strict_unverified_profile_that_compiles() {
     assert!(notes.contains("tool_name_unsupported") && notes.contains("BadName"));
     assert!(notes.contains("profile_mode_unknown"));
 
-    let validated = run(json!({"op": "validate", "profile": profile.to_string()}));
+    let rows = result["gateRowsText"].as_str().unwrap();
+    let validated =
+        run(json!({"op": "validate", "profile": profile.to_string(), "gateRows": rows}));
     assert_eq!(validated["ok"], true, "{validated}");
+    assert_eq!(validated["gateRows"], 14);
     assert_eq!(validated["trustClass"], "contributed");
     assert_eq!(validated["profileMode"], "unknown");
     assert_eq!(validated["tools"], 7);
@@ -149,8 +152,12 @@ fn validate_reports_compiler_refusals_and_shipped_ids() {
 fn validate_names_a_first_party_identity_overlap() {
     let mut request = generate_request();
     request["server"] = json!("browsermcp");
-    let profile = run(request)["profile"].clone();
-    let result = run(json!({"op": "validate", "profile": profile.to_string()}));
+    let drafted = run(request);
+    let result = run(json!({
+        "op": "validate",
+        "profile": drafted["profile"].to_string(),
+        "gateRows": drafted["gateRowsText"],
+    }));
     assert_eq!(result["ok"], true, "{result}");
     assert_eq!(result["firstPartyOverlap"], json!(["browser.browsermcp"]));
 }

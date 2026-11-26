@@ -13,10 +13,16 @@ from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 
 TOOLS = '{"tools": [{"name": "page_navigate", "inputSchema": {"properties": {"url": {}}}}, {"name": "frobnicate"}]}'
 PROFILE = {"schemaVersion": "guard.browser-driver.v1", "id": "browser.example-pilot", "tools": [{}, {}]}
+ROWS = [
+    {"id": "neg-browser-example-pilot-page_navigate", "server": "example-pilot", "tool": "page_navigate"},
+    {"id": "browser-example-pilot-page_navigate-site-grant", "server": "example-pilot", "tool": "page_navigate"},
+]
 DRAFT = {
     "ok": True,
     "profile": PROFILE,
     "profileText": json.dumps(PROFILE, indent=2) + "\n",
+    "gateRows": ROWS,
+    "gateRowsText": json.dumps(ROWS, indent=2) + "\n",
     "proposals": [{"tool": "page_navigate", "verb": "Navigate", "evidence": "navigate"}],
     "notes": [
         {"code": "verb_unknown", "tool": "frobnicate"},
@@ -81,6 +87,10 @@ def test_browser_generate_sends_the_tool_list_and_writes_the_profile(
         }
     ]
     assert output.read_text(encoding="utf-8") == DRAFT["profileText"]
+    rows = tmp_path / "browser.example-pilot.gate-rows.json"
+    assert rows.read_text(encoding="utf-8") == DRAFT["gateRowsText"]
+    assert result["gateRowsOutput"] == str(rows)
+    assert result["gateRows"] == 2
     assert result["driverId"] == "browser.example-pilot"
     assert result["tools"] == 2
     assert result["notes"] == DRAFT["notes"]
@@ -95,6 +105,7 @@ def test_browser_generate_text_output_names_skipped_tools(
     text = capsys.readouterr().out
     assert status == 0, text
     assert "page_navigate: Navigate (navigate)" in text
+    assert "Drafted 2 benign gate rows in" in text
     assert "Skipped BadName" in text
     assert "Skipped page_extra: a profile holds at most 256 tools." in text
 
@@ -124,6 +135,30 @@ def test_browser_generate_refuses_a_reply_without_profile_text(
     status, error = run("generate", generate_args(tmp_path, output), capsys)
     assert (status != 0, error["error"]["code"]) == (True, "browser_generate")
     assert not output.exists()
+
+    reply = {key: value for key, value in DRAFT.items() if key != "gateRowsText"}
+    status, error = run("generate", generate_args(tmp_path, output), capsys)
+    assert (status != 0, error["error"]["code"]) == (True, "browser_generate")
+    assert not output.exists()
+
+
+def test_browser_generate_writes_gate_rows_to_a_new_file_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(extension_builder_browser, "native_browser_request", lambda request, *, code: DRAFT)
+    output = tmp_path / "out.json"
+    rows = tmp_path / "rows.json"
+    status, result = run("generate", [*generate_args(tmp_path, output), "--gate-output", str(rows)], capsys)
+    assert status == 0, result
+    assert rows.read_text(encoding="utf-8") == DRAFT["gateRowsText"]
+
+    second = tmp_path / "second.json"
+    status, error = run("generate", [*generate_args(tmp_path, second), "--gate-output", str(rows)], capsys)
+    assert (status != 0, error["error"]["code"]) == (True, "output_exists")
+    assert not second.exists()
+    status, error = run("generate", [*generate_args(tmp_path, second), "--gate-output", str(second)], capsys)
+    assert (status != 0, error["error"]["code"]) == (True, "output_exists")
+    assert not second.exists()
 
 
 def test_browser_generate_refuses_wrong_inputs_and_existing_output(
@@ -169,17 +204,34 @@ def test_browser_validate_sends_the_profile_text(
         "otherTools": ["frobnicate"],
         "firstPartyOverlap": [],
         "profileMode": "unknown",
+        "gateRows": 4,
     }
     monkeypatch.setattr(
         extension_builder_browser, "native_browser_request", lambda request, *, code: sent.append(request) or reply
     )
     profile = tmp_path / "browser.example-pilot.json"
     profile.write_text('{"id": "browser.example-pilot"}\n', encoding="utf-8")
-    status, result = run("validate", ["--browser", str(profile)], capsys)
+    rows = tmp_path / "rows.json"
+    rows.write_text("[]\n", encoding="utf-8")
+    status, result = run("validate", ["--browser", str(profile), "--gate-rows", str(rows)], capsys)
     assert status == 0, result
-    assert sent == [{"op": "validate", "profile": '{"id": "browser.example-pilot"}\n'}]
+    assert sent == [{"op": "validate", "profile": '{"id": "browser.example-pilot"}\n', "gateRows": "[]\n"}]
     assert result["otherTools"] == ["frobnicate"]
     assert result["profileMode"] == "unknown"
+    assert result["gateRows"] == 4
+
+    sent.clear()
+    run("validate", ["--browser", str(profile)], capsys)
+    assert sent == [{"op": "validate", "profile": '{"id": "browser.example-pilot"}\n'}]
+
+    unpaired = {
+        "ok": False,
+        "error": {"code": "gate_benign_pair_missing", "items": ["neg-browser-example-pilot-\x1b[2Kgo"]},
+    }
+    monkeypatch.setattr(extension_builder_browser, "native_browser_request", lambda request, *, code: unpaired)
+    status, error = run("validate", ["--browser", str(profile), "--gate-rows", str(rows)], capsys)
+    assert status != 0
+    assert "gate_benign_pair_missing (neg-browser-example-pilot-?[2Kgo)" in error["error"]["message"]
 
     refusal = {"ok": False, "error": {"code": "browser_driver_publisher_verification_unproven"}}
     monkeypatch.setattr(extension_builder_browser, "native_browser_request", lambda request, *, code: refusal)
@@ -201,6 +253,18 @@ def test_browser_generate_and_validate_through_the_native_runtime(
     profile = json.loads(output.read_text(encoding="utf-8"))
     assert profile["publisher"]["verified"] is False
     assert profile["profileMode"] == {"default": "unknown"}
-    code, result = run("validate", ["--browser", str(output)], capsys)
+    rows = tmp_path / "browser.example-pilot.gate-rows.json"
+    drafted = json.loads(rows.read_text(encoding="utf-8"))
+    code, result = run("validate", ["--browser", str(output), "--gate-rows", str(rows)], capsys)
     assert code == 0, result
     assert result["otherTools"] == ["frobnicate"]
+    assert result["gateRows"] == len(drafted) == 4
+
+    code, error = run("validate", ["--browser", str(output)], capsys)
+    assert code != 0
+    assert "gate_rows_missing" in error["error"]["message"]
+    unpaired = tmp_path / "unpaired.json"
+    unpaired.write_text(json.dumps([row for row in drafted if row["expect"] != "allow"]), encoding="utf-8")
+    code, error = run("validate", ["--browser", str(output), "--gate-rows", str(unpaired)], capsys)
+    assert code != 0
+    assert "gate_benign_pair_missing" in error["error"]["message"]
