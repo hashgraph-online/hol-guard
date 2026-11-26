@@ -8,6 +8,8 @@
     "browser-mcp-navigate-javascript": "native_policy_reapproval_required",
     "browser-mcp-navigate-local-app": "native_policy_reapproval_required",
     "browser-mcp-snapshot": "native_policy_reapproval_required",
+    "browser-mcp-type-search": "native_policy_reapproval_required",
+    "browser-mcp-upload-file": "native_policy_reapproval_required",
     "session-git-c-wt-push-feature": "native_command_review_required"
   },
   "cases": [
