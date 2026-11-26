@@ -175,3 +175,23 @@ fn a_provider_at_its_session_cap_does_not_hide_another_with_reviews_left() {
     );
     assert_eq!(ledger.admit_subject(&[]).effect, ProviderEffect::None);
 }
+
+#[test]
+fn a_danger_is_reviewed_after_another_providers_caution_was() {
+    let mut ledger = NoiseLedger::new();
+    let caution = row("provider.alpha", V::Caution);
+    assert_eq!(
+        ledger.admit_subject(&[signal(&caution)]).effect,
+        ProviderEffect::Review
+    );
+    let rows = [caution, row("provider.bravo", V::Danger)];
+    let signals: Vec<_> = compose(&rows).shown.iter().map(signal).collect();
+    assert_eq!(
+        ledger.admit_subject(&signals).effect,
+        ProviderEffect::Review
+    );
+    assert_eq!(
+        ledger.admit_subject(&signals).effect,
+        ProviderEffect::Review
+    );
+}

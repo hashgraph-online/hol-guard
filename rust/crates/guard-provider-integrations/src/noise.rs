@@ -145,7 +145,12 @@ impl NoiseLedger {
             signal.verdict == ProviderVerdictV1::Caution && self.reviews_for(signal) > 0
         });
         let effect = |ledger: &Self, signal: &NoiseSignal<'_>| match ledger.preview(signal) {
-            ProviderEffect::Review if subject_reviewed => ProviderEffect::Finding,
+            // `danger` is never capped: only a `caution` review is covered by an earlier one.
+            ProviderEffect::Review
+                if subject_reviewed && signal.verdict == ProviderVerdictV1::Caution =>
+            {
+                ProviderEffect::Finding
+            }
             effect => effect,
         };
         let winner = signals
