@@ -123,7 +123,10 @@ _OMISSION_NOTES = {
 
 def _emit_omissions(notes: object, output: TextIO) -> None:
     for note in notes if isinstance(notes, list) else []:
-        template = _OMISSION_NOTES.get(note.get("code")) if isinstance(note, dict) else None
+        if not isinstance(note, dict):
+            continue
+        code = note.get("code")
+        template = _OMISSION_NOTES.get(code) if isinstance(code, str) else None
         if template:
             print(
                 "  " + template.format(tool=note.get("tool", "a tool"), detail=note.get("detail", "unreadable")),
