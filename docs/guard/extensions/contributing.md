@@ -125,6 +125,7 @@ request with the case that exposed it.
 | New native operation | Semantics the existing matcher graph cannot express | Reviewed Rust contract, validation, lowering, evaluation, identity, and parity tests |
 | MCP server | A package or hosted MCP service with tool defaults | Follow the separate [MCP server guide](../mcp-server-contributions.md) |
 | Cloud action pack | A provider's hosted actions, run by a host from a reviewed pack | Follow the separate [cloud action pack guide](cloud-action-pack-contributing.md) |
+| Provider integration | A security product's evidence on browser reviews | Follow the separate [provider integration guide](provider-integration-contributing.md) |
 | Documentation or publisher listing | Examples, references, public presentation, or attribution | Docs or an optional listing sidecar, plus public directory checks |
 
 For a new Extension or a material authority change, open a draft pull request with the

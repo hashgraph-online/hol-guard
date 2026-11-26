@@ -162,6 +162,9 @@ place to put its cases.
   in seven days the card offers "Stop asking for this reason from <provider>". Accepting sets that
   reason code to `observe`. Integrations page lists each with undo. Tests: never automatic, never
   below Guard's own decision, undo restores.
+  - Ledger done: `overrides.rs` counts allow-throughs per provider and reason in the window,
+    offers only at the threshold, refuses an unoffered accept, lowers only to `observe` and
+    undo restores. Still open: the card offer, the Integrations page list and the resident wiring.
 - [ ] **BP-T178** Multi-provider composition: strongest fresh verdict per subject, one review per
   subject, rows sorted by verdict then provider id, three rows plus "N more", placement never orders.
   Vectors and a Playwright spec for the card with four providers.
@@ -183,7 +186,7 @@ place to put its cases.
   responses, share set, no added prompt, bounded prompt. CI runs it for every manifest under
   `contributions/provider-integrations/`. Add `hol-guard extensions generate --provider` and
   `validate --provider` so a manifest is generated with its fixtures and gate rows.
-- [ ] **BP-T181** Calibration for `verified` (D12): document the report format, the public list named
+- [x] **BP-T181** Calibration for `verified` (D12): document the report format, the public list named
   by digest and the starting thresholds in the provider contributing guide. No list is checked in.
 - [ ] **BP-T182** Noise view on the provider detail page and in `hol-guard integrations status <id>`:
   reviews caused in seven days, allowed through, quieted reason codes, effect level per capability.
