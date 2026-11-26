@@ -1330,6 +1330,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-provider-integrations"
+version = "0.1.0"
+dependencies = [
+ "guard-command",
+ "guard-contracts",
+ "serde",
+ "serde_json",
+ "zeroize",
+]
+
+[[package]]
 name = "guard-rule-contract"
 version = "0.1.0"
 dependencies = [

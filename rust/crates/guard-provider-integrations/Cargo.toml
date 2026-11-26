@@ -1,0 +1,25 @@
+[package]
+name = "guard-provider-integrations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+# HTTPS goes through guard-command's egress caller, which pins `ureq` with
+# `rustls` at the same version as guard-yanez-pulse and applies the managed
+# network policy, so this crate adds no transport of its own.
+guard-command = { path = "../guard-command" }
+guard-contracts = { path = "../guard-contracts" }
+serde.workspace = true
+serde_json.workspace = true
+zeroize = "1.9.0"
+
+[lints]
+workspace = true
+
+[features]
+# In-memory fake provider for acceptance tests here and in guard-runtime.
+# Never enabled in a release build.
+testkit = []

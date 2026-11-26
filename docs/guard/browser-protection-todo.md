@@ -447,10 +447,13 @@ transcript in the pull request (after BP-T052).
 
 ### Crate
 
-- [ ] **BP-T110** Create `rust/crates/guard-provider-integrations` (`client.rs`, `render.rs`,
+- [x] **BP-T110** Create `rust/crates/guard-provider-integrations` (`client.rs`, `render.rs`,
   `parse.rs`, `lib.rs`, `testkit.rs` behind the `testkit` feature). Pin `ureq`, `zeroize` and TLS
   features to match `rust/crates/guard-yanez-pulse/Cargo.toml`. Add it to the workspace, the build
   manifests and the supply-chain allow lists.
+  - HTTPS runs through `guard_command::egress_caller::policy_send`, which already pins `ureq` with
+    `rustls` and applies the managed network policy, so the crate adds no transport dependency of
+    its own. `zeroize` matches the workspace's single resolved version.
 - [ ] **BP-T111** Client rules: HTTPS only, host pin checked before connect, no redirects, capped
   body, connect, read and wall-clock deadlines, managed network policy through
   `guard_command::egress_caller` (`ManagedEgressPolicy::resolve`, `policy_send`). Tests against the
