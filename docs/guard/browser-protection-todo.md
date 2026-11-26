@@ -432,7 +432,7 @@ transcript in the pull request (after BP-T052).
 
 ### Contract and compiler
 
-- [ ] **BP-T100** Add `rust/crates/guard-command/src/provider_integration_compile.rs`: validate
+- [x] **BP-T100** Add `rust/crates/guard-command/src/provider_integration_compile.rs`: validate
   `guard.provider-integration.v1` per PRD 6.2, including exact-host rules, single credential header,
   fact-only request bodies, pointer-only response mapping, `shares` equality, limit caps, safe-text
   labels for reason codes. Unit test per rejection.
