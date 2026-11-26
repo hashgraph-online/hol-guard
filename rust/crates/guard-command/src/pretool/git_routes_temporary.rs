@@ -162,23 +162,37 @@ fn private_temporary_root(
 }
 
 /// The profile's own Windows temporary directory, or a non-hidden directory
-/// below it, when that directory belongs to the home owner and only the
-/// owner, LocalSystem and the Administrators group can add an entry to it.
-/// It sits inside the home, so callers that keep the home tree's answers for
-/// paths inside it ask for this one by name.
+/// below it, when every directory from the temporary root down to it,
+/// inclusive, belongs to the home owner and only the owner, LocalSystem and
+/// the Administrators group can add an entry to it. A folder below the root
+/// whose ACL lets another account add entries could gain a junction after
+/// the check, so it is refused like a looser root. The directory sits
+/// inside the home, so callers that keep the home tree's answers for paths
+/// inside it ask for this one by name.
 #[cfg(windows)]
 pub(in crate::pretool) fn profile_temporary_directory(
     path: &std::path::Path,
     context: super::super::PathContext<'_>,
 ) -> bool {
+    let trusted = |directory: &std::path::Path| {
+        guard_runtime_windows_process::owned_by_current_user(directory)
+            && guard_runtime_windows_process::writable_only_by_trusted(directory)
+    };
     private_temporary_root(path, context)
         && context
             .home_dir
             .and_then(|home| std::fs::canonicalize(home).ok())
             .is_some_and(|home| {
                 let root = home.join("AppData").join("Local").join("Temp");
-                guard_runtime_windows_process::owned_by_current_user(&root)
-                    && guard_runtime_windows_process::writable_only_by_trusted(&root)
+                let Ok(relative) = path.strip_prefix(&root) else {
+                    return false;
+                };
+                let mut directory = root.clone();
+                trusted(&directory)
+                    && relative.components().all(|part| {
+                        directory.push(part);
+                        trusted(&directory)
+                    })
             })
 }
 

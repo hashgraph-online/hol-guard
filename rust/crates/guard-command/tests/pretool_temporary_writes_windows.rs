@@ -173,8 +173,8 @@ fn missing_hidden_name_probe_in_profile_temporary_directory_is_allowed() {
         stage.to_str().unwrap().replace('\\', "/"),
     ] {
         for command in [
-            format!("ls {spelled}/signup-funnel/.tmp 2>/dev/null | head -5"),
-            format!("ls {spelled}/.tmp 2>/dev/null | head -5"),
+            format!("ls '{spelled}/signup-funnel/.tmp' 2>/dev/null | head -5"),
+            format!("ls '{spelled}/.tmp' 2>/dev/null | head -5"),
         ] {
             let result = shell(&fixture, &command);
             assert_eq!(
@@ -190,7 +190,36 @@ fn missing_hidden_name_probe_in_profile_temporary_directory_is_allowed() {
     let home = fixture.home.replace('\\', "/");
     let result = shell(
         &fixture,
-        &format!("ls {home}/signup-funnel/.tmp 2>/dev/null | head -5"),
+        &format!("ls '{home}/signup-funnel/.tmp' 2>/dev/null | head -5"),
     );
     assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+}
+
+/// Every folder from the temporary root down to the probed one must keep
+/// other accounts from adding entries. A folder below the root that grants
+/// everyone write access could gain a junction under the probed hidden name
+/// after the check, so the same probe keeps its review there, and below it.
+#[test]
+fn missing_hidden_name_probe_below_a_loosened_temporary_folder_keeps_its_review() {
+    let fixture = fixture("listing-loose");
+    let loose = fixture.temp.join("tmp.loose");
+    std::fs::create_dir_all(loose.join("signup-funnel")).unwrap();
+    let granted = std::process::Command::new("icacls")
+        .arg(&loose)
+        .args(["/grant", "*S-1-1-0:(OI)(CI)(W)"])
+        .output()
+        .unwrap();
+    assert!(granted.status.success(), "{granted:?}");
+    let spelled = loose.to_str().unwrap().replace('\\', "/");
+    for command in [
+        format!("ls '{spelled}/.tmp' 2>/dev/null | head -5"),
+        format!("ls '{spelled}/signup-funnel/.tmp' 2>/dev/null | head -5"),
+    ] {
+        let result = shell(&fixture, &command);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
 }

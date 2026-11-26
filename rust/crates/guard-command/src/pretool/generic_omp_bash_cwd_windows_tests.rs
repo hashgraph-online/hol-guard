@@ -2,16 +2,24 @@ use super::omp_bash_cwd::{resolve, BashCwd};
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-/// A session directory inside a scratch root, canonicalized.
-fn layout(name: &str) -> (PathBuf, PathBuf) {
-    let root = std::env::temp_dir().join(format!("guard-omp-wincwd-{}-{name}", std::process::id()));
+/// A session directory inside a scratch root, canonicalized. The resolver
+/// takes only ASCII drive paths, so a temporary directory spelled with any
+/// other character (a profile named `José`) cannot host the fixture; those
+/// hosts skip the test rather than report a resolver regression.
+fn layout(name: &str) -> Option<(PathBuf, PathBuf)> {
+    let temp = std::env::temp_dir();
+    if !temp.to_str().is_some_and(|text| text.is_ascii()) {
+        eprintln!("skipped: the temporary directory is not an ASCII drive path");
+        return None;
+    }
+    let root = temp.join(format!("guard-omp-wincwd-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let session = root.join("org");
     std::fs::create_dir_all(&session).unwrap();
-    (
+    Some((
         root.canonicalize().unwrap(),
         session.canonicalize().unwrap(),
-    )
+    ))
 }
 
 /// The drive spelling of a canonical directory: Windows canonicalizes to the
@@ -28,7 +36,9 @@ fn drive_spelling(path: &Path) -> String {
 /// does not model.
 #[test]
 fn a_windows_drive_cwd_is_resolved_like_the_host_resolves_it() {
-    let (root, session) = layout("drive");
+    let Some((root, session)) = layout("drive") else {
+        return;
+    };
     let session_text = drive_spelling(&session);
     std::fs::create_dir_all(session.join("src")).unwrap();
     let resolve_cwd = |cwd: &str| {
@@ -71,7 +81,9 @@ fn a_windows_drive_cwd_is_resolved_like_the_host_resolves_it() {
 /// each stays a form the host resolves in a way Guard does not model.
 #[test]
 fn a_windows_cwd_without_a_drive_folder_stays_unresolved() {
-    let (root, session) = layout("unmodeled");
+    let Some((root, session)) = layout("unmodeled") else {
+        return;
+    };
     let session_text = drive_spelling(&session);
     let drive = &session_text[..2];
     for cwd in [
