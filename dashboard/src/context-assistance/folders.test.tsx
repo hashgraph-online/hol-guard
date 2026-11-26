@@ -37,10 +37,13 @@ const allow: CigarAllowFiles = { available: true, busy: false, error: null, star
 assert.match(renderToStaticMarkup(<AddProjectPanel {...props} documentsAllowed={false} allowFiles={allow} first />), /Choose a project folder/,
   "reading files off still lets the person start");
 assert.match(renderToStaticMarkup(<AddProjectPanel {...props} first={false} active={["/workspace/one", "/workspace/two"]} maxActiveWorkspaces={2} />),
-  /2 of 2 projects used\. Remove a project or raise Active workspaces under Custom limits\./);
+  /2 of 2 active workspaces used\. Remove a project or raise Active workspaces under Custom limits\./);
 const availableCapacity = renderToStaticMarkup(<AddProjectPanel {...props} first={false} active={["/workspace/one"]} maxActiveWorkspaces={2} />);
-assert.match(availableCapacity, /1 of 2 projects used\./);
+assert.match(availableCapacity, /1 of 2 active workspaces used\./);
 assert.doesNotMatch(availableCapacity, /Remove a project or raise Active workspaces/);
+assert.match(renderToStaticMarkup(<AddProjectPanel {...props} first={false} active={["/workspace/one", "/workspace/one"]} maxActiveWorkspaces={2} />),
+  /2 of 2 active workspaces used\. Remove a project or raise Active workspaces under Custom limits\./,
+  "each active scope consumes one workspace slot");
 
 
 // Saved folders stay on the page while CIGAR rests or starts: shown loading, read-only, never "No projects yet".

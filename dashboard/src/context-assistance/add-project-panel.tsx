@@ -46,7 +46,7 @@ export function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowe
   const [recent, setRecent] = useState<RecentProject[]>(() => readRecentProjects());
   const [preset, setPreset] = useState<string[] | null>(null);
   const shortcuts = recent.filter((project) => !active.includes(project.workspace));
-  const activeProjectCount = new Set(active).size;
+  const activeWorkspaceCount = active.length;
   const input: AddProjectInput | null = workspace ? { workspace, files: documentsAllowed ? files : [] } : null;
 
   async function grant(credentials?: SettingsSaveProofCredentials) {
@@ -62,7 +62,7 @@ export function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowe
 
   return <section className="space-y-5 rounded-2xl border border-brand-dark/10 bg-white p-4 sm:p-6" aria-labelledby={`${id}-add`}>
     <div><h3 id={`${id}-add`} className={versionHeading}>{first && !shortcuts.length ? "Add your first project" : "Add a project"}</h3>
-      {maxActiveWorkspaces ? <p className="mt-1 text-sm text-brand-dark/65">{activeProjectCount} of {maxActiveWorkspaces} projects used.{activeProjectCount >= maxActiveWorkspaces ? " Remove a project or raise Active workspaces under Custom limits." : ""}</p> : null}
+      {maxActiveWorkspaces ? <p className="mt-1 text-sm text-brand-dark/65">{activeWorkspaceCount} of {maxActiveWorkspaces} active workspaces used.{activeWorkspaceCount >= maxActiveWorkspaces ? " Remove a project or raise Active workspaces under Custom limits." : ""}</p> : null}
       <p className={versionLead}>Choose a folder and tick the files CIGAR should read. Secret files, like passwords and keys, are always skipped.</p></div>
 
     <fieldset disabled={busy || dirty} className="space-y-6">

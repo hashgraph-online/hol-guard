@@ -85,6 +85,9 @@ function refusal(code: string, action: string, status: number, maxActiveWorkspac
   if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
     return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
   }
+  if (code.endsWith("context_path_limit") && action === "grant") {
+    return "CIGAR can read up to 32 files in one project. Pick fewer files, then try again.";
+  }
   if (code.endsWith("context_resource_limit") && action === "grant") {
     const limit = Number.isSafeInteger(maxActiveWorkspaces) && (maxActiveWorkspaces as number) > 0
       ? ` (${maxActiveWorkspaces})` : "";

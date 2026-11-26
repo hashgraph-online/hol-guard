@@ -340,7 +340,7 @@ fn refusal_status(code: &str) -> u16 {
         | "context_request_invalid" => 400,
         "context_scope_denied" => 403,
         "context_stale" | "context_conflict" | "disabled" | "busy" | "context_busy" => 409,
-        "context_resource_limit" => 429,
+        "context_resource_limit" | "context_path_limit" => 429,
         _ => 503,
     }
 }

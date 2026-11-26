@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CdVksrz9.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-aUrRL07j.js","assets/chunks/home-protection-module-2ljOU6I5.js","assets/chunks/supply-chain-protection-stats-BfWBBkPj.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-D6aqOZsz.js","assets/chunks/harness-version-label-BurcXmYS.js","assets/chunks/connect-guard-cloud-button-Cc2GZ_t7.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-CwmKJ6MT.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-B9m9ICz8.js","assets/chunks/app-detail-workspace-WVe37kGf.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-BAc95i7H.js","assets/chunks/policy-workspace-page-B3mQX5sw.js","assets/chunks/about-workspace-CuJmJCRM.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CdVksrz9.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-aUrRL07j.js","assets/chunks/home-protection-module-2ljOU6I5.js","assets/chunks/supply-chain-protection-stats-BfWBBkPj.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-D6aqOZsz.js","assets/chunks/harness-version-label-BurcXmYS.js","assets/chunks/connect-guard-cloud-button-Cc2GZ_t7.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-C7_KJc3T.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-B9m9ICz8.js","assets/chunks/app-detail-workspace-WVe37kGf.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-BAc95i7H.js","assets/chunks/policy-workspace-page-B3mQX5sw.js","assets/chunks/about-workspace-CuJmJCRM.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -27259,6 +27259,9 @@ function refusal(code, action, status, maxActiveWorkspaces) {
   if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
     return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
   }
+  if (code.endsWith("context_path_limit") && action === "grant") {
+    return "CIGAR can read up to 32 files in one project. Pick fewer files, then try again.";
+  }
   if (code.endsWith("context_resource_limit") && action === "grant") {
     const limit = Number.isSafeInteger(maxActiveWorkspaces) && maxActiveWorkspaces > 0 ? ` (${maxActiveWorkspaces})` : "";
     return `CIGAR is already working with as many projects as your Context size allows${limit}. Remove a project, or raise Active workspaces under Custom limits.`;
@@ -43202,7 +43205,7 @@ const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-CdVksrz9.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-aUrRL07j.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-D6aqOZsz.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CwmKJ6MT.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-C7_KJc3T.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace-B9m9ICz8.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))

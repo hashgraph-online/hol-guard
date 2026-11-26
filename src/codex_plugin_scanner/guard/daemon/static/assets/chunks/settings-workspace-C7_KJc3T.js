@@ -5729,7 +5729,7 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate
   const [recent, setRecent] = reactExports.useState(() => readRecentProjects());
   const [preset, setPreset] = reactExports.useState(null);
   const shortcuts = recent.filter((project) => !active.includes(project.workspace));
-  const activeProjectCount = new Set(active).size;
+  const activeWorkspaceCount = active.length;
   const input = workspace ? { workspace, files: documentsAllowed ? files : [] } : null;
   async function grant(credentials) {
     if (!input) return;
@@ -5750,11 +5750,11 @@ function AddProjectPanel({ busy, dirty, documentsAllowed, executionAllowed, gate
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: `${id2}-add`, className: versionHeading, children: first && !shortcuts.length ? "Add your first project" : "Add a project" }),
       maxActiveWorkspaces ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-brand-dark/65", children: [
-        activeProjectCount,
+        activeWorkspaceCount,
         " of ",
         maxActiveWorkspaces,
-        " projects used.",
-        activeProjectCount >= maxActiveWorkspaces ? " Remove a project or raise Active workspaces under Custom limits." : ""
+        " active workspaces used.",
+        activeWorkspaceCount >= maxActiveWorkspaces ? " Remove a project or raise Active workspaces under Custom limits." : ""
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: versionLead, children: "Choose a folder and tick the files CIGAR should read. Secret files, like passwords and keys, are always skipped." })
     ] }),

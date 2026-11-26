@@ -120,6 +120,7 @@ fn engine_refusals_keep_their_http_status() {
         ("native_context_assistance_disabled", 409),
         ("native_context_assistance_busy", 409),
         ("native_context_assistance_context_resource_limit", 429),
+        ("native_context_assistance_context_path_limit", 429),
         ("native_context_assistance_unavailable", 503),
         ("native_context_assistance_runtime_retired", 503),
     ] {

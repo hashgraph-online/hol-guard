@@ -11,8 +11,11 @@ impl Engine {
     ) -> Result<Value, RuntimeError> {
         // A project picked by hand replaces CIGAR's automatic one for it.
         self.make_room(runtime, &workspace, &app)?;
-        if self.scopes.len() >= self.limits.max_active_workspaces as usize || paths.len() > 32 {
+        if self.scopes.len() >= self.limits.max_active_workspaces as usize {
             return Err(RuntimeError::ResourceLimit);
+        }
+        if paths.len() > 32 {
+            return Err(RuntimeError::PathLimit);
         }
         if app != "dashboard"
             && crate::guard_config_harness::canonical_harness_id(&app) != Some(app.as_str())
