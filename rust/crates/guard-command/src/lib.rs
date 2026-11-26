@@ -32,6 +32,7 @@ pub mod browser_action_project;
 pub(crate) mod browser_action_target;
 pub mod browser_driver_compile;
 pub mod browser_driver_match;
+pub mod browser_first_party_drivers;
 pub mod browser_guard_origin;
 pub mod browser_mcp_intent;
 pub mod browser_provider_switches;

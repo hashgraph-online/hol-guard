@@ -14,6 +14,10 @@ use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
 
+use crate::browser_first_party_drivers::{
+    first_party_operation_intent, first_party_profile_mode, CHROME_DEVTOOLS_DRIVER_ID,
+    PLAYWRIGHT_DRIVER_ID,
+};
 use crate::cloud_audit_sync::{urlparse_path_end, urlsplit, urlunsplit, UrlSplit};
 use crate::local_supply_chain::{unquote_plus, urlencode};
 use crate::target_identities::py_str;
@@ -156,35 +160,12 @@ pub fn classify_operation(operation: &str, server_name: &str) -> Option<BrowserI
     let matchers = patterns();
     let chrome = matchers.chrome.is_match(&server);
     let playwright = matchers.playwright.is_match(&server);
-    let categories = [Navigation, Inspect, Interact, Transfer, Privileged];
-    if chrome {
-        for (table, intent) in [
-            CHROME_DEVTOOLS_NAVIGATION,
-            CHROME_DEVTOOLS_INSPECT,
-            CHROME_DEVTOOLS_INTERACT,
-            CHROME_DEVTOOLS_TRANSFER,
-            CHROME_DEVTOOLS_PRIVILEGED,
-        ]
-        .into_iter()
-        .zip(categories)
-        {
-            if table.binary_search(&operation.as_str()).is_ok() {
-                return Some(intent);
-            }
-        }
-    }
-    if playwright {
-        for (table, intent) in [
-            PLAYWRIGHT_NAVIGATION,
-            PLAYWRIGHT_INSPECT,
-            PLAYWRIGHT_INTERACT,
-            PLAYWRIGHT_TRANSFER,
-            PLAYWRIGHT_PRIVILEGED,
-        ]
-        .into_iter()
-        .zip(categories)
-        {
-            if table.binary_search(&operation.as_str()).is_ok() {
+    for (claimed, driver_id) in [
+        (chrome, CHROME_DEVTOOLS_DRIVER_ID),
+        (playwright, PLAYWRIGHT_DRIVER_ID),
+    ] {
+        if claimed {
+            if let Some(intent) = first_party_operation_intent(driver_id, &operation) {
                 return Some(intent);
             }
         }
@@ -427,7 +408,6 @@ fn redacted_url(parts: &UrlSplit) -> String {
 }
 
 fn profile_mode(metadata: &Map<String, Value>) -> BrowserProfileModeV1 {
-    use BrowserProfileModeV1::*;
     let identity_args = metadata
         .get("mcp_server_identity")
         .and_then(Value::as_object)
@@ -435,27 +415,13 @@ fn profile_mode(metadata: &Map<String, Value>) -> BrowserProfileModeV1 {
         .and_then(Value::as_array);
     let direct_args = metadata.get("args").and_then(Value::as_array);
     let server_args = metadata.get("server_args").and_then(Value::as_array);
-    let flags = |prefixes: &[&str]| {
+    first_party_profile_mode(
         [identity_args, direct_args, server_args]
             .into_iter()
             .flatten()
             .flatten()
-            .filter_map(Value::as_str)
-            .any(|arg| prefixes.iter().any(|prefix| arg.starts_with(prefix)))
-    };
-    if flags(ISOLATED_FLAGS) {
-        return Isolated;
-    }
-    if flags(REMOTE_DEBUG_FLAGS) {
-        return RemoteDebugging;
-    }
-    if flags(PROFILE_DIR_FLAGS) {
-        return Dedicated;
-    }
-    if flags(&["--shared", "--no-isolated"]) {
-        return Shared;
-    }
-    Unknown
+            .filter_map(Value::as_str),
+    )
 }
 
 fn sensitive_surfaces(
