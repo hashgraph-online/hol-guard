@@ -11,8 +11,10 @@ Four rules over ``mcp_cases`` of ``tests/fixtures/benign_false_positive_gate.jso
 4. Every browser protect row (an id starting ``neg-``) has a benign pair: an ``allow`` row for the
    same server and tool.
 
-No profile or manifest ships yet, so rules 1 to 3 also run against a synthetic driver and provider
-here; the real checks start biting when the first profile or manifest lands.
+Rules 1 to 3 also run against a synthetic driver and provider here. The first-party profiles map
+more tools than the driver stand-in serves, and no grant preset is wired yet, so their current gaps
+are listed in ``tests/fixtures/browser_driver_gate_baseline.json``. A gap missing from that file
+fails, and so does a listed gap that has closed: the list only shrinks.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 _GATE = _ROOT / "tests" / "fixtures" / "benign_false_positive_gate.json"
 _PROFILES = _ROOT / "contributions" / "browser-drivers"
 _MANIFESTS = _ROOT / "contributions" / "provider-integrations"
+_BASELINE = _ROOT / "tests" / "fixtures" / "browser_driver_gate_baseline.json"
 
 # Presets that grant a site or a verb class (PRD 8.2); an exact saved approval is not a class grant.
 GRANT_STATES = frozenset({"site-grant", "session-site-grant", "saved-verb-site"})
@@ -101,6 +104,15 @@ def unpaired_protect_rows(rows: list[Row], servers: set[str]) -> list[str]:
     ]
 
 
+def baseline() -> dict[str, dict[str, list[str]]]:
+    return dict(json.loads(_BASELINE.read_text(encoding="utf-8"))["profiles"])
+
+
+def ratchet(found: list[str], allowed: list[str]) -> tuple[list[str], list[str]]:
+    """Gaps not in the baseline, and baseline entries that are no longer gaps."""
+    return sorted(set(found) - set(allowed)), sorted(set(allowed) - set(found))
+
+
 def _row(row_id: str, server: str, tool: str, expect: str, **extra: Any) -> Row:
     return {"id": row_id, "server": server, "tool": tool, "arguments": {}, "expect": expect, **extra}
 
@@ -129,8 +141,10 @@ def test_every_stand_in_driver_tool_has_a_row() -> None:
 @pytest.mark.parametrize("profile", _documents(_PROFILES), ids=lambda profile: profile["id"])
 def test_every_tool_of_a_shipped_profile_has_a_row(profile: dict[str, Any]) -> None:
     tools = [tool["name"] for tool in profile["tools"]]
-    missing = missing_tool_rows(profile_servers(profile), tools, gate_rows())
-    assert not missing, f"{profile['id']}: add gate rows for {missing}"
+    allowed = baseline().get(profile["id"], {}).get("missing_tools", [])
+    new, closed = ratchet(missing_tool_rows(profile_servers(profile), tools, gate_rows()), allowed)
+    assert not new, f"{profile['id']}: add gate rows for {new}"
+    assert not closed, f"{profile['id']}: these tools have rows now; remove them from the baseline: {closed}"
 
 
 def test_a_profile_tool_without_a_row_is_reported() -> None:
@@ -144,8 +158,20 @@ def test_a_profile_tool_without_a_row_is_reported() -> None:
 
 @pytest.mark.parametrize("profile", _documents(_PROFILES), ids=lambda profile: profile["id"])
 def test_every_verb_of_a_shipped_profile_has_a_granted_allow_and_a_stop(profile: dict[str, Any]) -> None:
-    gaps = verb_class_gaps(profile, gate_rows())
-    assert not gaps, f"{profile['id']}: {gaps}"
+    allowed = baseline().get(profile["id"], {}).get("verb_gaps", [])
+    new, closed = ratchet(verb_class_gaps(profile, gate_rows()), allowed)
+    assert not new, f"{profile['id']}: {new}"
+    assert not closed, f"{profile['id']}: these gaps are closed; remove them from the baseline: {closed}"
+
+
+def test_the_baseline_names_only_shipped_profiles() -> None:
+    shipped = {profile["id"] for profile in _documents(_PROFILES)}
+    stale = sorted(set(baseline()) - shipped)
+    assert not stale, f"remove baseline entries for profiles that no longer ship: {stale}"
+
+
+def test_the_ratchet_reports_new_and_closed_gaps() -> None:
+    assert ratchet(["a", "b"], ["b", "c"]) == (["a"], ["c"])
 
 
 def test_a_verb_needs_both_a_granted_allow_and_a_stop() -> None:
