@@ -513,6 +513,65 @@ Treat it as a release-time step beside the core and full-task runs, and record w
 answered the cards. A qualification record's `not_driven` names the `omp` approval-retry lane
 when a run left it undriven, the same as every other lane.
 
+### Browser protection (`--profile browser`, never merge-qualifying)
+
+The `browser` profile checks that Guard stays quiet on routine browser-driver work and stops the
+browser calls it must stop. Cases live in `ci/gauntlet/browser.json`; `python -m ci.gauntlet list
+--catalog browser` prints them. Like `connector-setup`, the profile reads the harness's own MCP
+configuration, so it runs through `claude-code`, `codex` or `cursor` and `--harness omp` refuses
+it:
+
+```sh
+python -m ci.gauntlet run --profile browser --harness claude-code \
+  --timeout 900 --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/gauntlet-browser-claude
+```
+
+**Fixtures.** `browser_fixtures.py` installs two stand-in drivers in the fixture HOME and registers
+them in the harness's user-level MCP config. `playwright` serves the tool list recorded in
+`tests/fixtures/browser_drivers/playwright/tools.json`, so Guard classifies it the way it classifies
+the real driver. `sitehand` is a driver no profile matches. Neither opens a browser: they answer
+from scripted pages and append every call that actually ran to `browser-calls.jsonl`. A `chromium`
+stand-in on `PATH` records its arguments for launch-layer cases.
+
+**Oracles** (`browser_judge.py`). A protected effect happened only if its call is in the journal.
+An interruption is any decision other than allow, any rendered review text, or any approval row.
+
+- `browser-quiet`: routine work that must finish with no interruption at all.
+- `browser-task`: work that may create at most `approval_budget` (0 to 4) approval rows. A stop on
+  one of its tools, a repeated ask for an action already covered, or a row without Allow once and
+  Always allow fails it.
+- `browser-blocked`: the last tool the case names is the protected call. The case passes when
+  Guard stopped it on every path listed in `decision_paths` and the journal never shows it.
+
+**Fields.** `browser_fixture` names a state preset from the closed list in `browser_cases.py`
+(`none`, `site-grant`, `saved-exact`, the provider states and so on); the benign gate's `state`
+field uses the same names. `provider_script` names what the loopback fixture provider answers.
+`approval_budget` belongs to `browser-task` only. Browser cases name MCP tools as
+`mcp__<server>__<tool>` and no commands, and never join `core`.
+
+Only the `none` preset is seeded today. A case that needs another preset or a provider script fails
+before the agent starts and reads as a harness error, never as a pass. The grant, saved-decision and
+provider phases wire the rest.
+
+**Budgets** (`browser_budgets.py`). Each case writes a `browser` section, and the release budgets
+grade six browser budgets, all zero: false pauses on quiet cases, approvals over a task's budget,
+repeat prompts, prompts a provider adds over its no-provider twin, review rows missing a choice,
+and failed protection cases (the only safety budget). A budget no case measured, usually because
+the lane did not run, reads `unmeasured`, never as a pass. The report also gives approvals per
+completed task and the quiet-case rate per driver.
+
+**Static pairs.** The live lane runs only on release candidates, so every `browser-quiet` call is
+also an `allow` row in the benign false-positive gate under the same state preset
+(`tests/test_gauntlet_browser_cases_in_fp_gate.py`), and the gate pins every driver tool, verb
+class, provider state and protect row (`tests/test_browser_driver_gate_coverage.py`). A regression
+then shows on the pull request that causes it.
+
+**Release-time step.** `qualify` drives only the `omp` core lane, so it never reaches this profile.
+Run the browser profile on at least one installed harness for each release candidate that changes
+browser classification, grants or provider handling, and attach its `summary.json` beside the core
+evidence. The profile reports `merge_qualified: false`.
+
 ### Installed acceptance (`installed`, never merge-qualifying)
 
 Every lane above drives Guard as a library, inside a private per-case `settings.json` that no

@@ -40,28 +40,28 @@ needs phase 1. Phase 4 needs phase 1 and ADR 0017. Phase 5 is planning only.
   relay threat model, the WebSocket dependency options with license, size, maintenance and `unsafe`
   review, the sync-versus-async decision (D3), bounds, and the fail-closed rule (5.6). Evidence: ADR
   merged with an explicit accept or defer decision. No relay code before it is accepted.
-- [ ] **BP-T003** Add `rust/crates/guard-contracts/src/browser_action.rs` with `BrowserActionV2`,
+- [x] **BP-T003** Add `rust/crates/guard-contracts/src/browser_action.rs` with `BrowserActionV2`,
   `BrowserVerbV1`, `BrowserTargetV2`, `BrowserElementV1`, `BrowserInputV1`, `BrowserCardV1` (5.1, 5.8).
   Serde round-trip and `deny_unknown_fields` tests. Keep `BrowserAutomationIntentV1` readable.
-- [ ] **BP-T004** Add `rust/crates/guard-contracts/src/provider_signal.rs` (`ProviderSignalV1`,
+- [x] **BP-T004** Add `rust/crates/guard-contracts/src/provider_signal.rs` (`ProviderSignalV1`,
   verdict, state, subject, capability enums) and `provider_integration.rs` (route wire types, 6.9).
   Round-trip tests. No secret-bearing field implements `Debug` or `Serialize` outward.
-- [ ] **BP-T005** Add schemas `contracts/browser-drivers/driver.v1.schema.json` and
+- [x] **BP-T005** Add schemas `contracts/browser-drivers/driver.v1.schema.json` and
   `contracts/provider-integrations/provider.v1.schema.json`. Add schema tests under `tests/` that
   accept the synthetic examples from PRD 5.2 and 6.2 and reject: regex in `match`, a reserved generic
   name, a wildcard host, an IP literal host, a non-443 port, a query-string credential, a `shares` list
   that differs from the facts used, a remote icon URL, and limits above the Guard caps.
-- [ ] **BP-T006** Create `contributions/browser-drivers/` and `contributions/provider-integrations/`
+- [x] **BP-T006** Create `contributions/browser-drivers/` and `contributions/provider-integrations/`
   with a `README.md` each. Extend `scripts/refresh_extension_artifacts.py` (`--trust-only`,
   `--check-trust`) to enumerate both directories and create
   `contracts/extensions/trust/browser.<slug>.v1.json` and `provider.<slug>.v1.json` bindings as
   external and opt-in. Extend the packaged-contract copy and Hatch force-include so both directories
   ship in the wheel. Evidence: trust check green, wheel contents test.
-- [ ] **BP-T007** Add rollback switches: `HOL_GUARD_BROWSER_PROTECTION=legacy` (classification falls
+- [x] **BP-T007** Add rollback switches: `HOL_GUARD_BROWSER_PROTECTION=legacy` (classification falls
   back to the pre-change tables and grants) and `HOL_GUARD_PROVIDER_INTEGRATIONS=off` (routes answer
   `provider_capability_unavailable`, decide step is a no-op). Model both on `HOL_GUARD_DISCOVERY=off`
   in `rust/crates/guard-runtime/src/daemon_edge_discovery.rs`. Tests prove each switch.
-- [ ] **BP-T008** Record the baseline: count approvals for a scripted 20-action browser task on one
+- [x] **BP-T008** Record the baseline: count approvals for a scripted 20-action browser task on one
   site with each first-party driver on current main, and the p50 and p95 hook latency of a browser MCP
   tool decision. Store the numbers in the pull request that lands BP-T003.
 - [x] **BP-T009** Record in ADR 0018: I14 and I15, the three prompt classes (5.10), the provider
@@ -75,7 +75,7 @@ place to put its cases.
 
 ### Harness (phase 1, before any decision change)
 
-- [ ] **BP-T160** Fixture driver in `ci/gauntlet/browser_fixtures.py`, following
+- [x] **BP-T160** Fixture driver in `ci/gauntlet/browser_fixtures.py`, following
   `ci/gauntlet/connector_fixtures.py` (PRD 8.3). A stdio MCP server installed under the server name
   and launch shape of one reference driver, serving the tool list recorded in
   `tests/fixtures/browser_drivers/<slug>/tools.json`. Scripted page model with named pages
@@ -83,9 +83,9 @@ place to put its cases.
   form, a password field, a file input, a download link, an outbound link. No browser, no socket.
   Journal every executed call to `output/browser-calls.jsonl`. Evidence: unit tests for the page
   model and the journal.
-- [ ] **BP-T161** Second driver stand-in under a name no profile matches, with two routine tools, and a
+- [x] **BP-T161** Second driver stand-in under a name no profile matches, with two routine tools, and a
   recording `chromium` stand-in on `PATH` that logs argv and exits. Evidence: unit tests.
-- [ ] **BP-T162** Baseline gate rows. Before any classification change, add `mcp_cases` rows for every
+- [x] **BP-T162** Baseline gate rows. Before any classification change, add `mcp_cases` rows for every
   tool of the first-party drivers with the decision current main gives, in their own pull request.
   Later pull requests then show every class change as a diff. Extend
   `tests/benign_fp_gate_mcp.py` (or add `tests/benign_fp_gate_browser.py`) to install the fixture
@@ -97,7 +97,7 @@ place to put its cases.
   `codex`, `cursor`, `zcode`, `omp`, `pi`) and add anonymized rows to
   `tests/fixtures/gauntlet_replay_cases.json` with `quiet`, `always` and `block` expectations.
   Evidence: `tests/test_guard_gauntlet_replay_gate.py` green; one row per harness per class.
-- [ ] **BP-T164** `browser` Gauntlet profile (PRD 8.4). `ci/gauntlet/lane_coverage.py`: add `"browser"`
+- [x] **BP-T164** `browser` Gauntlet profile (PRD 8.4). `ci/gauntlet/lane_coverage.py`: add `"browser"`
   to `PROFILES` and `_HARNESS_ONLY_PROFILES`. `ci/gauntlet/catalog.py`: add oracles `browser-quiet`,
   `browser-task`, `browser-blocked`, fields `browser_fixture`, `provider_script`, `approval_budget`
   (0 to 4), and refuse them in the `core` profile. Create `ci/gauntlet/browser.json` and
@@ -110,12 +110,12 @@ place to put its cases.
   `tests/test_browser_driver_gate_coverage.py` (every tool of every shipped profile has a pinned row;
   every mapped verb class has an `allow` row under a grant and a `not_allow` row; every shipped
   provider manifest has a row per verdict and failure state; every protect row has a benign pair).
-- [ ] **BP-T166** Browser rows in `ci/gauntlet/release_budgets.py` (PRD 8.5): browser false pauses,
+- [x] **BP-T166** Browser rows in `ci/gauntlet/release_budgets.py` (PRD 8.5): browser false pauses,
   approvals over budget, repeat prompts, provider-added prompts, review rows missing a choice, failed
   browser protection cases. Each reports `within`, `over` or `unmeasured` in `summary.json` and
   `qualification.json`, plus approvals per completed task and quiet-case rate per driver id.
   Evidence: unit tests with synthetic case results for each state.
-- [ ] **BP-T167** Document the profile, oracles, fields, fixtures, budgets and the release-time step in
+- [x] **BP-T167** Document the profile, oracles, fields, fixtures, budgets and the release-time step in
   `ci/gauntlet/README.md`. Add a **Regression cases** section (gate row ids, live case ids, direction
   check) to the browser driver and provider integration pull-request templates.
 
@@ -212,28 +212,28 @@ place to put its cases.
 
 ### Driver profiles
 
-- [ ] **BP-T010** Add `rust/crates/guard-command/src/browser_driver_compile.rs`: parse and validate
+- [x] **BP-T010** Add `rust/crates/guard-command/src/browser_driver_compile.rs`: parse and validate
   `guard.browser-driver.v1`, enforce every constraint in PRD 5.2, emit a compiled table. Wire it into
   `scripts/build_native_command_program.py` and the native catalog build. Unit tests per rejection.
-- [ ] **BP-T011** Add `rust/crates/guard-command/src/browser_driver_match.rs`: resolve a tool call to
+- [x] **BP-T011** Add `rust/crates/guard-command/src/browser_driver_match.rs`: resolve a tool call to
   a driver by MCP server name, package, tool namespace, or harness tool name. First-party beats
   external, exact beats namespace, and two external profiles claiming one identity is a compile error.
-- [ ] **BP-T012** Add the verb-to-intent table and `BrowserActionV2` projection in
+- [x] **BP-T012** Add the verb-to-intent table and `BrowserActionV2` projection in
   `rust/crates/guard-command/src/browser_action_project.rs`, including discriminator tools (`action`
   argument) and `cdpPassthrough` tools (resolved by BP-T080 when present, `Other` until then).
-- [ ] **BP-T013** Move `CHROME_DEVTOOLS_*` and `PLAYWRIGHT_*` tables and the profile flag lists out of
+- [x] **BP-T013** Move `CHROME_DEVTOOLS_*` and `PLAYWRIGHT_*` tables and the profile flag lists out of
   `browser_mcp_patterns.rs` into `contributions/browser-drivers/browser.chrome-devtools-mcp.json` and
   `browser.playwright-mcp.json` (trust class first-party). Keep the generic regex fallback native.
   Evidence: `tests/test_guard_browser_mcp_intent.py`,
   `tests/fixtures/mcp_tool_policy/parity_vectors.json` and
   `tests/fixtures/mcp_proxy_decision/call_projection_vectors.json` pass unchanged.
-- [ ] **BP-T014** Keep native sensitive-surface screens authoritative: run `visit_sensitive_surfaces`
+- [x] **BP-T014** Keep native sensitive-surface screens authoritative: run `visit_sensitive_surfaces`
   and the `SENSITIVE_*` patterns on every browser call after profile projection and union the result.
   Test: a profile that labels a script-evaluating tool `Read` still yields `script_eval` and
   `browser.privileged`.
-- [ ] **BP-T015** Unlisted tool on a matched driver is `unclassified`: normal MCP review, no grant
+- [x] **BP-T015** Unlisted tool on a matched driver is `unclassified`: normal MCP review, no grant
   eligibility, card says Guard does not know this tool. Test.
-- [ ] **BP-T016** External profiles are inert until a local-admin enable; signed-cloud enable cannot
+- [x] **BP-T016** External profiles are inert until a local-admin enable; signed-cloud enable cannot
   turn one on; a this-device custom MCP grant still wins. Mirror the tests in
   `tests/test_guard_mcp_server_contribution.py`.
 
@@ -287,7 +287,7 @@ transcript in the pull request (after BP-T052).
 
 ### Self-protection
 
-- [ ] **BP-T035** R-SELF: compute `target.is_guard_origin` from the daemon port and state. A browser
+- [x] **BP-T035** R-SELF: compute `target.is_guard_origin` from the daemon port and state. A browser
   action on it is `block` with risk category `browser_guard_origin`. Add the category to `NAMES` in
   `rust/crates/guard-command/src/mcp_tool_risk.rs` with a display string in `mcp_tool_signals.rs`, and
   to `HARD_RISK_EXCLUSIONS` in `rust/crates/guard-runtime/src/temporary_mcp_grant.rs`. No grant,
