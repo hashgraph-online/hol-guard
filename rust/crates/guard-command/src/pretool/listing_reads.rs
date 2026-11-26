@@ -285,7 +285,7 @@ fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::pa
 const MAX_LEAF_ENTRIES: usize = 4096;
 
 /// Screen every leaf glob match below a listable, owner-controlled non-home directory.
-fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
+pub(super) fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     // Windows spells the home path with `\`, so there it is a separator.
     let separator = |c: char| c == '/' || (c == '\\' && cfg!(windows));
     let Some((directory, pattern)) = value.rsplit_once(separator) else {

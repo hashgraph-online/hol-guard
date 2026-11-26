@@ -196,3 +196,39 @@ fn unproven_sibling_sizes_still_ask() {
         assert!(!seen.contains("allow"), "{command}: {seen}");
     }
 }
+
+/// A summary of a pattern in a directory outside the working directory prints
+/// the names `ls -d` of the pattern prints, so each match takes the leaf glob
+/// proof of that listing. A key file among the matches, a walk below them and
+/// `-H` keep the review.
+#[test]
+fn a_summary_glob_outside_the_working_directory_takes_the_listing_proof() {
+    let home = home();
+    let portal = home.join("Code/org/app-portal");
+    let builds = home.join("Code/builds");
+    for run in ["run-1", "run-2", "run-3"] {
+        write(builds.join(run).join("out.log"), "done\n");
+    }
+    write(builds.join("server.pem"), "not-a-real-key\n");
+    let builds = builds.to_str().unwrap();
+    for command in [
+        format!("du -sh {builds}/run-*"),
+        format!("du -sh {builds}/run-* 2>/dev/null | tail -5"),
+        format!("du -sk {builds}/run-? | sort -n"),
+        "du -sh ../../builds/run-*".to_owned(),
+        format!("du -h -d 1 {builds}/run-*"),
+    ] {
+        assert_eq!(decision(&home, &portal, &command), "allow", "{command}");
+    }
+    for command in [
+        format!("du -sh {builds}/*.pem"),
+        format!("du -sh {builds}/*"),
+        format!("du -sH {builds}/run-*"),
+        format!("du -h -d 2 {builds}/run-*"),
+        format!("du -h {builds}/run-*"),
+        "du -sh ~/.ssh/*".to_owned(),
+    ] {
+        let seen = decision(&home, &portal, &command);
+        assert!(!seen.contains("allow"), "{command}: {seen}");
+    }
+}
