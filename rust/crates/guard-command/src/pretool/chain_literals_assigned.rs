@@ -36,7 +36,8 @@
 //! - the substitution expands anything but a literal an earlier assignment
 //!   bound (written out as the literal projection writes it, bare when the
 //!   shell reads it the same way bare), nests a
-//!   substitution, reads a heredoc or spans lines;
+//!   substitution, reads a heredoc, spans lines or holds an unquoted pattern
+//!   character (`*`, `?`, `[`);
 //! - the name appears anywhere except as `$NAME` or `${NAME}` after the
 //!   assignment and while it holds: assigned again, modified, sliced, escaped,
 //!   inside another substitution or a heredoc body;
@@ -220,7 +221,7 @@ fn assignment(
             return None;
         }
         let prefix: String = chars[..span.start].iter().collect();
-        let prefix = &prefix[..prefix.rfind(|c| matches!(c, ';' | '&' | '\n'))? + 1];
+        let prefix = &prefix[..prefix.rfind([';', '&', '\n'])? + 1];
         resolved(prefix, raw)?
     } else {
         raw.to_owned()

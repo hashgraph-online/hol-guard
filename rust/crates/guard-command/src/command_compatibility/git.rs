@@ -50,6 +50,38 @@ pub(crate) fn canonical_subcommand(word: &str) -> &str {
     }
 }
 
+/// Subcommands that only read the repository: Git runs no hook, credential
+/// helper or transport for them. A pager or an external diff tool is chosen
+/// by Git's own settings and `GIT_*` names, which assignments ahead of the
+/// read never count as plain.
+const USER_PROGRAM_FREE_READS: &[&str] = &[
+    "blame",
+    "cat-file",
+    "describe",
+    "diff",
+    "for-each-ref",
+    "grep",
+    "log",
+    "ls-files",
+    "ls-tree",
+    "merge-base",
+    "name-rev",
+    "rev-list",
+    "rev-parse",
+    "shortlog",
+    "show",
+    "show-ref",
+    "status",
+];
+
+/// Whether `git ARGUMENTS` is a read that starts no hook or helper, which
+/// read whatever environment names they like.
+pub(super) fn starts_no_user_program(arguments: &[String]) -> bool {
+    command_index(arguments)
+        .and_then(|index| arguments.get(index))
+        .is_some_and(|word| USER_PROGRAM_FREE_READS.contains(&canonical_subcommand(word)))
+}
+
 pub(crate) fn command_index(arguments: &[String]) -> Option<usize> {
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {

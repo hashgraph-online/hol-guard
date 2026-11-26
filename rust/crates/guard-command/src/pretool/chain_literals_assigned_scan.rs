@@ -39,7 +39,9 @@ pub(super) fn expands(body: &str) -> bool {
 /// Whether `body` is one pipeline: no unquoted list operator, grouping or
 /// comment. Written in place of its assignment it then runs as one command
 /// of the chain, as it did inside the substitution, and a `cd` it makes
-/// cannot reach the commands after it.
+/// cannot reach the commands after it. An unquoted pattern character is
+/// refused too: the shell may expand `awk ?f` to `awk -f`, a word the body
+/// does not show.
 pub(super) fn one_pipeline(body: &str) -> bool {
     let (mut single, mut double, mut escaped) = (false, false, false);
     let mut previous = ' ';
@@ -53,7 +55,9 @@ pub(super) fn one_pipeline(body: &str) -> bool {
                 '\\' => escaped = true,
                 '\'' if !double => single = true,
                 '"' => double = !double,
-                ';' | '&' | '(' | ')' | '{' | '}' | '#' if !double => return false,
+                ';' | '&' | '(' | ')' | '{' | '}' | '#' | '*' | '?' | '[' if !double => {
+                    return false
+                }
                 '|' if !double && previous == '|' => return false,
                 _ => {}
             }

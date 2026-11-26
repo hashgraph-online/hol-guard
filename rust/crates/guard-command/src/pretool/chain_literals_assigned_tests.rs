@@ -168,6 +168,10 @@ fn an_assignment_this_scan_cannot_follow_keeps_the_chain_opaque() {
 ); echo $P",
         "P=$(ls\n-a)",
         "P=`ls`",
+        // A pattern the shell may expand to a word the body does not show.
+        "x=$(echo a | awk ?f prog.awk)",
+        "P=$(ls *.md); echo $P",
+        "P=$(ls [-]l); echo $P",
         // The name is used in a way the scan does not read.
         "P=$(ls); P=x; echo $P",
         "P=$(ls); echo ${P:-none}",

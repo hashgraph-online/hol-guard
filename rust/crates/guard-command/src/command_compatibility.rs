@@ -452,13 +452,21 @@ pub(crate) fn compatibility_observations_in(
     // Set once a list item assigns a non-inert shell variable, which every
     // later command inherits when the session had already exported it.
     let mut assigned = false;
-    // Whether every such list item named only a shell variable that Git never
-    // reads (`dir=`, `out_dir=`, `REF=`). Git's own settings, the proxy names
-    // curl reads and the names a shell ties to its state stay steering.
+    // Whether every such list item named only a lowercase shell variable that
+    // Git never reads (`dir=`, `out_dir=`). Git's own settings, the proxy
+    // names curl reads and the names a shell ties to its state stay steering.
     let mut git_blind = true;
+    // The same, also counting a plain capitalised name (`REF=`). One the
+    // session already exported reaches every hook and credential helper Git
+    // starts, which read any name they like, so it is ignored only before a
+    // Git read that starts neither.
+    let mut read_blind = true;
     for (index, segment) in command.segments.iter().enumerate() {
         deadline_check(deadline)?;
-        if assigned && !(git_blind && basename(segment) == "git") {
+        if assigned
+            && !(basename(segment) == "git"
+                && (git_blind || read_blind && git::starts_no_user_program(&segment.arguments)))
+        {
             steered.push(index);
         }
         if (segment.executable.is_none()
@@ -498,6 +506,10 @@ pub(crate) fn compatibility_observations_in(
                     .environment_names
                     .iter()
                     .all(|name| git_ignores_shell_variable(name));
+                read_blind &= segment
+                    .environment_names
+                    .iter()
+                    .all(|name| git_read_ignores_shell_variable(name));
             }
         }
         // A trailing `2>&1` only joins stderr to the segment's own stdout. It
@@ -544,17 +556,30 @@ pub(crate) fn compatibility_observations_in(
     Ok(result)
 }
 
-/// A shell variable such as `dir`, `out_dir` or `REF` that is not one Git, or
-/// a program Git starts, reads from its environment.
-/// [`plain_name`](crate::pretool::generic::chain_literals::inert::assigned::plain_name)
-/// refuses the names that still steer: Git's own settings (`GIT_DIR`,
-/// `PAGER`, `EDITOR`), the proxy names curl reads (`http_proxy`), the ones a
-/// shell ties to its own state (zsh's `path`, `cdpath`) and, for a name with
-/// capitals that may already be exported, any part of a name a program reads
-/// to choose what it runs (`*_COMMAND`, `*_DIR`, `*_CONFIG`).
+/// A lowercase shell variable such as `dir` or `out_dir` is not one Git, or
+/// a program Git starts, reads from its environment. Git's own settings are
+/// uppercase (`GIT_DIR`, `PAGER`, `EDITOR`), and
+/// [`crate::pretool::generic::chain_literals::ordinary_name`] refuses the lowercase
+/// names that still steer: the proxy names curl reads (`http_proxy`) and the
+/// ones a shell ties to its own state (zsh's `path`, `cdpath`).
 fn git_ignores_shell_variable(name: &str) -> bool {
     name.bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-        && name.bytes().any(|byte| byte.is_ascii_alphabetic())
-        && crate::pretool::generic::chain_literals::inert::assigned::plain_name(name)
+        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        && name.bytes().any(|byte| byte.is_ascii_lowercase())
+        && crate::pretool::generic::chain_literals::ordinary_name(name)
+}
+
+/// [`git_ignores_shell_variable`], or a capitalised name such as `REF` that
+/// [`plain_name`](crate::pretool::generic::chain_literals::inert::assigned::plain_name)
+/// accepts: no Git setting, no name the shell or a pager reads, and no part
+/// of a name a program reads to choose what it runs (`*_COMMAND`, `*_DIR`,
+/// `*_CONFIG`). Git itself reads none of these, so it holds before a Git
+/// read that starts no hook or helper.
+fn git_read_ignores_shell_variable(name: &str) -> bool {
+    git_ignores_shell_variable(name)
+        || name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            && name.bytes().any(|byte| byte.is_ascii_alphabetic())
+            && crate::pretool::generic::chain_literals::inert::assigned::plain_name(name)
 }
