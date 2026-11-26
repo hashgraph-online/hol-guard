@@ -111,6 +111,19 @@ pub(in crate::pretool) fn chosen_server_port(
             .is_some_and(|recorded| recorded != port)
 }
 
+/// The port `GUARD_DAEMON_PORT` names, if any.
+pub(crate) fn daemon_env_port() -> Option<u16> {
+    fixed_port()
+}
+
+/// The port the daemon state file under `guard_home` records, if any.
+pub(crate) fn daemon_state_port(guard_home: &Path) -> Option<u16> {
+    state_port(guard_home)
+}
+
+/// The approval center's first choice when nothing records another port.
+pub(crate) const GUARD_DAEMON_DEFAULT_PORT: u16 = *GUARD_DAEMON_PORTS.start();
+
 fn fixed_port() -> Option<u16> {
     std::env::var("GUARD_DAEMON_PORT")
         .ok()

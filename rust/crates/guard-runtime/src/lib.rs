@@ -1487,6 +1487,10 @@ pub fn launch() {
     // Neither the hook nor the error path may panic on a closed stderr: a
     // panic inside the panic hook aborts the process and loses the code.
     std::panic::set_hook(Box::new(runtime_output::panic_hook));
+    // Browser decisions check Guard's own approval center against this home's daemon state.
+    if let Some(guard_home) = runtime_output::failure_guard_home(&arguments) {
+        guard_command::browser_guard_origin::set_process_guard_home(guard_home);
+    }
     if let Err(code) = run() {
         runtime_output::report_launch_failure(&code);
         std::process::exit(2);

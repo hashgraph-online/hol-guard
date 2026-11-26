@@ -110,6 +110,7 @@ mod http_reads;
 mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
+pub(crate) use loopback_ports::{daemon_env_port, daemon_state_port, GUARD_DAEMON_DEFAULT_PORT};
 mod omp_tool_commands;
 pub(crate) mod port_probes;
 pub(crate) mod rsync_local;
