@@ -40911,6 +40911,23 @@ function queuePageSyncTarget(input) {
   const activeOnPage = activeRequestId !== null && (pagedRequests.some((item) => item.request_id === activeRequestId) || detailRequestId === activeRequestId);
   return activeOnPage ? null : pagedRequests[0].request_id;
 }
+function pinAfterActiveChange(input) {
+  const { activeRequestId, selfSelectedRequestId, pinnedRequestId } = input;
+  if (activeRequestId === null || activeRequestId === selfSelectedRequestId) {
+    return pinnedRequestId;
+  }
+  return activeRequestId;
+}
+function missingActiveFallback(input) {
+  const { filteredRequests, requests, activeRequestId, detailRequestId, pinnedRequestId, detailGone } = input;
+  if (filteredRequests.length === 0) return null;
+  if (activeRequestId !== null) {
+    const loaded = requests.some((item) => item.request_id === activeRequestId) || detailRequestId === activeRequestId;
+    if (loaded) return null;
+    if (activeRequestId === pinnedRequestId && !detailGone) return null;
+  }
+  return filteredRequests[0].request_id;
+}
 const QUEUE_PAGE_SIZE = 10;
 function ReviewWorkspace(props) {
   const businessQueueReadFailed2 = useBusinessQueueReadFailure();
@@ -40926,23 +40943,34 @@ function ReviewWorkspace(props) {
   const [dateTo, setDateTo] = reactExports.useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const [page, setPage] = reactExports.useState(1);
-  const [setupPinnedRequestId, setSetupPinnedRequestId] = reactExports.useState(null);
+  const [pinnedRequestId, setPinnedRequestId] = reactExports.useState(activeRequestId);
+  const selfSelectedRef = reactExports.useRef(null);
+  const [seenActiveRequestId, setSeenActiveRequestId] = reactExports.useState(activeRequestId);
+  if (activeRequestId !== seenActiveRequestId) {
+    setSeenActiveRequestId(activeRequestId);
+    setPinnedRequestId(pinAfterActiveChange({
+      activeRequestId,
+      selfSelectedRequestId: selfSelectedRef.current,
+      pinnedRequestId
+    }));
+  }
   const selectRequest = reactExports.useCallback((id2) => {
+    selfSelectedRef.current = id2;
     props.onOpenRequest(id2);
     setMobileQueueOpen(false);
   }, [props.onOpenRequest]);
   const handleOpenRequest = reactExports.useCallback((id2) => {
-    setSetupPinnedRequestId(null);
+    setPinnedRequestId(null);
     selectRequest(id2);
     readState.markRead(id2);
   }, [selectRequest, readState]);
   const handleOpenSetupEvidence = reactExports.useCallback((id2) => {
-    setSetupPinnedRequestId(id2);
+    setPinnedRequestId(id2);
     selectRequest(id2);
     readState.markRead(id2);
   }, [selectRequest, readState]);
   const handlePageChange = reactExports.useCallback((nextPage) => {
-    setSetupPinnedRequestId(null);
+    setPinnedRequestId(null);
     setPage(nextPage);
   }, []);
   const handleToggleMobileQueue = reactExports.useCallback(() => {
@@ -40965,10 +40993,14 @@ function ReviewWorkspace(props) {
     const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
   }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, setupFilter, sortDirection, semanticFilter]);
+  const filterSignature = JSON.stringify([searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
+  const appliedFilterSignatureRef = reactExports.useRef(filterSignature);
   reactExports.useEffect(() => {
-    setSetupPinnedRequestId(null);
+    if (appliedFilterSignatureRef.current === filterSignature) return;
+    appliedFilterSignatureRef.current = filterSignature;
+    setPinnedRequestId(null);
     setPage(1);
-  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
+  }, [filterSignature]);
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
@@ -40998,25 +41030,27 @@ function ReviewWorkspace(props) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [pagedRequests, activeRequestId, handleOpenRequest]);
+  const detailGone = props.detailGone ?? false;
   reactExports.useEffect(() => {
-    if (filteredRequests.length === 0) {
-      return;
-    }
-    const activeInRequests = requests.some((item) => item.request_id === activeRequestId) || detail?.item.request_id === activeRequestId;
-    if (activeRequestId !== null && activeInRequests) {
-      return;
-    }
-    selectRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
+    const target2 = missingActiveFallback({
+      filteredRequests,
+      requests,
+      activeRequestId,
+      detailRequestId: detail?.item.request_id ?? null,
+      pinnedRequestId,
+      detailGone
+    });
+    if (target2 !== null) selectRequest(target2);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, pinnedRequestId, detailGone, selectRequest]);
   reactExports.useEffect(() => {
     const target2 = queuePageSyncTarget({
       pagedRequests,
       activeRequestId,
       detailRequestId: detail?.item.request_id ?? null,
-      pinnedRequestId: setupPinnedRequestId
+      pinnedRequestId
     });
     if (target2 !== null) selectRequest(target2);
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, setupPinnedRequestId, selectRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, pinnedRequestId, selectRequest]);
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
@@ -42505,6 +42539,7 @@ function renderInboxContent(props) {
       activeRequestId: props.activeRequestId,
       detailError: props.detail.kind === "error" ? props.detail.message : null,
       detailLoading: props.detail.kind === "loading",
+      detailGone: props.detail.kind === "stale",
       onRetryDetail: props.onRetryDetail,
       detail: props.detail.kind === "ready" ? {
         item: props.detail.item,
