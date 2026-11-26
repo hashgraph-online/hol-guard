@@ -198,6 +198,7 @@ pub(crate) fn walk_exact(
     let mut reading = Reading::new(terms, phrases, named, exact);
     let mut stack = vec![(root.to_path_buf(), String::new(), 0_usize, rules.clone())];
     let (mut visited, mut stopped) = (0_usize, false);
+    let mut prose = Vec::new();
     'walk: while let Some((dir, prefix, depth, rules)) = stack.pop() {
         let Ok(entries) = fs::read_dir(&dir) else {
             reading.complete = false;
@@ -250,10 +251,24 @@ pub(crate) fn walk_exact(
             {
                 continue;
             }
+            if prose_file(&name) {
+                prose.push((entry.path(), relative));
+                continue;
+            }
             reading.file(&entry.path(), relative, entry.metadata().ok());
         }
         inside.sort_by_key(|(tests, _)| !tests);
         stack.extend(inside.into_iter().map(|(_, dir)| dir));
+    }
+    // Prose is read last: a busy machine that runs out of time has then read
+    // the code, not a changelog that names every function once.
+    for (path, relative) in prose {
+        if stopped || started.elapsed() >= budget {
+            stopped = true;
+            break;
+        }
+        let metadata = fs::metadata(&path).ok();
+        reading.file(&path, relative, metadata);
     }
     // A walk that ran to the end read every file it may read.
     if stopped {
@@ -415,6 +430,16 @@ pub(crate) fn wanted_file(name: &str) -> bool {
         .is_some_and(|ext| TEXT_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
 }
 
+/// Docs and notes, as opposed to code or config.
+fn prose_file(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| PROSE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
+const PROSE_EXTENSIONS: &[&str] = &["md", "markdown", "rst", "txt", "adoc"];
+
 /// The path without Windows' `\\?\` prefix, as grants spell it.
 pub(crate) fn plain(path: PathBuf) -> PathBuf {
     #[cfg(windows)]
@@ -439,3 +464,6 @@ use read::Reading;
 #[cfg(test)]
 #[path = "context_assistance_prompt_files_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_files_prose_tests.rs"]
+mod prose_tests;
