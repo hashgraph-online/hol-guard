@@ -24,6 +24,7 @@ pub const MAX_DEBUGGING_PORTS_PER_SESSION: usize = 16;
 pub const MAX_SESSIONS_PER_HARNESS_SESSION: i64 = 64;
 const MAX_ORIGIN_CHARS: usize = 512;
 const SAVEPOINT: &str = "browser_session_schema";
+const RECORD_SAVEPOINT: &str = "browser_session_record";
 
 const STATEMENTS: [&str; 4] = [
     "create table if not exists guard_browser_sessions (
@@ -260,62 +261,84 @@ pub fn record_browser_session(
     observation: &BrowserSessionObservation<'_>,
 ) -> BrowserSessionResult<()> {
     validate(observation)?;
-    let existing: Option<(String, String, String, String)> = connection
+    connection.execute_batch(&format!("savepoint {RECORD_SAVEPOINT}"))?;
+    let outcome = record_in_savepoint(connection, observation);
+    if outcome.is_err() {
+        connection.execute_batch(&format!("rollback to {RECORD_SAVEPOINT}"))?;
+    }
+    connection.execute_batch(&format!("release {RECORD_SAVEPOINT}"))?;
+    outcome
+}
+
+/// The insert claims a new digest atomically, so two concurrent first sightings
+/// cannot both take the insert path. The port is added before the trim, so a
+/// session trimmed straight away takes its port with it.
+fn record_in_savepoint(
+    connection: &Connection,
+    observation: &BrowserSessionObservation<'_>,
+) -> BrowserSessionResult<()> {
+    let inserted = connection.execute(
+        "insert into guard_browser_sessions (session_digest, harness, \
+         harness_session_digest, driver_identity_hash, profile_mode, first_seen_unix, \
+         last_seen_unix, current_origin) values (?, ?, ?, ?, ?, ?, ?, ?) \
+         on conflict(session_digest) do nothing",
+        params![
+            observation.session_digest,
+            observation.harness,
+            observation.harness_session_digest,
+            observation.driver_identity_hash,
+            mode_text(observation.profile_mode),
+            observation.now_unix,
+            observation.now_unix,
+            observation.origin,
+        ],
+    )? == 1;
+    if !inserted {
+        update_known_session(connection, observation)?;
+    }
+    if let Some(port) = observation.debugging_port {
+        add_debugging_port(connection, observation.session_digest, port)?;
+    }
+    if inserted {
+        trim_harness_session(connection, observation)?;
+    }
+    Ok(())
+}
+
+fn update_known_session(
+    connection: &Connection,
+    observation: &BrowserSessionObservation<'_>,
+) -> BrowserSessionResult<()> {
+    let (harness, harness_session, driver, mode): (String, String, String, String) = connection
         .query_row(
             "select harness, harness_session_digest, driver_identity_hash, profile_mode \
              from guard_browser_sessions where session_digest = ?",
             [observation.session_digest],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )
-        .optional()?;
-    match existing {
-        None => {
-            connection.execute(
-                "insert into guard_browser_sessions (session_digest, harness, \
-                 harness_session_digest, driver_identity_hash, profile_mode, first_seen_unix, \
-                 last_seen_unix, current_origin) values (?, ?, ?, ?, ?, ?, ?, ?)",
-                params![
-                    observation.session_digest,
-                    observation.harness,
-                    observation.harness_session_digest,
-                    observation.driver_identity_hash,
-                    mode_text(observation.profile_mode),
-                    observation.now_unix,
-                    observation.now_unix,
-                    observation.origin,
-                ],
-            )?;
-            trim_harness_session(connection, observation)?;
-        }
-        Some((harness, harness_session, driver, mode)) => {
-            if harness != observation.harness
-                || harness_session != observation.harness_session_digest
-                || driver != observation.driver_identity_hash
-            {
-                return Err(BrowserSessionStoreError::Invalid("session_identity"));
-            }
-            let stored = mode_from_text(&mode);
-            let kept = if mode_rank(observation.profile_mode) > mode_rank(stored) {
-                observation.profile_mode
-            } else {
-                stored
-            };
-            connection.execute(
-                "update guard_browser_sessions set profile_mode = ?, \
-                 last_seen_unix = max(last_seen_unix, ?), \
-                 current_origin = coalesce(?, current_origin) where session_digest = ?",
-                params![
-                    mode_text(kept),
-                    observation.now_unix,
-                    observation.origin,
-                    observation.session_digest,
-                ],
-            )?;
-        }
+        )?;
+    if harness != observation.harness
+        || harness_session != observation.harness_session_digest
+        || driver != observation.driver_identity_hash
+    {
+        return Err(BrowserSessionStoreError::Invalid("session_identity"));
     }
-    if let Some(port) = observation.debugging_port {
-        add_debugging_port(connection, observation.session_digest, port)?;
-    }
+    let stored = mode_from_text(&mode);
+    let kept = if mode_rank(observation.profile_mode) > mode_rank(stored) {
+        observation.profile_mode
+    } else {
+        stored
+    };
+    connection.execute(
+        "update guard_browser_sessions set profile_mode = ?, \
+         last_seen_unix = max(last_seen_unix, ?), \
+         current_origin = coalesce(?, current_origin) where session_digest = ?",
+        params![
+            mode_text(kept),
+            observation.now_unix,
+            observation.origin,
+            observation.session_digest,
+        ],
+    )?;
     Ok(())
 }
 

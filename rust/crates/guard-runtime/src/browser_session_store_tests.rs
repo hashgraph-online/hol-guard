@@ -299,3 +299,50 @@ fn a_harness_session_keeps_only_its_most_recent_sessions() {
             .is_none()
     );
 }
+
+#[test]
+fn a_session_trimmed_on_insert_leaves_no_port_behind() {
+    let connection = store();
+    connection
+        .execute_batch("pragma foreign_keys = on")
+        .expect("foreign keys");
+    for index in 0..MAX_SESSIONS_PER_HARNESS_SESSION {
+        let mut launch = sighting('a');
+        launch.session = format!("{index:064x}");
+        launch.now = NOW + 100 + index;
+        record(&connection, &launch).expect("launch");
+    }
+    let mut stale = sighting('f');
+    stale.port = Some(9222);
+    stale.now = NOW;
+    record(&connection, &stale).expect("an older sighting is trimmed, not refused");
+    assert!(browser_session(&connection, &digest('f'), NOW + 200)
+        .expect("read")
+        .is_none());
+    let ports: i64 = connection
+        .query_row(
+            "select count(*) from guard_browser_session_ports",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count");
+    assert_eq!(ports, 0);
+}
+
+#[test]
+fn a_failed_sighting_leaves_no_partial_write() {
+    let connection = store();
+    record(&connection, &sighting('a')).expect("first");
+    let mut moved = sighting('a');
+    moved.driver = digest('e');
+    moved.port = Some(9222);
+    assert!(record(&connection, &moved).is_err());
+    let ports: i64 = connection
+        .query_row(
+            "select count(*) from guard_browser_session_ports",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count");
+    assert_eq!(ports, 0);
+}
