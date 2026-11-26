@@ -91,6 +91,24 @@ pub(crate) fn parse_config(text: &str) -> Option<BridgeConfig> {
     })
 }
 
+/// `reason_code` of the daemon's fail-closed prompt envelope
+/// (`hook-fail-closed-envelopes.v1.json`).
+const PROMPT_OUTAGE_CODE: &str = "native_prompt_unavailable";
+const PROMPT_OUTAGE_SETTLED: &str = "Guard daemon could not check the prompt in time";
+
+/// Whether `body` is the daemon's "could not check this prompt" block for a
+/// `UserPromptSubmit` hook, as opposed to a verdict on the prompt.
+fn is_prompt_outage(body: &str, data: &str) -> bool {
+    if event_name(data).name != "UserPromptSubmit" {
+        return false;
+    }
+    let Ok(serde_json::Value::Object(reply)) = serde_json::from_str(body) else {
+        return false;
+    };
+    reply.get("decision").and_then(serde_json::Value::as_str) == Some("block")
+        && reply.get("reason_code").and_then(serde_json::Value::as_str) == Some(PROMPT_OUTAGE_CODE)
+}
+
 fn capped(deadline: Instant, cap: Duration) -> Duration {
     remaining(deadline).min(cap)
 }
@@ -223,9 +241,10 @@ impl Bridge<'_> {
             Ok(reply) => {
                 // A reply that is not a decision answers nothing, so it takes
                 // the same Watch check as a daemon that never replied.
-                let body = reply.unwrap_or_else(|| {
-                    self.unanswered(degraded(malformed, &self.data), state_path)
-                });
+                let body = match reply {
+                    Some(body) => self.settle_prompt_outage(body, state_path),
+                    None => self.unanswered(degraded(malformed, &self.data), state_path),
+                };
                 if should_suppress_output(&self.data, &body) {
                     return None;
                 }
@@ -245,6 +264,35 @@ impl Bridge<'_> {
         } else {
             self.unanswered(degraded(&reason, &self.data), state_path)
         })
+    }
+
+    /// A daemon that ran out of time on a prompt answers with its outage
+    /// block ("could not check this prompt"), most often on the first hook
+    /// after an idle spell, when the daemon is slow to warm up and the bridge
+    /// has already spent most of the hook deadline. That answer is not a
+    /// verdict on the prompt, so the bridge asks again: the resident first,
+    /// whose lane is usually back by now, then the daemon if time is left.
+    /// When neither can answer, the prompt gets the same response as a
+    /// daemon that never replied: it continues, with the local-secrets
+    /// notice where the prompt asks for secrets. Every tool call the prompt
+    /// leads to is still reviewed. Any other block is returned unchanged.
+    fn settle_prompt_outage(&self, body: String, state_path: &Path) -> String {
+        if !is_prompt_outage(&body, &self.data) {
+            return body;
+        }
+        let miss = match self.direct_response(state_path) {
+            Ok(Some(reply)) if !is_prompt_outage(&reply, &self.data) => return reply,
+            Ok(_) => DirectMiss::Unanswered,
+            Err(miss) => miss,
+        };
+        if remaining(self.deadline) >= MINIMUM_REQUEST {
+            if let Ok(Some(reply)) = self.exchange(state_path, self.deadline, miss) {
+                if !is_prompt_outage(&reply, &self.data) {
+                    return reply;
+                }
+            }
+        }
+        degraded(PROMPT_OUTAGE_SETTLED, &self.data)
     }
 
     /// The answer for a hook no daemon answered: `failure`, which denies a
@@ -301,7 +349,7 @@ impl Bridge<'_> {
             }
             let malformed = format!("{reason}; recovered daemon returned malformed hook JSON");
             match self.exchange(state_path, self.deadline, miss) {
-                Ok(Some(body)) => return body,
+                Ok(Some(body)) => return self.settle_prompt_outage(body, state_path),
                 Ok(None) => return self.unanswered(degraded(&malformed, &self.data), state_path),
                 Err(error) => reason = format!("{reason}; daemon recovery retry failed: {error}"),
             }
@@ -411,3 +459,7 @@ mod unmanaged_tests;
 #[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_watch_tests.rs"]
 mod watch_tests;
+
+#[cfg(all(test, unix))]
+#[path = "claude_hook_bridge_prompt_outage_tests.rs"]
+mod prompt_outage_tests;
