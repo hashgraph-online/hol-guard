@@ -30241,6 +30241,86 @@
       "expect": "allow"
     },
     {
+      "id": "git-signing-key-id-inline-status",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -c user.signingkey=3AA5C34371567BD2 status --short"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "git-signing-key-id-inline-log",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -c user.signingkey=3AA5C34371567BD2 -c core.pager=cat log --oneline -3"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "git-signing-key-id-inline-named-author-commit",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -c user.name=Agent -c user.email=agent@example.test -c user.signingkey=3AA5C34371567BD2 commit -m 'fix: handle retry'"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-signing-key-random-value-commit",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -c user.signingkey=Xq7vR2mK9pL4wT8nB3cZ6hJ1 commit -m 'fix: handle retry'"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-signing-key-id-read-with-pager-program",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -c user.signingkey=3AA5C34371567BD2 -c core.pager=./page log --oneline -3"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-echo-path-to-file",
       "fix_area": "queue",
       "harnesses": [
