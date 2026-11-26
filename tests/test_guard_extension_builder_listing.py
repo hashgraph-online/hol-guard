@@ -316,6 +316,21 @@ def test_listing_command_rejects_an_invalid_kit_without_output(tmp_path: Path) -
     assert output.getvalue() == ""
 
 
+def test_browser_web_category_is_a_v2_listing_category() -> None:
+    row = {**listing(), "category": "browser-web"}
+    assert validate_listing(row)["category"] == "browser-web"
+    assert CATEGORY_LABELS["browser-web"] == "Browser and web automation"
+    v1 = {
+        "schemaVersion": LISTING_SCHEMA_V1,
+        "extensionId": "command.builder-demo",
+        "tagline": "Reviewed command coverage for Builder Demo.",
+        "category": "browser-web",
+        "limitations": ["Coverage is limited to the reviewed operations and surrounding Guard policy."],
+    }
+    with pytest.raises(BuilderError):
+        validate_listing(v1)
+
+
 def test_category_labels_are_total_for_supported_ids() -> None:
     for extension_id in [
         "command.git",

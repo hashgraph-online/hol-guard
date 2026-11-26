@@ -181,6 +181,17 @@ const futureSurface = normalizeExtensionCatalog({
 });
 assert.equal(futureSurface.extensions[0]?.surface, "unsupported");
 assert.equal(futureSurface.extensions[0]?.mcp_launch, undefined);
+assert.equal(mcpCatalog.extensions[0]?.surfaces, undefined, "older daemons omit derived surfaces");
+const browserSurfaces = normalizeExtensionCatalog({
+  ...mcpCatalog,
+  extensions: [{ ...mcpCatalog.extensions[0], surfaces: ["browser", "future-surface", "mcp"] }],
+});
+assert.deepEqual(browserSurfaces.extensions[0]?.surfaces, ["mcp", "browser"], "unknown surfaces drop and known ones keep catalog order");
+const unknownSurfacesOnly = normalizeExtensionCatalog({
+  ...mcpCatalog,
+  extensions: [{ ...mcpCatalog.extensions[0], surfaces: ["future-surface"] }],
+});
+assert.equal(unknownSurfacesOnly.extensions[0]?.surfaces, undefined);
 const futureIcon = normalizeExtensionCatalog({
   ...mcpCatalog,
   extensions: [{ ...mcpCatalog.extensions[0], icon: { kind: "future-icon" } }],

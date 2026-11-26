@@ -4,7 +4,7 @@ import { HiMiniAdjustmentsHorizontal, HiMiniCheck, HiMiniChevronDown, HiMiniXMar
 import type { ExtensionCatalogSummary, ExtensionTrustClass } from "../../extension-controls-api";
 import type { ProtectionCategoryId } from "../model/protection-categories";
 import {
-  CATALOG_KIND_FILTERS,
+  availableCatalogKinds,
   CATALOG_TRUST_FILTERS,
   catalogFilterChipAriaLabel,
   catalogFilterChipCount,
@@ -281,7 +281,7 @@ export function CatalogFilterBar(props: {
             ))}
           </CatalogFilterGroup>
           <CatalogFilterGroup legend="Kind">
-            {CATALOG_KIND_FILTERS.map((kind) => (
+            {availableCatalogKinds(props.catalog).map((kind) => (
               <KindFilterOption
                 key={kind}
                 value={kind}

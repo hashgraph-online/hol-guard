@@ -269,7 +269,8 @@ def test_v2_credit_contract_fails_closed() -> None:
 def test_worker_authority_constants_match_public_schema() -> None:
     v1 = json.loads(SCHEMA_V1.read_text(encoding="utf-8"))
     v2 = json.loads(SCHEMA_V2.read_text(encoding="utf-8"))
-    categories = frozenset(v1["properties"]["category"]["enum"])
+    categories = frozenset(v2["properties"]["category"]["enum"])
+    assert frozenset(v1["properties"]["category"]["enum"]) <= categories
     github_id_pattern = v1["properties"]["maintainerGithubIds"]["items"]["pattern"]
     assert frozenset(v1["required"]) == MODULE.LISTING_REQUIRED_KEYS
     assert frozenset(v1["properties"]) == MODULE.LISTING_ALLOWED_KEYS

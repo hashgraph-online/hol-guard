@@ -76,6 +76,7 @@ LISTING_V2_ALLOWED_KEYS = LISTING_V2_REQUIRED_KEYS | frozenset({"documentationUr
 LISTING_CATEGORIES = frozenset(
     {
         "core-safety",
+        "browser-web",
         "cloud-infrastructure",
         "data-resilience",
         "delivery-remote",
