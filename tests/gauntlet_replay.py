@@ -137,9 +137,20 @@ class ReplayCase:
         if mcp is not None:
             server, name = mcp
             # Cursor names an MCP call by its bare tool; the launch command names the server.
-            return name if self.harness == "cursor" else f"mcp__{server}__{name}"
+            if self.harness == "cursor":
+                return name
+            # Oh My Pi flattens the name: one underscore after the server, whose dashes become
+            # underscores (`observed_mcp.rs`).
+            if self.harness == "omp":
+                return f"mcp__{server.replace('-', '_')}_{name}"
+            return f"mcp__{server}__{name}"
         table = FAMILIES.get(self.tool)
         return table[self.harness] if table else FIXED[self.tool]
+
+
+def browser_review(row: dict[str, Any]) -> bool:
+    """Whether an approval row carries the normalized browser intent of the call it holds."""
+    return bool(row.get("browser_intent") or row.get("browser_intent_json"))
 
 
 def mcp_tool(tool: str) -> tuple[str, str] | None:
@@ -388,6 +399,9 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
         return f"review row without an Always allow offer: {bad}" if bad else None
     if case.expect == "protection_block":
         return protection_block_failure(result, approvals)
+    if mcp_tool(case.tool) is not None and approvals and not all(browser_review(row) for row in approvals):
+        # A browser row is protected by the browser review, not by an unrelated interruption.
+        return f"browser call was held without a browser review: {[a.get('tool_name') for a in approvals]}"
     # A contained run reaches no network, home or credential, so it protects a case whose harm is
     # exactly that reach. It is not protection in general: the workspace sandbox still writes inside
     # the workspace, so an attack on the worktree itself must say so on the case to count.

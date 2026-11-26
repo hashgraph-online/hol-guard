@@ -222,12 +222,12 @@ def test_browser_mcp_calls_cover_every_harness_and_class() -> None:
     for harness in ("claude-code", "codex", "cursor", "zcode", "omp", "pi"):
         classes = {case.expect for case in browser if case.harness == harness}
         assert {"quiet", "always", "block"} <= classes, f"{harness} browser classes: {sorted(classes)}"
-    # Cursor sends the bare tool name on beforeMCPExecution; every other harness qualifies it.
+    # Cursor sends the bare tool name on beforeMCPExecution, Oh My Pi a flattened name, and every
+    # other harness the qualified one.
     for case in browser:
-        if case.harness == "cursor":
-            assert "__" not in case.tool_name
-        else:
-            assert case.tool_name.startswith("mcp__playwright__")
+        _, name = mcp_tool(case.tool) or ("", "")
+        expected = {"cursor": name, "omp": f"mcp__playwright_{name}"}.get(case.harness, f"mcp__playwright__{name}")
+        assert case.tool_name == expected, (case.case_id, case.tool_name)
 
 
 def test_known_gaps_name_real_cases() -> None:
