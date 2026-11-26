@@ -20,8 +20,8 @@ EXPECTED = {
         "sha512-m8ArJUtVcQMSe1lLE/Ei7vX/JV7O39sWmWBsXV2NOU70F0qCp8GubA24pT3LnwTmM6LL2xV80/h6sQg85n69ew==",
     ),
     OMP_PACKAGE: (
-        "19.1.0",
-        "sha512-HQb+ucNYUuNJDYWKkSXj+yFQ4ao/LlQcTDUSUb0/g9/F5PKToHlVDLbiKnYmdQawtBSv1vT7x4F418Lwd7iLNA==",
+        "19.2.0",
+        "sha512-E4eMyBMYG6KZkq6pTCRPEC2PyzCx/lpbV2rJpXqS3/WJ63BMySvwKnQlGi1qNeECB+Oszs8/fZSg2V5xReBpqA==",
     ),
 }
 EXPECTED_NODE = "v22.22.2"
@@ -75,7 +75,7 @@ def verify_lock(lock_path: Path) -> None:
     root = packages.get("")
     if not isinstance(root, dict) or root.get("dependencies") != {
         PI_PACKAGE: "0.87.1",
-        OMP_PACKAGE: "19.1.0",
+        OMP_PACKAGE: "19.2.0",
     }:
         fail("root package dependencies are not the reviewed exact SDK versions")
 
