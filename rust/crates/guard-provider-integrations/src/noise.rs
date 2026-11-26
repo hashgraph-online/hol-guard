@@ -134,41 +134,109 @@ impl NoiseLedger {
         }
     }
 
-    fn caution(&mut self, signal: &NoiseSignal<'_>) -> NoiseOutcome {
+    /// Several providers answered about one subject. Every signal is weighed against the caps
+    /// without recording anything; only the strongest effect is recorded, so the subject raises at
+    /// most one provider-caused review whatever the provider count. Ties go to a verified
+    /// provider, then to the earlier signal, so the caller passes signals in card order.
+    pub fn admit_subject(&mut self, signals: &[NoiseSignal<'_>]) -> NoiseOutcome {
+        // A review already raised for one of these answers covers the subject: another provider's
+        // `caution` about the same subject does not ask again.
+        let subject_reviewed = signals.iter().any(|signal| {
+            signal.verdict == ProviderVerdictV1::Caution && self.reviews_for(signal) > 0
+        });
+        let effect = |ledger: &Self, signal: &NoiseSignal<'_>| match ledger.preview(signal) {
+            ProviderEffect::Review if subject_reviewed => ProviderEffect::Finding,
+            effect => effect,
+        };
+        let winner = signals
+            .iter()
+            .enumerate()
+            .max_by(|(left_index, left), (right_index, right)| {
+                effect(self, left)
+                    .cmp(&effect(self, right))
+                    .then_with(|| left.verified.cmp(&right.verified))
+                    .then_with(|| right_index.cmp(left_index))
+            })
+            .map(|(_, signal)| *signal);
+        match winner {
+            Some(signal) if effect(self, &signal) == ProviderEffect::Finding => {
+                NoiseOutcome::of(ProviderEffect::Finding)
+            }
+            Some(signal) => self.admit(&signal),
+            None => NoiseOutcome::of(ProviderEffect::None),
+        }
+    }
+
+    fn reviews_for(&self, signal: &NoiseSignal<'_>) -> u32 {
+        self.reviewed
+            .get(signal.provider_id)
+            .and_then(|subjects| {
+                subjects.get(&(signal.subject_digest.to_owned(), signal.signal_version))
+            })
+            .copied()
+            .unwrap_or(0)
+    }
+
+    /// What [`NoiseLedger::admit`] would return for `signal`, without recording it.
+    pub fn preview(&self, signal: &NoiseSignal<'_>) -> ProviderEffect {
+        if !signal.fresh {
+            return ProviderEffect::None;
+        }
+        match signal.verdict {
+            ProviderVerdictV1::Unknown => ProviderEffect::None,
+            ProviderVerdictV1::Ok => ProviderEffect::Finding,
+            ProviderVerdictV1::Danger => Self::danger(signal),
+            ProviderVerdictV1::Caution => match self.caution_gate(signal) {
+                CautionGate::Effect(effect) => effect,
+                CautionGate::SessionCapped => ProviderEffect::Finding,
+                CautionGate::Admit => ProviderEffect::Review,
+            },
+        }
+    }
+
+    fn caution_gate(&self, signal: &NoiseSignal<'_>) -> CautionGate {
         if signal.effect == ProviderEffectLevelV1::Observe {
-            return NoiseOutcome::of(ProviderEffect::WouldHaveReviewed);
+            return CautionGate::Effect(ProviderEffect::WouldHaveReviewed);
         }
         if !signal.verified {
-            return NoiseOutcome::of(ProviderEffect::Finding);
+            return CautionGate::Effect(ProviderEffect::Finding);
         }
         if signal.guard_reviews_anyway {
-            return NoiseOutcome::of(ProviderEffect::RidesOnGuardReview);
+            return CautionGate::Effect(ProviderEffect::RidesOnGuardReview);
         }
-        let key = (signal.subject_digest.to_owned(), signal.signal_version);
-        let already = self
-            .reviewed
-            .get(signal.provider_id)
-            .and_then(|subjects| subjects.get(&key))
-            .copied()
-            .unwrap_or(0);
-        if already >= PROVIDER_CAUTION_REVIEWS_PER_SUBJECT_VERSION {
-            return NoiseOutcome::of(ProviderEffect::Finding);
+        if self.reviews_for(signal) >= PROVIDER_CAUTION_REVIEWS_PER_SUBJECT_VERSION {
+            return CautionGate::Effect(ProviderEffect::Finding);
         }
         if self.caution_reviews(signal.provider_id) >= PROVIDER_CAUTION_REVIEWS_PER_SESSION {
-            let first = self.capped.insert(signal.provider_id.to_owned());
-            return NoiseOutcome {
-                effect: ProviderEffect::Finding,
-                quiet_cap_notice: first,
-            };
+            return CautionGate::SessionCapped;
         }
-        *self
-            .reviewed
-            .entry(signal.provider_id.to_owned())
-            .or_default()
-            .entry(key)
-            .or_insert(0) += 1;
-        NoiseOutcome::of(ProviderEffect::Review)
+        CautionGate::Admit
     }
+
+    fn caution(&mut self, signal: &NoiseSignal<'_>) -> NoiseOutcome {
+        match self.caution_gate(signal) {
+            CautionGate::Effect(effect) => NoiseOutcome::of(effect),
+            CautionGate::SessionCapped => NoiseOutcome {
+                effect: ProviderEffect::Finding,
+                quiet_cap_notice: self.capped.insert(signal.provider_id.to_owned()),
+            },
+            CautionGate::Admit => {
+                *self
+                    .reviewed
+                    .entry(signal.provider_id.to_owned())
+                    .or_default()
+                    .entry((signal.subject_digest.to_owned(), signal.signal_version))
+                    .or_insert(0) += 1;
+                NoiseOutcome::of(ProviderEffect::Review)
+            }
+        }
+    }
+}
+
+enum CautionGate {
+    Effect(ProviderEffect),
+    SessionCapped,
+    Admit,
 }
 
 #[cfg(test)]

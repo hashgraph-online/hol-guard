@@ -2,9 +2,15 @@
 //!
 //! For one subject the strongest fresh verdict wins and produces at most one review, whatever the
 //! provider count. An `ok` from one provider never cancels a `danger` from another. The card lists
-//! the rows sorted by verdict, strongest first, then by provider id, shows up to
-//! [`PROVIDER_CARD_MAX_ROWS`] and folds the rest into "N more". The order depends only on the
-//! verdict and the id, so a paid listing or the order answers arrived in never moves a row.
+//! the rows sorted by verdict, strongest first, then verified publishers first, then by provider
+//! id, shows up to [`PROVIDER_CARD_MAX_ROWS`] and folds the rest into "N more". The order depends
+//! only on the verdict, the maintainer-set verification and the id, so a paid listing or the order
+//! answers arrived in never moves a row.
+//!
+//! [`Composition::deciding`] names the row a card leads with. Which row's effect applies is the
+//! noise ledger's call: pass every row, in card order, to
+//! [`NoiseLedger::admit_subject`](crate::noise::NoiseLedger::admit_subject), which weighs each
+//! against the verification and session caps and records only the strongest.
 
 use guard_contracts::{ProviderVerdictV1, PROVIDER_CARD_MAX_ROWS};
 
@@ -15,6 +21,8 @@ pub struct ProviderRow<'a> {
     pub verdict: ProviderVerdictV1,
     /// Only a fresh answer may decide. A stale or unavailable one is still listed.
     pub fresh: bool,
+    /// `provider.publisher.verified`, set by maintainers only.
+    pub verified: bool,
 }
 
 impl ProviderRow<'_> {
@@ -31,8 +39,8 @@ impl ProviderRow<'_> {
 /// The card's provider section for one subject.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Composition<'a> {
-    /// The strongest fresh row, the one that goes through the noise caps. `None` when no row is
-    /// fresh with a verdict other than `unknown`.
+    /// The strongest fresh row, the one the card leads with. `None` when no row is fresh with a
+    /// verdict other than `unknown`.
     pub deciding: Option<ProviderRow<'a>>,
     /// Up to [`PROVIDER_CARD_MAX_ROWS`] rows, in card order.
     pub shown: Vec<ProviderRow<'a>>,
@@ -47,6 +55,7 @@ pub fn compose<'a>(rows: &[ProviderRow<'a>]) -> Composition<'a> {
         right
             .strength()
             .cmp(&left.strength())
+            .then_with(|| right.verified.cmp(&left.verified))
             .then_with(|| left.provider_id.cmp(right.provider_id))
             .then_with(|| right.fresh.cmp(&left.fresh))
             .then_with(|| right.verdict.strength().cmp(&left.verdict.strength()))

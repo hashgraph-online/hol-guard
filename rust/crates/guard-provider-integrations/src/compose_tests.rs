@@ -8,6 +8,20 @@ fn row(provider_id: &'static str, verdict: V) -> ProviderRow<'static> {
         provider_id,
         verdict,
         fresh: true,
+        verified: true,
+    }
+}
+
+fn signal(row: &ProviderRow<'static>) -> NoiseSignal<'static> {
+    NoiseSignal {
+        provider_id: row.provider_id,
+        subject_digest: "subject",
+        signal_version: 1,
+        verdict: row.verdict,
+        fresh: row.fresh,
+        verified: row.verified,
+        effect: ProviderEffectLevelV1::Tighten,
+        guard_reviews_anyway: false,
     }
 }
 
@@ -111,20 +125,53 @@ fn one_subject_raises_at_most_one_provider_review_whatever_the_count() {
     .collect();
     let mut reviews = 0;
     for _ in 0..5 {
-        let deciding = compose(&rows).deciding.unwrap();
-        let outcome = ledger.admit(&NoiseSignal {
-            provider_id: deciding.provider_id,
-            subject_digest: "subject",
-            signal_version: 1,
-            verdict: deciding.verdict,
-            fresh: deciding.fresh,
-            verified: true,
-            effect: ProviderEffectLevelV1::Tighten,
-            guard_reviews_anyway: false,
-        });
-        if outcome.effect == ProviderEffect::Review {
+        let signals: Vec<_> = compose(&rows).shown.iter().map(signal).collect();
+        if ledger.admit_subject(&signals).effect == ProviderEffect::Review {
             reviews += 1;
         }
     }
     assert_eq!(reviews, 1);
+}
+
+#[test]
+fn a_verified_caution_leads_an_unverified_one() {
+    let mut unverified = row("provider.alpha", V::Caution);
+    unverified.verified = false;
+    let verified = row("provider.bravo", V::Caution);
+    for rows in [[unverified, verified], [verified, unverified]] {
+        let composition = compose(&rows);
+        assert_eq!(composition.deciding, Some(verified));
+        assert_eq!(composition.shown, [verified, unverified]);
+        let signals: Vec<_> = composition.shown.iter().map(signal).collect();
+        assert_eq!(
+            NoiseLedger::new().admit_subject(&signals).effect,
+            ProviderEffect::Review
+        );
+    }
+}
+
+#[test]
+fn a_provider_at_its_session_cap_does_not_hide_another_with_reviews_left() {
+    let mut ledger = NoiseLedger::new();
+    let capped = row("provider.alpha", V::Caution);
+    for index in 0..guard_contracts::PROVIDER_CAUTION_REVIEWS_PER_SESSION {
+        let subject = format!("other-{index}");
+        let filler = NoiseSignal {
+            subject_digest: &subject,
+            ..signal(&capped)
+        };
+        assert_eq!(ledger.admit(&filler).effect, ProviderEffect::Review);
+    }
+    let rows = [capped, row("provider.bravo", V::Caution)];
+    let signals: Vec<_> = compose(&rows).shown.iter().map(signal).collect();
+    assert_eq!(
+        ledger.admit_subject(&signals).effect,
+        ProviderEffect::Review
+    );
+    assert_eq!(ledger.caution_reviews("provider.bravo"), 1);
+    assert_eq!(
+        ledger.caution_reviews("provider.alpha"),
+        guard_contracts::PROVIDER_CAUTION_REVIEWS_PER_SESSION
+    );
+    assert_eq!(ledger.admit_subject(&[]).effect, ProviderEffect::None);
 }

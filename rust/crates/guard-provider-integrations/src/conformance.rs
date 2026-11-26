@@ -22,14 +22,11 @@ use std::collections::BTreeMap;
 use guard_command::provider_integration_compile::{
     compile_provider_integration, CompiledProviderCapabilityV1, CompiledProviderIntegrationV1,
 };
-use guard_contracts::{
-    ProviderCapabilityV1, ProviderEffectLevelV1, ProviderShareableFactV1, ProviderVerdictV1,
-    PROVIDER_CAUTION_REVIEWS_PER_SESSION, PROVIDER_CAUTION_REVIEWS_PER_SUBJECT_VERSION,
-};
+use guard_contracts::{ProviderCapabilityV1, ProviderShareableFactV1, ProviderVerdictV1};
 use serde_json::Value;
 
 use crate::answer::{map_answer, AnswerMapping, MappedAnswer, ReasonCodeMapping, TtlMapping};
-use crate::noise::{apply, BaselineDecision, NoiseLedger, NoiseSignal, ProviderEffect};
+use crate::noise::BaselineDecision;
 use crate::parse::parse_strict;
 use crate::render::render_body;
 
@@ -159,8 +156,8 @@ pub fn run_conformance(
             ConformanceCheck::new(CONFORMANCE_CHECKS[0], Vec::new()),
             check_recordings(&compiled, recordings),
             check_share_set(&compiled),
-            check_no_added_prompt(&compiled, corpus),
-            check_bounded_prompt(&compiled, corpus.len()),
+            noise_checks::check_no_added_prompt(&compiled, corpus),
+            noise_checks::check_bounded_prompt(&compiled, corpus.len()),
         ],
     }
 }
@@ -402,102 +399,8 @@ fn check_share_set(compiled: &CompiledProviderIntegrationV1) -> ConformanceCheck
     ConformanceCheck::new(CONFORMANCE_CHECKS[2], problems)
 }
 
-/// The answers check 4 tries: `ok`, `unknown`, and a failure, which never produces a fresh signal.
-const QUIET_ANSWERS: [(ProviderVerdictV1, bool); 3] = [
-    (ProviderVerdictV1::Ok, true),
-    (ProviderVerdictV1::Unknown, true),
-    (ProviderVerdictV1::Unknown, false),
-];
-
-const LEVELS: [ProviderEffectLevelV1; 3] = [
-    ProviderEffectLevelV1::Observe,
-    ProviderEffectLevelV1::Tighten,
-    ProviderEffectLevelV1::Enforce,
-];
-
-fn subject(index: usize) -> String {
-    format!("conformance-subject-{index}")
-}
-
-fn check_no_added_prompt(
-    compiled: &CompiledProviderIntegrationV1,
-    corpus: &[BaselineDecision],
-) -> ConformanceCheck {
-    let mut problems = Vec::new();
-    if corpus.is_empty() {
-        problems.push("the benign browser corpus is empty".to_owned());
-    }
-    for (verdict, fresh) in QUIET_ANSWERS {
-        for level in LEVELS {
-            let mut ledger = NoiseLedger::new();
-            let changed = corpus
-                .iter()
-                .enumerate()
-                .filter(|(index, baseline)| {
-                    let subject = subject(*index);
-                    let outcome = ledger.admit(&NoiseSignal {
-                        provider_id: &compiled.id,
-                        subject_digest: &subject,
-                        signal_version: 1,
-                        verdict,
-                        fresh,
-                        verified: compiled.verified,
-                        effect: level,
-                        guard_reviews_anyway: **baseline != BaselineDecision::Allow,
-                    });
-                    apply(**baseline, outcome.effect) != **baseline
-                })
-                .count();
-            if changed > 0 {
-                problems.push(format!(
-                    "{changed} corpus row(s) changed with the provider answering {}{}",
-                    verdict_name(verdict),
-                    if fresh { "" } else { " after a failure" }
-                ));
-            }
-        }
-    }
-    ConformanceCheck::new(CONFORMANCE_CHECKS[3], problems)
-}
-
-fn check_bounded_prompt(compiled: &CompiledProviderIntegrationV1, rows: usize) -> ConformanceCheck {
-    let mut problems = Vec::new();
-    // Worst case: the publisher is verified and the subjects are asked about twice.
-    let mut ledger = NoiseLedger::new();
-    let mut per_subject = vec![0u32; rows];
-    let mut reviews = 0u32;
-    for _ in 0..2 {
-        for (index, count) in per_subject.iter_mut().enumerate() {
-            let subject = subject(index);
-            let outcome = ledger.admit(&NoiseSignal {
-                provider_id: &compiled.id,
-                subject_digest: &subject,
-                signal_version: 1,
-                verdict: ProviderVerdictV1::Caution,
-                fresh: true,
-                verified: true,
-                effect: ProviderEffectLevelV1::Tighten,
-                guard_reviews_anyway: false,
-            });
-            if outcome.effect == ProviderEffect::Review {
-                reviews += 1;
-                *count += 1;
-            }
-        }
-    }
-    if reviews > PROVIDER_CAUTION_REVIEWS_PER_SESSION {
-        problems.push(format!(
-            "{reviews} provider-caused reviews in one session, over {PROVIDER_CAUTION_REVIEWS_PER_SESSION}"
-        ));
-    }
-    if per_subject
-        .iter()
-        .any(|count| *count > PROVIDER_CAUTION_REVIEWS_PER_SUBJECT_VERSION)
-    {
-        problems.push("a subject was reviewed twice for the same answer".to_owned());
-    }
-    ConformanceCheck::new(CONFORMANCE_CHECKS[4], problems)
-}
+#[path = "conformance_noise.rs"]
+mod noise_checks;
 
 #[cfg(test)]
 #[path = "conformance_tests.rs"]

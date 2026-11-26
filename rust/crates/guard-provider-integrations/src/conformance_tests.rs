@@ -3,6 +3,7 @@ use guard_contracts::{
 };
 use serde_json::{json, Value};
 
+use super::noise_checks::check_bounded_prompt;
 use super::*;
 
 fn manifest() -> Value {
