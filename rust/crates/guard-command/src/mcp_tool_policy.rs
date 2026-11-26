@@ -165,6 +165,10 @@ pub fn write_tool_policy_context(
     Ok(())
 }
 
+/// R-SELF: a browser action on Guard's own approval center is blocked. No configured action,
+/// grant, saved approval or contributed default changes that.
+const GUARD_ORIGIN: &str = "browser_guard_origin";
+
 pub fn evaluate_tool_policy(
     request: &McpToolPolicyRequestV1,
 ) -> Result<McpToolPolicyResultV1, &'static str> {
@@ -179,6 +183,14 @@ pub fn evaluate_tool_policy(
     .or_else(|| config.get("default_action"));
     let risk_override = configured_risk(config, &request.harness);
     let explicit = risk_override.filter(|value| !value.is_null());
+    if categories.iter().any(|category| category == GUARD_ORIGIN) {
+        return Ok(McpToolPolicyResultV1 {
+            action: "block".to_owned(),
+            source: "browser-guard-origin".to_owned(),
+            summary_code: "guard_origin".to_owned(),
+            risk_categories: categories,
+        });
+    }
     let (raw_action, mut source, mut summary_code) = if categories.is_empty() {
         (Some("allow"), "heuristic", "no_risk")
     } else if explicit.is_none() && routine_browser(&categories) {
@@ -238,6 +250,35 @@ mod tests {
             }))
             .unwrap();
             assert_eq!(evaluate_tool_policy(&request).unwrap().action, expected);
+        }
+    }
+
+    #[test]
+    fn guard_origin_blocks_over_every_configured_action() {
+        let target = "http://localhost:4781/approvals";
+        if !crate::browser_guard_origin::is_guard_origin(target, None) {
+            return;
+        }
+        for config in [
+            serde_json::json!({"mode": "prompt", "default_action": "allow"}),
+            serde_json::json!({"mode": "block", "security_level": "balanced", "default_action": "allow",
+                "risk_actions": {"codex": "allow"}}),
+        ] {
+            let request: McpToolPolicyRequestV1 = serde_json::from_value(serde_json::json!({
+                "artifact": {"name": "playwright:browser_navigate", "command": "browser_navigate",
+                    "metadata": {"server_name": "playwright"}},
+                "arguments": {"url": target},
+                "config": config,
+                "harness": "codex", "artifact_id": "guard-origin", "publisher": null,
+            }))
+            .unwrap();
+            let result = evaluate_tool_policy(&request).unwrap();
+            assert_eq!(result.action, "block");
+            assert_eq!(result.summary_code, "guard_origin");
+            assert!(result
+                .risk_categories
+                .iter()
+                .any(|name| name == GUARD_ORIGIN));
         }
     }
 

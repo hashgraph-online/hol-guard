@@ -787,6 +787,8 @@ pub(crate) struct BrowserRiskFacts {
     pub external_domain: bool,
     pub shared_profile: bool,
     pub sensitive_surface: bool,
+    /// The action targets Guard's own approval center (R-SELF).
+    pub guard_origin: bool,
 }
 
 pub(crate) fn browser_risk_facts(
@@ -821,6 +823,13 @@ pub(crate) fn browser_risk_facts(
                     && !matches!(domain, "127.0.0.1" | "::1")
             })
         });
+    let guard_origin = [
+        target,
+        optional_str(artifact.metadata.get("browser_current_page_url")),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|url| crate::browser_guard_origin::is_guard_origin(url, None));
     let mut sensitive_surface = false;
     visit_sensitive_surfaces(operation, &values, &artifact.metadata, |_| {
         sensitive_surface = true
@@ -833,5 +842,6 @@ pub(crate) fn browser_risk_facts(
             BrowserProfileModeV1::Shared | BrowserProfileModeV1::RemoteDebugging
         ),
         sensitive_surface,
+        guard_origin,
     })
 }

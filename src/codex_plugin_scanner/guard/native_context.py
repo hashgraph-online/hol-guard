@@ -996,6 +996,7 @@ _MCP_RISK_CATEGORIES = frozenset(
         "browser_external_domain",
         "browser_shared_profile",
         "browser_sensitive_surface",
+        "browser_guard_origin",
     }
 )
 

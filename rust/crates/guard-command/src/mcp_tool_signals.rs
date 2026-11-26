@@ -89,6 +89,7 @@ fn signal_for(category: &str, browser: Option<&BrowserSignalContext>) -> Option<
         "secret_access" => Some("call arguments mention sensitive local files or secrets"),
         "privileged_system_mutation" => Some("call arguments imply privileged system mutation"),
         "tool_schema_mismatch" => Some("tool name understates dangerous schema capabilities"),
+        "browser_guard_origin" => Some("browser action on Guard's own approval center"),
         "browser_shared_profile" => {
             browser.map(|_| "browser MCP uses a shared or remote-debugging profile")
         }
@@ -163,4 +164,9 @@ pub fn evaluate_risk_evidence(input: &McpToolRiskInputV1) -> Result<Value, &'sta
         "signals": signals,
         "summary": summary,
     }))
+}
+
+#[cfg(test)]
+pub(crate) fn guard_origin_signal_for_test() -> String {
+    signal_for("browser_guard_origin", None).unwrap_or_default()
 }
