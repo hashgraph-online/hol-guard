@@ -221,11 +221,13 @@ pub(super) fn tests(
     } else {
         MAX_SHOWN_CHARS
     };
+    let top = found.first().map_or(0.0, |(best, ..)| *best);
     let mut listed = Vec::new();
     for (_, _, line, near) in found.into_iter().take(MAX_TEST_FILES) {
         let mut entry = Entry::plain(line);
-        for (file, at, _) in near.into_iter().take(MAX_SHOWN_TESTS) {
-            let Some((span, code)) = whole(file, at) else {
+        for (file, at, score) in near.into_iter().take(MAX_SHOWN_TESTS) {
+            // Room left goes to other files' tests that match nearly as well.
+            let Some((span, code)) = whole(file, at).filter(|_| score * 2.0 >= top) else {
                 continue;
             };
             if code.len() <= room && !earlier.contains(&span) {
@@ -242,8 +244,6 @@ pub(super) fn tests(
                 entry.shown.push(span);
             }
         }
-        // Only the best file's tests are shown.
-        room = 0;
         listed.push(entry);
     }
     listed
