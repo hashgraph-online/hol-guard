@@ -368,6 +368,7 @@ pub mod pretool_tee_merged_stderr;
 pub mod pretool_temp_checkout_search;
 pub mod pretool_temporary_writes;
 pub mod pretool_temporary_writes_windows;
+pub mod pretool_test_symlink_predicate;
 pub mod pretool_unmatched_read_globs;
 pub mod pretool_version_manager_bin_listing;
 pub mod pretool_version_printenv;
