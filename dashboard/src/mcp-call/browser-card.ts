@@ -121,7 +121,7 @@ export function browserProfileLabel(profile: GuardBrowserProfileLineV1): string 
 }
 
 /** What the input is, never what it says: the card has no typed text. */
-function inputValue(card: GuardBrowserCardV1): string | null {
+export function browserInputSummary(card: GuardBrowserCardV1): string | null {
   const { input_kind: kind, input_length: length, input_masked: masked } = card.detail;
   if (kind === null) return null;
   const size = length === null ? null : `${length} ${length === 1 ? "character" : "characters"}`;
@@ -134,7 +134,7 @@ function fact(label: string, value: string | null, key: string, kind: McpFact["k
 }
 
 /** The site without its scheme, as the card names it. */
-function siteLabel(origin: string | null): string | null {
+export function browserSiteLabel(origin: string | null): string | null {
   if (origin === null) return null;
   const host = origin.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
   return host.length > 0 ? host : null;
@@ -149,7 +149,7 @@ export function explainBrowserCard(
   const facts = [
     ...fact("Web page", card.site.origin, "browser_site", "url"),
     ...fact("On", card.detail.element_preview, "browser_element"),
-    ...fact(card.detail.input_kind === "script" ? "Code" : "What it types", inputValue(card), "browser_input"),
+    ...fact(card.detail.input_kind === "script" ? "Code" : "What it types", browserInputSummary(card), "browser_input"),
     ...fact("Browser", PROFILES[card.profile_line], "browser_profile"),
     ...fact("Touches", card.risk_chips.map((chip) => SURFACES[chip]).join(", "), "browser_surfaces"),
   ];
@@ -158,7 +158,7 @@ export function explainBrowserCard(
     : null;
   const code = codeKey !== null ? codeOf(input?.[codeKey]) : null;
   const thought = textOf(input?.thought, 300);
-  const site = siteLabel(card.site.origin);
+  const site = browserSiteLabel(card.site.origin);
   const rowTitle = card.verb === "navigate" && site !== null ? `Open ${site}` : title;
   return {
     headline: card.headline,
