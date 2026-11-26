@@ -514,3 +514,6 @@ fn looped(chars: &[char], spans: &[ShellCommandSubstitution]) -> bool {
             .any(|entry| entry == word)
     })
 }
+
+#[path = "chain_literals_compared.rs"]
+pub(super) mod compared;
