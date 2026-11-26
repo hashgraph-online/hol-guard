@@ -101,6 +101,7 @@ mod bounded_hook_bridge_hermes;
 mod bounded_hook_bridge_remediation;
 mod bounded_hook_bridge_render;
 mod browser_explain_command;
+mod browser_report_prompt_command;
 mod browser_open;
 pub mod browser_session_store;
 #[cfg(test)]

@@ -35469,6 +35469,26 @@ function McpAppMark({ name, size = "md" }) {
     }
   );
 }
+function browserReportCommand(requestId) {
+  return `hol-guard browser report-prompt ${requestId}`;
+}
+function BrowserReportPrompt({ requestId }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "This should not have asked" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Run this command to print the call as an anonymized case: every value is replaced and every site becomes site-a.example.test. Read it, then paste it into a public issue. Guard does not send anything." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoggedActionPanel,
+      {
+        label: "Command",
+        text: browserReportCommand(requestId),
+        copyAriaLabel: "Copy the report command to clipboard",
+        expandAriaLabel: "Expand the report command",
+        collapseAriaLabel: "Collapse the report command"
+      },
+      `${requestId}-report`
+    ) })
+  ] });
+}
 const EFFECT_ICONS = {
   "in-app": HiMiniComputerDesktop,
   read: HiMiniMagnifyingGlass,
@@ -35702,7 +35722,8 @@ function McpCallCard({ item, explanation }) {
         scopeNote(item, explanation.connector),
         explanation.truncated ? " Long text is shown shortened here." : ""
       ] })
-    ] })
+    ] }),
+    item.browser_card ? /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserReportPrompt, { requestId: item.request_id }) : null
   ] });
 }
 const PROTECTION_APPEARANCE = {
