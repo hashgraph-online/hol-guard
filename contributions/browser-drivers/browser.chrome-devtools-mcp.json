@@ -1,0 +1,345 @@
+{
+  "schemaVersion": "guard.browser-driver.v1",
+  "id": "browser.chrome-devtools-mcp",
+  "name": "Chrome DevTools MCP",
+  "publisher": {
+    "name": "HOL Guard",
+    "url": "https://github.com/hashgraph-online/hol-guard",
+    "verified": true
+  },
+  "referenceUrls": [
+    "https://github.com/ChromeDevTools/chrome-devtools-mcp"
+  ],
+  "match": {
+    "mcpServerNames": [
+      "chrome-devtools"
+    ],
+    "packages": [
+      "chrome-devtools-mcp",
+      "@modelcontextprotocol/server-chrome-devtools"
+    ],
+    "toolNamespaces": [
+      "mcp__chrome-devtools__"
+    ],
+    "harnessTools": []
+  },
+  "profileMode": {
+    "default": "unknown",
+    "flags": {
+      "isolated": [
+        "--isolated",
+        "--isolated-context"
+      ],
+      "dedicated": [
+        "--user-data-dir",
+        "--persistent",
+        "--profile-dir",
+        "--storage-state"
+      ],
+      "shared": [
+        "--shared",
+        "--no-isolated"
+      ],
+      "remoteDebugging": [
+        "--remote-debugging-port",
+        "--remote-debugging-pipe",
+        "--ws-endpoint"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "accept_dialog",
+      "verb": "Click"
+    },
+    {
+      "name": "accessibility_snapshot",
+      "verb": "Read"
+    },
+    {
+      "name": "clear_storage",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "click",
+      "verb": "Click"
+    },
+    {
+      "name": "close_page",
+      "verb": "Navigate"
+    },
+    {
+      "name": "dismiss_dialog",
+      "verb": "Click"
+    },
+    {
+      "name": "download_file",
+      "verb": "Download"
+    },
+    {
+      "name": "drag",
+      "verb": "Click"
+    },
+    {
+      "name": "drag_drop_file",
+      "verb": "Upload"
+    },
+    {
+      "name": "emulate",
+      "verb": "Click"
+    },
+    {
+      "name": "evaluate_script",
+      "verb": "Evaluate",
+      "script": [
+        "function"
+      ]
+    },
+    {
+      "name": "fill_form",
+      "verb": "Type"
+    },
+    {
+      "name": "fill_input",
+      "verb": "Type",
+      "text": [
+        "value"
+      ]
+    },
+    {
+      "name": "focus_element",
+      "verb": "Click"
+    },
+    {
+      "name": "get_auth_headers",
+      "verb": "Other"
+    },
+    {
+      "name": "get_console",
+      "verb": "Read"
+    },
+    {
+      "name": "get_console_message",
+      "verb": "Read"
+    },
+    {
+      "name": "get_cookies",
+      "verb": "CookieRead"
+    },
+    {
+      "name": "get_dom",
+      "verb": "Read"
+    },
+    {
+      "name": "get_html",
+      "verb": "Read"
+    },
+    {
+      "name": "get_network",
+      "verb": "Read"
+    },
+    {
+      "name": "get_network_request",
+      "verb": "Other"
+    },
+    {
+      "name": "get_performance",
+      "verb": "Read"
+    },
+    {
+      "name": "get_snapshot",
+      "verb": "Read"
+    },
+    {
+      "name": "get_storage",
+      "verb": "StorageRead"
+    },
+    {
+      "name": "go_back",
+      "verb": "Navigate"
+    },
+    {
+      "name": "go_forward",
+      "verb": "Navigate"
+    },
+    {
+      "name": "handle_dialog",
+      "verb": "Click"
+    },
+    {
+      "name": "hover",
+      "verb": "Click"
+    },
+    {
+      "name": "lighthouse_audit",
+      "verb": "Read"
+    },
+    {
+      "name": "list_console_messages",
+      "verb": "Read"
+    },
+    {
+      "name": "list_network_requests",
+      "verb": "Read"
+    },
+    {
+      "name": "list_pages",
+      "verb": "Navigate"
+    },
+    {
+      "name": "list_resources",
+      "verb": "Read"
+    },
+    {
+      "name": "manage_extension",
+      "verb": "Other"
+    },
+    {
+      "name": "manage_profile",
+      "verb": "Other"
+    },
+    {
+      "name": "manage_session",
+      "verb": "Other"
+    },
+    {
+      "name": "mock_network",
+      "verb": "Intercept"
+    },
+    {
+      "name": "navigate_page",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "network_intercept",
+      "verb": "Intercept"
+    },
+    {
+      "name": "new_page",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "performance_analyze_insight",
+      "verb": "Read"
+    },
+    {
+      "name": "performance_start_trace",
+      "verb": "Read"
+    },
+    {
+      "name": "performance_stop_trace",
+      "verb": "Read"
+    },
+    {
+      "name": "performance_trace",
+      "verb": "Read"
+    },
+    {
+      "name": "press_key",
+      "verb": "Key",
+      "text": [
+        "key"
+      ]
+    },
+    {
+      "name": "raw_cdp",
+      "verb": "Attach"
+    },
+    {
+      "name": "read_clipboard",
+      "verb": "Download"
+    },
+    {
+      "name": "read_console",
+      "verb": "Read"
+    },
+    {
+      "name": "read_cookies",
+      "verb": "CookieRead"
+    },
+    {
+      "name": "read_network",
+      "verb": "Read"
+    },
+    {
+      "name": "read_storage",
+      "verb": "StorageRead"
+    },
+    {
+      "name": "reload_page",
+      "verb": "Navigate"
+    },
+    {
+      "name": "resize_page",
+      "verb": "Click"
+    },
+    {
+      "name": "save_file",
+      "verb": "Download"
+    },
+    {
+      "name": "scroll",
+      "verb": "Click"
+    },
+    {
+      "name": "select_dropdown",
+      "verb": "Select"
+    },
+    {
+      "name": "select_page",
+      "verb": "Navigate"
+    },
+    {
+      "name": "set_cookies",
+      "verb": "CookieWrite"
+    },
+    {
+      "name": "set_network_intercept",
+      "verb": "Intercept"
+    },
+    {
+      "name": "set_storage",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "submit_form",
+      "verb": "Click"
+    },
+    {
+      "name": "take_screenshot",
+      "verb": "Screenshot"
+    },
+    {
+      "name": "take_snapshot",
+      "verb": "Read"
+    },
+    {
+      "name": "type_text",
+      "verb": "Type",
+      "text": [
+        "text"
+      ]
+    },
+    {
+      "name": "upload_file",
+      "verb": "Upload",
+      "file": [
+        "filePath"
+      ]
+    },
+    {
+      "name": "wait_for",
+      "verb": "Navigate"
+    },
+    {
+      "name": "write_clipboard",
+      "verb": "Upload"
+    }
+  ]
+}
