@@ -25,6 +25,7 @@ use crate::browser_driver_compile::{
     browser_verb_intent, CompiledBrowserOperationV1, CompiledBrowserToolV1,
 };
 use crate::browser_driver_match::{BrowserDriverMatch, BrowserDriverMatchKind};
+use crate::browser_mcp_intent::browser_sensitive_surfaces;
 
 /// Session facts the projection cannot read from the call itself.
 #[derive(Debug, Clone, Copy, Default)]
@@ -57,6 +58,28 @@ pub enum BrowserProjection {
         tool_name: String,
         reason: BrowserUnclassifiedReason,
     },
+}
+
+/// Project one matched call and union the native sensitive-surface screens into it. `metadata`
+/// carries the tool description and schema the screens read. This is the entry point for runtime
+/// callers: the screens stay authoritative after profile projection.
+pub fn project_screened_browser_action(
+    matched: &BrowserDriverMatch<'_, '_>,
+    arguments: &Map<String, Value>,
+    metadata: &Map<String, Value>,
+    context: &BrowserProjectionContext<'_>,
+) -> BrowserProjection {
+    let mut screened = browser_sensitive_surfaces(matched.tool_name, arguments, metadata);
+    for surface in context.screened_surfaces {
+        if !screened.contains(surface) {
+            screened.push(*surface);
+        }
+    }
+    let context = BrowserProjectionContext {
+        screened_surfaces: &screened,
+        ..*context
+    };
+    project_browser_action(matched, arguments, &context)
 }
 
 /// Project one matched call with its arguments.

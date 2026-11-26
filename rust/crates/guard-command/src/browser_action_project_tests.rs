@@ -28,6 +28,7 @@ fn pilot() -> CompiledBrowserDriverV1 {
             {"name": "press", "verb": "Click", "element": {"name": ["label"]}},
             {"name": "fill", "verb": "Type", "element": {"name": ["label"]}, "text": ["value"]},
             {"name": "peek", "verb": "Read", "script": ["code"]},
+            {"name": "inspect", "verb": "Read"},
             {"name": "run_js", "verb": "Evaluate", "script": ["code"]},
             {"name": "attach_file", "verb": "Upload", "file": ["path"]},
             {"name": "web-pilot", "discriminator": "action", "cases": {
@@ -333,4 +334,82 @@ fn long_case_operations_fall_back_to_the_case() {
     let case = "c".repeat(64);
     assert_eq!(case_operation(&tool, &case), case);
     assert_eq!(case_operation("act", "click"), "act.click");
+}
+
+fn screened(tool: &str, arguments: Value, metadata: Value) -> BrowserProjection {
+    let drivers = [pilot()];
+    let call = BrowserToolCallIdentity {
+        harness_tool_name: tool,
+        ..Default::default()
+    };
+    let matched = match_browser_driver(&drivers, &call).expect("fixture driver matches");
+    let (Value::Object(arguments), Value::Object(metadata)) = (arguments, metadata) else {
+        panic!("objects");
+    };
+    project_screened_browser_action(
+        &matched,
+        &arguments,
+        &metadata,
+        &BrowserProjectionContext::default(),
+    )
+}
+
+#[test]
+fn native_screens_see_script_eval_a_profile_labels_read() {
+    let action = action(screened(
+        "mcp__example-pilot__inspect",
+        json!({"expression": "document.title"}),
+        json!({}),
+    ));
+    assert_eq!(action.verb, BrowserVerbV1::Read);
+    assert_eq!(
+        action.sensitive_surface_flags,
+        vec![BrowserSensitiveSurfaceV1::ScriptEval]
+    );
+    assert_eq!(action.intent, BrowserIntentV1::Privileged);
+}
+
+#[test]
+fn native_screens_read_the_tool_description_and_schema() {
+    let action = action(screened(
+        "mcp__example-pilot__press",
+        json!({"label": "Save"}),
+        json!({
+            "tool_description": "Clicks and returns the page cookies",
+            "tool_schema": {"properties": {"storage_key": {"type": "string"}}}
+        }),
+    ));
+    assert!(action
+        .sensitive_surface_flags
+        .contains(&BrowserSensitiveSurfaceV1::Cookies));
+    assert!(action
+        .sensitive_surface_flags
+        .contains(&BrowserSensitiveSurfaceV1::Storage));
+    assert_eq!(action.intent, BrowserIntentV1::Privileged);
+}
+
+#[test]
+fn a_plain_call_gains_no_screen_flags() {
+    let action = action(screened(
+        "mcp__example-pilot__press",
+        json!({"label": "Next"}),
+        json!({"tool_description": "Clicks an element"}),
+    ));
+    assert!(action.sensitive_surface_flags.is_empty());
+    assert_eq!(action.intent, BrowserIntentV1::Interact);
+}
+
+#[test]
+fn screens_do_not_classify_an_unlisted_tool() {
+    assert!(matches!(
+        screened(
+            "mcp__example-pilot__evaluate",
+            json!({"script": "1"}),
+            json!({})
+        ),
+        BrowserProjection::Unclassified {
+            reason: BrowserUnclassifiedReason::ToolNotListed,
+            ..
+        }
+    ));
 }

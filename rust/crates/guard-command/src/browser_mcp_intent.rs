@@ -424,6 +424,16 @@ fn profile_mode(metadata: &Map<String, Value>) -> BrowserProfileModeV1 {
     )
 }
 
+/// The native sensitive-surface screens for one browser call. Driver profile projection unions
+/// these flags into every action, so a profile can never hide a surface the screens see.
+pub fn browser_sensitive_surfaces(
+    operation: &str,
+    arguments: &Map<String, Value>,
+    metadata: &Map<String, Value>,
+) -> Vec<BrowserSensitiveSurfaceV1> {
+    sensitive_surfaces(operation, &ArgumentValues::Object(arguments), metadata)
+}
+
 fn sensitive_surfaces(
     operation: &str,
     values: &ArgumentValues<'_>,
