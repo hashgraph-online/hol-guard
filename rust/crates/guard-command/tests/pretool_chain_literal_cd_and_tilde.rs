@@ -179,6 +179,10 @@ fn a_variable_the_shell_may_not_hold_keeps_its_review() {
         // A quoted tilde stays a tilde, and `~name` is another user's home.
         "f=\"~/notes/plan.md\"; sed -n 1,5p $f",
         "f=~root/.profile; sed -n 1,5p $f",
+        // A bare tilde holds HOME as the shell spells it, which may differ
+        // from the declared home in a way a joined suffix can see.
+        "f=~; sed -n 1,5p ${f}/notes/plan.md",
+        "f=~ && wc -l \"$f/notes/plan.md\"",
     ] {
         for harness in HARNESSES {
             assert_ne!(

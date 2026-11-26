@@ -31,12 +31,18 @@ pub(super) fn enters(
         })
 }
 
-/// The value of an assignment written `~` or `~/rest`, given the `rest` after
-/// the tilde: the declared home joined with it. `None` for `~name`, for an
-/// unknown home and for any value the shell would not pass through unchanged.
+/// The value of an assignment written `~/rest`, given the `rest` after the
+/// tilde: the declared home joined with it. `None` for `~name`, for an unknown
+/// home and for any value the shell would not pass through unchanged.
+///
+/// A bare `~` stays unknown too. The shell gives it HOME exactly as spelled,
+/// and the declared home only names the same directory: with HOME set to
+/// `/h/` or `/h/.`, `${f}ssh` reads below `/h`, not the `/hssh` the declared
+/// spelling would give. After `~/` every spelling of the home names the same
+/// file.
 pub(super) fn home_value(rest: &[char], home: Option<&str>) -> Option<String> {
     let rest: String = rest.iter().collect();
-    home.filter(|_| rest.is_empty() || rest.starts_with('/'))
+    home.filter(|_| rest.starts_with('/'))
         .map(|home| format!("{}{rest}", home.trim_end_matches('/')))
         .filter(|value| !value.is_empty() && value.chars().count() <= MAX_VALUE_CHARS)
         .filter(|value| literal(value))
