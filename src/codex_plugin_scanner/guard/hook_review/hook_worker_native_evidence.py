@@ -77,26 +77,33 @@ def _record_unavailable_native(
         prompt_reason=prompt_reason,
     )
     native_response = native.get("response") if isinstance(native, dict) else None
-    response = dict(native_response) if isinstance(native_response, Mapping) else availability_harness_response(
-        harness=harness,
-        event_name=event_name,
-        reason_code=reason_code,
-        reason=resolved_reason,
-        prompt_reason=reason or native_unavailable_reason(failure_code, "") or None,
-        guard_home=guard_home,
-        deadline=deadline,
+    response = (
+        dict(native_response)
+        if isinstance(native_response, Mapping)
+        else availability_harness_response(
+            harness=harness,
+            event_name=event_name,
+            reason_code=reason_code,
+            reason=resolved_reason,
+            prompt_reason=reason or native_unavailable_reason(failure_code, "") or None,
+            guard_home=guard_home,
+            deadline=deadline,
+        )
     )
     if watch_continue and event_name == "PreToolUse":
         # Only a superseded Watch snapshot (resident reachable) keeps recording,
         # through the resident-rendered continue; any render failure keeps the
         # fixed deny above. Real outages never take this path.
-        response = native_render_recording_only_pre_tool(
-            harness,
-            reason_code=reason_code,
-            reason="Watch recorded this action without stopping it.",
-            guard_home=guard_home,
-            deadline=deadline,
-        ) or response
+        response = (
+            native_render_recording_only_pre_tool(
+                harness,
+                reason_code=reason_code,
+                reason="Watch recorded this action without stopping it.",
+                guard_home=guard_home,
+                deadline=deadline,
+            )
+            or response
+        )
     host.metrics.record_route("native_fail_safe")
     if event_name == "PreToolUse":
         submit = getattr(host.activity_writer, "submit_pre_tool_activity", None)

@@ -16,6 +16,7 @@ def _transition_probe_request_id(payload: Mapping[str, object]) -> str | None:
     request_id = probe.get("request_id")
     return request_id if isinstance(request_id, str) else None
 
+
 if TYPE_CHECKING:
     from .hook_review.hook_worker_native import _HookWorkerNativeHost
 

@@ -32,9 +32,7 @@ from .hook_worker_native_review import (
 from .hook_worker_unavailable import structured_outage_overlay
 
 
-def _attach_transition_observation(
-    response: dict[str, object], edge: Mapping[str, object]
-) -> dict[str, object]:
+def _attach_transition_observation(response: dict[str, object], edge: Mapping[str, object]) -> dict[str, object]:
     """Carry the edge's native transition observation onto a harness response."""
 
     transition = edge.get("transition_hook_observation")
