@@ -144,12 +144,12 @@ fn earlier_tests_blanked(
             ';' | '&' | '|' | '\n' if !single && !double => {
                 let any = |word: &Word| matches!(word, Word::Value(_)) || operand(word);
                 if words(chars, spans, begins, at).is_some_and(|words| string_test(&words, any)) {
-                    for index in begins..at {
+                    for (index, slot) in blanked.iter_mut().enumerate().take(at).skip(begins) {
                         if !spans
                             .iter()
                             .any(|span| span.start <= index && index < span.end)
                         {
-                            blanked[index] = ' ';
+                            *slot = ' ';
                         }
                     }
                 }
