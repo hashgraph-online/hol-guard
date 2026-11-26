@@ -103,6 +103,7 @@ mod bounded_hook_bridge_render;
 mod browser_driver_builder_command;
 mod browser_explain_command;
 mod browser_open;
+mod browser_report_prompt_command;
 pub mod browser_session_store;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;

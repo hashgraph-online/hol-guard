@@ -24,7 +24,7 @@ const REDACTION_MARKERS: [&str; 3] = ["[redacted]", "[REDACTED]", "*****"];
 /// What the hook appends to a stored excerpt it cut short; the stored length is not the real one.
 const TRUNCATION_MARKER: char = '\u{2026}';
 
-fn text<'a>(envelope: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
+pub(crate) fn envelope_text<'a>(envelope: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
     envelope
         .get(key)
         .and_then(Value::as_str)
@@ -32,7 +32,7 @@ fn text<'a>(envelope: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
         .filter(|value| !value.is_empty())
 }
 
-fn tool_input(envelope: &Map<String, Value>) -> Map<String, Value> {
+pub(crate) fn tool_input(envelope: &Map<String, Value>) -> Map<String, Value> {
     let Some(Value::Object(raw)) = envelope.get("raw_payload_redacted") else {
         return Map::new();
     };
@@ -84,9 +84,9 @@ fn agent_name(harness: &str) -> &'static str {
 /// The card for one stored approval, or `None` when no first-party profile classifies the call.
 pub(crate) fn approval_browser_card(envelope: &Value, harness: &str) -> Option<Value> {
     let envelope = envelope.as_object()?;
-    let tool_name = text(envelope, "tool_name");
-    let mcp_server = text(envelope, "mcp_server");
-    let mcp_tool = text(envelope, "mcp_tool");
+    let tool_name = envelope_text(envelope, "tool_name");
+    let mcp_server = envelope_text(envelope, "mcp_server");
+    let mcp_tool = envelope_text(envelope, "mcp_tool");
     let harness_tool_name = tool_name.or(mcp_tool)?;
     let call = BrowserToolCallIdentity {
         harness_tool_name,

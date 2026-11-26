@@ -141,6 +141,16 @@ const call = (server: string, tool: string, input: unknown) => request(envelope(
   assert(open?.facts.some((fact) => fact.label === "Browser" && fact.value === "Your own browser profile") === true, "T-APP-28: the browser line names the profile");
   assert(open?.queueTitle.endsWith("· Open www.example-shop.com") === true, "T-APP-29: the row names the site");
 
+  const reported = carded("playwright", "browser_navigate", { url: "https://www.example-shop.com/" }, card({}));
+  const reportMarkup = renderToStaticMarkup(PrimaryActionCard({ item: reported }));
+  assert(reportMarkup.includes("This should not have asked"), "T-APP-80: a browser card offers the report path");
+  assert(
+    reportMarkup.includes(`hol-guard browser report-prompt ${reported.request_id}`),
+    "T-APP-81: the report path names the command for this request",
+  );
+  const plainMarkup = renderToStaticMarkup(PrimaryActionCard({ item: call("acme", "sync_records", { batch: 4 }) }));
+  assert(!plainMarkup.includes("This should not have asked"), "T-APP-82: a call with no browser card has no report path");
+
   const typed = explainMcpCall(
     carded(
       "playwright",
