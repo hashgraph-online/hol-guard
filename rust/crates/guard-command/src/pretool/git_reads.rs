@@ -304,14 +304,21 @@ pub(super) fn safe_git_arguments(
         // `core.fsmonitor`, so the configuration probe clears it first. Git
         // quotes the line it could not read, so each named patch goes through
         // the ordinary read screen: a workspace name that is a link to a
-        // private file is not a patch this proof read.
+        // private file is not a patch this proof read. Git opens each patch
+        // in the directory a `-C` route selects, so it is screened there.
+        let Some(directory) =
+            crate::command_compatibility::git_operand_directory(with_route, context)
+        else {
+            return false;
+        };
+        let directory = directory.to_string_lossy();
         return allow_helper_context
             && super::git_apply_check::patch_targets(&arguments[1..]).is_some_and(|patches| {
                 patches.iter().all(|patch| {
                     super::read_paths::bounded_file_read_target(
                         patch,
                         context.home_dir,
-                        context.cwd,
+                        Some(directory.as_ref()),
                     )
                 })
             });
@@ -321,10 +328,23 @@ pub(super) fn safe_git_arguments(
         // them, but `pager.merge-file` can still name a program, so the
         // configuration probe clears that first. Each of the three goes
         // through the ordinary read screen, as a printed merge quotes them.
+        // Git opens them in the directory a `-C` route selects, so they are
+        // screened there; a route with no known directory (`--git-dir`)
+        // keeps the review.
+        let Some(directory) =
+            crate::command_compatibility::git_operand_directory(with_route, context)
+        else {
+            return false;
+        };
+        let directory = directory.to_string_lossy();
         return allow_helper_context
             && super::git_merge_file_read::read_targets(&arguments[1..]).is_some_and(|files| {
                 files.iter().all(|file| {
-                    super::read_paths::bounded_file_read_target(file, context.home_dir, context.cwd)
+                    super::read_paths::bounded_file_read_target(
+                        file,
+                        context.home_dir,
+                        Some(directory.as_ref()),
+                    )
                 })
             });
     }
