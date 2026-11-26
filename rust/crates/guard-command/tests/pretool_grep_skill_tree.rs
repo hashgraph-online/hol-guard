@@ -30,7 +30,9 @@ fn home() -> PathBuf {
         ".agents/skills/hidden-notes/.cache",
         ".agents/skills/linked-notes",
         ".agents/skills/data-notes",
-        "work/project",
+        "work/project/.agents/skills/local-check",
+        "work/project/.agents/skills/local-data",
+        "work/outside-skill",
     ] {
         std::fs::create_dir_all(home.join(directory)).unwrap();
     }
@@ -55,12 +57,30 @@ fn home() -> PathBuf {
         (".agents/skills/data-notes/SKILL.md", "# Data\n"),
         (".agents/skills/data-notes/settings.json", "{}\n"),
         ("work/outside.md", "outside\n"),
+        (
+            "work/project/.agents/skills/local-check/SKILL.md",
+            "# Local check\n",
+        ),
+        (
+            "work/project/.agents/skills/local-data/SKILL.md",
+            "# Local data\n",
+        ),
+        (
+            "work/project/.agents/skills/local-data/settings.json",
+            "{}\n",
+        ),
+        ("work/outside-skill/SKILL.md", "# Outside\n"),
     ] {
         std::fs::write(home.join(path), contents).unwrap();
     }
     std::os::unix::fs::symlink(
         home.join("work/outside.md"),
         home.join(".agents/skills/linked-notes/outside.md"),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(
+        home.join("work/outside-skill"),
+        home.join("work/project/.agents/skills/linked-skill"),
     )
     .unwrap();
     std::fs::canonicalize(home).unwrap()
@@ -86,9 +106,15 @@ fn a_search_that_opens_only_skill_documents_is_allowed() {
     let home = home();
     let skills = home.join(".agents/skills");
     let skills = skills.display();
+    let local = home.join("work/project/.agents/skills");
+    let local = local.display();
     for command in [
         format!(
             "grep -r -n -i -E \"approved form|without review\" {skills}/release-check {skills}/docs-only --include='*.md' | cut -c1-300 | head -30"
+        ),
+        // A skill tree of the project sits beside the user's own.
+        format!(
+            "grep -r -n -i -E \"approved form|without review\" {skills}/release-check {skills}/docs-only {local}/local-check --include='*.md' | cut -c1-300 | head -30"
         ),
         format!("grep -rn 'Run the review' {skills}/release-check --include='*.md'"),
         format!(
@@ -97,6 +123,8 @@ fn a_search_that_opens_only_skill_documents_is_allowed() {
         // Without an include the search opens every file, and here every
         // file is a document or a script.
         format!("grep -rn Usage {skills}/docs-only"),
+        "grep -rn x .agents/skills/local-check".to_owned(),
+        "grep -rln x .agents/skills/local-data --include='*.md'".to_owned(),
     ] {
         for harness in ["omp", "zcode", "claude-code", "codex"] {
             assert_eq!(action(&home, harness, &command), "allow", "{harness}: {command}");
@@ -119,6 +147,10 @@ fn a_search_that_opens_anything_else_in_the_tree_keeps_its_review() {
         // A data file is not a skill document.
         format!("grep -rn x {skills}/data-notes --include='*.json'"),
         format!("grep -rn x {skills}/data-notes"),
+        // The project's own skill tree keeps the same screens.
+        "grep -rn x .agents/skills/local-data".to_owned(),
+        // A project skill linked out of the checkout is not the project's.
+        "grep -rn Outside .agents/skills/linked-skill --include='*.md'".to_owned(),
     ] {
         for harness in ["omp", "zcode"] {
             assert_ne!(

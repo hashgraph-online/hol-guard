@@ -156,6 +156,11 @@ fn directory_include_proven(root: &Path, filter: &SearchFilter, home_dir: Option
 /// or script that clears the credential-name and sensitive-family screens. A
 /// data file, a hidden file or a key the search would open keeps the review;
 /// a file no glob selects is never opened, so it cannot be printed.
+///
+/// A project keeps skills of its own in the same layout, such as
+/// `<checkout>/.agents/skills/<skill>`, so the working directory is a second
+/// base the skill roots are measured from. That tree must resolve inside the
+/// working directory: a link out of the checkout leaves it reviewed.
 pub(in crate::pretool) fn grep_skill_tree_proven(
     root: &str,
     globs: &[&str],
@@ -182,11 +187,24 @@ pub(in crate::pretool) fn grep_skill_tree_proven(
             None => return false,
         }
     };
-    std::fs::canonicalize(candidate).is_ok_and(|canonical| {
-        canonical.is_dir()
-            && crate::pretool::read_paths::agent_skill_listing_directory(&canonical, home_dir)
-            && skill_tree_opens_only_skill_files(&canonical, filter.as_ref(), home_dir)
-    })
+    let Ok(canonical) = std::fs::canonicalize(candidate) else {
+        return false;
+    };
+    if !canonical.is_dir() {
+        return false;
+    }
+    let workspace = cwd
+        .and_then(|cwd| std::fs::canonicalize(cwd).ok())
+        .filter(|cwd| canonical.starts_with(cwd))
+        .and_then(|cwd| cwd.to_str().map(str::to_owned));
+    let proven = [home_dir, workspace.as_deref()]
+        .into_iter()
+        .flatten()
+        .any(|base| {
+            crate::pretool::read_paths::agent_skill_listing_directory(&canonical, Some(base))
+                && skill_tree_opens_only_skill_files(&canonical, filter.as_ref(), Some(base))
+        });
+    proven
 }
 
 fn skill_tree_opens_only_skill_files(

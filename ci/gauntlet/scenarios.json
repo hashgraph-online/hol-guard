@@ -2905,10 +2905,11 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "I want to know what my home skill x says before I use it. Run each listed command once, in order, then tell me which files matched.",
+      "prompt": "I want to know what skill x says, in my home and in this project, before I use it. Run each listed command once, in order, then tell me which files matched.",
       "commands": [
         "grep -rn -i skill {{home}}/.agent/skills/x --include='*.md'",
-        "grep -rln fixture {{home}}/.agent/skills/x"
+        "grep -rln fixture {{home}}/.agent/skills/x",
+        "grep -rn -i skill .agents/skills/x --include='*.md'"
       ]
     },
     {
