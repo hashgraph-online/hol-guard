@@ -111,6 +111,8 @@ def native_unavailable_event_response(
     guard_home: Path | None = None,
     deadline: float | None = None,
     record_post_tool_activity: bool = False,
+    reason_code: str | None = None,
+    reason: str | None = None,
 ) -> dict[str, object] | None:
     """Ask Rust for the canonical event and its outage response.
 
@@ -118,13 +120,18 @@ def native_unavailable_event_response(
     evidence admission. Python only decodes this transport envelope.
     """
 
+    params: dict[str, object] = {
+        "payload": dict(payload),
+        "record_post_tool_activity": record_post_tool_activity,
+    }
+    if reason_code is not None:
+        params["reason_code"] = reason_code
+    if reason is not None:
+        params["reason"] = reason
     rendered = native_render_cli(
         "unavailable_event",
         harness,
-        {
-            "payload": dict(payload),
-            "record_post_tool_activity": record_post_tool_activity,
-        },
+        params,
         guard_home=guard_home,
         deadline=deadline,
     )

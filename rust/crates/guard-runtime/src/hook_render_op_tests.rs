@@ -59,6 +59,21 @@ fn recording_only_response_continues() {
 }
 
 #[test]
+fn unavailable_event_uses_reason_overrides_from_the_daemon() {
+    let mut req = request("unavailable_event");
+    req.cli = Some(json!({
+        "payload": {"hook_event_name": "PreToolUse"},
+        "record_post_tool_activity": false,
+        "reason_code": "native_policy_update_pending",
+        "reason": "Policy update is still being applied.",
+    }));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    let response = &result.payload.expect("payload")["response"];
+    assert_eq!(response["reason_code"], "native_policy_update_pending");
+    assert_eq!(response["reason"], "Policy update is still being applied.");
+}
+
+#[test]
 fn accepted_allow_response_marks_reuse_in_the_native_renderer() {
     let mut req = request("accepted_allow");
     req.harness = "pi".to_owned();

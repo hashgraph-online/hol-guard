@@ -171,7 +171,10 @@ fn render(
             .get("event_name")
             .and_then(Value::as_str)
             .ok_or("native_hook_render_invalid")?;
-        let reason = "HOL Guard could not identify this hook event safely.";
+        let reason = params
+            .get("reason")
+            .and_then(Value::as_str)
+            .unwrap_or("HOL Guard could not identify this hook event safely.");
         let permission = availability
             .get("permission_request")
             .and_then(Value::as_bool)
@@ -190,11 +193,15 @@ fn render(
         {
             json!({"hookSpecificOutput": {"hookEventName": "PermissionRequest"}})
         } else {
-            let reason_code = match event {
-                "PreToolUse" => "native_pre_tool_unavailable",
-                "PostToolUse" => "native_post_tool_unavailable",
-                _ => "native_hook_event_unavailable",
-            };
+            let reason_code =
+                params
+                    .get("reason_code")
+                    .and_then(Value::as_str)
+                    .unwrap_or(match event {
+                        "PreToolUse" => "native_pre_tool_unavailable",
+                        "PostToolUse" => "native_post_tool_unavailable",
+                        _ => "native_hook_event_unavailable",
+                    });
             guard_command::hook_responses::fail_closed::response(
                 harness,
                 event,
