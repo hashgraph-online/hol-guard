@@ -1,5 +1,7 @@
 //! An installed release may replace policy compiled by an older engine, but
 //! cannot use that migration to change the user's controls or pack selection.
+//! The one addition it may make is a pack the installed release turns on by
+//! default.
 use super::layers::{layers_from_json, layers_from_values, layers_to_values};
 use super::records::{
     canonical, field, query_row, row_text, tampered, verify_record, Fault, Res, Row,
@@ -10,6 +12,7 @@ use guard_command::extension_control::ControlLayerKind;
 use guard_command::native_command_program::{NativeCommandProgram, PackAdmissionBudget};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 const REFUSED: &str = "installed command pack upgrade is not authorized";
@@ -38,6 +41,44 @@ fn lifecycle_reason(result: &Value) -> Option<&str> {
 
 fn hash(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
+}
+
+/// The upgrade keeps every pack the user's selection held. It may add only a
+/// pack the authenticated installed release turns on by default, such as a new
+/// core protection; it never drops one or adds any other.
+fn selection_kept(
+    previous: &Value,
+    candidate: &Value,
+    release: &Value,
+    directory: &Path,
+) -> Res<()> {
+    let changed = || tampered("installed command pack upgrade changed selection");
+    let ids = |value: &Value| -> Option<BTreeSet<String>> {
+        value
+            .as_array()?
+            .iter()
+            .map(|id| id.as_str().map(str::to_owned))
+            .collect()
+    };
+    let (Some(previous), Some(candidate)) = (ids(previous), ids(candidate)) else {
+        return Err(changed());
+    };
+    if !previous.is_subset(&candidate) {
+        return Err(changed());
+    }
+    if previous.len() == candidate.len() {
+        return Ok(());
+    }
+    let defaults =
+        crate::pack_preparation::release_default_ids(directory, release).map_err(|_| changed())?;
+    if candidate
+        .difference(&previous)
+        .all(|id| defaults.contains(id))
+    {
+        Ok(())
+    } else {
+        Err(changed())
+    }
 }
 
 fn open(role: &str, value: &Value, key: &[u8], directory: &Path) -> Res<Value> {
@@ -166,9 +207,6 @@ impl Ctx<'_> {
             &stored_catalog,
             &directory,
         )?;
-        if previous_open["selected"] != candidate_open["selected"] {
-            return Err(tampered("installed command pack upgrade changed selection"));
-        }
         let previous = &previous_open["value"];
         let candidate = &candidate_open["value"];
         let installed = crate::pack_lifecycle::evaluate(&json!({"kind":"installed",
@@ -267,11 +305,54 @@ impl Ctx<'_> {
         if let Some((_, cause)) = checks.iter().find(|(failed, _)| *failed) {
             return Err(refused(cause));
         }
+        selection_kept(
+            &previous_open["selected"],
+            &candidate_open["selected"],
+            &release,
+            &directory,
+        )?;
         Ok(Some(
             evidence["candidate"]["digest"]
                 .as_str()
                 .ok_or_else(|| refused("candidate has no digest"))?
                 .to_owned(),
         ))
+    }
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+
+    fn release(count: u64) -> Value {
+        json!({"policy":{"defaults":{"count":count,"index":null}}})
+    }
+
+    #[test]
+    fn an_unchanged_selection_is_kept() {
+        let ids = json!(["command.alpha", "command.beta"]);
+        assert!(selection_kept(&ids, &ids, &release(0), Path::new("unused")).is_ok());
+    }
+
+    #[test]
+    fn a_dropped_pack_is_refused() {
+        let previous = json!(["command.alpha", "command.beta"]);
+        let candidate = json!(["command.alpha"]);
+        assert!(selection_kept(&previous, &candidate, &release(0), Path::new("unused")).is_err());
+    }
+
+    #[test]
+    fn a_pack_the_release_does_not_default_is_refused() {
+        let previous = json!(["command.alpha"]);
+        let candidate = json!(["command.alpha", "command.beta"]);
+        assert!(selection_kept(&previous, &candidate, &release(0), Path::new("unused")).is_err());
+    }
+
+    #[test]
+    fn unreadable_default_metadata_is_refused() {
+        let previous = json!(["command.alpha"]);
+        let candidate = json!(["command.alpha", "command.beta"]);
+        let missing = Path::new("missing-pack-cache");
+        assert!(selection_kept(&previous, &candidate, &release(1), missing).is_err());
     }
 }

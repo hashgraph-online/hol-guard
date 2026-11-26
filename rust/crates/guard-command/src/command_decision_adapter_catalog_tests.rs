@@ -9,8 +9,13 @@ use std::collections::BTreeSet;
 /// expected; pinning it means a newly shipped class is a decision someone
 /// makes rather than one the `PROCESS_EXECUTION` fallback quietly absorbs.
 /// Map a class and drop it from here.
-const UNMAPPED_SHIPPED_RISK_CLASSES: [&str; 3] =
-    ["credential_access", "permission_change", "remote_execution"];
+const UNMAPPED_SHIPPED_RISK_CLASSES: [&str; 5] = [
+    "browser_control",
+    "credential_access",
+    "network_exposure",
+    "permission_change",
+    "remote_execution",
+];
 
 fn strings(value: &Value) -> impl Iterator<Item = String> + '_ {
     value
