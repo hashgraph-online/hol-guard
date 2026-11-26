@@ -233,7 +233,11 @@ fn unrolled<'a>(
             .into_iter()
             .map(|(text, separator)| (unquote_whole_references(&text), separator))
             .collect();
-        if !items.iter().all(|(text, _)| references_stand_alone(text)) {
+        if !items.iter().all(|(text, _)| {
+            body::grouped_commands(text).into_iter().all(|command| {
+                references_stand_alone(command) || body::prints_quoted_references(command)
+            })
+        }) {
             return None;
         }
         items

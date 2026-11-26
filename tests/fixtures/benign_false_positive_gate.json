@@ -55238,6 +55238,74 @@
       "expect": "allow"
     },
     {
+      "id": "loop-label-echo-glob-reads",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in *.md; do echo \"### $f\"; cat \"$f\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "loop-test-then-group-glob-reads",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in *.md; do [ -f \"$f\" ] && { printf '%s\\n' \"### $f\"; sed -n '1,120p' \"$f\"; }; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-loop-group-reads-credential-store",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in *.md; do { cat \"$f\"; cat ~/.ssh/id_rsa; }; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-loop-label-piped-to-shell",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in *.md; do echo \"cat $f\" | sh; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "chain-git-log-then-bare-glob-read",
       "fix_area": "shell",
       "harnesses": [

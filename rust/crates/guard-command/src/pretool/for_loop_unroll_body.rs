@@ -157,6 +157,43 @@ fn body_items_at<'a>(
                 at_word_start = true;
                 i += 1;
             }
+            // `{ list; }` in command position groups a list in the current
+            // shell, as `[ -f "$f" ] && { printf …; sed -n … "$f"; }` reads a
+            // file only when the test holds. Its list is read the way a
+            // subshell's is and written back with the braces, so the proofs
+            // below read the group, `cd` and all, as the shell runs it. A
+            // brace anywhere else is a word or an expansion this grammar does
+            // not model.
+            '{' if command_position
+                && depth < MAX_GROUP_DEPTH
+                && rest[1..].starts_with([' ', '\t', '\n']) =>
+            {
+                let (inner, _, after) = body_items_at(
+                    &text[byte + 1..],
+                    name,
+                    &["}"],
+                    depth + 1,
+                    rewrites_references,
+                )?;
+                if inner.is_empty()
+                    || !inner
+                        .iter()
+                        .all(|(list_item, _)| stages_are_plain(list_item))
+                {
+                    return None;
+                }
+                item.push_str("{ ");
+                for (inner_item, separator) in &inner {
+                    item.push_str(inner_item);
+                    item.push_str(separator);
+                }
+                item.push('}');
+                at_word_start = false;
+                command_position = false;
+                redirect_target = false;
+                let consumed = text.len() - after.len();
+                i = chars.partition_point(|(index, _)| *index < consumed);
+            }
             '`' | '{' | '}' => return None,
             // A `(` in command position opens a subshell, whose body is a
             // command list read the same way this one is. The group runs what
@@ -553,6 +590,72 @@ fn plain_path_suffix(chars: &[char], start: usize) -> Option<usize> {
         .then_some(end)
 }
 
+/// The commands of an item, cut at the `;`, `&&` and `||` that separate them
+/// and at the braces of a `{ …; }` group, outside quotes. A group's list is
+/// written back into one item, so a reference that ends one of its commands
+/// stands beside `;` rather than a space; each command is held to the
+/// reference rules on its own. Pipelines stay whole.
+pub(crate) fn grouped_commands(item: &str) -> Vec<&str> {
+    let bytes = item.as_bytes();
+    let mut pieces = Vec::new();
+    let (mut single, mut double) = (false, false);
+    let (mut start, mut index) = (0, 0);
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte == b'\\' && !single {
+            index += 2;
+            continue;
+        }
+        match byte {
+            b'\'' if !double => single = !single,
+            b'"' if !single => double = !double,
+            _ if single || double => {}
+            b';' | b'{' | b'}' => {
+                pieces.push(&item[start..index]);
+                start = index + 1;
+            }
+            b'&' | b'|' if bytes.get(index + 1) == Some(&byte) => {
+                pieces.push(&item[start..index]);
+                start = index + 2;
+                index += 2;
+                continue;
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    pieces.push(&item[start.min(item.len())..]);
+    pieces
+        .into_iter()
+        .map(str::trim)
+        .filter(|piece| !piece.is_empty())
+        .collect()
+}
+
+/// Whether `item` only prints, with every reference inside double quotes.
+///
+/// `echo "### $f"` labels each file a loop prints. Inside double quotes the
+/// shell neither splits nor expands the matched name, so the item prints one
+/// argument and reads nothing, whatever name the loop hands it. Written out
+/// over the loop's pattern it prints the pattern instead, which is the same
+/// work: text to standard output. That holds only for a lone `echo`, or a
+/// `printf` whose format is a single-quoted literal the reference cannot
+/// reach, with no redirection, pipe or group that could carry the name
+/// anywhere else.
+pub(crate) fn prints_quoted_references(item: &str) -> bool {
+    let Some((command, rest)) = item.split_once(' ') else {
+        return false;
+    };
+    let printer = match command {
+        "echo" => true,
+        "printf" => rest.trim_start().starts_with('\''),
+        _ => false,
+    };
+    printer
+        && !item.contains(['|', '<', '>', '(', ')', '{', '}', '&', ';', '`'])
+        && references_are_quoted(item)
+}
+
 /// Whether every reference in `item` stands inside quotes of the body's own.
 ///
 /// A header word that holds field separators is one field only while those
@@ -582,7 +685,9 @@ pub(crate) fn references_are_quoted(item: &str) -> bool {
 /// Whether the character beside a reference ends the word, counting the ends
 /// of the item itself.
 fn word_boundary(character: Option<char>) -> bool {
-    character.is_none_or(|character| character.is_whitespace() || character == '|')
+    // An unquoted `;` ends a word as a space does. A `{ …; }` group is
+    // written back into one item, so `"$f";` closes its last command there.
+    character.is_none_or(|character| character.is_whitespace() || matches!(character, '|' | ';'))
 }
 
 /// Cutting a body item into the stages the shell reads.
