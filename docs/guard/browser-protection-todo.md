@@ -502,6 +502,14 @@ transcript in the pull request (after BP-T052).
 - [ ] **BP-T122** `provider_integration_worker.rs`: the only caller of the client. Token bucket,
   negative cache (60 s), jittered refresh, circuit breaker (five failures, 5 minutes), `401` and `403`
   to `key_invalid` with calls stopped.
+  - [x] Pacing and failure handling (`ProviderWorker`): per-provider token bucket at the manifest's
+    `max_requests_per_minute` with a burst of a tenth of a minute, a 60 s per-subject negative cache
+    for failures (bounded), a circuit that opens for 5 minutes after five consecutive failures and
+    reopens on a failed probe, `401`/`403` written to the stored connection as `key_invalid` with one
+    notice, and a jittered refresh point late in an answer's lifetime (`refresh_at`).
+  - [ ] Lookup executor: render the request, send it through the client, map the answer and write
+    the signal to the store (`put_signal`), using the pacing above. Needs the conformance kit's
+    answer-mapping helper from the provider-noise change.
 - [ ] **BP-T123** `provider_integration_decide.rs`: cache read only, applies PRD 6.6. Property test:
   for any signal set the decision is never weaker than the decision with no provider.
 - [ ] **BP-T124** Hot path proof: a test that fails if the hook or relay decision path performs
