@@ -5,7 +5,7 @@ It speaks newline-delimited JSON-RPC on stdio like a real browser driver and ser
 tool list, but there is no browser and no socket: navigation moves between named, scripted pages
 and every tool call is appended to a journal so a judge can tell which calls actually ran.
 
-Usage: browser_driver_server.py <tools.json> <journal.jsonl> [<server-name>]
+Usage: browser_driver_server.py <tools.json> <journal.jsonl> [<server-name>] [<start-page>]
 
 Every page, origin and element here is invented for the Gauntlet.
 """
@@ -282,9 +282,14 @@ def load_tools(path: Path) -> list[dict[str, Any]]:
 
 def main(argv: list[str]) -> int:
     if len(argv) < 3:
-        sys.stderr.write("usage: browser_driver_server.py <tools.json> <journal.jsonl> [server-name]\n")
+        sys.stderr.write("usage: browser_driver_server.py <tools.json> <journal.jsonl> [server-name] [start-page]\n")
         return 2
     state = BrowserState(load_tools(Path(argv[1])), Path(argv[2]), argv[3] if len(argv) > 3 else "browser")
+    if len(argv) > 4:
+        if argv[4] not in PAGES:
+            sys.stderr.write(f"unknown start page: {argv[4]}\n")
+            return 2
+        state.url = PAGES[argv[4]]["url"]
     for line in sys.stdin:
         try:
             message = json.loads(line)

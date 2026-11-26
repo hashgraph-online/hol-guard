@@ -40,6 +40,13 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.benign_fp_gate_browser import (
+    BROWSER_SERVERS,
+    browser_server_command,
+    unwired_state,
+    validate_browser_fields,
+    write_browser_servers,
+)
 
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
@@ -94,29 +101,43 @@ class McpCase:
     tool: str
     arguments: dict[str, object]
     expect: str
+    state: str = "none"
+    page: str | None = None
 
 
 def mcp_cases(document: dict[str, Any]) -> list[McpCase]:
-    """The ``mcp_cases`` of the gate's case document."""
-    return [
-        McpCase(entry["id"], entry["server"], entry["tool"], entry["arguments"], entry["expect"])
-        for entry in document["mcp_cases"]
-    ]
+    """The ``mcp_cases`` of the gate's case document; a browser row's ``state`` and ``page`` must be known."""
+    cases = []
+    for entry in document["mcp_cases"]:
+        case = McpCase(
+            entry["id"],
+            entry["server"],
+            entry["tool"],
+            entry["arguments"],
+            entry["expect"],
+            entry.get("state", "none"),
+            entry.get("page"),
+        )
+        validate_browser_fields(case.case_id, case.server, case.state, case.page)
+        cases.append(case)
+    return cases
 
 
 def server_script(home: Path) -> Path:
     return home / ".echo-mcp" / "server.py"
 
 
-def server_command(home: Path, server: str) -> list[str]:
+def server_command(home: Path, server: str, page: str | None = None) -> list[str]:
     """The command a harness config launches for ``server``; the name in argv keeps each server's identity apart."""
+    if server in BROWSER_SERVERS:
+        return browser_server_command(home, server, page)
     return [sys.executable, "-u", str(server_script(home)), server]
 
 
 def mcp_config(home: Path, remote_url: str) -> str:
     """Codex ``config.toml`` naming both stdio servers and a remote one."""
     sections = []
-    for server in SERVERS:
+    for server in (*SERVERS, *BROWSER_SERVERS):
         command, *args = server_command(home, server)
         sections.append(f"[mcp_servers.{server}]\ncommand = {json.dumps(command)}\nargs = {json.dumps(args)}\n")
     sections.append(f'[mcp_servers.remote-example]\nurl = "{remote_url}"\n')
@@ -127,10 +148,11 @@ def write_server(home: Path) -> None:
     script = server_script(home)
     script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text(_SERVER, encoding="utf-8")
+    write_browser_servers(home)
 
 
 def _identity(case: McpCase, fixture: BenignFixture) -> McpServerIdentity:
-    command, *args = server_command(fixture.home, case.server)
+    command, *args = server_command(fixture.home, case.server, case.page)
     return build_mcp_server_identity(
         config_path=_config_path(fixture),
         command=command,
@@ -146,7 +168,7 @@ def _config_path(fixture: BenignFixture) -> str:
 
 def _relay_command(case: McpCase, fixture: BenignFixture) -> list[str]:
     """The relay command an installer writes for ``case.server`` in the Codex config."""
-    command, *args = server_command(fixture.home, case.server)
+    command, *args = server_command(fixture.home, case.server, case.page)
     options = argparse.Namespace(
         home=str(fixture.home),
         workspace=str(fixture.worktree),
@@ -377,6 +399,9 @@ def replay(
     case: McpCase, fixture: BenignFixture, store: GuardStore
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     """Run one call through the relay: its answer, the approval rows it queued and the server's identity hash."""
+    unwired = unwired_state(case.state)
+    if unwired is not None:
+        return {"unwired_state": unwired}, [], ""
     provision_native_verifier_key_for_store(store)
     identity = _identity(case, fixture)
     if case.server == READY_SERVER:
@@ -409,6 +434,8 @@ def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, An
     """Why a replayed call is not what its case expects, or None when it is."""
     error = response.get("error")
     data = error.get("data", {}) if isinstance(error, dict) else {}
+    if "unwired_state" in response:
+        return str(response["unwired_state"])
     if "relay_defer" in response:
         return f"the relay never decided the call: {response['relay_defer']}"
     if case.expect == "allow":

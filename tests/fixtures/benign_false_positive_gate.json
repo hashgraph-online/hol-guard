@@ -72230,6 +72230,260 @@
       "expect": "setup"
     },
     {
+      "id": "browser-playwright-snapshot",
+      "server": "playwright",
+      "tool": "browser_snapshot",
+      "arguments": {},
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-navigate",
+      "server": "playwright",
+      "tool": "browser_navigate",
+      "arguments": {
+        "url": "https://docs.example.test/guide/configuration"
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-navigate-back",
+      "server": "playwright",
+      "tool": "browser_navigate_back",
+      "arguments": {},
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-click-link",
+      "server": "playwright",
+      "tool": "browser_click",
+      "arguments": {
+        "element": "Configuration",
+        "ref": "e3"
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-hover",
+      "server": "playwright",
+      "tool": "browser_hover",
+      "arguments": {
+        "element": "Getting started",
+        "ref": "e1"
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-type-search",
+      "server": "playwright",
+      "tool": "browser_type",
+      "arguments": {
+        "element": "Search the docs",
+        "ref": "e2",
+        "text": "install"
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-press-key",
+      "server": "playwright",
+      "tool": "browser_press_key",
+      "arguments": {
+        "key": "Enter"
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-wait-for",
+      "server": "playwright",
+      "tool": "browser_wait_for",
+      "arguments": {
+        "text": "Getting started"
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-screenshot",
+      "server": "playwright",
+      "tool": "browser_take_screenshot",
+      "arguments": {},
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-console",
+      "server": "playwright",
+      "tool": "browser_console_messages",
+      "arguments": {},
+      "expect": "setup",
+      "state": "none",
+      "page": "local-dev"
+    },
+    {
+      "id": "browser-playwright-network",
+      "server": "playwright",
+      "tool": "browser_network_requests",
+      "arguments": {},
+      "expect": "setup",
+      "state": "none",
+      "page": "local-dev"
+    },
+    {
+      "id": "browser-playwright-tabs-list",
+      "server": "playwright",
+      "tool": "browser_tabs",
+      "arguments": {
+        "action": "list"
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-resize",
+      "server": "playwright",
+      "tool": "browser_resize",
+      "arguments": {
+        "width": 1280,
+        "height": 800
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-close",
+      "server": "playwright",
+      "tool": "browser_close",
+      "arguments": {},
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-install",
+      "server": "playwright",
+      "tool": "browser_install",
+      "arguments": {},
+      "expect": "setup",
+      "state": "none"
+    },
+    {
+      "id": "browser-playwright-handle-dialog",
+      "server": "playwright",
+      "tool": "browser_handle_dialog",
+      "arguments": {
+        "accept": false
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-evaluate",
+      "server": "playwright",
+      "tool": "browser_evaluate",
+      "arguments": {
+        "function": "() => document.title"
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "local-dev"
+    },
+    {
+      "id": "browser-playwright-file-upload",
+      "server": "playwright",
+      "tool": "browser_file_upload",
+      "arguments": {
+        "paths": []
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-fill-form",
+      "server": "playwright",
+      "tool": "browser_fill_form",
+      "arguments": {
+        "fields": [
+          {
+            "name": "Discount code",
+            "type": "textbox",
+            "ref": "e2",
+            "value": "WELCOME"
+          }
+        ]
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "shop-basket"
+    },
+    {
+      "id": "browser-playwright-drag",
+      "server": "playwright",
+      "tool": "browser_drag",
+      "arguments": {
+        "startElement": "Getting started",
+        "startRef": "e1",
+        "endElement": "Search the docs",
+        "endRef": "e2"
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-playwright-select-option",
+      "server": "playwright",
+      "tool": "browser_select_option",
+      "arguments": {
+        "element": "Search the docs",
+        "ref": "e2",
+        "values": [
+          "guides"
+        ]
+      },
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
+      "id": "browser-sitehand-open-url",
+      "server": "sitehand",
+      "tool": "open_url",
+      "arguments": {
+        "url": "https://docs.example.test/guide/getting-started"
+      },
+      "expect": "setup",
+      "state": "none"
+    },
+    {
+      "id": "browser-sitehand-read-page",
+      "server": "sitehand",
+      "tool": "read_page",
+      "arguments": {},
+      "expect": "setup",
+      "state": "none",
+      "page": "docs-article"
+    },
+    {
       "id": "echo-ready-lookup",
       "server": "echo-ready",
       "tool": "lookup",
