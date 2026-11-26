@@ -1,0 +1,102 @@
+{
+  "schemaVersion": "guard.browser-driver.v1",
+  "id": "browser.puppeteer-mcp",
+  "name": "Puppeteer MCP",
+  "publisher": {
+    "name": "HOL Guard",
+    "url": "https://github.com/hashgraph-online/hol-guard",
+    "verified": true
+  },
+  "referenceUrls": [
+    "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/puppeteer",
+    "https://github.com/merajmehrabi/puppeteer-mcp-server"
+  ],
+  "referenceVersion": "2025.5.12",
+  "match": {
+    "mcpServerNames": [
+      "puppeteer"
+    ],
+    "packages": [
+      "@modelcontextprotocol/server-puppeteer",
+      "puppeteer-mcp-server"
+    ],
+    "toolNamespaces": [
+      "mcp__puppeteer__"
+    ],
+    "harnessTools": []
+  },
+  "profileMode": {
+    "default": "unknown"
+  },
+  "tools": [
+    {
+      "name": "puppeteer_click",
+      "verb": "Click",
+      "element": {
+        "name": [
+          "selector"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_connect_active_tab",
+      "verb": "Attach",
+      "url": [
+        "targetUrl"
+      ]
+    },
+    {
+      "name": "puppeteer_evaluate",
+      "verb": "Evaluate",
+      "script": [
+        "script"
+      ]
+    },
+    {
+      "name": "puppeteer_fill",
+      "verb": "Type",
+      "element": {
+        "name": [
+          "selector"
+        ]
+      },
+      "text": [
+        "value"
+      ]
+    },
+    {
+      "name": "puppeteer_hover",
+      "verb": "Click",
+      "element": {
+        "name": [
+          "selector"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_navigate",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "puppeteer_screenshot",
+      "verb": "Screenshot",
+      "element": {
+        "name": [
+          "selector"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_select",
+      "verb": "Select",
+      "element": {
+        "name": [
+          "selector"
+        ]
+      }
+    }
+  ]
+}

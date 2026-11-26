@@ -108,6 +108,17 @@ const SENSITIVE_AUTH_PATTERNS: &[&str] =
 
 const SENSITIVE_CDP_PATTERNS: &[&str] = &["cdp", "chrome_devtools_protocol", "raw_cdp"];
 
+/// Arguments that relaunch the browser with caller-chosen options, such as Puppeteer MCP's
+/// `launchOptions` and `allowDangerous` on navigate. A relaunch can add remote debugging, another
+/// executable or another profile, so it is reviewed like raw protocol access. A schema that only
+/// lists them does not count; the call has to pass one.
+const SENSITIVE_LAUNCH_PATTERNS: &[&str] = &[
+    "launchoptions",
+    "launch_options",
+    "allowdangerous",
+    "allow_dangerous",
+];
+
 const SENSITIVE_SCRIPT_EVAL_PATTERNS: &[&str] = &["eval", "script", "javascript", "expression"];
 
 const SENSITIVE_UPLOAD_PATTERNS: &[&str] = &["upload", "file_input", "file_path", "filepath"];
@@ -163,6 +174,8 @@ const BROWSER_SERVER_NAME_PATTERNS: &[&str] = &[
     "browser[\\-_\\s\\x{001c}-\\x{001f}]?tools",
     "browser[\\-_\\s\\x{001c}-\\x{001f}]?mcp",
     "puppeteer[\\-_\\s\\x{001c}-\\x{001f}]?mcp",
+    // A server registered under the bare name the Puppeteer MCP profile claims.
+    "^puppeteer\\s",
     "web[\\-_\\s\\x{001c}-\\x{001f}]?browser",
 ];
 

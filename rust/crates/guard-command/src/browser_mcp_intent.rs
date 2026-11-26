@@ -16,7 +16,7 @@ use serde_json::{Map, Value};
 
 use crate::browser_first_party_drivers::{
     first_party_operation_intent, first_party_profile_mode, CHROME_DEVTOOLS_DRIVER_ID,
-    PLAYWRIGHT_DRIVER_ID,
+    PLAYWRIGHT_DRIVER_ID, PUPPETEER_DRIVER_ID,
 };
 use crate::cloud_audit_sync::{urlparse_path_end, urlsplit, urlunsplit, UrlSplit};
 use crate::local_supply_chain::{unquote_plus, urlencode};
@@ -29,6 +29,7 @@ struct Patterns {
     package: RegexSet,
     chrome: Regex,
     playwright: Regex,
+    puppeteer: Regex,
     other_browser: Regex,
     navigation: RegexSet,
     inspect: RegexSet,
@@ -57,6 +58,7 @@ fn patterns() -> &'static Patterns {
             package: set(BROWSER_PACKAGE_PATTERNS),
             chrome: regex(r"chrome[\-_\s\x{001c}-\x{001f}]?devtools"),
             playwright: regex(r"@playwright/mcp|playwright"),
+            puppeteer: regex(r"puppeteer"),
             other_browser: regex(r"browser[\-_\s\x{001c}-\x{001f}]?(tools|mcp)|puppeteer"),
             navigation: set(NAVIGATION_PATTERNS),
             inspect: set(INSPECT_PATTERNS),
@@ -160,9 +162,11 @@ pub fn classify_operation(operation: &str, server_name: &str) -> Option<BrowserI
     let matchers = patterns();
     let chrome = matchers.chrome.is_match(&server);
     let playwright = matchers.playwright.is_match(&server);
+    let puppeteer = matchers.puppeteer.is_match(&server);
     for (claimed, driver_id) in [
         (chrome, CHROME_DEVTOOLS_DRIVER_ID),
         (playwright, PLAYWRIGHT_DRIVER_ID),
+        (puppeteer, PUPPETEER_DRIVER_ID),
     ] {
         if claimed {
             if let Some(intent) = first_party_operation_intent(driver_id, &operation) {
@@ -170,7 +174,7 @@ pub fn classify_operation(operation: &str, server_name: &str) -> Option<BrowserI
             }
         }
     }
-    if chrome || playwright || matchers.other_browser.is_match(&server) {
+    if chrome || playwright || puppeteer || matchers.other_browser.is_match(&server) {
         let operation = regex_text(&operation);
         for (expressions, intent) in [
             (&matchers.navigation, Navigation),
@@ -517,6 +521,7 @@ fn visit_sensitive_surfaces(
         (SENSITIVE_STORAGE_PATTERNS, Storage, false),
         (SENSITIVE_AUTH_PATTERNS, AuthHeaders, false),
         (SENSITIVE_CDP_PATTERNS, Cdp, false),
+        (SENSITIVE_LAUNCH_PATTERNS, Cdp, true),
         (SENSITIVE_SCRIPT_EVAL_PATTERNS, ScriptEval, true),
         (SENSITIVE_UPLOAD_PATTERNS, Upload, true),
         (SENSITIVE_DOWNLOAD_PATTERNS, Download, true),
@@ -821,3 +826,7 @@ pub(crate) fn browser_risk_facts(
         guard_origin,
     })
 }
+
+#[cfg(test)]
+#[path = "browser_mcp_intent_puppeteer_tests.rs"]
+mod puppeteer_tests;

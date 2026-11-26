@@ -181,6 +181,34 @@
         "Type: no allow row under a grant",
         "Upload: no allow row under a grant"
       ]
+    },
+    "browser.puppeteer-mcp": {
+      "missing_tools": [
+        "puppeteer_click",
+        "puppeteer_connect_active_tab",
+        "puppeteer_evaluate",
+        "puppeteer_fill",
+        "puppeteer_hover",
+        "puppeteer_navigate",
+        "puppeteer_screenshot",
+        "puppeteer_select"
+      ],
+      "verb_gaps": [
+        "Attach: no allow row under a grant",
+        "Attach: no row that is not allow",
+        "Click: no allow row under a grant",
+        "Click: no row that is not allow",
+        "Evaluate: no allow row under a grant",
+        "Evaluate: no row that is not allow",
+        "Navigate: no allow row under a grant",
+        "Navigate: no row that is not allow",
+        "Screenshot: no allow row under a grant",
+        "Screenshot: no row that is not allow",
+        "Select: no allow row under a grant",
+        "Select: no row that is not allow",
+        "Type: no allow row under a grant",
+        "Type: no row that is not allow"
+      ]
     }
   }
 }

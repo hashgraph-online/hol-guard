@@ -194,12 +194,12 @@ fn oracle_names(oracle: &[(BrowserIntentV1, &[&str])]) -> Vec<String> {
 #[test]
 fn first_party_profiles_compile_as_first_party() {
     let drivers = compile_first_party().expect("first-party profiles compile");
-    assert_eq!(drivers.len(), 2);
+    assert_eq!(drivers.len(), 3);
     for driver in &drivers {
         assert_eq!(driver.trust_class, BrowserDriverTrustClassV1::FirstParty);
         assert!(driver.publisher_verified);
     }
-    assert_eq!(first_party_browser_drivers().len(), 2);
+    assert_eq!(first_party_browser_drivers().len(), 3);
 }
 
 #[test]
@@ -228,6 +228,31 @@ fn every_replaced_table_entry_keeps_its_intent() {
             "{driver_id} lists exactly the old tools"
         );
     }
+}
+
+#[test]
+fn the_puppeteer_profile_lists_the_reference_server_tools() {
+    use BrowserIntentV1::*;
+    for (name, intent) in [
+        ("puppeteer_click", Interact),
+        ("puppeteer_connect_active_tab", Privileged),
+        ("puppeteer_evaluate", Privileged),
+        ("puppeteer_fill", Interact),
+        ("puppeteer_hover", Interact),
+        ("puppeteer_navigate", Navigation),
+        ("puppeteer_screenshot", Inspect),
+        ("puppeteer_select", Interact),
+    ] {
+        assert_eq!(
+            first_party_operation_intent(PUPPETEER_DRIVER_ID, name),
+            Some(intent),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        first_party_operation_intent(PUPPETEER_DRIVER_ID, "browser_navigate"),
+        None
+    );
 }
 
 #[test]
