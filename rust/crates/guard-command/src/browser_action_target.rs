@@ -33,7 +33,7 @@ pub(crate) fn browser_target(url: &str, guard_origins: &[&str]) -> BrowserTarget
         None => format!("{}://{}", parts.scheme, parts.host),
     };
     let mut url_redacted = format!("{origin}{}", parts.path);
-    if let Some(query) = parts.query {
+    if let Some(query) = parts.query.as_deref() {
         url_redacted.push('?');
         url_redacted.push_str(&redacted_query(query));
     }
@@ -44,7 +44,7 @@ pub(crate) fn browser_target(url: &str, guard_origins: &[&str]) -> BrowserTarget
         .any(|guard| guard.eq_ignore_ascii_case(&origin));
     BrowserTargetV2 {
         site_group: Some(site_group(&parts.host)),
-        path_prefix: Some(path_prefix(parts.path)),
+        path_prefix: Some(path_prefix(&parts.path)),
         is_loopback: host_is_loopback(&parts.host),
         is_guard_origin,
         origin: Some(origin),
@@ -59,60 +59,35 @@ pub(crate) fn url_runs_script(url: &str) -> bool {
         .is_some_and(|scheme| scheme.eq_ignore_ascii_case("javascript:"))
 }
 
-struct HttpUrl<'a> {
+struct HttpUrl {
     scheme: &'static str,
     host: String,
     port: Option<u16>,
-    path: &'a str,
-    query: Option<&'a str>,
+    path: String,
+    query: Option<String>,
 }
 
-fn split_http_url(url: &str) -> Option<HttpUrl<'_>> {
-    let (scheme, rest) = url.split_once("://")?;
-    let scheme = if scheme.eq_ignore_ascii_case("https") {
-        "https"
-    } else if scheme.eq_ignore_ascii_case("http") {
-        "http"
-    } else {
+/// Parse `url` with the WHATWG URL parser browsers use, so a backslash ends the authority, tab and
+/// newline are stripped, and decimal, hex or short IPv4 hosts resolve to the address the browser
+/// would load. The port is dropped when it is the scheme's default, as in a browser origin.
+fn split_http_url(url: &str) -> Option<HttpUrl> {
+    let parsed = url::Url::parse(url).ok()?;
+    let scheme = match parsed.scheme() {
+        "https" => "https",
+        "http" => "http",
+        _ => return None,
+    };
+    let host = parsed.host_str()?.to_ascii_lowercase();
+    if host.is_empty() {
         return None;
-    };
-    let rest = rest.split('#').next().unwrap_or("");
-    let authority_end = rest.find(['/', '?']).unwrap_or(rest.len());
-    let (authority, tail) = rest.split_at(authority_end);
-    let host_port = authority.rsplit('@').next().unwrap_or(authority);
-    let (host, port) = split_host_port(host_port)?;
-    let (path, query) = match tail.split_once('?') {
-        Some((path, query)) => (path, Some(query)),
-        None => (tail, None),
-    };
-    let path = if path.is_empty() { "/" } else { path };
+    }
     Some(HttpUrl {
         scheme,
         host,
-        port,
-        path,
-        query,
+        port: parsed.port(),
+        path: parsed.path().to_owned(),
+        query: parsed.query().map(str::to_owned),
     })
-}
-
-fn split_host_port(host_port: &str) -> Option<(String, Option<u16>)> {
-    let (host, port) = if let Some(bracketed) = host_port.strip_prefix('[') {
-        let (host, rest) = bracketed.split_once(']')?;
-        (format!("[{host}]"), rest.strip_prefix(':'))
-    } else {
-        match host_port.rsplit_once(':') {
-            Some((host, port)) => (host.to_owned(), Some(port)),
-            None => (host_port.to_owned(), None),
-        }
-    };
-    if host.is_empty() || host.chars().any(|ch| ch.is_whitespace() || ch.is_control()) {
-        return None;
-    }
-    let port = match port {
-        None | Some("") => None,
-        Some(port) => Some(port.parse::<u16>().ok()?),
-    };
-    Some((host.to_ascii_lowercase(), port))
 }
 
 fn redacted_query(query: &str) -> String {

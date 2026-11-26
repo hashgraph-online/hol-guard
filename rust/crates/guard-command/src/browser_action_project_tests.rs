@@ -130,6 +130,46 @@ fn second_url_pointer_and_loopback_and_guard_origin() {
     assert_eq!(dev.target.site_group.as_deref(), Some("localhost"));
 }
 
+#[test]
+fn the_target_origin_is_the_host_a_browser_would_load() {
+    // A backslash ends the authority in http(s) URLs, so the text after `@` is path, not host.
+    let spoofed = action_of(
+        "mcp__example-pilot__open_page",
+        json!({"url": "https://other.example\\@trusted.example/"}),
+    );
+    assert_eq!(
+        spoofed.target.origin.as_deref(),
+        Some("https://other.example")
+    );
+    let guard = ["http://127.0.0.1:4781"];
+    let context = BrowserProjectionContext {
+        guard_origins: &guard,
+        ..Default::default()
+    };
+    for url in [
+        "http://127.0.0.1:4781\\@elsewhere.example/",
+        "http://127.1:4781/",
+        "http://2130706433:4781/",
+        "http://127.0.0.1:4781\t/approvals",
+    ] {
+        let action = action(project_with(
+            "mcp__example-pilot__open_page",
+            json!({"url": url}),
+            &context,
+        ));
+        assert!(action.target.is_guard_origin, "{url}");
+        assert!(action.target.is_loopback, "{url}");
+    }
+    let default_port = action_of(
+        "mcp__example-pilot__open_page",
+        json!({"url": "https://docs.example.org:443/a"}),
+    );
+    assert_eq!(
+        default_port.target.origin.as_deref(),
+        Some("https://docs.example.org")
+    );
+}
+
 fn action_of(tool: &str, arguments: Value) -> BrowserActionV2 {
     action(project(tool, arguments))
 }
