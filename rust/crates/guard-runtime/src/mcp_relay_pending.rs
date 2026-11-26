@@ -101,18 +101,6 @@ impl Default for PendingRelayEvidence {
 }
 
 impl PendingRelayEvidence {
-    /// Whether a forward can reserve a held-record slot before it performs a
-    /// remembered policy write.
-    pub(crate) fn has_headroom(&self, now: Instant) -> bool {
-        let Ok(mut state) = self.state.lock() else {
-            return false;
-        };
-        state
-            .records
-            .retain(|held| now.saturating_duration_since(held.held_at) < HOLD_TTL);
-        state.records.len() < MAX_HELD_RECORDS
-    }
-
     /// Hold one forward's record; `None` when it cannot be held.
     pub(crate) fn hold(&self, record: Value, now: Instant) -> Option<String> {
         let bytes = serde_json::to_vec(&record).ok()?.len();
