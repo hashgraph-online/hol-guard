@@ -176,7 +176,15 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                             }
                             // A value that is only printed needs no stand-in of its
                             // own shape (`display`).
-                            _ if display::display_slot(&masked, &substitutions, substitution) => {
+                            // So does a value that is only compared as a string
+                            // (`display::compared`).
+                            _ if display::display_slot(&masked, &substitutions, substitution)
+                                || display::compared::compared(
+                                    &masked,
+                                    &substitutions,
+                                    substitution,
+                                ) =>
+                            {
                                 display::DISPLAY_VALUE
                             }
                             _ => return None,
