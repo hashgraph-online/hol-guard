@@ -18,6 +18,14 @@ A profile only describes a driver. It cannot allow anything, lower a review, or 
   `chrome`, `playwright`, shells or interpreters.
 - Use invented names in examples and fixtures.
 
+## Upstream version
+
+Set `referenceVersion` to the npm release of the driver whose tool list the profile was reviewed
+against. For a first-party profile, the weekly upstream drift check
+(`python -m scripts.upstream_drift`) compares it with the npm `latest` of the first package in
+`match.packages`. A first-party profile without a version is reported as `unpinned`. The check only
+reports; it never edits a profile.
+
 ## Trust
 
 Every profile needs a trust binding in `contracts/extensions/trust/<id>.v1.json`. Run:

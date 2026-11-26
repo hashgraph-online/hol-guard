@@ -12,6 +12,7 @@ from scripts import upstream_drift
 from scripts.upstream_drift import (
     NotFoundError,
     Pin,
+    browser_driver_pins,
     check,
     discovery_pins,
     discovery_projection,
@@ -128,7 +129,9 @@ def test_main_exits_nonzero_on_drift_and_writes_report(tmp_path, monkeypatch):
     assert upstream_drift.main(["--json", str(report)]) == 1
     data = json.loads(report.read_text())
     assert data["schema"] == "hol.guard.upstream-drift.v1"
-    assert {item["status"] for item in data["findings"]} == {"unknown"}
+    # No upstream answers, so pinned upstreams are unknown; a profile without a version is unpinned.
+    assert {item["status"] for item in data["findings"]} <= {"unknown", "unpinned"}
+    assert "unknown" in {item["status"] for item in data["findings"]}
     assert "Stale proofs" in summary_file.read_text()
 
 
@@ -327,3 +330,53 @@ def test_scheduled_workflow_only_reads():
     assert checkout["with"]["persist-credentials"] is False
     # Run as a module: as a script, scripts/ci would shadow the top-level ci package.
     assert any(step.get("run", "").startswith("python -m scripts.upstream_drift ") for step in job["steps"])
+
+
+def _profile(root: Path, name: str, **fields: object) -> None:
+    profile = {
+        "id": f"browser.{name}",
+        "publisher": {"name": "HOL Guard", "verified": True},
+        "match": {"packages": [f"@example-org/{name}", f"{name}-legacy"]},
+        **fields,
+    }
+    directory = root / "contributions/browser-drivers"
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"browser.{name}.json").write_text(json.dumps(profile), encoding="utf-8")
+
+
+def test_browser_driver_pins_use_the_first_package_and_reference_version(tmp_path):
+    _profile(tmp_path, "pilot", referenceVersion="1.2.0")
+    [pin] = browser_driver_pins(tmp_path)
+    assert (pin.extension_id, pin.kind, pin.project, pin.pinned) == (
+        "browser.pilot",
+        "npm",
+        "@example-org/pilot",
+        "1.2.0",
+    )
+    url = "https://registry.npmjs.org/@example-org%2Fpilot"
+    [finding] = check([pin], fake_fetch({url: {"dist-tags": {"latest": "1.3.0"}}}), {}, {})
+    assert (finding.status, finding.current) == ("drifted", "1.3.0")
+    text = summary([finding])
+    assert "`browser.pilot`" in text
+    assert "referenceVersion" in text
+    assert "command source pin" not in text
+
+
+def test_first_party_profile_without_a_version_is_reported_unpinned(tmp_path):
+    _profile(tmp_path, "pilot")
+    [pin] = browser_driver_pins(tmp_path)
+    [finding] = check([pin], fake_fetch({}), {}, {})
+    assert finding.status == "unpinned"
+    assert "referenceVersion" in finding.detail
+
+
+def test_community_profiles_are_not_checked(tmp_path):
+    _profile(tmp_path, "pilot", referenceVersion="1.0.0", publisher={"name": "Example", "verified": False})
+    assert browser_driver_pins(tmp_path) == []
+
+
+def test_repository_first_party_browser_profiles_are_all_checked():
+    found = {pin.extension_id: pin for pin in browser_driver_pins(ROOT)}
+    assert {"browser.playwright-mcp", "browser.chrome-devtools-mcp"} <= set(found)
+    assert found["browser.playwright-mcp"].project == "@playwright/mcp"
+    assert found["browser.chrome-devtools-mcp"].project == "chrome-devtools-mcp"

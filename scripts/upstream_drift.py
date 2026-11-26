@@ -94,6 +94,27 @@ def pins(repository: Path) -> list[Pin]:
     return found
 
 
+def browser_driver_pins(repository: Path) -> list[Pin]:
+    """Return the npm release each first-party browser driver profile was reviewed against.
+
+    A first-party profile with no ``referenceVersion`` or no package is returned with
+    kind ``unpinned`` so the report names it instead of skipping it.
+    """
+    found = []
+    for path in sorted((repository / "contributions/browser-drivers").glob("*.json")):
+        profile = json.loads(path.read_text(encoding="utf-8"))
+        if not (profile.get("publisher") or {}).get("verified"):
+            continue
+        source = path.relative_to(repository).as_posix()
+        packages = (profile.get("match") or {}).get("packages") or ()
+        version = profile.get("referenceVersion")
+        if packages and isinstance(version, str) and version:
+            found.append(Pin(profile["id"], "npm", packages[0], version, source))
+        else:
+            found.append(Pin(profile["id"], "unpinned", packages[0] if packages else profile["id"], "none", source))
+    return found
+
+
 def _child(mapping: dict[str, Any] | None, name: str) -> Any:
     """Look up a Discovery resource or method the way gws does: case-insensitively."""
     for key, value in (mapping or {}).items():
@@ -265,8 +286,13 @@ def _discovery(pin: Pin, fetch: Fetch) -> tuple[str, str | None, str]:
     return "drifted", revision, "changed: " + ", ".join(changed)
 
 
+def _unpinned(pin: Pin, fetch: Fetch) -> tuple[str, str | None, str]:
+    return "unpinned", None, "the profile records no referenceVersion"
+
+
 _CHECKS: dict[str, Callable[[Pin, Fetch], tuple[str, str | None, str]]] = {
     "github": _github,
+    "unpinned": _unpinned,
     "npm": _npm,
     "discovery": _discovery,
 }
@@ -312,8 +338,15 @@ def summary(findings: list[Finding]) -> str:
             f"| `{item.current or '?'}` | {item.status}: {item.detail} | {proofs} |"
         )
     lines.append("")
-    if any(item.pin.kind != "discovery" for item in stale):
+    browser = [item for item in stale if item.pin.source.startswith("contributions/browser-drivers/")]
+    if len(browser) < len(stale) and any(item.pin.kind != "discovery" for item in stale):
         lines.append("Review the upstream change, then update the command source pin and rerun the listed proofs.")
+    if browser:
+        lines.append(
+            "For a browser driver profile, compare the release's tool list with the profile's `tools`, "
+            "map each new tool to a verb, then set `referenceVersion` to the reviewed release. "
+            "A tool the profile does not list stays an unclassified review until then."
+        )
     if any(item.pin.kind == "discovery" for item in stale):
         lines.append(
             "For a Discovery change, review the listed methods, resources and schemas, then run "
@@ -392,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"re-pinned {path.relative_to(args.repository).as_posix()}")
         return 0
     findings = check(
-        pins(args.repository) + discovery_pins(args.repository),
+        pins(args.repository) + discovery_pins(args.repository) + browser_driver_pins(args.repository),
         http_json,
         pack_members(args.repository),
         gauntlet_scenarios(args.repository),
