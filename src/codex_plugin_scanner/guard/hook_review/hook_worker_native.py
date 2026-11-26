@@ -194,9 +194,6 @@ class HookWorkerNativeMixin:
         defer_accepted_recording: bool = False,
         deferred_receipts: list[Mapping[str, object]] | None = None,
     ) -> tuple[dict[str, object], bool]:
-        from ..runtime_transition_hook_probe import transition_hook_probe
-
-        probe = transition_hook_probe(payload)
         # Worker threads are reused, so clear any failure code left by an
         # earlier request before this review can report its own.
         record_native_resident_client_failure_code(None)
@@ -214,7 +211,6 @@ class HookWorkerNativeMixin:
                 policy_snapshot=policy_snapshot,
                 recording_only=recording_only,
                 defer_accepted_recording=defer_accepted_recording,
-                probe=probe,
                 claim_saved_approval=claim_saved_approval,
             )
             if direct_answer:

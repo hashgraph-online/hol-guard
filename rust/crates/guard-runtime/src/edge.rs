@@ -83,10 +83,19 @@ pub(crate) fn request_identity(envelope: &GuardHookEnvelopeV2) -> Result<(String
         "source": source,
     });
     let digest = canonical_identity_digest(&value, "native_hook_request_digest_failed")?;
+    let probe_request_id =
+        crate::transition_hook_observation::probe_request_id(&envelope.raw_payload);
     let request_id = match envelope.request_id.as_deref() {
-        Some(value) if request_id_is_safe(value) => value.to_owned(),
+        Some(value) if request_id_is_safe(value) => {
+            if probe_request_id.is_some_and(|probe| probe != value) {
+                return Err("native_hook_request_id_probe_mismatch".to_owned());
+            }
+            value.to_owned()
+        }
         Some(_) => return Err("native_hook_request_id_invalid".to_owned()),
-        None => format!("sha256:{digest}"),
+        None => probe_request_id
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("sha256:{digest}")),
     };
     Ok((request_id, digest))
 }

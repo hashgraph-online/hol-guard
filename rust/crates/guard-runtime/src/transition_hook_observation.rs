@@ -40,6 +40,11 @@ fn probe(payload: &Value) -> Option<(&str, &str)> {
         .then_some((operation, request))
 }
 
+/// The request identity a valid transition probe asks the edge to echo.
+pub(crate) fn probe_request_id(payload: &Value) -> Option<&str> {
+    probe(payload).map(|(_, request)| request)
+}
+
 /// The observation a native receipt makes of the probe it answers: valid, and
 /// a live, enforcing `PreToolUse` of exactly that probe.
 fn observation(operation: &str, request: &str, receipt: &Value) -> Option<Value> {
