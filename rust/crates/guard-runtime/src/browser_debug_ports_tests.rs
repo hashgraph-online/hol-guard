@@ -174,3 +174,51 @@ fn loopback_ports_are_read_from_every_local_host_form() {
     assert_eq!(loopback_port("http://127.0.0.1.example.test:9333/"), None);
     assert_eq!(loopback_port("http://example.test\\@127.0.0.1:9333/"), None);
 }
+
+fn browser_navigate(session: Option<&str>, url: &str) -> Value {
+    let mut payload = json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "mcp__playwright__browser_navigate",
+        "tool_input": {"url": url},
+    });
+    if let Some(session) = session {
+        payload["session_id"] = json!(session);
+    }
+    payload
+}
+
+#[test]
+fn a_tool_call_to_a_conventional_debugger_port_is_held() {
+    let home = tempfile::tempdir().unwrap();
+    for url in [
+        "http://127.0.0.1:9222/json/version",
+        "http://localhost:9229/json/list",
+    ] {
+        for session in [Some("session-a"), None] {
+            let reached = run(home.path(), &browser_navigate(session, url), "allow");
+            assert_eq!(reached.reason_code, DEBUG_PORT_REVIEW, "{url}");
+            assert_eq!(reached.minimum_action, "review");
+        }
+    }
+    // A dev server and a public host keep their verdict.
+    for url in ["http://127.0.0.1:5173/", "https://example.test:9222/"] {
+        let reached = run(
+            home.path(),
+            &browser_navigate(Some("session-a"), url),
+            "allow",
+        );
+        assert_eq!(reached.minimum_action, "allow", "{url}");
+    }
+}
+
+#[test]
+fn a_tool_call_to_a_recorded_port_is_held() {
+    let home = tempfile::tempdir().unwrap();
+    run(home.path(), &bash("session-a", LAUNCH), "allow");
+    let reached = run(
+        home.path(),
+        &browser_navigate(Some("session-a"), "http://127.0.0.1:9333/json"),
+        "allow",
+    );
+    assert_eq!(reached.reason_code, DEBUG_PORT_REVIEW);
+}

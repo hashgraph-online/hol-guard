@@ -13,6 +13,11 @@
 //! recorded port is held for review, the same way a request to a listed admin
 //! port is. Ports named in the same call count too.
 //!
+//! A tool call that is not a shell command, such as a browser driver asked to
+//! open `http://127.0.0.1:9222/json`, is also held when it names a loopback
+//! destination on a conventional debugger port. The shell route already
+//! reviews those ports through its own admin-port screen.
+//!
 //! The overlay only raises: recording a port can never lift a decision, an
 //! unreadable store leaves the verdict as it was, and the review keeps Allow
 //! once and Always allow.
@@ -42,6 +47,8 @@ const MAX_TARGETS: usize = 64;
 const SHELL_LAUNCH_DRIVER: &str = "shell-launch";
 /// Flags that open a browser's debugging protocol on a loopback port.
 const DEBUG_PORT_FLAGS: [&str; 2] = ["remote-debugging-port", "start-debugger-server"];
+/// Chrome DevTools and the Node inspector. Either one controls what it serves.
+const CONVENTIONAL_DEBUG_PORTS: [u16; 2] = [9222, 9229];
 const SESSIONS_TABLE: &str = "guard_browser_sessions";
 const WRITE_BUSY_TIMEOUT: Duration = Duration::from_millis(250);
 
@@ -67,7 +74,7 @@ pub(crate) fn apply_to_envelope(
 
 /// Records the debugging ports the call names, then raises the result to a
 /// review when the call reaches a loopback port a launch in this harness
-/// session named.
+/// session named, or a tool call reaches a conventional debugger port.
 pub(crate) fn apply(
     guard_home: &Path,
     harness: &str,
@@ -78,16 +85,16 @@ pub(crate) fn apply(
     if result.action.event == "UserPromptSubmit" {
         return result;
     }
-    let Some(harness_session) = harness_session_digest(harness, payload) else {
-        return result;
-    };
+    let harness_session = harness_session_digest(harness, payload);
     let command = command_text(payload);
     let launched = command
         .as_deref()
         .map(debugging_ports_in)
         .unwrap_or_default();
-    if !launched.is_empty() {
-        record(guard_home, harness, &harness_session, &launched, now_unix);
+    if let Some(harness_session) = harness_session.as_deref() {
+        if !launched.is_empty() {
+            record(guard_home, harness, harness_session, &launched, now_unix);
+        }
     }
     if result.minimum_action == "block" {
         return result;
@@ -103,8 +110,14 @@ pub(crate) fn apply(
     if reached.is_empty() {
         return result;
     }
-    let mut known = recorded_ports(guard_home, harness, &harness_session, now_unix);
+    let mut known = harness_session
+        .as_deref()
+        .map(|session| recorded_ports(guard_home, harness, session, now_unix))
+        .unwrap_or_default();
     known.extend(&launched);
+    if command.is_none() {
+        known.extend(CONVENTIONAL_DEBUG_PORTS);
+    }
     if reached.iter().any(|port| known.contains(port)) {
         raise(result)
     } else {
@@ -113,7 +126,8 @@ pub(crate) fn apply(
 }
 
 /// The harness session the call belongs to. A call without a session id has
-/// no session to scope a port to, so nothing is recorded or matched.
+/// no session to scope a port to, so nothing is recorded or matched against
+/// the store.
 fn harness_session_digest(harness: &str, payload: &Value) -> Option<String> {
     let session = payload
         .get("session_id")
