@@ -160,10 +160,13 @@ fn a_session_digest_cannot_move_to_another_harness_session_or_driver() {
     ));
 }
 
+/// One change to a sighting, named for the field it breaks.
+type Mutation = fn(&mut Sighting);
+
 #[test]
 fn malformed_observations_are_rejected_before_any_write() {
     let connection = store();
-    let cases: [(&str, fn(&mut Sighting)); 6] = [
+    let cases: [(&str, Mutation); 6] = [
         ("session_digest", |s| s.session = "ABC".to_owned()),
         ("harness_session_digest", |s| {
             s.harness_session = digest('g')
