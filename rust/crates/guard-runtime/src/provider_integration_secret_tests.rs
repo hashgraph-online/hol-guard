@@ -126,7 +126,12 @@ fn a_refused_key_writes_nothing() {
     let mut store = EncryptedFileSecretStore::new(home.path());
     let base64url = auth(ProviderKeyCharsetV1::Base64url);
     assert_eq!(
-        store_provider_key(&mut store, SHIELD, &key("this is a note, not a provider key"), &base64url),
+        store_provider_key(
+            &mut store,
+            SHIELD,
+            &key("this is a note, not a provider key"),
+            &base64url
+        ),
         Err(ProviderSecretError::KeyCharset)
     );
     assert_eq!(
