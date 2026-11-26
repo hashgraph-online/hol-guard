@@ -324,7 +324,8 @@ impl Ctx<'_> {
                 let publication = legacy::previous_publication(previous, &directory)?;
                 Ok(Defaults {
                     installed: defaults(&release)?,
-                    previous: defaults(&publication)?,
+                    previous: previous_default_ids(&directory, &publication)
+                        .map_err(|_| refused("release default packs unreadable"))?,
                 })
             },
         )?;
@@ -335,6 +336,19 @@ impl Ctx<'_> {
                 .to_owned(),
         ))
     }
+}
+
+/// The default packs the previous release shipped. A release from before default packs has no
+/// `policy.defaults` and so no default the user could have turned off; a field that is present
+/// but unreadable is still refused.
+fn previous_default_ids(
+    directory: &Path,
+    publication: &Value,
+) -> std::result::Result<BTreeSet<String>, String> {
+    if publication["policy"].get("defaults").is_none() {
+        return Ok(BTreeSet::new());
+    }
+    crate::pack_preparation::release_default_ids(directory, publication)
 }
 
 #[cfg(test)]
@@ -405,5 +419,34 @@ mod selection_tests {
         let previous = json!(["command.alpha"]);
         let candidate = json!(["command.alpha", "command.beta"]);
         assert!(selection_kept(&previous, &candidate, unread).is_err());
+    }
+
+    #[test]
+    fn a_release_from_before_default_packs_had_no_defaults() {
+        let directory = Path::new(".");
+        let legacy = json!({"policy": {"root": {}, "revocations": {"epoch": 0}}});
+        assert_eq!(
+            previous_default_ids(directory, &legacy),
+            Ok(BTreeSet::new())
+        );
+        let none = json!({"policy": {"defaults": {"count": 0}}});
+        assert_eq!(previous_default_ids(directory, &none), Ok(BTreeSet::new()));
+    }
+
+    #[test]
+    fn a_present_but_unreadable_defaults_field_is_refused() {
+        let directory = Path::new(".");
+        for defaults in [
+            json!(null),
+            json!({}),
+            json!({"count": "two"}),
+            json!({"count": 1}),
+        ] {
+            let publication = json!({"policy": {"defaults": defaults}});
+            assert!(
+                previous_default_ids(directory, &publication).is_err(),
+                "{publication}"
+            );
+        }
     }
 }
