@@ -1,6 +1,14 @@
-use guard_contracts::{BrowserDriverTrustClassV1, BrowserIntentV1, BrowserProfileModeV1};
+use guard_contracts::{
+    BrowserDriverTrustClassV1, BrowserIntentV1, BrowserProfileModeV1, BrowserSensitiveSurfaceV1,
+};
+
+use serde_json::{json, Value};
 
 use super::*;
+use crate::browser_action_project::{
+    project_browser_action, BrowserProjection, BrowserProjectionContext,
+};
+use crate::browser_driver_match::{match_browser_driver, BrowserToolCallIdentity};
 
 // The operation tables these profiles replaced, plus the tools of the upstream release each profile
 // records in `referenceVersion`. Every name keeps its intent.
@@ -274,12 +282,12 @@ fn oracle_names(oracle: &[(BrowserIntentV1, &[&str])]) -> Vec<String> {
 #[test]
 fn first_party_profiles_compile_as_first_party() {
     let drivers = compile_first_party().expect("first-party profiles compile");
-    assert_eq!(drivers.len(), 2);
+    assert_eq!(drivers.len(), 5);
     for driver in &drivers {
         assert_eq!(driver.trust_class, BrowserDriverTrustClassV1::FirstParty);
         assert!(driver.publisher_verified);
     }
-    assert_eq!(first_party_browser_drivers().len(), 2);
+    assert_eq!(first_party_browser_drivers().len(), 5);
 }
 
 #[test]
@@ -306,6 +314,58 @@ fn every_replaced_table_entry_keeps_its_intent() {
             listed,
             oracle_names(oracle),
             "{driver_id} lists exactly the oracle tools"
+        );
+    }
+}
+
+#[test]
+fn the_puppeteer_profile_lists_the_reference_server_tools() {
+    use BrowserIntentV1::*;
+    for (name, intent) in [
+        ("puppeteer_click", Interact),
+        ("puppeteer_connect_active_tab", Privileged),
+        ("puppeteer_evaluate", Privileged),
+        ("puppeteer_fill", Interact),
+        ("puppeteer_hover", Interact),
+        ("puppeteer_navigate", Navigation),
+        ("puppeteer_screenshot", Inspect),
+        ("puppeteer_select", Interact),
+    ] {
+        assert_eq!(
+            first_party_operation_intent(PUPPETEER_DRIVER_ID, name),
+            Some(intent),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        first_party_operation_intent(PUPPETEER_DRIVER_ID, "browser_navigate"),
+        None
+    );
+}
+
+#[test]
+fn the_browsermcp_profile_lists_the_script_tool_and_the_legacy_tools() {
+    use BrowserIntentV1::*;
+    for (name, intent) in [
+        ("browser", Privileged),
+        ("browser_click", Interact),
+        ("browser_drag", Interact),
+        ("browser_get_console_logs", Inspect),
+        ("browser_go_back", Navigation),
+        ("browser_go_forward", Navigation),
+        ("browser_hover", Interact),
+        ("browser_navigate", Navigation),
+        ("browser_press_key", Interact),
+        ("browser_screenshot", Inspect),
+        ("browser_select_option", Interact),
+        ("browser_snapshot", Inspect),
+        ("browser_type", Interact),
+        ("browser_wait", Inspect),
+    ] {
+        assert_eq!(
+            first_party_operation_intent(BROWSERMCP_DRIVER_ID, name),
+            Some(intent),
+            "{name}"
         );
     }
 }
@@ -351,4 +411,83 @@ fn profile_mode_reads_the_profile_flag_lists_in_priority_order() {
     assert_eq!(mode(&["--persistent"]), BrowserProfileModeV1::Dedicated);
     assert_eq!(mode(&["--no-isolated"]), BrowserProfileModeV1::Shared);
     assert_eq!(mode(&["--shared"]), BrowserProfileModeV1::Shared);
+}
+
+fn computer_use(harness_tool_name: &str, arguments: Value) -> BrowserProjection {
+    let call = BrowserToolCallIdentity {
+        harness_tool_name,
+        ..Default::default()
+    };
+    let matched = match_browser_driver(first_party_browser_drivers(), &call).expect("matched");
+    assert_eq!(matched.driver.id, COMPUTER_USE_DRIVER_ID);
+    let Value::Object(arguments) = arguments else {
+        panic!("arguments are an object");
+    };
+    project_browser_action(&matched, &arguments, &BrowserProjectionContext::default())
+}
+
+#[test]
+fn computer_use_maps_each_action_and_acts_in_the_shared_session() {
+    use guard_contracts::BrowserVerbV1::*;
+    for (tool, action, verb) in [
+        ("computer", "get_screenshot", Screenshot),
+        ("computer", "screenshot", Screenshot),
+        ("computer", "left_click", Click),
+        ("computer", "mouse_move", Click),
+        ("computer", "type", Type),
+        ("computer", "key", Key),
+        ("computer", "scroll", Scroll),
+        ("mcp__computer-use__computer", "double_click", Click),
+    ] {
+        let BrowserProjection::Classified(projected) =
+            computer_use(tool, json!({"action": action, "text": "x"}))
+        else {
+            panic!("{action} is classified");
+        };
+        assert_eq!(projected.verb, verb, "{action}");
+        assert_eq!(
+            projected.session.profile_mode,
+            BrowserProfileModeV1::Shared,
+            "{action}"
+        );
+    }
+}
+
+#[test]
+fn an_unlisted_computer_use_action_stays_unclassified() {
+    for arguments in [json!({"action": "open_application"}), json!({})] {
+        assert!(matches!(
+            computer_use("computer", arguments),
+            BrowserProjection::Unclassified { .. }
+        ));
+    }
+}
+
+#[test]
+fn a_drag_screens_its_destination_as_well_as_its_source() {
+    let call = BrowserToolCallIdentity {
+        harness_tool_name: "mcp__browsermcp__browser_drag",
+        ..Default::default()
+    };
+    let matched = match_browser_driver(first_party_browser_drivers(), &call).expect("matched");
+    assert_eq!(matched.driver.id, BROWSERMCP_DRIVER_ID);
+    let project = |arguments: Value| {
+        let Value::Object(arguments) = arguments else {
+            panic!("arguments are an object");
+        };
+        let BrowserProjection::Classified(projected) =
+            project_browser_action(&matched, &arguments, &BrowserProjectionContext::default())
+        else {
+            panic!("drag is classified");
+        };
+        projected
+    };
+    let password = project(json!({"startElement": "Account name", "endElement": "Password"}));
+    assert!(password
+        .sensitive_surface_flags
+        .contains(&BrowserSensitiveSurfaceV1::PasswordField));
+    let plain = project(json!({"startElement": "Card one", "endElement": "Done column"}));
+    assert!(!plain
+        .sensitive_surface_flags
+        .contains(&BrowserSensitiveSurfaceV1::PasswordField));
 }

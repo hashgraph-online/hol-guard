@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "guard.browser-driver.v1",
+  "id": "browser.computer-use",
+  "name": "Computer use",
+  "publisher": {
+    "name": "HOL Guard",
+    "url": "https://github.com/hashgraph-online/hol-guard",
+    "verified": true
+  },
+  "referenceUrls": [
+    "https://github.com/domdomegg/computer-use-mcp",
+    "https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/computer-use-tool"
+  ],
+  "referenceVersion": "2.0.0",
+  "match": {
+    "mcpServerNames": [
+      "computer-use"
+    ],
+    "packages": [
+      "computer-use-mcp"
+    ],
+    "toolNamespaces": [
+      "mcp__computer-use__"
+    ],
+    "harnessTools": [
+      "computer"
+    ]
+  },
+  "profileMode": {
+    "default": "shared"
+  },
+  "tools": [
+    {
+      "name": "computer",
+      "discriminator": "action",
+      "cases": {
+        "cursor_position": {
+          "verb": "Read"
+        },
+        "double_click": {
+          "verb": "Click"
+        },
+        "get_cursor_position": {
+          "verb": "Read"
+        },
+        "get_screenshot": {
+          "verb": "Screenshot"
+        },
+        "hold_key": {
+          "verb": "Key",
+          "text": [
+            "text"
+          ]
+        },
+        "key": {
+          "verb": "Key",
+          "text": [
+            "text"
+          ]
+        },
+        "left_click": {
+          "verb": "Click"
+        },
+        "left_click_drag": {
+          "verb": "Click"
+        },
+        "left_mouse_down": {
+          "verb": "Click"
+        },
+        "left_mouse_up": {
+          "verb": "Click"
+        },
+        "middle_click": {
+          "verb": "Click"
+        },
+        "mouse_move": {
+          "verb": "Click"
+        },
+        "right_click": {
+          "verb": "Click"
+        },
+        "screenshot": {
+          "verb": "Screenshot"
+        },
+        "scroll": {
+          "verb": "Scroll"
+        },
+        "triple_click": {
+          "verb": "Click"
+        },
+        "type": {
+          "verb": "Type",
+          "text": [
+            "text"
+          ]
+        },
+        "wait": {
+          "verb": "Read"
+        },
+        "zoom": {
+          "verb": "Screenshot"
+        }
+      }
+    }
+  ]
+}

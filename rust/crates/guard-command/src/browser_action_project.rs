@@ -274,13 +274,21 @@ fn element(
     verb: BrowserVerbV1,
     arguments: &Map<String, Value>,
 ) -> Option<BrowserElementV1> {
-    let name = first_string(arguments, &operation.pointers.element_name)?;
+    let pointers = &operation.pointers.element_name;
+    let name = first_string(arguments, pointers)?;
+    // A drag names a source and a destination: either one can be the sensitive field, so every
+    // named element is screened while the first one is shown.
+    let names = || {
+        pointers
+            .iter()
+            .filter_map(|pointer| arguments.get(pointer).and_then(Value::as_str))
+    };
     Some(BrowserElementV1 {
         role: None,
         name_digest: Some(digest(name)),
         name_preview: Some(element_preview(name)),
-        is_password: name_looks_like_password(name),
-        is_payment: name_looks_like_payment(name),
+        is_password: names().any(name_looks_like_password),
+        is_payment: names().any(name_looks_like_payment),
         is_file_input: verb == BrowserVerbV1::Upload,
     })
 }
