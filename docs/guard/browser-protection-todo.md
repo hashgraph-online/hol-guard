@@ -491,6 +491,14 @@ transcript in the pull request (after BP-T052).
 - [ ] **BP-T121** `provider_integration_store.rs`: connection rows and the `provider_signals` cache
   table keyed by `(provider_id, capability, subject_digest)`, through the native `ensure_schema`
   chain. Subjects are stored as digests.
+  - [x] Store module: `provider_connections`, `provider_capability_settings` and `provider_signals`,
+    created and checked by `ensure_provider_integration_schema` the way the browser session tables
+    are. Every value is checked against the contract on write and on read, so a damaged row is a
+    store error rather than a missing signal. The store numbers each change of verdict or reason
+    codes per subject (`revision`), which is the signal version BP-T176 counts. The cache is bounded
+    per provider, and expired rows are pruned after an hour.
+  - [ ] Callers: the worker (BP-T122) writes signals and connection state, the decide step (BP-T123)
+    reads them, and the routes (BP-T130) own connections and settings.
 - [ ] **BP-T122** `provider_integration_worker.rs`: the only caller of the client. Token bucket,
   negative cache (60 s), jittered refresh, circuit breaker (five failures, 5 minutes), `401` and `403`
   to `key_invalid` with calls stopped.
