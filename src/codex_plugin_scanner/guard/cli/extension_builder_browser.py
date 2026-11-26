@@ -1,7 +1,7 @@
 """``extensions generate|validate --browser``: thin glue over the native ``browser-driver`` command.
 
-The native runtime drafts and compiles browser driver profiles. This module reads bounded input
-files, sends one request line and reports or writes what comes back.
+The native runtime drafts and compiles browser driver profiles and their benign gate rows. This
+module reads bounded input files, sends one request line and reports or writes what comes back.
 """
 
 from __future__ import annotations
@@ -60,6 +60,23 @@ def _refusal(reply: dict[str, object]) -> str:
     return str(error.get("code")) if isinstance(error, dict) else "unknown"
 
 
+def _items(reply: dict[str, object]) -> str:
+    """The rows or tools a gate refusal names, made safe to print."""
+    error = reply.get("error")
+    items = error.get("items") if isinstance(error, dict) else None
+    if not isinstance(items, list) or not items:
+        return ""
+    return " (" + ", ".join(_shown(item) for item in items[:20]) + (", ..." if len(items) > 20 else "") + ")"
+
+
+def gate_rows_path(output: Path, gate_output: Path | None) -> Path:
+    """Where the drafted gate rows go: ``--gate-output``, or next to the profile."""
+    if gate_output is not None:
+        return gate_output
+    stem = output.name.removesuffix(".json")
+    return output.with_name(f"{stem}.gate-rows.json")
+
+
 def generate_browser_draft(args: argparse.Namespace) -> dict[str, object]:
     if args.source_adapter != "mcp":
         raise BuilderError("browser_source", "Browser driver drafts read an MCP tool list (--from mcp).")
@@ -83,25 +100,50 @@ def generate_browser_draft(args: argparse.Namespace) -> dict[str, object]:
         raise BuilderError("browser_generate", f"The draft could not be built: {_refusal(reply)}.")
     profile = reply.get("profile")
     profile_text = reply.get("profileText")
+    rows_text = reply.get("gateRowsText")
     if not isinstance(profile, dict) or not isinstance(profile.get("tools"), list) or not isinstance(profile_text, str):
         raise BuilderError("browser_generate", "The native drafter returned an invalid profile.")
+    if not isinstance(rows_text, str):
+        raise BuilderError("browser_generate", "The native drafter returned no gate rows.")
+    rows_path = gate_rows_path(args.output, getattr(args, "gate_output", None))
+    if rows_path == args.output or rows_path.resolve() == Path(args.output).resolve():
+        raise BuilderError("output_exists", "The gate rows need a file of their own; choose another --gate-output.")
+    if rows_path.exists() or rows_path.is_symlink():
+        raise BuilderError("output_exists", "The gate rows file already exists; choose a new --gate-output.")
     # Write the exact text the native compiler checked, so the file on disk is the one it accepted.
+    # The pair lands together: a rows file that cannot be written takes the new profile with it,
+    # so the same command can run again.
     _write_new(args.output, profile_text)
+    try:
+        _write_new(rows_path, rows_text)
+    except BaseException as exc:
+        Path(args.output).unlink(missing_ok=True)
+        if isinstance(exc, OSError):
+            raise BuilderError(
+                "unsafe_path", "The gate rows file could not be written; choose a writable --gate-output."
+            ) from exc
+        raise
+    gate_rows = reply.get("gateRows")
     return {
         "generated": True,
         "browser": True,
         "driverId": profile.get("id"),
         "tools": len(profile["tools"]),
         "output": str(args.output),
+        "gateRowsOutput": str(rows_path),
+        "gateRows": len(gate_rows) if isinstance(gate_rows, list) else 0,
         "proposals": reply.get("proposals", []),
         "notes": reply.get("notes", []),
     }
 
 
-def validate_browser_driver(path: Path) -> dict[str, object]:
-    reply = native_browser_request({"op": "validate", "profile": _read_text(path, "profile")}, code="browser_validate")
+def validate_browser_driver(path: Path, gate_rows: Path | None = None) -> dict[str, object]:
+    request: dict[str, object] = {"op": "validate", "profile": _read_text(path, "profile")}
+    if gate_rows is not None:
+        request["gateRows"] = _read_text(gate_rows, "gate rows")
+    reply = native_browser_request(request, code="browser_validate")
     if reply.get("ok") is not True:
-        raise BuilderError("browser_validate", f"The profile is not valid: {_refusal(reply)}.")
+        raise BuilderError("browser_validate", f"The profile is not valid: {_refusal(reply)}{_items(reply)}.")
     return {
         "validated": True,
         "browser": True,
@@ -111,6 +153,7 @@ def validate_browser_driver(path: Path) -> dict[str, object]:
         "otherTools": reply.get("otherTools", []),
         "firstPartyOverlap": reply.get("firstPartyOverlap", []),
         "profileMode": reply.get("profileMode"),
+        "gateRows": reply.get("gateRows"),
     }
 
 
@@ -152,19 +195,22 @@ def _emit_omissions(notes: object, output: TextIO) -> None:
 def emit_browser_summary(command: str, result: dict[str, object], output: TextIO) -> None:
     if command == "generate":
         print(f"Drafted {result['tools']} tools for {result['driverId']} in {result['output']}.", file=output)
+        print(f"Drafted {result['gateRows']} benign gate rows in {result['gateRowsOutput']}.", file=output)
         for proposal in result["proposals"] if isinstance(result["proposals"], list) else []:
             if isinstance(proposal, dict):
                 evidence = proposal.get("evidence") or "no matching name"
                 print(f"  {proposal.get('tool')}: {proposal.get('verb')} ({evidence})", file=output)
         _emit_omissions(result["notes"], output)
         print(
-            "Check every verb, set profileMode once you know how the driver launches its browser, "
-            "then run extensions validate --browser.",
+            "Check every verb and gate row, set profileMode once you know how the driver launches its browser, "
+            "then run extensions validate --browser --gate-rows.",
             file=output,
         )
         return
     print(
-        f"Validated {result['driverId']}: {result['tools']} tools, profile mode {result['profileMode']}.", file=output
+        f"Validated {result['driverId']}: {result['tools']} tools, profile mode {result['profileMode']}, "
+        f"{result['gateRows']} gate rows.",
+        file=output,
     )
     other = result["otherTools"] if isinstance(result["otherTools"], list) else []
     if other:

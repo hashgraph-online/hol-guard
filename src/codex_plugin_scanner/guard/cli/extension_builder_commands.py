@@ -61,6 +61,11 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
         help="Draft a browser driver profile from an MCP tool list; --output names a new file",
     )
     generate.add_argument("--server", help="MCP server name the --browser driver matches")
+    generate.add_argument(
+        "--gate-output",
+        type=Path,
+        help="New file for the --browser benign gate rows; defaults to <output stem>.gate-rows.json",
+    )
     generate.add_argument("--host", help="API host for --cloud drafts; required for MCP tool lists")
     generate.add_argument("--auth-mode", choices=("none", "oauth2", "api-key"), help="Auth mode for MCP --cloud drafts")
     generate.add_argument(
@@ -72,6 +77,9 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     validate.add_argument("kit", type=Path, help="Kit directory, or a pack or profile file with --cloud or --browser")
     validate.add_argument("--cloud", action="store_true", help="Validate a cloud action pack and run its fixtures")
     validate.add_argument("--browser", action="store_true", help="Compile a browser driver profile as a contribution")
+    validate.add_argument(
+        "--gate-rows", type=Path, help="Benign gate rows for a --browser profile: a row array or the gate fixture"
+    )
     diff = commands.add_parser("diff", help="Compare valid kits; exit 1 when their inventories or reviews differ")
     diff.add_argument("previous", type=Path)
     diff.add_argument("current", type=Path)
@@ -237,7 +245,7 @@ def _operate(args: argparse.Namespace) -> dict[str, object]:
         if args.browser:
             from .extension_builder_browser import validate_browser_driver
 
-            return validate_browser_driver(args.kit)
+            return validate_browser_driver(args.kit, args.gate_rows)
         if args.cloud:
             from .extension_builder_cloud import validate_cloud_pack
 

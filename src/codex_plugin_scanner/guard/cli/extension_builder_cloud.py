@@ -151,8 +151,13 @@ def _write_new(path: Path, text: str) -> None:
         fd = os.open(path, flags, 0o644)
     except FileExistsError as exc:
         raise BuilderError("output_exists", "The output file already exists; choose a new path.") from exc
-    with os.fdopen(fd, "w", encoding="utf-8") as stream:
-        stream.write(text)
+    # This call created the file, so a failed write removes it and the same command can run again.
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(text)
+    except BaseException:
+        Path(path).unlink(missing_ok=True)
+        raise
 
 
 def emit_cloud_summary(result: dict[str, object], output: TextIO) -> None:
