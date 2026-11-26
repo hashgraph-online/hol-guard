@@ -10,7 +10,14 @@ import pytest
 
 from ci.gauntlet.browser_driver_server import START_PAGE_FILE
 from ci.gauntlet.browser_fixtures import PAGE_NAMES, install_server, recorded_tools
-from tests.benign_fp_gate_browser import BROWSER_STATES, browser_server_command, start_page, unwired_state
+from tests.benign_fp_gate_browser import (
+    BROWSER_STATES,
+    PENDING_SAME_CALL,
+    WIRED_STATES,
+    browser_server_command,
+    start_page,
+    unwired_state,
+)
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, server_command
 
 _DOCUMENT = json.loads((Path(__file__).parent / "fixtures" / "benign_false_positive_gate.json").read_text())
@@ -52,12 +59,28 @@ def test_unknown_presets_and_pages_are_rejected(overrides: dict[str, object], me
 
 
 def test_a_known_preset_that_is_not_wired_fails_its_row() -> None:
-    assert unwired_state("none") is None
-    for state in BROWSER_STATES[1:]:
+    for state in WIRED_STATES:
+        assert unwired_state(state) is None
+    for state in (state for state in BROWSER_STATES if state not in WIRED_STATES):
         reason = unwired_state(state)
         assert reason is not None and state in reason
     case = McpCase("browser-row", "playwright", "browser_snapshot", {}, "setup", "site-grant")
     assert mcp_failure(case, {"unwired_state": unwired_state("site-grant")}, [], "") == unwired_state("site-grant")
+
+
+def _block_row(dedupe_count: int) -> dict[str, object]:
+    return {"queue_group_id": "group", "allow_scopes": ["once", "always"], "dedupe_count": dedupe_count}
+
+
+@pytest.mark.parametrize(
+    ("dedupe_counts", "attached"),
+    [((2,), True), ((3,), True), ((1,), False), ((1, 1), False), ((), False)],
+)
+def test_a_retry_while_pending_must_attach_to_the_first_row(dedupe_counts: tuple[int, ...], attached: bool) -> None:
+    case = McpCase("browser-row", "playwright", "browser_click", {}, "block", PENDING_SAME_CALL, "docs-article")
+    response = {"error": {"data": {"transportOutcome": "not-forwarded", "guardPolicyAction": "block"}}}
+    failure = mcp_failure(case, response, [_block_row(count) for count in dedupe_counts], "")
+    assert (failure is None) is attached, failure
 
 
 def test_the_start_page_never_changes_the_configured_launch(tmp_path: Path) -> None:

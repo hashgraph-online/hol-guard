@@ -72702,6 +72702,18 @@
       "page": "docs-article"
     },
     {
+      "id": "browser-playwright-click-link-retry-pending",
+      "server": "playwright",
+      "tool": "browser_click",
+      "arguments": {
+        "element": "Configuration",
+        "ref": "e3"
+      },
+      "expect": "block",
+      "state": "pending-same-call",
+      "page": "docs-article"
+    },
+    {
       "id": "browser-playwright-hover",
       "server": "playwright",
       "tool": "browser_hover",

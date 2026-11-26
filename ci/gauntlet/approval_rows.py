@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from typing import Any
 
 PERSISTENT_SCOPES = frozenset({"workspace", "harness", "global", "publisher", "artifact"})
@@ -234,3 +235,25 @@ def connector_coverage(cases: list[dict[str, Any]]) -> dict[str, Any] | None:
         "supported": sorted(covered_connector_classes(catalog.values())),
         "uncovered": [{"class": name, "rows": observed.get(name, 0)} for name in universe if name not in covered],
     }
+
+
+def await_rows(
+    store: Any, known: set[str], *, waiting: bool, retried: bool = False, seconds: float = 10.0
+) -> list[dict[str, Any]]:
+    """The rows a stopped call queued, once the resident's evidence drain has written them.
+
+    The drain runs after the relay has answered, so a stopped call (``waiting``) polls for its row.
+    A retry waits until its pending row records the second call.
+    """
+    rows = approval_rows(store, known)
+    deadline = time.monotonic() + seconds
+
+    def settled() -> bool:
+        if not rows:
+            return False
+        return not retried or any(row["dedupe_count"] >= 2 for row in rows)
+
+    while waiting and not settled() and time.monotonic() < deadline:
+        time.sleep(0.1)
+        rows = approval_rows(store, known)
+    return rows
