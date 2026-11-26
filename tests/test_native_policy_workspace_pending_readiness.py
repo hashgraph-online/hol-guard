@@ -372,11 +372,13 @@ def test_deferred_subdirectory_whose_probe_misses_its_budget_is_published(
     worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
     nested = existing / "src"
     nested.mkdir()
-    probe = readiness._workspace_overlay_readiness
     calls: list[object] = []
 
-    def second_probe_misses(*args: object, **kwargs: object) -> object:
-        result = probe(*args, **kwargs) if not calls else None  # pyright: ignore[reportArgumentType]
+    def second_probe_misses(*_args: object, **_kwargs: object) -> object:
+        # Registration sees a file-less directory and defers it; the hook's own
+        # probe then runs out of budget. Fixed results keep the deferred state
+        # independent of how fast the resident answers on this host.
+        result = "directory_and_ancestors" if not calls else None
         calls.append(result)
         return result
 
