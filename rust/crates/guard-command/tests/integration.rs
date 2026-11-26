@@ -73,6 +73,7 @@ pub mod pretool_bun_eval;
 pub mod pretool_cd_canonical_workspace;
 pub mod pretool_cd_parenthesized_directory;
 pub mod pretool_chain_git_temporary;
+pub mod pretool_chain_literal_cd_and_tilde;
 pub mod pretool_chain_temporary_files;
 pub mod pretool_cline_dual_copies;
 pub mod pretool_clone_links;

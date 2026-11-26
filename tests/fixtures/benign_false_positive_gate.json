@@ -36442,6 +36442,102 @@
       "expect": "allow"
     },
     {
+      "id": "shell-variable-after-leading-cd-reads-its-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd . && f=src/one.ts; sed -n 1,5p $f; grep -n export $f | head -8"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-variable-after-cd-into-source-folder",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd src && f=one.ts; wc -l $f; sed -n 1,3p \"$f\""
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-home-plan-note-materialised",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wc -l ${HOME}/.codex/plans/acme-plan-todo.md"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-variable-holding-tilde-plan-path",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "f=~/.codex/plans/acme-plan-todo.md; sed -n 1,5p $f; sed -n 1,3p $f | cut -c1-600"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-shell-variable-holding-tilde-key-path",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "f=~/.ssh/id_rsa; sed -n 1,5p $f"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-shell-variable-tilde-after-home-reassigned",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "HOME=/etc; f=~/passwd; sed -n 1,5p $f"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-ln-s-ssh-into-local-clone",
       "fix_area": "negative",
       "harnesses": [
