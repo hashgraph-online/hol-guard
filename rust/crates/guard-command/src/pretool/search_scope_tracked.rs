@@ -25,6 +25,8 @@ const STORE_DIRECTORIES: &[&str] = &[
     ".aws", ".ssh", ".gnupg", ".kube", ".docker", ".azure", ".gcloud", ".config", ".npm",
 ];
 
+#[path = "tracked_listing_names.rs"]
+pub(in crate::pretool) mod listing;
 #[path = "tracked_credential_names.rs"]
 pub(super) mod names;
 
@@ -90,7 +92,10 @@ impl TrackedFiles {
         // A Kubernetes `Secret` holds base64 values the detector does not
         // flag, so a manifest that declares one is never a fixture, whether
         // a tool names it or a recursive search walks into it.
-        if names::secret_object(&text) {
+        // A JSON Web Key holds its private parts in one-letter members the
+        // detector does not read either, so a document carrying one is held
+        // the same way, whatever its name or format.
+        if names::secret_object(&text) || names::private_jwk(&text) {
             return Tracked::SecretManifest;
         }
         if clean(&text, &rendered) {
@@ -193,6 +198,69 @@ impl TrackedFiles {
             .is_some_and(|names| names.contains(&rendered))
             .then_some((metadata.len(), rendered))
     }
+}
+
+/// How many tracked files whose names the credential denials match one
+/// sandbox launch will try to prove. Past it the rest stay withheld.
+const MAX_SANDBOX_DOCUMENTS: usize = 32;
+
+/// Files below `workspace` that the workspace sandbox's credential denials
+/// name but the read review already lets an agent open: committed,
+/// secret-free documents such as `docs/private-key-jwt-client-auth.md`, as
+/// [`names::resolves_to_tracked`] proves them. A recursive search the
+/// decision routes into the sandbox reads every file it reaches, so without
+/// these it fails on a page the Read tool opens.
+///
+/// Each path is canonical and is itself the indexed file, never a link to
+/// one. The candidates come from the repository index, sorted, and at most
+/// [`MAX_SANDBOX_DOCUMENTS`] are tried, so the result does not depend on
+/// index order and a large repository costs one bounded pass. Anything the
+/// proof does not clear, including every file once the walk's content budget
+/// is spent, stays withheld.
+pub(crate) fn sandbox_readable_documents(workspace: &Path) -> Vec<PathBuf> {
+    let Some(denied) = crate::credential_patterns::patterns()
+        .iter()
+        .map(|pattern| regex::Regex::new(pattern).ok())
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Vec::new();
+    };
+    let Ok(workspace) = std::fs::canonicalize(workspace) else {
+        return Vec::new();
+    };
+    let Some(repository) = workspace
+        .ancestors()
+        .take(MAX_ANCESTORS)
+        .find(|directory| std::fs::symlink_metadata(directory.join(".git")).is_ok())
+    else {
+        return Vec::new();
+    };
+    let Some(indexed) = read_index(repository) else {
+        return Vec::new();
+    };
+    let mut candidates: Vec<PathBuf> = indexed
+        .iter()
+        .filter_map(|name| std::str::from_utf8(name).ok())
+        .map(|name| repository.join(name))
+        .filter(|path| path.starts_with(&workspace) && path != &workspace)
+        .filter(|path| {
+            path.to_str()
+                .is_some_and(|text| denied.iter().any(|pattern| pattern.is_match(text)))
+        })
+        .collect();
+    candidates.sort();
+    candidates.truncate(MAX_SANDBOX_DOCUMENTS);
+    let _walk = names::document_walk();
+    let cwd = workspace.to_str();
+    candidates
+        .into_iter()
+        .filter(|path| {
+            std::fs::canonicalize(path).ok().as_deref() == Some(path.as_path())
+                && path
+                    .to_str()
+                    .is_some_and(|text| names::resolves_to_tracked(text, cwd))
+        })
+        .collect()
 }
 
 /// Whether Guard's secret detector finds nothing in `text`. The real name
@@ -425,3 +493,9 @@ fn parse_index(bytes: &[u8]) -> Option<HashSet<Vec<u8>>> {
     }
     Some(names)
 }
+
+// The fixture commits a link, so it builds where links do.
+#[cfg(test)]
+#[cfg(unix)]
+#[path = "sandbox_documents_tests.rs"]
+pub(crate) mod sandbox_documents_tests;

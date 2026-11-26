@@ -43,7 +43,7 @@ import { queueRequesterName } from "./mcp-call/mcp-queue-name";
 import { ReviewEmptyState } from "./review-states";
 import { ConnectorSetupCards, useConnectorSetupClis } from "./connector-setup-card";
 import { buildConnectorSetupGroups, connectorSetupIdentityKey, isConnectorSetupItem } from "./connector-setup-groups";
-import { queuePageSyncTarget } from "./review-queue-page-sync";
+import { missingActiveFallback, pinAfterActiveChange, queuePageSyncTarget } from "./review-queue-page-sync";
 
 export type ReviewViewModel = {
   item: GuardApprovalRequest;
@@ -58,6 +58,8 @@ export type ReviewWorkspaceProps = {
   detail: ReviewViewModel | null;
   detailError?: string | null;
   detailLoading?: boolean;
+  /** The active request's detail is gone (resolved or removed), so it can no longer stay pinned. */
+  detailGone?: boolean;
   onRetryDetail?: () => void;
   runtime: GuardRuntimeSnapshot | null;
   resolutionMessage: string | null;
@@ -97,28 +99,41 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [dateTo, setDateTo] = useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const [page, setPage] = useState(1);
-  // Request opened from a setup card; it stays active while the queue page or filters exclude it.
-  const [setupPinnedRequestId, setSetupPinnedRequestId] = useState<string | null>(null);
+  // Request opened from a setup card or from outside the queue (a review link,
+  // Desktop, back navigation). It stays active while the queue page or filters
+  // exclude it and while its detail loads.
+  const [pinnedRequestId, setPinnedRequestId] = useState<string | null>(activeRequestId);
+  const selfSelectedRef = useRef<string | null>(null);
+  const [seenActiveRequestId, setSeenActiveRequestId] = useState(activeRequestId);
+  if (activeRequestId !== seenActiveRequestId) {
+    setSeenActiveRequestId(activeRequestId);
+    setPinnedRequestId(pinAfterActiveChange({
+      activeRequestId,
+      selfSelectedRequestId: selfSelectedRef.current,
+      pinnedRequestId,
+    }));
+  }
 
   const selectRequest = useCallback((id: string) => {
+    selfSelectedRef.current = id;
     props.onOpenRequest(id);
     setMobileQueueOpen(false);
   }, [props.onOpenRequest]);
 
   const handleOpenRequest = useCallback((id: string) => {
-    setSetupPinnedRequestId(null);
+    setPinnedRequestId(null);
     selectRequest(id);
     readState.markRead(id);
   }, [selectRequest, readState]);
 
   const handleOpenSetupEvidence = useCallback((id: string) => {
-    setSetupPinnedRequestId(id);
+    setPinnedRequestId(id);
     selectRequest(id);
     readState.markRead(id);
   }, [selectRequest, readState]);
 
   const handlePageChange = useCallback((nextPage: number) => {
-    setSetupPinnedRequestId(null);
+    setPinnedRequestId(null);
     setPage(nextPage);
   }, []);
 
@@ -145,10 +160,15 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     return sortQueue(searched, sortDirection);
   }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, setupFilter, sortDirection, semanticFilter]);
 
+  const filterSignature = JSON.stringify([searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
+  const appliedFilterSignatureRef = useRef(filterSignature);
   useEffect(() => {
-    setSetupPinnedRequestId(null);
+    // Only a real filter change resets the page; mounting keeps a linked request pinned.
+    if (appliedFilterSignatureRef.current === filterSignature) return;
+    appliedFilterSignatureRef.current = filterSignature;
+    setPinnedRequestId(null);
     setPage(1);
-  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
+  }, [filterSignature]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -198,28 +218,28 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [pagedRequests, activeRequestId, handleOpenRequest]);
 
+  const detailGone = props.detailGone ?? false;
   useEffect(() => {
-    if (filteredRequests.length === 0) {
-      return;
-    }
-    const activeInRequests =
-      requests.some((item) => item.request_id === activeRequestId) ||
-      detail?.item.request_id === activeRequestId;
-    if (activeRequestId !== null && activeInRequests) {
-      return;
-    }
-    selectRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
+    const target = missingActiveFallback({
+      filteredRequests,
+      requests,
+      activeRequestId,
+      detailRequestId: detail?.item.request_id ?? null,
+      pinnedRequestId,
+      detailGone,
+    });
+    if (target !== null) selectRequest(target);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, pinnedRequestId, detailGone, selectRequest]);
 
   useEffect(() => {
     const target = queuePageSyncTarget({
       pagedRequests,
       activeRequestId,
       detailRequestId: detail?.item.request_id ?? null,
-      pinnedRequestId: setupPinnedRequestId,
+      pinnedRequestId,
     });
     if (target !== null) selectRequest(target);
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, setupPinnedRequestId, selectRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, pinnedRequestId, selectRequest]);
 
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,

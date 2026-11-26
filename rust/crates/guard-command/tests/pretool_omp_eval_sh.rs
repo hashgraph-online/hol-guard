@@ -134,6 +134,8 @@ fn a_literal_sh_read_is_allowed_like_the_direct_read() {
         "console.log(await sh('git status --short'))",
         "await sh`git status --short`",
         "const out = await sh('git status --short'); display(out);",
+        // A timeout only bounds how long the command runs.
+        "await sh('git status --short', { timeout: 5 })",
     ] {
         let result = eval(&session, code);
         assert_eq!(result.minimum_action, "allow", "{code}: {result:?}");
@@ -146,7 +148,8 @@ fn sh_calls_the_grammar_cannot_pin_down_stay_reviewed() {
     for code in [
         // Options, computed commands, interpolation and escaped templates.
         "await sh('git status --short', { cwd: 'sub' })",
-        "await sh('git status --short', { timeout: 5 })",
+        "await sh('git status --short', { timeout: 5, cwd: 'sub' })",
+        "await sh('git status --short', { timeout: '5' })",
         "const c = 'git status'; await sh(c)",
         "await sh('git ' + 'status')",
         "await sh`git ${'status'}`",

@@ -145,13 +145,33 @@ def test_attempt_command_and_environment(tmp_path: Path, native_route: str | Non
     else:
         assert "--native-luna-route" in argv
         assert "--native-route" not in argv
-    for flag in ("--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
+    for flag in ("--host-slots", "--max-load", "--expected-source-sha"):
         assert flag in argv
+    # A failing round still runs the rest of the catalog, so it reports every failure.
+    assert "--fail-fast" not in argv
     assert argv[argv.index("--max-load") + 1] == "32.0"
     assert argv[argv.index("--case-retries") + 1] == "2"
     assert argv[argv.index("--max-load-wait") + 1] == "600.0"
     assert "low" not in argv
     assert argv[argv.index("--candidate-sha") + 1] == "b" * 40
+    stopping = qualify.attempt_argv(
+        python=tmp_path / "py",
+        effort="medium",
+        sdk_root=tmp_path / "sdk",
+        jobs=1,
+        case_retries=0,
+        host_slots=1,
+        max_load=1.0,
+        max_load_wait=1.0,
+        sha=SHA,
+        candidate_sha=None,
+        evidence=tmp_path / "e",
+        work_root=tmp_path / "w",
+        timeout=1,
+        max_rounds=1,
+        fail_fast=True,
+    )
+    assert "--fail-fast" in stopping
 
     base = dict(os.environ)
     base.update(

@@ -84,6 +84,7 @@ class PackageSummary:
     manifest_path: str | None = None
     name: str | None = None
     version: str | None = None
+    components: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -120,6 +120,10 @@ pub const HOOK_LOCAL_CLI_RULE_FEATURE: &str = "hook-local-cli-rule-v1";
 /// Capability advertised by the runtime when the hook edge reads the daemon's
 /// custom extension rules (`GuardHookEnvelopeV2::local_cli_rules`).
 pub const EDGE_LOCAL_CLI_RULE_FEATURE: &str = "edge-local-cli-rule-v1";
+/// Capability advertised when the edge stamps the custom extension outcome
+/// beside the rule object. Older residents are rejected before a stale rule
+/// can reach the Python adapter.
+pub const EDGE_LOCAL_CLI_RULE_STAMP_FEATURE: &str = "edge-local-cli-rule-stamp-v1";
 
 /// The custom extension rule for one native `PreToolUse` the daemon holds:
 /// `allowed` checks a command the edge allowed against the custom block

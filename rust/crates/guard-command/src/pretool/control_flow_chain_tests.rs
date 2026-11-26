@@ -192,3 +192,54 @@ fn a_quoted_pipe_does_not_make_a_gated_loop_change_the_shell() {
         assert_eq!(spliced(command, None), None, "{command}");
     }
 }
+
+/// A wait written after a plain list keeps that list in front of the one pass
+/// the wait flattens to, in the order the shell runs it.
+#[test]
+fn a_wait_after_a_list_is_written_out_in_place() {
+    for (command, expected) in [
+        (
+            "sleep 20; until grep -q 'exit status:' deploy.log 2>/dev/null; do sleep 30; done; sleep 10; grep -E 'ok|failed' deploy.log | tail -5",
+            "sleep 20; grep -q 'exit status:' deploy.log 2>/dev/null; sleep 30; sleep 10; grep -E 'ok|failed' deploy.log | tail -5",
+        ),
+        (
+            "git status --short && until grep -q ready server.log; do sleep 1; done",
+            "git status --short && grep -q ready server.log; sleep 1",
+        ),
+        (
+            "sleep 5\nuntil grep -q ready server.log; do sleep 2; done\ntail -3 server.log",
+            "sleep 5\ngrep -q ready server.log; sleep 2; tail -3 server.log",
+        ),
+        (
+            "git status --short; while read name; do wc -l README.md; done < list.txt",
+            "git status --short; cat list.txt; wc -l README.md",
+        ),
+    ] {
+        assert_eq!(
+            spliced(command, None).as_deref(),
+            Some(expected),
+            "{command}"
+        );
+    }
+}
+
+/// A wait the flattening refuses on its own, or a list in front of it that
+/// leaves the plain grammar, keeps its review.
+#[test]
+fn other_waits_after_a_list_are_not_written_out() {
+    for command in [
+        "sleep 20; until grep -q ready server.log > wait.log; do sleep 1; done",
+        "sleep 20; until grep -q ready server.log; do rm -f server.log; done",
+        "F=server.log; until grep -q ready $F; do sleep 1; done",
+        "cat server.log | until grep -q ready server.log; do sleep 1; done",
+        "sleep 20 & until grep -q ready server.log; do sleep 1; done",
+        "(sleep 20); until grep -q ready server.log; do sleep 1; done",
+        "echo $(date); until grep -q ready server.log; do sleep 1; done",
+        "until grep -q ready server.log; do sleep 1; done",
+        "if true; then sleep 1; fi; until grep -q ready server.log; do sleep 1; done; rm x",
+        "until grep -q a f; do sleep 1; done; until grep -q b f; do sleep 1; done",
+        "line=README.md; while read -r line; do cat \"$line\"; done < list.txt",
+    ] {
+        assert_eq!(spliced(command, None), None, "{command}");
+    }
+}

@@ -1598,6 +1598,7 @@ dependencies = [
  "tree-sitter-python",
  "unicode-normalization",
  "windows-permissions",
+ "zbus",
  "zeroize",
  "zip",
 ]

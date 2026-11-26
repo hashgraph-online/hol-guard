@@ -99,7 +99,9 @@ mod bounded_hook_bridge_grok_script;
 mod bounded_hook_bridge_hermes;
 mod bounded_hook_bridge_remediation;
 mod bounded_hook_bridge_render;
+mod browser_explain_command;
 mod browser_open;
+pub mod browser_session_store;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
@@ -832,6 +834,7 @@ mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
 mod hook_exit_code_op;
+mod hook_fail_closed_envelopes;
 mod hook_failure_op;
 mod hook_launch_scan;
 #[path = "adapters/hook_python_identity.rs"]
@@ -1248,6 +1251,7 @@ mod runtime_identity_range;
 mod runtime_known_vulnerable;
 mod runtime_known_vulnerable_source;
 mod runtime_transition_record;
+mod runtime_upgrade_advice;
 mod secrets_cli;
 mod sensitive_request_op;
 #[cfg(all(test, unix))]
@@ -1485,6 +1489,10 @@ pub fn launch() {
     // Neither the hook nor the error path may panic on a closed stderr: a
     // panic inside the panic hook aborts the process and loses the code.
     std::panic::set_hook(Box::new(runtime_output::panic_hook));
+    // Browser decisions check Guard's own approval center against this home's daemon state.
+    if let Some(guard_home) = runtime_output::failure_guard_home(&arguments) {
+        guard_command::browser_guard_origin::set_process_guard_home(guard_home);
+    }
     if let Err(code) = run() {
         runtime_output::report_launch_failure(&code);
         std::process::exit(2);

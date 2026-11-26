@@ -53,6 +53,8 @@ mod event;
 mod notice;
 #[path = "mcp_relay_receipt_package.rs"]
 pub(crate) mod package;
+#[path = "mcp_relay_receipt_prepare.rs"]
+mod prepare;
 #[path = "mcp_relay_receipt_record.rs"]
 mod record;
 #[path = "mcp_relay_receipt_remember.rs"]
@@ -112,6 +114,10 @@ pub(crate) fn is_plain(record: &Value) -> bool {
         return remember::stripped(record).is_some_and(|forward| plain_either(&forward));
     }
     plain_either(record)
+}
+
+pub(crate) fn rejection_code(record: &Value) -> &'static str {
+    record::rejection_code(record)
 }
 
 fn plain_either(record: &Value) -> bool {
@@ -187,34 +193,19 @@ fn write_with_notices_indexed(
     records: Vec<(u64, Value)>,
     schedule: impl FnOnce(&str, Vec<String>),
 ) -> Vec<(u64, Value)> {
-    let composed: Vec<Composed> = records
-        .into_iter()
-        .filter_map(|(sequence, record)| {
-            let (record, remembered) = match record.get(remember::KEY) {
-                Some(_) => (remember::stripped(&record)?, true),
-                None => (record, false),
-            };
-            let stamp = Stamp::fresh()?;
-            let (receipt, row) = compose(guard_home, &record, &stamp)?;
-            Some((
-                sequence,
-                record,
-                receipt,
-                row,
-                remembered.then_some(stamp.store_now),
-            ))
-        })
-        .collect();
+    // Records whose stamp could not be drawn come back for the drain to retry.
+    let (composed, mut unwritten) = prepare::prepare(guard_home, records);
     if composed.is_empty() {
-        return Vec::new();
+        return unwritten;
     }
     let home = Path::new(guard_home);
     if !home.join(STORE_FILE_NAME).is_file() {
-        return records_of(composed);
+        unwritten.extend(records_of(composed));
+        return unwritten;
     }
     let timeout_ms = sqlite_timeout_ms();
     let mut notices = Vec::new();
-    let unwritten = {
+    let failed: Vec<(u64, Value)> = {
         let _writer = WRITER.lock().unwrap_or_else(PoisonError::into_inner);
         // Before the gate, in the daemon policy writer's order. A lock that
         // stays taken costs the memory of each remembered record, never its
@@ -225,7 +216,8 @@ fn write_with_notices_indexed(
             .then(|| remember::lock(guard_home))
             .flatten();
         let Ok(_gate) = hold_storage_gate(home, Duration::from_millis(timeout_ms.into())) else {
-            return records_of(composed);
+            unwritten.extend(records_of(composed));
+            return unwritten;
         };
         let busy_timeout_ms = u64::from(timeout_ms).clamp(1, MAX_BUSY_TIMEOUT_MS);
         composed
@@ -257,6 +249,7 @@ fn write_with_notices_indexed(
     if !notices.is_empty() {
         schedule(guard_home, notices);
     }
+    unwritten.extend(failed);
     unwritten
 }
 
@@ -421,10 +414,12 @@ fn receipt_evidence(
         params: call.params.clone(),
         risk: None,
     })
-    .ok()?;
+    .ok();
     // `argument_entries`: only the keys the command text reads are shipped.
-    let arguments: Option<Vec<ArgumentEntry>> =
-        projection["safe_arguments"].as_object().map(|safe| {
+    let arguments: Option<Vec<ArgumentEntry>> = projection
+        .as_ref()
+        .and_then(|projection| projection["safe_arguments"].as_object())
+        .map(|safe| {
             safe.iter()
                 .filter(|(key, _)| {
                     MCP_RUNTIME_EVIDENCE_COMMAND_ARGUMENT_KEYS.contains(&key.as_str())
@@ -480,7 +475,7 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
         params: plain.params,
         artifact_name: name,
         description: artifact["metadata"]["tool_description"].as_str(),
-        firewall: Some(plain.firewall),
+        firewall: plain.firewall,
     };
     let (raw_command_text, firewall_evidence) =
         receipt_evidence(guard_home, &call, stamp, &risk_categories)?;
@@ -488,9 +483,12 @@ fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option<Args> {
     // the inbox row records as well.
     let mut call_evidence = decision_evidence(plain.decision);
     call_evidence.extend(plain.append.iter().cloned());
-    let row = projected
-        .as_ref()
-        .and_then(|projected| row::silent_review(&plain, projected, &call_evidence, stamp));
+    let row = row::silent_review(
+        &plain,
+        projected.as_ref().unwrap_or(&Value::Null),
+        &call_evidence,
+        stamp,
+    );
     let mut scanner_evidence = vec![firewall_evidence];
     scanner_evidence.extend(call_evidence);
     let launch_command = artifact["command"]

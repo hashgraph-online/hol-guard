@@ -28,7 +28,7 @@ use admission::{
 #[path = "daemon_edge_hook_admission.rs"]
 mod admission;
 #[path = "daemon_edge_hook_counters.rs"]
-mod counters;
+pub(crate) mod counters;
 #[path = "daemon_edge_hook_cursor_sink.rs"]
 mod cursor_sink;
 #[path = "daemon_edge_hook_envelopes.rs"]
@@ -39,7 +39,9 @@ mod lifecycle;
 mod managed;
 #[path = "daemon_edge_hook_readiness.rs"]
 mod readiness;
-use envelopes::{capacity_reason, envelope, fail_safe, prepare_refusal, refusal};
+use envelopes::{
+    capacity_reason, envelope, fail_safe, policy_wait_outlived_deadline, prepare_refusal, refusal,
+};
 #[cfg(test)]
 use envelopes::{event_kind, fill, ENVELOPES};
 
@@ -439,6 +441,13 @@ impl Hook<'_> {
             return unavailable();
         };
         if let Some(refused) = prepared.get("fail_safe") {
+            if policy_wait_outlived_deadline(refused, remaining()) {
+                let code = hook_scheduler::DEADLINE_EXHAUSTED;
+                return fail(
+                    &capacity_reason(code, Path::new(&self.config.guard_home), &self.home()),
+                    code,
+                );
+            }
             return prepare_refusal(&reply_harness, &reply_event, refused)
                 .unwrap_or_else(unavailable);
         }

@@ -49,11 +49,18 @@ pub(super) fn writable_by_anyone(_directory: &std::path::Path) -> bool {
 }
 
 /// Whether canonical `path` is a temporary directory only the home owner can
-/// create an entry in, and lies outside the home tree.
+/// create an entry in, and not a home tree that merely lives below one.
+///
+/// A Windows profile keeps its temporary directory inside the home
+/// (`<home>\AppData\Local\Temp`) rather than the home inside it. That
+/// directory, and a non-hidden one below it, is the temporary root itself,
+/// not part of the home tree the hidden-name screens guard, so it answers
+/// like the macOS private root does.
 fn outside_home(path: &std::path::Path, context: super::PathContext<'_>) -> bool {
     let inside_home = context
         .home_dir
         .and_then(|home| std::fs::canonicalize(home).ok())
         .is_some_and(|home| path.starts_with(&home));
-    !inside_home && super::git_routes::private_temporary_parent(path, context)
+    (!inside_home && super::git_routes::private_temporary_parent(path, context))
+        || super::git_routes::profile_temporary_directory(path, context)
 }

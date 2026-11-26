@@ -2,8 +2,8 @@
 //!
 //! A loop is the same shape as a conditional only when one pass stands for
 //! every iteration it could run. Two loops are: a `read` that empties a
-//! redirected file, which ends at that file's end, and a wait that asks one
-//! question until it succeeds, whose body only sleeps. Every other loop keeps
+//! redirected file, which ends at that file's end, and a wait that asks the same
+//! questions until they succeed, whose body only sleeps. Every other loop keeps
 //! its review, and the reasons each shape is taken are written beside it.
 
 use super::super::for_loop_unroll::body::{
@@ -91,10 +91,7 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
     }
     let (test, _, after_test) = body_items(rest, "", &["do"])?;
     let (body, _, tail) = body_items(after_test, "", &["done"])?;
-    let [(probe, _)] = test.as_slice() else {
-        return None;
-    };
-    if !opens_no_file(probe) {
+    if !asks_the_same_question_each_pass(&test) {
         return None;
     }
     if !body.iter().all(|(text, _)| only_waits(text)) {
@@ -106,14 +103,87 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
     // neither, so a wait written with a redirection keeps its review. A
     // command list written after the loop is not that shape: it runs once,
     // after the wait, and the flat list carries it.
-    let after = trailing_list(tail)?;
+    let (after, following) = match trailing_list(tail) {
+        Some(after) => (after, None),
+        None => (Vec::new(), Some(following_construct(tail)?)),
+    };
     let mut parts: Vec<(String, &'static str)> = Vec::new();
     collect(&mut parts, test, "")?;
     collect(&mut parts, body, "")?;
     if !after.is_empty() {
         collect(&mut parts, after, "")?;
     }
-    assemble(&parts, "")
+    let flat = assemble(&parts, "")?;
+    let Some(following) = following else {
+        return Some(flat);
+    };
+    let out = format!("{flat}; {following}");
+    (out.len() <= super::MAX_FLATTENED_BYTES).then_some(out)
+}
+
+/// The flat list of a construct written after `done`, as in
+/// `until test -e ready; do sleep 5; done; until ! test -e lock; do sleep 5; done`.
+///
+/// A developer waits for one condition and then for the next. The second
+/// construct starts after the first wait is over and runs exactly what it
+/// would run on its own, so its own flat list, written after this one, keeps
+/// every command in the order the shell runs it. Anything the second reading
+/// does not take keeps the whole command's review.
+fn following_construct(tail: &str) -> Option<String> {
+    let list = after_done(tail)?.trim_start_matches([' ', '\t', '\n']);
+    super::flatten(list)
+}
+
+/// The text after the `;` or newline that ends the loop.
+///
+/// A `&&` or `||` reads the loop's own outcome, a single `&` puts the wait
+/// in the background and a single `|` feeds it to a pipe, so none of them is
+/// taken, and a join followed by another join is not a list.
+fn after_done(tail: &str) -> Option<&str> {
+    let trimmed = tail.trim_start_matches([' ', '\t']);
+    let list = trimmed
+        .strip_prefix(';')
+        .or_else(|| trimmed.strip_prefix('\n'))?;
+    (!list
+        .trim_start_matches([' ', '\t', '\n'])
+        .starts_with([';', '&', '|']))
+    .then_some(list)
+}
+
+/// Whether every pass of the loop's test asks the same thing.
+///
+/// A single probe is the common wait. Two or more joined by `&&` or `||`
+/// (`until grep -q ready a.log && grep -q ready b.log`) wait for several
+/// conditions at once: each pass runs the same probes on the same outcomes,
+/// so the flat list, which keeps the `&&` and `||`, describes every pass. Two
+/// things would make a later pass differ from the first. A probe that opens a
+/// file reaches it again, which [`opens_no_file`] already refuses for each
+/// probe. A probe that changes shell state changes it again before the next
+/// probe runs: `until cd build && test -f done.txt` moves one directory
+/// deeper each time `test` fails, so a list whose probe changes shell state
+/// keeps its review. A `;` between probes is not taken either: the loop then
+/// runs commands whose outcome nothing reads, which is not a question.
+fn asks_the_same_question_each_pass(test: &[(String, &'static str)]) -> bool {
+    let Some((_, joined)) = test.split_last() else {
+        return false;
+    };
+    if !joined
+        .iter()
+        .all(|(_, separator)| matches!(*separator, " && " | " || "))
+    {
+        return false;
+    }
+    if !test.iter().all(|(probe, _)| opens_no_file(probe)) {
+        return false;
+    }
+    // Every `|` starts a piece that may be a pipeline stage, so checking the
+    // head of each piece covers each stage the shell could run in place.
+    joined.is_empty()
+        || test.iter().all(|(probe, _)| {
+            probe
+                .split('|')
+                .all(|stage| !super::command_word_changes_shell_state(stage.trim()))
+        })
 }
 
 /// Whether the loop's test opens nothing of its own.
@@ -127,23 +197,73 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
 /// 2>/dev/null` is how a wait asks whether a process is still running
 /// without printing the answer while it is not, and the sink holds nothing:
 /// every pass writes the same nothing, so the flat list stands for the loop
-/// exactly as the unredirected spelling does. Only a sink that ends the test
-/// is read, and only in front of text that spells no other redirection,
-/// quote or escape, so what is taken off is the whole of what the probe
-/// opens.
+/// exactly as the unredirected spelling does. `>/dev/null 2>&1` silences both
+/// streams the same way: the duplication opens nothing, it points stderr at
+/// the descriptor stdout already holds. Only redirections that end the test
+/// are read, each a null-device sink or a duplication between stdout and
+/// stderr, and only in front of text that spells no other redirection or
+/// escape outside a closed quote, so what is taken off is the whole of what
+/// the probe opens.
 fn opens_no_file(probe: &str) -> bool {
     if !probe.contains(['<', '>']) {
         return true;
     }
-    let asked = probe.trim_end();
-    let chars: Vec<char> = asked.chars().collect();
-    let Some(start) = (0..chars.len()).find(|start| {
-        crate::parser_segments::null_sink_redirect_end(&chars, *start, false) == Some(chars.len())
-    }) else {
-        return false;
-    };
-    let command: String = chars[..start].iter().collect();
-    !command.trim().is_empty() && !command.contains(['<', '>', '\\', '\'', '"'])
+    let mut chars: Vec<char> = probe.trim_end().chars().collect();
+    while let Some(start) = trailing_inert_redirect(&chars) {
+        chars.truncate(start);
+        while chars
+            .last()
+            .is_some_and(|value| matches!(value, ' ' | '\t'))
+        {
+            chars.pop();
+        }
+    }
+    let command: String = chars.iter().collect();
+    !command.trim().is_empty() && plain_words(&command)
+}
+
+/// Whether `command` spells no redirection, background or escape of its own.
+///
+/// Quoted text is read as the shell reads it. The loop already refused every
+/// `$` and backtick, so a single- or double-quoted string is literal through
+/// to its closing quote, and a `>` inside `'=> ready'` is a character the
+/// probe searches for, not a file it opens. Outside quotes `<`, `>` and `&`
+/// keep their meaning and keep the review. A backslash anywhere, or a quote
+/// left open, also keeps it: the redirections taken off the end could then
+/// sit inside a string rather than after the command.
+fn plain_words(command: &str) -> bool {
+    let mut quote: Option<char> = None;
+    for value in command.chars() {
+        if value == '\\' {
+            return false;
+        }
+        match quote {
+            Some(open) if value == open => quote = None,
+            Some(_) => {}
+            None if matches!(value, '\'' | '"') => quote = Some(value),
+            None if matches!(value, '<' | '>' | '&') => return false,
+            None => {}
+        }
+    }
+    quote.is_none()
+}
+
+/// Where the inert redirection that ends `chars` starts: a sink to the null
+/// device, or `2>&1`, `1>&2` or `>&2`, which only copy a descriptor the probe
+/// already holds.
+fn trailing_inert_redirect(chars: &[char]) -> Option<usize> {
+    for dup in ["2>&1", "1>&2", ">&2"] {
+        let dup: Vec<char> = dup.chars().collect();
+        let Some(start) = chars.len().checked_sub(dup.len()) else {
+            continue;
+        };
+        if start > 0 && chars[start..] == dup[..] && matches!(chars[start - 1], ' ' | '\t') {
+            return Some(start);
+        }
+    }
+    (0..chars.len()).find(|start| {
+        crate::parser_segments::null_sink_redirect_end(chars, *start, false) == Some(chars.len())
+    })
 }
 
 /// The command list written after `done`, empty when nothing follows it.
@@ -154,9 +274,8 @@ fn opens_no_file(probe: &str) -> bool {
 /// list keeps every command the shell runs in front of the ordinary proofs,
 /// in the order it runs them.
 ///
-/// Only a plain `;` or newline join is read. A `&&` or `||` reads the loop's
-/// own outcome, a redirection belongs to the loop itself, and `&` puts the
-/// wait in the background, so each keeps its review. The parse ends on a
+/// Only a plain `;` or newline join is read, as [`after_done`] describes. A
+/// redirection belongs to the loop itself, so it keeps its review. The parse ends on a
 /// terminator of this reading's own, which a list that spells `done` itself
 /// would reach early, leaving text behind and keeping its review too.
 fn trailing_list(tail: &str) -> Option<Vec<(String, &'static str)>> {
@@ -164,15 +283,7 @@ fn trailing_list(tail: &str) -> Option<Vec<(String, &'static str)>> {
     if trimmed.trim().is_empty() {
         return Some(Vec::new());
     }
-    let list = trimmed
-        .strip_prefix(';')
-        .or_else(|| trimmed.strip_prefix('\n'))?;
-    if list
-        .trim_start_matches([' ', '\t', '\n'])
-        .starts_with([';', '&', '|'])
-    {
-        return None;
-    }
+    let list = after_done(trimmed)?;
     let text = format!("{list}\ndone");
     let (items, _, after) = body_items(&text, "", &["done"])?;
     (after.is_empty() && !items.is_empty()).then_some(items)

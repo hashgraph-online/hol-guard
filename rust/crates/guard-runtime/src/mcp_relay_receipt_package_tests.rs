@@ -495,3 +495,6 @@ fn a_safe_alternative_block_that_is_not_reviewable_adds_no_row() {
     assert!(row.is_none());
     let _ = std::fs::remove_dir_all(&workspace);
 }
+
+#[path = "mcp_relay_receipt_package_group_tests.rs"]
+mod group;

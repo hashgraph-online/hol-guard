@@ -159,7 +159,15 @@ pub(super) fn compose_with_inline_approval(
     inline_approved: bool,
 ) -> Result<Decided, &'static str> {
     let mut tool_facts = crate::mcp_tool_policy_proxy::facts(tool);
-    if inline_approved && tool_facts.action != "block" {
+    // The approval answers a review. A fresh block or sandbox-required tool
+    // policy is not something the prompt offered, so it still stops the call.
+    let fresh = tool.current_action.unwrap_or(tool.action);
+    let terminal = matches!(
+        fresh,
+        guard_command::effect_decision::GuardAction::Block
+            | guard_command::effect_decision::GuardAction::SandboxRequired
+    );
+    if inline_approved && !terminal {
         let saved_tool_block =
             (tool_facts.saved_action.as_deref() == Some("block")).then(|| "block".to_owned());
         tool_facts.action = "allow".to_owned();

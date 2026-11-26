@@ -54,6 +54,102 @@ fn every_evaluated_edge_passes_its_own_check() {
 }
 
 #[test]
+fn the_edge_stamps_approval_classification_from_its_minimum_action() {
+    let edge = pre_tool();
+    let result = edge.result.as_object().unwrap();
+    assert_eq!(
+        edge.requires_approval,
+        edge_result_check::requires_approval("PreToolUse", result)
+    );
+    assert!(edge_result_check::requires_approval(
+        "PreToolUse",
+        &serde_json::json!({"minimum_action": "review"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+    assert!(edge_result_check::requires_approval(
+        "PreToolUse",
+        &serde_json::json!({"minimum_action": "require-reapproval"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+    assert!(!edge_result_check::requires_approval(
+        "PreToolUse",
+        &serde_json::json!({"minimum_action": "sandbox-required"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+    assert!(!edge_result_check::requires_approval(
+        "PostToolUse",
+        &serde_json::json!({"minimum_action": "review"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+
+    let mut tampered = edge;
+    tampered.requires_approval = !tampered.requires_approval;
+    assert!(edge_result_check::check(&tampered).is_err());
+}
+
+#[test]
+fn the_edge_stamps_custom_rule_classification_from_the_rule_object() {
+    let mut edge = pre_tool();
+    assert_eq!(
+        edge.local_cli_rule_blocked,
+        edge.local_cli_rule.as_ref().map(|rule| rule.blocked)
+    );
+    edge.local_cli_rule_blocked = Some(false);
+    assert!(edge_result_check::check(&edge).is_err());
+}
+
+#[test]
+fn the_edge_stamps_recording_only_denials_without_reclassifying_the_result() {
+    let mut envelope = envelope(
+        "PreToolUse",
+        serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_input": {"command": "cat .env.synthetic"}
+        }),
+    );
+    envelope.recording_only = true;
+    let edge: GuardHookEdgeResultV2 =
+        serde_json::from_slice(&evaluate_isolated(envelope).unwrap()).unwrap();
+    let result = edge.result.as_object().unwrap();
+    assert_eq!(
+        edge.recording_only_response,
+        edge_result_check::recording_only_response("PreToolUse", true, result)
+    );
+    assert!(edge.recording_only_response);
+    assert!(!edge_result_check::recording_only_response(
+        "PreToolUse",
+        true,
+        &serde_json::json!({"minimum_action": "allow", "decision": "allow"})
+            .as_object()
+            .unwrap()
+            .clone()
+    ));
+    assert!(!edge_result_check::recording_only_response(
+        "PostToolUse",
+        true,
+        result
+    ));
+    let mut observed = result.clone();
+    observed.insert("observe_mode".to_owned(), Value::Bool(true));
+    assert!(edge_result_check::recording_only_response(
+        "PreToolUse",
+        false,
+        &observed
+    ));
+    let mut tampered = pre_tool();
+    tampered.recording_only_response = true;
+    assert!(edge_result_check::check(&tampered).is_err());
+}
+
+#[test]
 fn a_repaired_block_keeps_its_repair_link() {
     // `command_policy_repair` adds the link and its status to a block the
     // user can repair; the hook client used to refuse the whole answer.

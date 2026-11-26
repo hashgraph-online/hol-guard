@@ -31,6 +31,14 @@ pub(crate) mod standalone;
 
 use reads::{NativeReads, Outcome};
 
+pub(crate) fn note_resident_hook_counters(
+    guard_home: &std::path::Path,
+    epoch: &str,
+    counters: &serde_json::Value,
+) {
+    reads::note_resident_hook_counters(guard_home, epoch, counters);
+}
+
 /// Connections served at once; further connections wait in the listen
 /// backlog until one closes. Sized for a burst of thousands of hooks: each
 /// connection is bounded by its hook's deadline and the review scheduler

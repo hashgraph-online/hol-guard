@@ -217,6 +217,26 @@ def _node_package(workspace: Path, name: str, version: str, binaries: tuple[str,
         shim.symlink_to(Path("..") / name / launcher)
 
 
+def _pnpm_store_package(workspace: Path, name: str, version: str) -> None:
+    """One package installed the way pnpm and Bun install: a content store below
+    ``node_modules/.pnpm``, with the project's own entry and its ``.bin`` shim
+    linked into it."""
+    project = {"name": "@acme/codegen-app", "version": "1.4.0", "devDependencies": {name: f"^{version}"}}
+    _write(workspace / "package.json", json.dumps(project, indent=2) + "\n")
+    store = workspace / "node_modules" / ".pnpm" / f"{name}@{version}" / "node_modules" / name
+    manifest = {"name": name, "version": version, "bin": {name: f"bin/{name}.js"}}
+    _write(store / "package.json", json.dumps(manifest) + "\n")
+    launcher = store / "bin" / f"{name}.js"
+    _write(launcher, f"#!/usr/bin/env node\nconsole.log('{name} {version}');\n")
+    launcher.chmod(0o755)
+    entry = workspace / "node_modules" / name
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.symlink_to(Path(".pnpm") / f"{name}@{version}" / "node_modules" / name)
+    shim = workspace / "node_modules" / ".bin" / name
+    shim.parent.mkdir(parents=True, exist_ok=True)
+    shim.symlink_to(Path("..") / name / "bin" / f"{name}.js")
+
+
 def _python_toolchain(workspace: Path) -> None:
     """Project virtualenv with the console scripts ``uv sync`` installs into it."""
     project = {
@@ -468,6 +488,52 @@ def pnpm_monorepo(root: Path) -> None:
     legacy = {"name": "@acme/legacy", "devDependencies": {"typescript": f"~{_PNPM_LEGACY_TYPESCRIPT}"}}
     _write(root / "packages" / "legacy" / "package.json", json.dumps(legacy) + "\n")
     _write(root / "pnpm-lock.yaml", _pnpm_monorepo_lockfile(version))
+    _node_package(root, "typescript", version, ("tsc",))
+
+
+def workspace_base_monorepo(root: Path) -> None:
+    """A workspace whose packages keep their type-check settings in a shared base.
+
+    This is the layout nearly every monorepo converges on: one
+    `tsconfig.base.json` at the checkout root, and a package whose own config
+    extends it and declares `"noEmit": true` beside the override it needs. The
+    type check runs from the package directory, so the answer about emitting
+    lives one directory above the run, which is the shape that turned an
+    ordinary type check into an approval prompt.
+    """
+
+    version = _NODE_TOOLS["typescript"][0]
+    manifest = {
+        "private": True,
+        "workspaces": ["packages/*"],
+        "devDependencies": {"typescript": f"^{version}"},
+    }
+    _write(root / "package.json", json.dumps(manifest) + "\n")
+    base = {"compilerOptions": {"strict": True, "skipLibCheck": True, "module": "esnext"}}
+    _write(root / "tsconfig.base.json", json.dumps(base) + "\n")
+    package = root / "packages" / "app"
+    project = {
+        "extends": "../../tsconfig.base.json",
+        "compilerOptions": {"noEmit": True},
+        "include": ["src/**/*.ts"],
+    }
+    _write(package / "tsconfig.json", json.dumps(project) + "\n")
+    _write(package / "src" / "index.ts", "export const ready = true;\n")
+    # The control for the same layout: a second base that turns on
+    # `incremental`, and a package that extends it. tsc then writes a
+    # build-info file beside the project whatever the package says about
+    # emitting, so reading the chain across the checkout root has to keep that
+    # run's review rather than admit it with the no-emit one.
+    incremental = {"compilerOptions": {"strict": True, "incremental": True}}
+    _write(root / "tsconfig.incremental.json", json.dumps(incremental) + "\n")
+    tool = root / "packages" / "tool"
+    tool_project = {
+        "extends": "../../tsconfig.incremental.json",
+        "compilerOptions": {"noEmit": True},
+        "include": ["src/**/*.ts"],
+    }
+    _write(tool / "tsconfig.json", json.dumps(tool_project) + "\n")
+    _write(tool / "src" / "index.ts", "export const ready = true;\n")
     _node_package(root, "typescript", version, ("tsc",))
 
 

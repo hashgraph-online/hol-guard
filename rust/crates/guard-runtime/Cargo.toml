@@ -93,6 +93,9 @@ capctl = "=0.2.4"
 # The desktop keyring (Secret Service over D-Bus) that holds the
 # policy-integrity signing key, as Python's keyring library reads it.
 secret-service = { version = "=5.2.0", default-features = false, features = ["rt-async-io-crypto-rust"] }
+# The D-Bus error names that tell a bus with no Secret Service apart from a
+# service that failed; already in the tree through secret-service.
+zbus = { version = "=5.19.0", default-features = false }
 
 [features]
 # Exposes the parser entry points in `src/fuzz_entry.rs` to `rust/fuzz`.

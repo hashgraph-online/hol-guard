@@ -33,11 +33,12 @@ const RESULT_FIELDS: [&str; 10] = [
 ];
 /// Fields a result may carry beyond the required ones. The repair pair is
 /// what `command_policy_repair` adds to a block the user can repair.
-const RESULT_OPTIONAL_FIELDS: [&str; 4] = [
+const RESULT_OPTIONAL_FIELDS: [&str; 5] = [
     "command_extensions",
     "prompt_risk_classes",
     "repair_url",
     "repair_status",
+    "observe_mode",
 ];
 const ACTION_FIELDS: [&str; 8] = [
     "schema",
@@ -118,7 +119,14 @@ fn checked(edge: &GuardHookEdgeResultV2) -> Option<bool> {
         "PostToolUse" => matches!(kind, "inline" | "source_file_ref" | "encrypted_payload_ref"),
         _ => false,
     };
-    Some(shaped && receipt_agrees(edge, kind, result, &receipt))
+    Some(
+        shaped
+            && edge.requires_approval == requires_approval(event, result)
+            && (!edge.recording_only_response
+                || recording_only_response("PreToolUse", true, result))
+            && edge.local_cli_rule_blocked == edge.local_cli_rule.as_ref().map(|rule| rule.blocked)
+            && receipt_agrees(edge, kind, result, &receipt),
+    )
 }
 
 fn bounded_text(value: &Value) -> bool {
@@ -138,6 +146,12 @@ pub(super) fn pre_tool_result(result: &Map<String, Value>, harness: &str, event:
     if ["repair_url", "repair_status"]
         .iter()
         .any(|name| result.get(*name).is_some_and(|value| !value.is_string()))
+    {
+        return false;
+    }
+    if result
+        .get("observe_mode")
+        .is_some_and(|value| !value.is_boolean())
     {
         return false;
     }
@@ -194,6 +208,30 @@ pub(super) fn pre_tool_result(result: &Map<String, Value>, harness: &str, event:
             } else {
                 "deny"
             }
+}
+
+/// Whether a checked native result needs the hook adapter to pause for an
+/// approval. This is the only action classification the adapter needs after
+/// Rust has validated the result.
+pub(super) fn requires_approval(event: &str, result: &Map<String, Value>) -> bool {
+    event == "PreToolUse"
+        && result
+            .get("minimum_action")
+            .and_then(Value::as_str)
+            .is_some_and(|action| matches!(action, "review" | "require-reapproval"))
+}
+
+/// Whether a checked edge answer is the Watch response the adapter returns
+/// without running approval, saved-block or containment control.
+pub(super) fn recording_only_response(
+    event: &str,
+    recording_only: bool,
+    result: &Map<String, Value>,
+) -> bool {
+    (recording_only || result.get("observe_mode") == Some(&Value::Bool(true)))
+        && event == "PreToolUse"
+        && !(result.get("minimum_action").and_then(Value::as_str) == Some("allow")
+            && result.get("decision").and_then(Value::as_str) == Some("allow"))
 }
 
 fn pre_tool_action(action: &Value, harness: &str, event: &str) -> bool {

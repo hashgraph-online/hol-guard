@@ -83,6 +83,7 @@ fn home_result(
             shell_home_matches: true,
             cdpath_unset: false,
             rustup_override_absent: false,
+            go_toolchain_inert: false,
             cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
@@ -203,6 +204,7 @@ fn the_home_projection_answers_for_a_sibling_root() {
         shell_home_matches: true,
         cdpath_unset: false,
         rustup_override_absent: false,
+        go_toolchain_inert: false,
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
@@ -296,6 +298,12 @@ fn a_status_echo_after_a_sibling_cd_stays_contained() {
             "cd {} && npm run build && echo PASS || echo FAIL",
             tree.display()
         ),
+        // Work after the echo is another step of the sequenced list, read
+        // from the root like the steps before it.
+        format!(
+            "cd {} && npm run build; echo \"rc=$?\" && ls dist",
+            tree.display()
+        ),
     ] {
         assert_eq!(
             contained(&reason("omp", &home, &main, &command)),
@@ -303,20 +311,12 @@ fn a_status_echo_after_a_sibling_cd_stays_contained() {
             "{command}"
         );
     }
-    for command in [
-        // Not the tail the sink peels: a quoting the sink cannot read, or
-        // work after the echo that the `cd` would still join.
-        format!("cd {} && npm run build; echo 'rc=$?'", tree.display()),
-        format!(
-            "cd {} && npm run build; echo \"rc=$?\" && ls dist",
-            tree.display()
-        ),
-    ] {
-        assert!(
-            !contained(&reason("omp", &home, &main, &command)),
-            "{command}"
-        );
-    }
+    // Not the tail the sink peels: a quoting the sink cannot read.
+    let unreadable_quoting = format!("cd {} && npm run build; echo 'rc=$?'", tree.display());
+    assert!(
+        !contained(&reason("omp", &home, &main, &unreadable_quoting)),
+        "{unreadable_quoting}"
+    );
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
 
@@ -336,20 +336,6 @@ fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
             projects.display()
         ),
         format!("cd {} && npm run build && ls dist", projects.display()),
-        // A pipe, or `;` anywhere but right after the `cd`, is not the list
-        // the sink peels.
-        format!(
-            "cd {}/app-report && npm run build && ls | wc -l",
-            projects.display()
-        ),
-        format!(
-            "cd {}/app-report; npm run build; ls dist",
-            projects.display()
-        ),
-        format!(
-            "cd {}/app-report && npm run build; ls dist",
-            projects.display()
-        ),
         // `;` after a cd into a plain directory still has no root to rebase.
         format!("cd {}/plain; npm run build", projects.display()),
         format!("cd {}/plain 2>/dev/null; npm run build", projects.display()),
@@ -538,7 +524,6 @@ fn a_command_below_a_sibling_root_reaching_outside_it_keeps_its_review() {
         ),
         // Unproved, or not the list the sink rejoins.
         "cd ../app-report/scripts && ./report.sh".to_owned(),
-        format!("cd {}/scripts; ./report.sh; ls", tree.display()),
         // The peel reads `cd <dir> 2>/dev/null; <core>` without a filter
         // chain, so this spelling still reaches neither the peel nor the
         // list the sink rejoins.

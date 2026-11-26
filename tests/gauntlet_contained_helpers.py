@@ -72,6 +72,10 @@ OPERATOR_HOME_WINDOWS_SINK = [
 ]
 
 
+SINK_RECEIPTS = 2
+NATIVE_RUNTIME = "/candidate/.venv/lib/python3.12/site-packages/codex_plugin_scanner/_native/hol-guard-runtime"
+
+
 def _wrapper(
     request_sha256: str,
     *,
@@ -79,12 +83,14 @@ def _wrapper(
     home: str | None = "{{home}}",
     windows: bool = False,
     operator_home: bool = False,
+    native: bool = False,
 ) -> str:
     sink = OPERATOR_HOME_WINDOWS_SINK if operator_home else WINDOWS_SINK
     temp = "{{operator_home}}" if operator_home else "C:\\Users\\agent"
+    # The runtime's own sink, for a call the bridge marked for it.
+    launcher = [*(sink if windows else ["/candidate/.venv/bin/hol-guard"]), "execute-contained-test"]
     argv = [
-        *(sink if windows else ["/candidate/.venv/bin/hol-guard"]),
-        "execute-contained-test",
+        *([NATIVE_RUNTIME, "contained-workspace-sink", "--harness", "omp"] if native else launcher),
         "--guard-home",
         guard_home,
         "--workspace",
@@ -180,6 +186,11 @@ def _contained(
             )
         else:
             row.update(input={"command": wrapper}, input_sha256=input_digest({"command": wrapper}))
+    if wrapper_options.get("native"):
+        # The runtime sink asks the daemon again, receipt-only, before it runs.
+        case["native_routes"]["native_resident"] += SINK_RECEIPTS
+        case["sink_receipt_routes"] = {"native_resident": SINK_RECEIPTS}
+        case["sink_receipt_calls"] = {call_id: SINK_RECEIPTS}
     return case
 
 

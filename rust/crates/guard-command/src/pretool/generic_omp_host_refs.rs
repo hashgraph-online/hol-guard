@@ -32,7 +32,7 @@ pub(in crate::pretool) fn host_reference_reason(value: &str) -> Option<&'static 
         Some("native_omp_proc_read")
     } else if local_reference(value) {
         Some("native_omp_local_read")
-    } else if device_docs_reference(value) {
+    } else if device_docs_reference(value) || help_docs_reference(value) {
         Some("native_omp_device_docs_read")
     } else {
         None
@@ -112,6 +112,32 @@ fn device_docs_reference(value: &str) -> bool {
     }
     let parts: Vec<&str> = rest.split('/').collect();
     rest.len() <= 256 && parts.len() <= 2 && parts.iter().copied().all(host_name_token)
+}
+
+/// `help://<tool>` lists one tool's doc topics and `help://<tool>/<topic>`
+/// reads one of them: the reference text a tool's description links, which
+/// Oh My Pi 19 serves read-only from memory in place of `xd://`'s docs. The
+/// scheme is immutable, so a write to it never runs anything. The eval
+/// prelude hands its own `read("help://...")` to the read tool with `:raw`
+/// appended, so the same selector tail as `local://` follows.
+fn help_docs_reference(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("help://") else {
+        return false;
+    };
+    let mut chunks = rest.split(':');
+    let target = chunks.next().unwrap_or_default();
+    let parts: Vec<&str> = target.split('/').collect();
+    rest.len() <= 256
+        && (1..=2).contains(&parts.len())
+        && parts.iter().copied().all(host_name_token)
+        && selector_chunks_ok(chunks)
+}
+
+/// Whether `path` names Oh My Pi's own tool documentation, `xd://` or
+/// `help://`. The eval `read` helper hands such a URL to the read tool, whose
+/// own proof judges its exact shape.
+pub(in crate::pretool) fn tool_docs_url(path: &str) -> bool {
+    path.starts_with("xd://") || path.starts_with("help://")
 }
 
 /// The `:`-separated tail the host peels from a reference: at most one `N-M`

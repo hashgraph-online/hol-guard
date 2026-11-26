@@ -1,7 +1,7 @@
 use super::evaluate_pre_tool_with_context;
 use crate::CommandModelRequestV1;
 
-fn decide(command: &str) -> (String, String) {
+pub(super) fn decide(command: &str) -> (String, String) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .canonicalize()
         .unwrap();
@@ -139,8 +139,8 @@ fn unsupported_loops_fall_back_to_review() {
     for command in [
         "for f in $(ls); do echo $f; done",
         // A bracket expression is a character set the text does not spell
-        // out, and the rest start at the root or reach above the directory
-        // the loop runs in.
+        // out, and the rest reach above the directory the loop runs in or,
+        // like `/etc/*.conf`, name matches the written-out command reviews.
         "for f in [ab]*.ts; do echo $f; done",
         "for f in -*.ts; do echo $f; done",
         // A directoryless pattern that names no file type is an identifier the

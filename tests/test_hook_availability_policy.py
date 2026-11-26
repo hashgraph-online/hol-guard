@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
+from codex_plugin_scanner.guard.native_hook_render import (
     availability_harness_response,
 )
 
@@ -33,7 +33,7 @@ def test_availability_denies_inspection_and_high_impact_without_review(tmp_path:
 
 
 def test_runtime_availability_reuses_the_rust_answer(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+    from codex_plugin_scanner.guard import native_hook_availability as policy
 
     calls: list[object] = []
 
@@ -108,3 +108,43 @@ def test_availability_response_does_not_retry_native_outage_render(monkeypatch, 
     )
     assert response["policy_action"] == "block"
     assert len(calls) == 1
+
+
+def test_unavailable_event_response_is_decoded_from_native_projection(monkeypatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.native_hook_render import native_unavailable_event_response
+
+    calls: list[dict[str, object]] = []
+
+    def render(kind: str, harness: str, params: dict[str, object], **kwargs: object):
+        calls.append({"kind": kind, "harness": harness, "params": params, **kwargs})
+        return "document", {
+            "event_name": "PostToolUse",
+            "response": {"decision": "allow"},
+            "activity_recorded": True,
+        }
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_render.native_render_cli", render)
+    answer = native_unavailable_event_response(
+        {"hook_event_name": "post_toolcall"},
+        "pi",
+        guard_home=tmp_path,
+        deadline=12.0,
+        record_post_tool_activity=True,
+    )
+    assert answer == {
+        "event_name": "PostToolUse",
+        "response": {"decision": "allow"},
+        "activity_recorded": True,
+    }
+    assert calls == [
+        {
+            "kind": "unavailable_event",
+            "harness": "pi",
+            "params": {
+                "payload": {"hook_event_name": "post_toolcall"},
+                "record_post_tool_activity": True,
+            },
+            "guard_home": tmp_path,
+            "deadline": 12.0,
+        }
+    ]

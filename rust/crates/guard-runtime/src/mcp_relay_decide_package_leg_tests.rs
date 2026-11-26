@@ -125,6 +125,29 @@ fn a_whole_package_call_is_decided_against_the_store() {
 }
 
 #[test]
+fn a_readable_store_without_saved_rows_still_reaches_the_package_policy() {
+    // Only a store that cannot be read has no package policy; one with no
+    // saved row resolves it with every lookup missing, as the proxy does.
+    let request = request();
+    let view = view();
+    let identity =
+        identity(&request, &view, CONTROL.to_owned(), None).expect("the identity is built");
+    let connection = rusqlite::Connection::open_in_memory().expect("an empty store opens");
+    let empty = super::super::store::empty(&connection, &request.guard_home)
+        .expect("an empty store has evidence");
+    let inputs = package_inputs(
+        &request,
+        &view,
+        Some(&empty),
+        CONTROL,
+        &identity,
+        &intent(),
+        request.package_evaluation.as_ref(),
+    );
+    assert!(inputs.is_ok());
+}
+
+#[test]
 fn a_package_call_sent_without_its_evaluation_defers() {
     assert_eq!(
         leg(|request| request.package_evaluation = None).err(),

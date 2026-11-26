@@ -3,6 +3,7 @@ import type { GuardReceipt } from "./guard-types";
 import { harnessDisplayName } from "./approval-center-utils";
 import { detectCategory } from "./evidence/categories";
 import { guardActionDisposition } from "./guard-action";
+import { GUARD_ORIGIN_COPY, isGuardOriginBlock } from "./browser-guard-origin";
 
 // ──────────────────────────────────────────
 // Decision Pie Chart (SVG donut)
@@ -388,7 +389,8 @@ export function BlockReasonBreakdown({ receipts }: { receipts: GuardReceipt[] })
     const counts = new Map<string, number>();
     for (const r of blocked) {
       const cat = detectCategory(r);
-      const label = cat === "secret" ? "Secret access" :
+      const label = isGuardOriginBlock(r) ? GUARD_ORIGIN_COPY.breakdownLabel :
+        cat === "secret" ? "Secret access" :
         cat === "network" ? "Network/Exfiltration" :
         cat === "destructive" ? "Destructive" :
         cat === "hidden" ? "Encoded payload" :

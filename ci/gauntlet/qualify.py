@@ -84,8 +84,15 @@ def attempt_argv(
     timeout: float,
     max_rounds: int,
     native_route: str | None = None,
+    fail_fast: bool = False,
 ) -> list[str]:
-    """The candidate's own runner invocation for one complete fresh attempt."""
+    """The candidate's own runner invocation for one complete fresh attempt.
+
+    The attempt runs the whole catalog unless ``fail_fast`` is asked for. Stopping at
+    the first product failure leaves every later case unexecuted, so a run that fails
+    reports one defect per round instead of all of them; the retry rules are the same
+    either way, and a product failure still ends the loop.
+    """
     argv = [
         str(python),
         "-m",
@@ -106,7 +113,7 @@ def attempt_argv(
         str(max_load),
         "--max-load-wait",
         str(max_load_wait),
-        "--fail-fast",
+        *(["--fail-fast"] if fail_fast else []),
         "--expected-source-sha",
         sha,
         "--output",
@@ -449,6 +456,7 @@ def main(args: Any) -> int:
                     work_root=work,
                     timeout=args.timeout,
                     max_rounds=args.max_inference_rounds,
+                    fail_fast=getattr(args, "fail_fast", False),
                 )
                 env = attempt_env(
                     dict(os.environ),

@@ -53,71 +53,6 @@ pub(crate) fn safe_grep_segment(
     arguments_pass(&segment.arguments, context, false, absent, false)
 }
 
-/// A peer that cannot create a filesystem entry: no output redirect beyond
-/// `/dev/null`, and a program that only changes directory, prints, or opens
-/// paths to read them. `ln -s <dir> <repo>/cfg && grep -rn . <repo>/cfg/` is
-/// the shape this refuses, because `ln` puts a tree where the proof measured
-/// nothing. `grep -rln needle app; cat notes.md` is the shape it admits: an
-/// agent sweeps for a name it guessed at and prints a file it knows is there,
-/// and without the redirect already refused above, `cat` can no more create
-/// the missing root than `cd` or `echo` can.
-pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1) -> bool {
-    let text = ["2>&1", "2>/dev/null", ">/dev/null"]
-        .iter()
-        .fold(segment.text.clone(), |text, quiet| text.replace(quiet, ""));
-    if text.contains('>') || !segment.wrapper_chain.is_empty() || segment.path_overridden {
-        return false;
-    }
-    match segment.executable.as_deref() {
-        Some("cd") => true,
-        Some(executable) => {
-            reads_only(executable)
-                || pathless_builtin(executable)
-                || (segment.pipeline_index > 0
-                    && crate::pretool::segment_proof::stdin_filter_segment(segment))
-        }
-        None => false,
-    }
-}
-
-/// A program that opens the paths it is given only to read them, and writes
-/// what it finds to standard output. None of them takes an option that names
-/// a file to write, so the redirect screen above is the whole write surface.
-fn reads_only(executable: &str) -> bool {
-    matches!(
-        executable,
-        "cat"
-            | "cut"
-            | "diff"
-            | "echo"
-            | "egrep"
-            | "fgrep"
-            | "grep"
-            | "head"
-            | "jq"
-            | "ls"
-            | "nl"
-            | "printf"
-            | "pwd"
-            | "rg"
-            | "tail"
-            | "test"
-            | "tr"
-            | "true"
-            | "wc"
-    )
-}
-
-/// A program that writes nothing and opens no path: its operands are words it
-/// prints or compares, never names it creates. Without a redirect, which the
-/// caller has already refused, it cannot put an entry where a missing root is.
-fn pathless_builtin(executable: &str) -> bool {
-    matches!(
-        crate::pretool::executable_basename(executable),
-        "echo" | "printf" | "pwd" | "true" | "false" | ":"
-    )
-}
-
 /// `literal_words` are the segment's quoted words, as
 /// `listing_reads::literal_words` reads them.
 pub(super) fn safe_stdin_arguments(arguments: &[String], literal_words: &[String]) -> bool {
@@ -132,10 +67,13 @@ pub(super) fn safe_stdin_arguments(arguments: &[String], literal_words: &[String
     arguments_pass(arguments, context, true, absent, false)
 }
 
+pub(in crate::pretool) use writes_nothing::creates_nothing;
+
 mod exclusion;
 mod includes;
 mod missing;
 mod reach;
+mod writes_nothing;
 pub(in crate::pretool) use reach::sensitive_reach_reason;
 
 /// What a pass over `grep` arguments read besides its verdict.
@@ -439,6 +377,8 @@ fn scan_into(
                     // `app/[slug]/route.ts` names one route when its class
                     // matches nothing, and is walked as that path.
                     || (!dereference && tree::safe_literal_bracket_search_target(target, context))
+                    // A file operand starts no walk: `-r` opens it once.
+                    || recursive_file_operand(target, context)
                     // A sensitive file the pattern cannot match prints nothing.
                     || clearance.as_ref().is_some_and(|clearance| {
                         tree::safe_recursive_target_cleared(
@@ -454,6 +394,9 @@ fn scan_into(
                     // walks the tree again, so it is asked last: every reading
                     // above answers the same question without it.
                     || (!dereference && includes.narrows(target, context))
+                    // A skill tree opens only documents and scripts a direct
+                    // read allows. That walk refuses every link it meets.
+                    || includes.skill_tree(target, context)
             };
             missing::recursive_targets_proven(&targets, proven, context, absent.recursive)
         })
@@ -472,6 +415,19 @@ fn scan_into(
 pub(super) fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
     (!value.starts_with('~') || context.shell_home_matches)
         && crate::pretool::listing_reads::absent_listing_operand(value, context)
+}
+
+/// `grep -r` walks only a directory operand. A regular file named as an
+/// operand, or a link to one, is opened once exactly as plain `grep` opens it,
+/// so it takes the plain read screen rather than the walk proof. The walk
+/// proof refuses any `..` because a walk above the working directory reaches
+/// a tree whose ignore rules were never read; one file reaches no tree.
+fn recursive_file_operand(value: &str, context: ReadContext<'_>) -> bool {
+    !value.contains(['*', '?', '['])
+        && (!value.starts_with('~') || context.shell_home_matches)
+        && tree::expanded_operand(value, context)
+            .is_some_and(|path| std::fs::metadata(path).is_ok_and(|meta| meta.is_file()))
+        && !unsafe_search_value(SearchValueRole::Path, value, context)
 }
 
 /// A shell glob operand whose every expansion is screened, and whose matched

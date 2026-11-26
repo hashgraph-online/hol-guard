@@ -177,6 +177,9 @@ pub(crate) fn launch_bundle_advisories(input: Option<&CachedBundleInput>) -> Lau
     LaunchAdvisories { advisories, source }
 }
 
+#[path = "runtime_identity_fixes.rs"]
+mod fixes;
+
 /// Bundle rules verified once and reused across launch checks.
 #[derive(Debug)]
 pub(crate) struct LaunchAdvisories {

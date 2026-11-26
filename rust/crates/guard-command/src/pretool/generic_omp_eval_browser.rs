@@ -19,7 +19,7 @@
 //!   compute over the DOM but not name a network, navigation, markup or code
 //!   sink, a global object, a URL, or a computed property.
 //! - `await new Promise(r => setTimeout(r, MS))`, a pause.
-//! - `display(...)`, `log(...)` and `console.log(...)` of literals, declared
+//! - `display(...)`, `log(...)`, `print(...)` and `console.log(...)` of literals, declared
 //!   names and awaited tab calls, negated or read for their `.length`.
 //! - Waiting for a local server: `fetch` GET of a literal loopback URL, its
 //!   `text()`, `json()`, `status` and `ok`, a counted `for` retry loop with
@@ -34,7 +34,7 @@
 
 use std::collections::HashSet;
 
-const MAX_CODE_BYTES: usize = 16 * 1024;
+pub(crate) const MAX_CODE_BYTES: usize = 16 * 1024;
 const MAX_DEPTH: usize = 12;
 
 #[path = "generic_omp_eval_browser_flow.rs"]
@@ -43,9 +43,10 @@ mod flow;
 mod lex;
 #[path = "generic_omp_eval_browser_page.rs"]
 mod page;
-use lex::{
-    loopback_url, timer_pause, tokenize, Token, NO_ARGUMENT_METHODS, OPEN_KEYS, OPTION_KEYS,
-};
+use lex::{loopback_url, timer_pause, NO_ARGUMENT_METHODS, OPTION_KEYS};
+/// The tokenizer and `open` option table, shared with the browser action projection in
+/// `browser_omp_eval_action.rs`.
+pub(crate) use lex::{tokenize, Token, OPEN_KEYS};
 
 #[derive(Default)]
 struct Parser {
@@ -185,7 +186,8 @@ impl Parser {
             "if" => self.if_throw(),
             "break" if self.loops > 0 => Some(()),
             "return" => self.value(),
-            "display" | "log" => self.output_args(),
+            // `print` is the eval prelude's own alias for `console.log`.
+            "display" | "log" | "print" => self.output_args(),
             "console" => {
                 self.punct('.')?;
                 if !matches!(self.ident()?.as_str(), "log" | "info" | "warn" | "error") {
@@ -466,7 +468,7 @@ impl Parser {
 
 /// Whether `code` is a JavaScript program that only drives the isolated
 /// browser against loopback pages and displays what it reads.
-pub(super) fn loopback_browser_program(code: &str, home_dir: Option<&str>) -> bool {
+pub(crate) fn loopback_browser_program(code: &str, home_dir: Option<&str>) -> bool {
     if code.len() > MAX_CODE_BYTES {
         return false;
     }

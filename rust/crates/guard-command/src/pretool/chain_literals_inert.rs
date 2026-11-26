@@ -29,6 +29,9 @@
 //! word, where the value is neither split nor matched, and only when the body
 //! spells nothing that could reopen the shell. An apostrophe is literal there,
 //! so `it's` in a message is message text.
+//! `git commit -m "$(printf 'Subject\n\nBody')"` is read the same way, in
+//! that slot only, when the format is one single-quoted literal whose only
+//! escapes are `\n` and `%%`.
 //!
 //! A line break between commands separates them as `;` does. A heredoc body
 //! is not shell text: one with a quoted delimiter (`<<'EOF'`, `<<"EOF"`) is
@@ -130,34 +133,71 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         if substitution.start < cursor || patterned_word(&patterned, substitution) {
             return None;
         }
-        let (value, judged_text) = match heredoc_value(&chars, &masked, substitution, message) {
-            // The heredoc is the whole of what the `cat` reads, so judging
-            // the bare `cat` is judging the command the shell runs.
-            Some(value) => (value, "cat".to_owned()),
-            // A message the heredoc form does not read is never a stand-in.
-            None if !substitution.body.is_ascii() => return None,
-            None => {
-                let text: String = chars
-                    .get(substitution.start..substitution.end)?
-                    .iter()
-                    .collect();
-                let inner = text
-                    .strip_prefix(open)
-                    .and_then(|rest| rest.strip_suffix(close))?;
-                if inner.trim() != substitution.body {
-                    return None;
-                }
-                (
-                    stand_in(&substitution.body)?.to_owned(),
-                    substitution.body.clone(),
-                )
-            }
-        };
+        let (value, judged_text, heredoc) =
+            match heredoc_value(&chars, &masked, substitution, message) {
+                // The heredoc is the whole of what the `cat` reads, so judging
+                // the bare `cat` is judging the command the shell runs.
+                Some(value) => (value, "cat".to_owned(), true),
+                None => match printf_value(&chars, &masked, substitution, message) {
+                    // The format is the whole of what `printf` reads, so the
+                    // bare `printf` is the command the shell runs.
+                    Some(value) => (value, "printf".to_owned(), true),
+                    // A message neither form reads is never a stand-in.
+                    None if !substitution.body.is_ascii() => return None,
+                    None => {
+                        let text: String = chars
+                            .get(substitution.start..substitution.end)?
+                            .iter()
+                            .collect();
+                        let inner = text
+                            .strip_prefix(open)
+                            .and_then(|rest| rest.strip_suffix(close))?;
+                        if inner.trim() != substitution.body {
+                            return None;
+                        }
+                        let value = match stand_in(&substitution.body) {
+                            // A lookup can print nothing; only a Git command reads
+                            // a missing revision as the same kind of operation.
+                            Some(value)
+                                if (value != git_value::COMMIT_VALUE
+                                    || (git_value::in_git_command(
+                                        &masked,
+                                        &substitutions,
+                                        substitution.start,
+                                    ) && git_value::standalone(&masked, substitution)))
+                                    && (value != line_number::LINE_VALUE
+                                        || line_number::opens_sed_range(
+                                            &masked,
+                                            &substitutions,
+                                            substitution,
+                                        )) =>
+                            {
+                                value
+                            }
+                            // A value that is only printed needs no stand-in of its
+                            // own shape (`display`).
+                            _ if display::display_slot(&masked, &substitutions, substitution) => {
+                                display::DISPLAY_VALUE
+                            }
+                            _ => return None,
+                        };
+                        (value.to_owned(), substitution.body.clone(), false)
+                    }
+                },
+            };
         // A lookup can print nothing; only a Git command reads a missing
         // revision as the same kind of operation.
         if value == git_value::COMMIT_VALUE
             && !(git_value::in_git_command(&masked, &substitutions, substitution.start)
                 && git_value::standalone(&masked, substitution))
+        {
+            return None;
+        }
+        // A heredoc that holds `1` prints exactly that; only the lookup's
+        // stand-in depends on the place it fills.
+        if !heredoc
+            && value == line_number::LINE_VALUE
+            && !line_number::opens_sed_range(&masked, &substitutions, substitution)
         {
             return None;
         }
@@ -295,6 +335,70 @@ fn heredoc_value(
     Some(value.trim_end_matches('\n').to_owned())
 }
 
+/// The text `printf 'FORMAT'` prints, when that is the whole of the
+/// double-quoted value of `git commit -m`.
+///
+/// It is the other shape an agent writes to hand a multi-line message to
+/// `git commit -m`: `"$(printf 'Subject\n\nCo-Authored-By: ...')"`. A
+/// single-quoted format is literal to the shell, and with no arguments the
+/// only things `printf` reads in it are its escapes and conversions. This
+/// reads exactly one single-quoted format and nothing after it, and accepts
+/// only `\n` and `%%` there: any other escape (`\x41`, `\0101`, `\c`) or
+/// conversion (`%s`, `%b`) prints something this would have to compute, so
+/// the substitution stays opaque. A format that starts with `-` would be read
+/// as an option.
+///
+/// The value is then written as the heredoc form writes it: each character
+/// the message may not carry becomes `_` (`commit_message`).
+fn printf_value(
+    chars: &[char],
+    quote_scan: &[char],
+    substitution: &ShellCommandSubstitution,
+    message: bool,
+) -> Option<String> {
+    if !message || substitution.kind != "dollar" || !double_quoted_word(quote_scan, substitution) {
+        return None;
+    }
+    let inner: String = chars
+        .get(substitution.body_start..substitution.body_end)?
+        .iter()
+        .collect();
+    // Only the shell's own blanks may surround the command: a no-break space
+    // after the closing quote is part of the word and `printf` prints it.
+    let format = inner
+        .trim_matches([' ', '\t', '\n'])
+        .strip_prefix("printf")?
+        // Only blanks: a newline here ends `printf` and starts a command.
+        .strip_prefix([' ', '\t'])?
+        .trim_start_matches([' ', '\t'])
+        .strip_prefix('\'')?
+        .strip_suffix('\'')?;
+    if format.contains('\'')
+        || format.starts_with('-')
+        || format.chars().count() > MAX_HEREDOC_VALUE_CHARS
+    {
+        return None;
+    }
+    let mut value = String::with_capacity(format.len());
+    let mut characters = format.chars();
+    while let Some(character) = characters.next() {
+        match character {
+            '\\' => match characters.next()? {
+                'n' => value.push('\n'),
+                _ => return None,
+            },
+            '%' => match characters.next()? {
+                '%' => value.push('%'),
+                _ => return None,
+            },
+            other => value.push(other),
+        }
+    }
+    let value = commit_message::projected(&value, message_character);
+    // A substitution drops every line break at the end of what it read.
+    Some(value.trim_end_matches('\n').to_owned())
+}
+
 /// A character the value may carry into the double-quoted word as it is.
 ///
 /// An apostrophe is literal inside double quotes, so `it's` or `'in'` reaches
@@ -413,7 +517,7 @@ fn patterned_word(chars: &[char], substitution: &ShellCommandSubstitution) -> bo
 /// The stand-in for a substitution body that is one simple value-producing
 /// command with literal arguments.
 fn stand_in(body: &str) -> Option<&'static str> {
-    if let Some(value) = git_value::stand_in(body) {
+    if let Some(value) = git_value::stand_in(body).or_else(|| line_number::stand_in(body)) {
         return Some(value);
     }
     if body.len() > MAX_BODY_CHARS
@@ -489,8 +593,14 @@ fn date_arguments(arguments: &[&str]) -> bool {
 #[path = "chain_literals_commit_message.rs"]
 mod commit_message;
 
+#[path = "chain_literals_display.rs"]
+mod display;
+
 #[path = "chain_literals_git_value.rs"]
 mod git_value;
+
+#[path = "chain_literals_line_number.rs"]
+mod line_number;
 
 #[path = "chain_literals_temp_cd.rs"]
 pub(crate) mod temp_cd;

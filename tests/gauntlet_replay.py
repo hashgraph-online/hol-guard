@@ -32,6 +32,11 @@ REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text
 # Keep focused regressions separate from the pre-existing legacy corpus.
 OMP_BROWSER_REPLAY = json.loads((FIXTURES / "gauntlet_replay_omp_browser.json").read_text(encoding="utf-8"))
 REPLAY_DOCUMENT["cases"].extend(OMP_BROWSER_REPLAY["cases"])
+# Browser MCP calls as each harness's hook sends them (tool family ``mcp:<server>:<tool>``).
+BROWSER_MCP_REPLAY = json.loads((FIXTURES / "gauntlet_replay_browser_mcp.json").read_text(encoding="utf-8"))
+REPLAY_DOCUMENT["cases"].extend(BROWSER_MCP_REPLAY["cases"])
+# The stdio launch command Cursor reports beside a bare MCP tool name, by server.
+MCP_LAUNCH = {"playwright": "npx -y @playwright/mcp@latest"}
 GATE_DOCUMENT = json.loads((FIXTURES / "benign_false_positive_gate.json").read_text(encoding="utf-8"))
 
 # Tool names each harness really sends, by the case's abstract tool family. Pi names its built-ins
@@ -58,6 +63,7 @@ FIXED = {
     "todo_write": "todo_write",
     "ls": "ls",
     "ask_user_question": "AskUserQuestion",
+    "read_notifications": "ReadNotifications",
     # Gate cases name these tools for Claude Code only, so one spelling is enough.
     "web_fetch": "WebFetch",
     "agent": "Agent",
@@ -127,8 +133,38 @@ class ReplayCase:
 
     @property
     def tool_name(self) -> str:
+        mcp = mcp_tool(self.tool)
+        if mcp is not None:
+            server, name = mcp
+            # Cursor names an MCP call by its bare tool; the launch command names the server.
+            if self.harness == "cursor":
+                return name
+            # Oh My Pi flattens the name: one underscore after the server, whose dashes become
+            # underscores (`observed_mcp.rs`).
+            if self.harness == "omp":
+                return f"mcp__{server.replace('-', '_')}_{name}"
+            return f"mcp__{server}__{name}"
         table = FAMILIES.get(self.tool)
         return table[self.harness] if table else FIXED[self.tool]
+
+
+def browser_review(row: dict[str, Any]) -> bool:
+    """Whether an approval row carries the normalized browser intent of the call it holds."""
+    return bool(row.get("browser_intent") or row.get("browser_intent_json"))
+
+
+def _browser_review_failure(case: ReplayCase, approvals: list[dict[str, Any]]) -> str | None:
+    """A browser row is held by the browser review, not by an unrelated interruption or offer."""
+    if mcp_tool(case.tool) is None or all(browser_review(row) for row in approvals):
+        return None
+    return f"browser call was held without a browser review: {[a.get('tool_name') for a in approvals]}"
+
+
+def mcp_tool(tool: str) -> tuple[str, str] | None:
+    """The server and tool of an ``mcp:<server>:<tool>`` case, or None for any other tool family."""
+    prefix, _, rest = tool.partition(":")
+    server, _, name = rest.partition(":")
+    return (server, name) if prefix == "mcp" and server and name else None
 
 
 def _entry(entry: dict[str, Any], harness: str, expect: str) -> ReplayCase:
@@ -232,6 +268,10 @@ def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, objec
         "user_email": "person@example.test",
         "workspace_roots": [str(payload["cwd"])],
     }
+    mcp = mcp_tool(tool)
+    if mcp is not None:
+        # Cursor's beforeMCPExecution names the server only by how it is launched (stdio) or reached.
+        return {**identity, "hook_event_name": "beforeMCPExecution", "command": MCP_LAUNCH[mcp[0]]}
     if tool in {"write", "grep"}:
         return identity
     if tool == "read":
@@ -363,9 +403,13 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
         if not approvals:
             return "review-by-design action raised no approval row to offer an Always allow"
         bad = [(a.get("tool_name"), a.get("once_only_reason")) for a in approvals if not offers_always(a)]
-        return f"review row without an Always allow offer: {bad}" if bad else None
+        if bad:
+            return f"review row without an Always allow offer: {bad}"
+        return _browser_review_failure(case, approvals)
     if case.expect == "protection_block":
         return protection_block_failure(result, approvals)
+    if approvals and (failure := _browser_review_failure(case, approvals)):
+        return failure
     # A contained run reaches no network, home or credential, so it protects a case whose harm is
     # exactly that reach. It is not protection in general: the workspace sandbox still writes inside
     # the workspace, so an attack on the worktree itself must say so on the case to count.

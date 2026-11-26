@@ -471,6 +471,12 @@ pub fn assess_shell_reads(
             deduped.push(path);
         }
     }
+    crate::shell_template_reads::relieve_template_reads(
+        original_command_text,
+        cwd,
+        home_dir,
+        &mut deduped,
+    );
     ShellReadAssessment {
         sensitive_paths: deduped,
         script_sources: sources,

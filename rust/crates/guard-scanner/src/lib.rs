@@ -10,17 +10,24 @@ mod code_cursor;
 mod code_expression;
 mod code_shapes;
 mod code_value;
+mod command_value;
 mod continuation;
 mod field_copy;
 mod guard_link;
 mod masked_value;
 mod match_spans;
+mod path_segment;
 mod payment_key;
 mod prose_answer_value;
 mod reference_value;
+mod result_pass;
 mod self_named_value;
 mod url_credential;
 mod wiped_read;
+
+#[cfg(test)]
+#[path = "shell_reference_tests.rs"]
+mod shell_reference_tests;
 
 pub use match_spans::scan_match_spans;
 pub use payment_key::holds_live_payment_key;
@@ -290,6 +297,44 @@ fn interpolates(value: &str) -> bool {
         })
 }
 
+/// Whether a match that crossed a line break swallowed a line holding a
+/// credential assignment of its own. The match consumed that line's first
+/// word, so the rule cannot match its key again, and the softeners judge the
+/// swallowed word instead: `if not password:` followed by
+/// `password = "..."` reads as a self-named value and would pass unread.
+fn next_line_flagged(
+    matched: &str,
+    rest_of_line: &str,
+    suppress_samples: bool,
+    documentation_sample_context: bool,
+) -> bool {
+    let Some(index) = matched.find([':', '=']) else {
+        return false;
+    };
+    let swallowed = matched[index + 1..].trim_start_matches([' ', '\t']);
+    if !swallowed.starts_with(['\r', '\n']) {
+        return false;
+    }
+    let line = format!("{}{}", swallowed.trim_start(), rest_of_line);
+    assignment_flagged(&line, suppress_samples, documentation_sample_context)
+}
+
+/// Whether `line` holds a credential assignment that is not a sample.
+fn assignment_flagged(
+    line: &str,
+    suppress_samples: bool,
+    documentation_sample_context: bool,
+) -> bool {
+    PATTERNS
+        .iter()
+        .position(|def| def.classifier == "credential-assignment")
+        .is_some_and(|rule| {
+            counted_matches(rule, line, suppress_samples, documentation_sample_context)
+                .next()
+                .is_some()
+        })
+}
+
 fn is_sample(
     classifier: &str,
     matched: &str,
@@ -299,6 +344,12 @@ fn is_sample(
     suppress_samples: bool,
     documentation_sample_context: bool,
 ) -> bool {
+    // `_authToken=${NPM_TOKEN}` in an `.npmrc` and `NPM_TOKEN: ${{ secrets.NPM_TOKEN }}`
+    // in a publish workflow name where the token comes from. Sample wording
+    // still proves nothing for this rule, so only a reference passes.
+    if classifier == "npm-auth-token" {
+        return reference_value::is_reference(matched, preceding, rest_of_line);
+    }
     if !suppressible(classifier) {
         return false;
     }
@@ -309,13 +360,29 @@ fn is_sample(
         return url_credential::password(matched).is_some_and(url_credential::is_placeholder);
     }
     if classifier == "credential-assignment"
+        && next_line_flagged(
+            matched,
+            rest_of_line,
+            suppress_samples,
+            documentation_sample_context,
+        )
+    {
+        return false;
+    }
+    if classifier == "credential-assignment"
         && (field_copy::is_field_copy(matched, rest_of_line)
             || guard_link::is_guard_link(matched, preceding)
+            || code_value::is_block_header(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
+            || result_pass::is_result_pass(matched)
+            || path_segment::is_path_segment(matched, rest_of_line, |line| {
+                assignment_flagged(line, suppress_samples, documentation_sample_context)
+            })
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
-            || reference_value::is_reference(matched, rest_of_line)
+            || reference_value::is_reference(matched, preceding, rest_of_line)
+            || command_value::is_command_substitution(matched, rest_of_line)
             || code_value::is_code_value(matched, rest_of_line)
             || code_expression::is_code_expression(matched, rest_of_line))
     {

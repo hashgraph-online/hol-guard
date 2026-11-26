@@ -63,6 +63,22 @@ Rust raw envelope
 | Native command, policy, rules, runtime, scanner | Rust semantic | Complete supported hook authority |
 | Native hook core and secure filesystem | Rust I/O | Complete decision-critical I/O |
 
+### Scoped extension-control reads (temporary exception)
+
+The native store owns the extension-control snapshot, head, recovery and
+committed reads (`extension_control_snapshot_layers`,
+`extension_control_snapshot_head`, `extension_control_recovery_transition`,
+`extension_control_transition_committed`). One caller still runs the same SQL
+in Python: an operation that already holds the store's shared connection
+scope, which today is the MCP tool-call decision. Its resident budget allows
+one store call, so a second round trip for these reads would exceed it.
+
+`native_extension_control_snapshot.py` and `native_extension_control_head.py`
+keep those scoped copies. They answer exactly as the native reads do: a cell
+of the wrong type reads as null and a missing table has no head and no
+transitions. Tests cover both paths. The copies go away once the MCP decision
+fetches this state inside its existing native round trip.
+
 ## NHD-061–070 decision-critical I/O contract
 
 The `decision_critical_io` section of the v2 JSON contract makes this boundary

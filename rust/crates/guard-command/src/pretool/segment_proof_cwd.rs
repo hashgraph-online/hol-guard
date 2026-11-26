@@ -21,7 +21,20 @@ pub(in crate::pretool) fn verified_cwd_list_context(
     context: PathContext<'_>,
     sequence_after_cd: bool,
 ) -> Option<String> {
-    cwd_list_context(model, context, sequence_after_cd, false)
+    cwd_list_context(model, context, sequence_after_cd, false, false)
+}
+
+/// Like [`verified_cwd_list_context`], but a `;` between later steps counts
+/// too. Only a caller that runs the issued text with the resolved directory
+/// as the sandbox's own may pass it: a step after a `;` runs there whatever
+/// the `cd` did, so it cannot fall back to the session's directory as it
+/// would in the user's shell, and that caller reads every path the step
+/// names against the sandbox root as well as the `cd` target.
+pub(in crate::pretool) fn sequenced_list_cwd_context(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<String> {
+    cwd_list_context(model, context, true, false, true)
 }
 
 /// Like [`verified_cwd_compound_context`], but also admits a `cd` that climbs
@@ -31,7 +44,7 @@ fn verified_read_cwd_compound_context(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> Option<String> {
-    cwd_list_context(model, context, false, true)
+    cwd_list_context(model, context, false, true, false)
 }
 
 /// The directory the Git reads of a `cd <dir> && ...` list run in, for the
@@ -59,6 +72,7 @@ fn cwd_list_context(
     context: PathContext<'_>,
     sequence_after_cd: bool,
     climb: bool,
+    sequence_between_steps: bool,
 ) -> Option<String> {
     let first = model.segments.first()?;
     if model.segments.len() < 2
@@ -78,7 +92,11 @@ fn cwd_list_context(
     };
     let cwd = safe_reads::verified_cwd_target(target, context).or_else(|| {
         climb
-            .then(|| directory_targets::verified_climb_target(target, context))
+            .then(|| {
+                directory_targets::verified_climb_target(target, context).or_else(|| {
+                    directory_targets::notes::verified_note_directory_target(target, context)
+                })
+            })
             .flatten()
     })?;
     // A trailing report says how the run went: `; echo "<label>$?"`,
@@ -105,7 +123,7 @@ fn cwd_list_context(
             // whose own shape was already read above.
             matches!(separator, ";" | "&&" | "||")
         } else if separator == ";" {
-            false
+            sequence_between_steps
         } else {
             matches!(separator, "&&" | "|")
         };
@@ -154,6 +172,7 @@ pub(in crate::pretool) fn verified_leading_cd_target(
     };
     safe_reads::verified_cwd_target(target, context)
         .or_else(|| directory_targets::verified_climb_target(target, context))
+        .or_else(|| directory_targets::notes::verified_note_directory_target(target, context))
 }
 
 /// `cd <dir> && <reads>`, then more of the same, with a read outside a group
@@ -381,6 +400,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,
                 rustup_override_absent: context.rustup_override_absent,
+                go_toolchain_inert: context.go_toolchain_inert,
                 cargo_config_inert: context.cargo_config_inert,
                 npm_config_inert: context.npm_config_inert,
                 pip_config_inert: context.pip_config_inert,
@@ -408,6 +428,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                     home_dir: context.home_dir,
                     cdpath_unset: context.cdpath_unset,
                     rustup_override_absent: context.rustup_override_absent,
+                    go_toolchain_inert: context.go_toolchain_inert,
                     cargo_config_inert: context.cargo_config_inert,
                     npm_config_inert: context.npm_config_inert,
                     pip_config_inert: context.pip_config_inert,
@@ -481,7 +502,7 @@ fn cwd_effectful_executable(executable: Option<&str>) -> bool {
     )
 }
 
-/// Executables a verified `cd` compound may run after the directory change.
+/// Executables a verified `cd` compound may run beside the directory change.
 ///
 /// Membership narrows; it never admits. Every caller pairs this with the
 /// segment proof for the same program, so a name here still has to prove its
@@ -489,9 +510,15 @@ fn cwd_effectful_executable(executable: Option<&str>) -> bool {
 /// name is missing here is refused for the name alone, so the spellings that
 /// read the way `grep` and `rg` do belong beside them.
 pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool {
-    if executable
-        .is_some_and(|name| super::super::digest_reads::digest_program(name) || name == "openssl")
-    {
+    if executable.is_some_and(|name| {
+        super::super::digest_reads::digest_program(name)
+            || name == "openssl"
+            // The text filters carry their own argument proof, which opens a
+            // file operand only through the same read screen `cat` takes, so
+            // the set is named once beside that proof rather than repeated
+            // here where it drifted out of step with it.
+            || super::super::stdin_filters::text_filter_program(name)
+    }) {
         return true;
     }
     matches!(
@@ -518,6 +545,10 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "base64"
                 | "base32"
                 | "stat"
+                // `file` names the type of the files it is given. Its
+                // argument proof refuses `-C`, `-m` and `-f` and opens each
+                // operand only through the read screen `cat` takes.
+                | "file"
                 | "test"
                 | "["
                 | "find"
@@ -537,10 +568,13 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "dirname"
                 | "basename"
                 | "sed"
-                | "sort"
-                | "uniq"
-                | "cut"
-                | "tr"
+                // `awk` reads a program, not a file to write: its screen
+                // refuses `system`, `getline`, the environment arrays and
+                // every pipe or redirect the program could spell.
+                | "awk"
+                // `numfmt` rewrites the numbers it is handed and opens no
+                // file at all.
+                | "numfmt"
                 | "du"
                 | "df"
                 | "diff"
@@ -641,3 +675,7 @@ fn mutation_directory_stays_in_workspace(cwd: &str, context: PathContext<'_>) ->
     target.starts_with(&original)
         || super::super::worktree_writes::same_repository_worktree(&original, target)
 }
+
+#[cfg(test)]
+#[path = "segment_proof_cwd_filter_tests.rs"]
+mod filter_tests;

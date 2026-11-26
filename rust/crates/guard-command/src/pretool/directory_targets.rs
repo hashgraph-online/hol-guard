@@ -7,6 +7,8 @@
 
 #[path = "directory_targets_home_variable.rs"]
 pub(crate) mod home_variable;
+#[path = "directory_targets_notes.rs"]
+pub(crate) mod notes;
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
 #[path = "directory_targets_tmp_alias.rs"]
@@ -465,8 +467,20 @@ impl<'a> super::PathContext<'a> {
                 .then(|| std::fs::canonicalize(path).ok())
                 .flatten()
         };
+        // The shell's own spelling is the text `~` expands to. A spelling
+        // the shell would split or glob once a variable holding it is used
+        // unquoted (`/work/alias extra`) names other paths than the declared
+        // home, even when the directory it resolves to is the same, so only a
+        // plain literal spelling counts.
+        let plain = |path: &str| {
+            path.chars().all(|c| {
+                c.is_ascii_alphanumeric()
+                    || matches!(c, '_' | '.' | '/' | '@' | '%' | '+' | ':' | ',' | '-')
+            })
+        };
         home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
-            canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
+            plain(&shell)
+                && canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
         })
     }
 
@@ -478,6 +492,43 @@ impl<'a> super::PathContext<'a> {
         cwd: Option<&'a str>,
         execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> Self {
+        let fields = match execution_environment {
+            Some(_) => Self::session_fields(home_dir, cwd, execution_environment),
+            None => {
+                inherited_session::fields(home_dir, || Self::session_fields(home_dir, cwd, None))
+            }
+        };
+        Self {
+            literal_words: &[],
+            home_dir,
+            cwd,
+            cdpath_unset: fields.cdpath_unset,
+            rustup_override_absent: fields.rustup_override_absent,
+            go_toolchain_inert: fields.go_toolchain_inert,
+            cargo_config_inert: fields.cargo_config_inert,
+            npm_config_inert: fields.npm_config_inert,
+            pip_config_inert: fields.pip_config_inert,
+            python_environment_inert: fields.python_environment_inert,
+            shell_home_matches: fields.shell_home_matches,
+            ripgrep_config_absent: fields.ripgrep_config_absent,
+            gem_config_absent: fields.gem_config_absent,
+            http_config_absent: fields.http_config_absent,
+            openssl_config_absent: fields.openssl_config_absent,
+            // A session knows its environment, not the command, so the
+            // proof that no step creates a filesystem entry is set where a
+            // command model is in hand.
+            creates_nothing: false,
+            psql_environment: fields.psql_environment,
+            // Only the hook knows which Guard home it reported.
+            guard_home: None,
+        }
+    }
+
+    fn session_fields(
+        home_dir: Option<&str>,
+        cwd: Option<&str>,
+        execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> SessionFields {
         let cdpath_unset = execution_environment.is_some_and(|environment| {
             environment.has_valid_shape()
                 && !environment
@@ -498,6 +549,39 @@ impl<'a> super::PathContext<'a> {
             }
             None => !std::env::vars_os()
                 .any(|(name, value)| !value.is_empty() && rustup_selector(&name.to_string_lossy())),
+        };
+        // The go command reads these before it decides which toolchain
+        // answers a query: one of them names the toolchain outright, and the
+        // rest move where a release it would download comes from, whether it
+        // is checked on arrival, and which module cache an already-fetched
+        // one is taken from.
+        //
+        // `XDG_CONFIG_HOME` only moves the stored go environment file, so a
+        // value that spells out `~/.config` names the file the proof reads
+        // anyway. Its value is stamped rather than only named; a name with no
+        // value, or any other directory, keeps the review.
+        let go_toolchain_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        super::go_toolchain::go_toolchain_selector(name)
+                            && !(name.eq_ignore_ascii_case("XDG_CONFIG_HOME")
+                                && go_config_home_is_default(
+                                    environment.xdg_config_home.as_deref(),
+                                    environment.home.as_deref(),
+                                ))
+                    })
+            }
+            None => !std::env::vars_os().any(|(name, value)| {
+                let name = name.to_string_lossy();
+                !value.is_empty()
+                    && super::go_toolchain::go_toolchain_selector(&name)
+                    && !(name.eq_ignore_ascii_case("XDG_CONFIG_HOME")
+                        && go_config_home_is_default(
+                            value.to_str(),
+                            std::env::var("HOME").ok().as_deref(),
+                        ))
+            }),
         };
         // Cargo reads its configuration from the environment too, including
         // the default registry, a named registry's index and the credential
@@ -656,12 +740,10 @@ impl<'a> super::PathContext<'a> {
         let shell_home_matches = Self::shell_home_matches_for(home_dir, execution_environment);
         let psql_environment =
             super::safe_scalar::psql_environment(execution_environment, shell_home_matches);
-        Self {
-            literal_words: &[],
-            home_dir,
-            cwd,
+        SessionFields {
             cdpath_unset,
             rustup_override_absent,
+            go_toolchain_inert,
             cargo_config_inert,
             npm_config_inert,
             pip_config_inert,
@@ -671,15 +753,27 @@ impl<'a> super::PathContext<'a> {
             gem_config_absent,
             http_config_absent,
             openssl_config_absent,
-            // A session knows its environment, not the command, so the
-            // proof that no step creates a filesystem entry is set where a
-            // command model is in hand.
-            creates_nothing: false,
             psql_environment,
-            // Only the hook knows which Guard home it reported.
-            guard_home: None,
         }
     }
+}
+
+/// What a session's environment settles before any command is read.
+#[derive(Clone, Copy)]
+pub(super) struct SessionFields {
+    cdpath_unset: bool,
+    rustup_override_absent: bool,
+    go_toolchain_inert: bool,
+    cargo_config_inert: bool,
+    npm_config_inert: bool,
+    pip_config_inert: bool,
+    python_environment_inert: bool,
+    shell_home_matches: bool,
+    ripgrep_config_absent: bool,
+    gem_config_absent: bool,
+    http_config_absent: bool,
+    openssl_config_absent: bool,
+    psql_environment: super::PsqlEnvironment,
 }
 
 const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
@@ -717,6 +811,16 @@ fn xdg_config_is_default(value: Option<&str>, home: Option<&str>) -> bool {
             .ok()
             .zip(std::fs::canonicalize(&default).ok())
             .is_some_and(|(value, default)| value == default)
+}
+
+/// Whether a set `XDG_CONFIG_HOME` names `~/.config`, where
+/// [`super::go_toolchain`] already reads the stored go environment file.
+///
+/// Unlike [`xdg_config_is_default`], an absent value does not count: the
+/// variable is known to be set, so a value this proof cannot see could name
+/// any directory.
+fn go_config_home_is_default(value: Option<&str>, home: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.is_empty()) && xdg_config_is_default(value, home)
 }
 
 fn rustup_selector(name: &str) -> bool {
@@ -932,3 +1036,108 @@ mod tests_relative_cd;
 #[cfg(test)]
 #[path = "tests_relative_cd_windows.rs"]
 mod tests_relative_cd_windows;
+
+#[cfg(all(test, unix))]
+#[path = "tests_shell_home_spelling.rs"]
+mod tests_shell_home_spelling;
+
+/// The runtime's own environment, read once for every command one batch
+/// evaluates.
+///
+/// A session with no stamped environment inherits the runtime's, and reading
+/// it walks every variable the process holds several times over. That
+/// environment, and the home it is checked against, are the same for every
+/// command a batch carries, so inside [`scope`] the first command's reading
+/// is reused by the rest. Outside a scope every call reads afresh.
+pub mod inherited_session {
+    use std::cell::RefCell;
+
+    use super::SessionFields;
+
+    /// Each home a batch has read, with what its environment settled.
+    type Readings = Vec<(Option<String>, SessionFields)>;
+
+    thread_local! {
+        static READINGS: RefCell<Option<Readings>> = const { RefCell::new(None) };
+    }
+
+    /// Run `body` with the inherited environment read at most once per home.
+    pub fn scope<R>(body: impl FnOnce() -> R) -> R {
+        struct Restore(Option<Readings>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                let previous = self.0.take();
+                READINGS.with(|readings| *readings.borrow_mut() = previous);
+            }
+        }
+        let previous = READINGS.with(|readings| readings.borrow_mut().replace(Vec::new()));
+        let _restore = Restore(previous);
+        body()
+    }
+
+    pub(super) fn fields(
+        home_dir: Option<&str>,
+        read: impl FnOnce() -> SessionFields,
+    ) -> SessionFields {
+        let known = READINGS.with(|readings| {
+            readings.borrow().as_ref().map(|readings| {
+                readings
+                    .iter()
+                    .find(|(home, _)| home.as_deref() == home_dir)
+                    .map(|(_, fields)| *fields)
+            })
+        });
+        match known {
+            Some(Some(fields)) => fields,
+            Some(None) => {
+                let fields = read();
+                READINGS.with(|readings| {
+                    if let Some(readings) = readings.borrow_mut().as_mut() {
+                        readings.push((home_dir.map(str::to_owned), fields));
+                    }
+                });
+                fields
+            }
+            None => read(),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::cell::Cell;
+
+        use super::{fields, scope};
+        use crate::pretool::PathContext;
+
+        fn counted(reads: &Cell<usize>, home: Option<&str>) {
+            fields(home, || {
+                reads.set(reads.get() + 1);
+                PathContext::session_fields(home, None, None)
+            });
+        }
+
+        #[test]
+        fn a_batch_reads_the_inherited_environment_once_per_home() {
+            let reads = Cell::new(0);
+            counted(&reads, Some("/home/a"));
+            counted(&reads, Some("/home/a"));
+            assert_eq!(reads.get(), 2, "outside a batch every session reads afresh");
+            scope(|| {
+                counted(&reads, Some("/home/a"));
+                counted(&reads, Some("/home/a"));
+                counted(&reads, Some("/home/b"));
+                counted(&reads, None);
+                counted(&reads, None);
+                scope(|| counted(&reads, Some("/home/a")));
+                counted(&reads, Some("/home/b"));
+            });
+            assert_eq!(
+                reads.get(),
+                2 + 4,
+                "one reading per home, and a nested batch starts its own"
+            );
+            counted(&reads, Some("/home/a"));
+            assert_eq!(reads.get(), 7, "the batch's readings end with it");
+        }
+    }
+}

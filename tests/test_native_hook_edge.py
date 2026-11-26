@@ -11,8 +11,8 @@ from codex_plugin_scanner.guard.hook_execution_environment import (
     LIBRARY_SEARCH_PATH_NAMES,
     collect_hook_execution_environment,
 )
-from codex_plugin_scanner.guard.hook_review.hook_availability_policy import canonical_hook_event_name
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, review_raw_hook_native
+from codex_plugin_scanner.guard.native_hook_render import canonical_hook_event_name
 from codex_plugin_scanner.guard.native_route_receipt import native_hook_route
 from codex_plugin_scanner.guard.native_runtime import (
     NativeRuntimeCapabilities,
@@ -105,6 +105,9 @@ def _edge_result() -> dict[str, object]:
         "event_name": "PreToolUse",
         "payload_kind": "inline",
         "harness_response": {"continue": True},
+        "requires_approval": False,
+        "recording_only_response": False,
+        "local_cli_rule_blocked": None,
         "containment_route": "none",
         "result": {
             "schema": "guard-pre-tool-result.v1",
@@ -160,7 +163,7 @@ def _edge_result() -> dict[str, object]:
 
 @pytest.mark.parametrize("alias", ("UserPromptSubmit", "userPromptSubmitted", "user_prompt_submit", "prompt"))
 def test_prompt_event_aliases_enter_one_native_authority_route(alias: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+    from codex_plugin_scanner.guard import native_hook_availability as policy
 
     monkeypatch.setattr(policy, "_runtime_availability", lambda *_args, **_kwargs: {"event_name": "UserPromptSubmit"})
     assert canonical_hook_event_name({"hook_event_name": alias}) == "UserPromptSubmit"
@@ -171,6 +174,42 @@ def test_edge_decoder_accepts_omitted_optional_request_id() -> None:
     with_extra = _edge_result()
     with_extra["semantic_override"] = "allow"
     assert _decode_edge(with_extra) is None
+
+
+@pytest.mark.parametrize("value", (None, "yes", 1))
+def test_edge_decoder_requires_rust_approval_classification(value: object) -> None:
+    edge = _edge_result()
+    if value is None:
+        edge.pop("requires_approval")
+    else:
+        edge["requires_approval"] = value
+    assert _decode_edge(edge) is None
+
+
+@pytest.mark.parametrize("blocked", (True, False))
+def test_edge_decoder_binds_custom_rule_classification(blocked: bool) -> None:
+    edge = _edge_result()
+    edge["local_cli_rule"] = {"blocked": blocked, "harness_response": {"policy_action": "block"}}
+    edge["local_cli_rule_blocked"] = blocked
+    assert _decode_edge(edge) == edge
+    edge["local_cli_rule_blocked"] = not blocked
+    assert _decode_edge(edge) is None
+
+
+def test_edge_decoder_rejects_a_custom_rule_without_its_classification() -> None:
+    edge = _edge_result()
+    edge["local_cli_rule"] = {"blocked": True, "harness_response": {"policy_action": "block"}}
+    assert _decode_edge(edge) is None
+
+
+@pytest.mark.parametrize("value", (None, "yes", 1))
+def test_edge_decoder_requires_rust_recording_only_classification(value: object) -> None:
+    edge = _edge_result()
+    if value is None:
+        edge.pop("recording_only_response")
+    else:
+        edge["recording_only_response"] = value
+    assert _decode_edge(edge) is None
 
 
 @pytest.mark.parametrize("route", ("none", "sink", "grant"))
@@ -443,6 +482,7 @@ def test_a_custom_rule_check_gets_its_own_allowance_past_the_review_deadline(
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
             "edge-local-cli-rule-v1",
+            "edge-local-cli-rule-stamp-v1",
         ),
     )
     monkeypatch.setattr(
@@ -504,6 +544,7 @@ def test_a_review_evidence_request_needs_a_resident_that_proves_it(
             "pre-tool-generic-authority-v1",
             "git-execution-context-v1",
             "edge-local-cli-rule-v1",
+            "edge-local-cli-rule-stamp-v1",
             *(["edge-review-evidence-v1"] if advertised else []),
         ),
     )

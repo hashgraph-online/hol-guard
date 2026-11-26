@@ -72,6 +72,18 @@ pub(in crate::pretool) fn glob_file_matches(
     glob_words(value, context).filter(|words| !words.is_empty())
 }
 
+/// The words a pattern with a wildcard directory expands to, such as
+/// `packages/*/package.json`, when every one of them clears the literal read
+/// proof; `None` otherwise, including when nothing matches. A copy keeps the
+/// single-directory model of [`glob_file_matches`]; a file test only needs to
+/// know each match is one a reader may name.
+pub(in crate::pretool) fn directory_glob_file_matches(
+    value: &str,
+    context: super::super::PathContext<'_>,
+) -> Option<Vec<String>> {
+    directory_globs::directory_glob_matches(value, context)
+}
+
 /// Every word the pattern expands to, which is empty when the directory was
 /// listed in full and no name matched.
 fn glob_words(value: &str, context: super::super::PathContext<'_>) -> Option<Vec<String>> {
@@ -223,6 +235,37 @@ pub(in crate::pretool) fn wildcard_matches(pattern: &[u8], name: &[u8]) -> bool 
             for index in 1..=name.len() {
                 current[index] = previous[index - 1]
                     && (token == b'?' || token.eq_ignore_ascii_case(&name[index - 1]));
+            }
+        }
+        previous = current;
+    }
+    previous[name.len()]
+}
+
+/// Every shell expands `pattern` to `name` whatever its options: an ASCII
+/// `*` and `?` pattern that matches with case, and a leading `.` only when
+/// the pattern spells it. [`wildcard_matches`] ignores case, so it is looser.
+pub(in crate::pretool) fn wildcard_sure_match(pattern: &str, name: &str) -> bool {
+    if !pattern.is_ascii()
+        || !name.is_ascii()
+        || pattern.contains(['[', ']'])
+        || (name.starts_with('.') && !pattern.starts_with('.'))
+    {
+        return false;
+    }
+    let (pattern, name) = (pattern.as_bytes(), name.as_bytes());
+    let mut previous = vec![false; name.len() + 1];
+    previous[0] = true;
+    for &token in pattern {
+        let mut current = vec![false; name.len() + 1];
+        if token == b'*' {
+            current[0] = previous[0];
+            for index in 1..=name.len() {
+                current[index] = previous[index] || current[index - 1];
+            }
+        } else {
+            for index in 1..=name.len() {
+                current[index] = previous[index - 1] && (token == b'?' || token == name[index - 1]);
             }
         }
         previous = current;

@@ -30,6 +30,8 @@ use crate::package_evaluation_compose_op::{compose, parse_action, parse_evaluati
 
 #[path = "package_policy_resolve_approvals.rs"]
 mod approvals;
+#[path = "package_policy_resolve_daemon.rs"]
+mod daemon;
 #[path = "package_policy_resolve_wire.rs"]
 mod wire;
 use approvals::{
@@ -230,16 +232,7 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
         && request.ignored_integrity
         && !request.policy_workspaces.is_empty()
     {
-        let authority = crate::daemon_policy_authority::ResidentPolicyAuthority::new(
-            std::path::PathBuf::from(&request.guard_home),
-        );
-        if let Some((decision, authority_value)) = authority.resolve_package_policy(
-            &request.harness,
-            Some(&request.artifact_id),
-            &request.artifact_hash,
-            &request.policy_workspaces,
-            request.publisher.as_deref(),
-        ) {
+        if let Some((decision, authority_value)) = daemon::resolve(request) {
             ignored_integrity = false;
             daemon_authority = true;
             resolved_authority = Some(authority_value);

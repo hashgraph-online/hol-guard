@@ -112,6 +112,8 @@ Security-conscious consumers should prefer the commit-SHA form, the same guidanc
 
 The action also writes a concise summary to `GITHUB_STEP_SUMMARY` by default. The full report is written to the job log for `text` output, or to the file you pass through `output` for `json`, `markdown`, or `sarif`.
 
+When the scanned package declares a runtime-bearing surface, `scan` text, Markdown, and JSON reports and job summaries for `scan`, `lint`, and `submit` modes add a report-only **Guard coverage context** section. Lint text and JSON reports and all `verify` outputs omit it. The section links the relevant harness claim and local installation guide. This context is derived from the repository's checked-in coverage contract and does not probe a host, install Guard, or make a network request. It is omitted when no mapped runtime surface is detected. The [coverage context contract](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/scanner-coverage-bridge.md) documents the JSON shape.
+
 Mode notes:
 
 - `scan` and `lint` respect `profile`, `config`, and `baseline`.
@@ -130,6 +132,14 @@ Mode notes:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   ```
+
+## Scanner to release evidence
+
+Use the [Scanner to release evidence starter](../docs/guard/scanner-to-release-starter.md)
+to connect a published release to the existing HOL Plugin Release attestation
+contract. The starter keeps registration disabled until the repository owner
+reviews the matching listing, OIDC binding, visibility, retention, and retry
+behavior.
 
 ## Examples
 

@@ -169,6 +169,41 @@ fn a_warning_is_raised_and_a_stronger_result_is_kept() {
 }
 
 #[test]
+fn a_rule_replaces_a_hold_due_only_to_non_recognition() {
+    let saved = home(&[rule("git status")]);
+    let unreadable = tempfile::tempdir().unwrap();
+    std::fs::write(unreadable.path().join(STORE_FILE_NAME), b"not a database").unwrap();
+    for code in crate::connector_setup::NON_RECOGNITION_REASON_CODES {
+        // A stronger floor is kept, but the rule's code replaces the one a
+        // grant answers.
+        for floor in ["review", "require-reapproval"] {
+            let mut held = result(PreToolActionTypeV1::Command, floor);
+            held.reason_code = code.into();
+            for (home, expected) in [
+                (&saved, "policy_exact_command_review"),
+                (&unreadable, "exact_command_rules_unreadable"),
+            ] {
+                let raised = apply(home.path(), &call("git status"), Some(NOW), held.clone());
+                assert_eq!(raised.minimum_action, floor, "{code} {floor}");
+                assert_eq!(raised.policy_action, floor, "{code} {floor}");
+                assert_eq!(raised.reason_code, expected, "{code} {floor}");
+                validate_pre_tool_result_matrix(&raised).unwrap();
+            }
+        }
+        // A sandbox route is not this step's to settle.
+        let mut contained = result(PreToolActionTypeV1::Command, "sandbox-required");
+        contained.reason_code = code.into();
+        let kept = apply(
+            saved.path(),
+            &call("git status"),
+            Some(NOW),
+            contained.clone(),
+        );
+        assert_eq!(kept, contained, "{code}");
+    }
+}
+
+#[test]
 fn a_raised_policy_action_is_never_lowered() {
     let home = home(&[rule("git status")]);
     let mut stronger_policy = allowed();

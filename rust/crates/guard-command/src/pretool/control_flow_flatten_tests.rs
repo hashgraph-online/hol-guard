@@ -366,6 +366,35 @@ fn a_wait_flattens_to_the_question_it_asks() {
             "until nc -z localhost 5432 >/dev/null; do sleep 1; done",
             "nc -z localhost 5432 >/dev/null; sleep 1",
         ),
+        // Copying stderr onto stdout opens nothing of its own.
+        (
+            "until nc -z localhost 5432 >/dev/null 2>&1; do sleep 1; done",
+            "nc -z localhost 5432 >/dev/null 2>&1; sleep 1",
+        ),
+        (
+            "until nc -z localhost 5432 2>&1 >/dev/null; do sleep 1; done",
+            "nc -z localhost 5432 2>&1 >/dev/null; sleep 1",
+        ),
+        // Quoted words are literal: the `>` in `'=> ready'` is a character
+        // grep searches for, and the sink after the closing quote is the
+        // whole of what the test opens.
+        (
+            "until grep -q 'exit status:' deploy.log 2>/dev/null; do sleep 30; done",
+            "grep -q 'exit status:' deploy.log 2>/dev/null; sleep 30",
+        ),
+        (
+            "until grep -q '=> ready' server.log; do sleep 5; done",
+            "grep -q '=> ready' server.log; sleep 5",
+        ),
+        // A sink spelled inside the quotes is part of the pattern.
+        (
+            "until grep -q 'ready 2>/dev/null' server.log; do sleep 1; done",
+            "grep -q 'ready 2>/dev/null' server.log; sleep 1",
+        ),
+        (
+            "until grep -q \"listening on\" server.log >/dev/null 2>&1; do sleep 5; done",
+            "grep -q \"listening on\" server.log >/dev/null 2>&1; sleep 5",
+        ),
         // A list written after `done` runs once, when the wait is over.
         (
             "while kill -0 4821 2>/dev/null; do sleep 15; done; echo \"build finished\"; date -u +%H:%M:%SZ",
@@ -375,13 +404,33 @@ fn a_wait_flattens_to_the_question_it_asks() {
             "until nc -z localhost 5432; do sleep 1; done; npm test",
             "nc -z localhost 5432; sleep 1; npm test",
         ),
+        // A wait for several conditions keeps the `&&` and `||` between them.
+        (
+            "until grep -q done a.log && grep -q done b.log; do sleep 5; done; echo ready",
+            "grep -q done a.log && grep -q done b.log; sleep 5; echo ready",
+        ),
+        (
+            "until nc -z localhost 5432 || ! kill -0 4821 2>/dev/null; do sleep 1; done",
+            "nc -z localhost 5432 || kill -0 4821 2>/dev/null; sleep 1",
+        ),
+        // A second wait written after the first runs once the first is over,
+        // and its own flat list follows the first one.
+        (
+            "until test -e build/lock.d/pid; do sleep 60; done; until ! test -e build/lock.d/pid; do sleep 30; done",
+            "test -e build/lock.d/pid; sleep 60; test -e build/lock.d/pid; sleep 30",
+        ),
+        (
+            "until nc -z localhost 5432; do sleep 1; done\nwhile kill -0 4821 2>/dev/null; do sleep 5; done; echo done",
+            "nc -z localhost 5432; sleep 1; kill -0 4821 2>/dev/null; sleep 5; echo done",
+        ),
     ] {
         assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
     }
 }
 
-/// A wait whose body does more than pause, or whose test is a list, a
-/// redirection or an expansion, is a loop this reading does not describe.
+/// A wait whose body does more than pause, whose test list can change from
+/// pass to pass, or whose test holds a redirection or an expansion, is a loop
+/// this reading does not describe.
 #[test]
 fn a_wait_that_builds_up_across_passes_keeps_its_review() {
     for command in [
@@ -397,16 +446,35 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         "until nc -z localhost 5432; do sleep 1.2.3; done",
         // An empty body is a loop that asks without pausing.
         "until nc -z localhost 5432; do done",
-        // The test is a list, so a later command runs on an earlier outcome.
-        "until nc -z localhost 5432 && redis-cli ping; do sleep 1; done",
+        // A test list whose probes change shell state, or that runs a command
+        // whose outcome nothing reads, can differ from pass to pass.
         "until cd build; ls; do sleep 1; done",
+        "until cd build && test -f done.txt; do sleep 1; done",
+        "until test -f done.txt || cd build; do sleep 1; done",
+        "until export READY=1 && nc -z localhost 5432; do sleep 1; done",
+        "until nc -z localhost 5432 && grep -q x a.log | cd build; do sleep 1; done",
+        "until grep -q ready a.log; grep -q ready b.log; do sleep 1; done",
+        // Each probe in the list opens nothing of its own.
+        "until grep -q ready a.log && grep -q ready b.log > wait.log; do sleep 1; done",
+        "until grep -q ready a.log > wait.log || nc -z localhost 5432; do sleep 1; done",
         // The test opens a file the next pass would reach again.
         "until nc -z localhost 5432 > wait.log; do sleep 1; done",
         "until nc -z localhost 5432 2> wait.log; do sleep 1; done",
         // A sink that is not the whole of what the test opens, and a
-        // descriptor copy that is no sink at all.
+        // descriptor copy that reaches a real file or another descriptor.
         "until nc -z localhost 5432 2>/dev/null > wait.log; do sleep 1; done",
-        "until nc -z localhost 5432 >/dev/null 2>&1; do sleep 1; done",
+        "until nc -z localhost 5432 > wait.log 2>&1; do sleep 1; done",
+        "until nc -z localhost 5432 2>&1 > wait.log; do sleep 1; done",
+        "until nc -z localhost 5432 >/dev/null 2>&3; do sleep 1; done",
+        "until nc -z localhost 5432 </dev/tty 2>&1; do sleep 1; done",
+        // Quoting hides nothing: a redirection outside the quotes still
+        // opens a file, and an escape or a quote left open could put the
+        // trailing sink inside a string.
+        "until grep -q 'ready' server.log > wait.log 2>/dev/null; do sleep 1; done",
+        "until grep -q 'ready' server.log 2>wait.log; do sleep 1; done",
+        "until grep -q \"ready\" < server.log 2>/dev/null; do sleep 1; done",
+        "until grep -q 'ready' server\\ log 2>/dev/null; do sleep 1; done",
+        "until grep -q \"ready' server.log 2>/dev/null; do sleep 1; done",
         // A redirection after `done` is opened once and written through on
         // every pass, and an input device need never end.
         "until nc -z localhost 5432; do sleep 1; done > wait.log",
@@ -419,6 +487,12 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         "until nc -z localhost 5432; do sleep 1; done || npm test",
         "until nc -z localhost 5432; do sleep 1; done & npm test",
         "until nc -z localhost 5432; do sleep 1; done; ; npm test",
+        // A second construct keeps the first one's review when this reading
+        // does not take it, or when the join reads the first one's outcome.
+        "until nc -z localhost 5432; do sleep 1; done; until nc -z localhost 6379; do date; done",
+        "until nc -z localhost 5432; do sleep 1; done && until nc -z localhost 6379; do sleep 1; done",
+        "until nc -z localhost 5432; do sleep 1; done; until nc -z localhost 6379; do sleep 1; done > wait.log",
+        "until nc -z localhost 5432; do sleep 1; done; for f in a b; do sleep 1; done",
         // An expansion need not name the same text on the next pass.
         "until nc -z localhost $PORT; do sleep 1; done",
         "until nc -z localhost `cat port`; do sleep 1; done",

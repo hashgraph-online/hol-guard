@@ -112,9 +112,10 @@ impl Git {
         })
     }
 
-    /// Runs `git` with `arguments` while the note's share of the wait lasts.
-    /// A call that starts is bounded by Git's own timeout. The share is short,
-    /// so asking for part of it to be left let only the first calls start.
+    /// Runs `git` with `arguments` while the note's share of the wait lasts,
+    /// and stops a call still running when the share ends. A call left to
+    /// Git's own timeout ran past it: in a large project the change lists
+    /// took the whole hook, and the prompt got no search at all.
     fn run(&self, arguments: &[&str], until: Instant) -> Option<String> {
         if Instant::now() >= until {
             return None;
@@ -125,7 +126,7 @@ impl Git {
             cwd: &self.root,
             environment: &self.environment,
         };
-        let output = prober.run_offline(&all)?;
+        let output = prober.run_offline_until(&all, until)?;
         output
             .success()
             .then(|| output.text().map(str::to_owned))
@@ -455,6 +456,8 @@ mod asked;
 mod code;
 #[path = "context_assistance_prompt_changes_fix.rs"]
 mod fix;
+#[path = "context_assistance_prompt_changes_grep.rs"]
+pub(super) mod grep;
 #[path = "context_assistance_prompt_changes_labels.rs"]
 mod labels;
 #[path = "context_assistance_prompt_changes_removed.rs"]

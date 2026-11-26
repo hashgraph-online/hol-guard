@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_vitest
 from codex_plugin_scanner.guard.runtime.contained_wrapper import (
     OutputFilter,
+    _output_filter,
     bounded_output,
     peel_contained_wrapper,
     sibling_project_root,
@@ -200,7 +202,13 @@ def test_other_operators_are_left_to_the_strict_unwrapped_path(tmp_path: Path, c
         ),
         ("pytest tests/a\\ b.py | head -3", "pytest 'tests/a b.py'", OutputFilter("head", 3, False)),
         ('pytest -k "a \\"b\\" (c)" | head -n 2', "pytest -k 'a \"b\" (c)'", OutputFilter("head", 2, False)),
-        ("pytest -q '|' x | tail -1", "pytest -q x", None),
+        # A quoted `|` is text the program reads, so the core keeps it. Windows
+        # quoting is not POSIX, so the peel there still refuses the word.
+        (
+            "pytest -q '|' x | tail -1",
+            "pytest -q '|' x",
+            None if sys.platform == "win32" else OutputFilter("tail", 1, False),
+        ),
         (
             'node -e "a(); if (!b) c(1); d()" | tail -3',
             "node -e 'a(); if (!b) c(1); d()'",
@@ -260,6 +268,14 @@ def emit() -> None:
         print(f"out {index}")
     for index in range(3):
         print(f"err {index}", file=sys.stderr)
+
+
+def test_a_scratch_log_is_left_to_the_native_sink() -> None:
+    """Only the native sink opens a peeled scratch log; the Python fallback refuses the plan."""
+    encoded = {"kind": "all", "count": 0, "merge_stderr": True, "file": "/tmp/hg-scratch.log"}
+    with pytest.raises(ValueError, match="unsupported wrapper shape"):
+        _output_filter(encoded)
+    assert _output_filter({**encoded, "file": None}) == OutputFilter("all", 0, True)
 
 
 def test_output_filter_runs_in_process(capsys: pytest.CaptureFixture[str]) -> None:

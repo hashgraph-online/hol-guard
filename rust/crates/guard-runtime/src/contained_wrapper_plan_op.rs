@@ -94,6 +94,7 @@ fn encode_output(output: &ContainedOutput) -> Value {
         "success_label": output.success_label,
         "failure_label": output.failure_label,
         "stages": output.stages,
+        "file": output.file.as_ref().map(|file| file.to_string_lossy().into_owned()),
     })
 }
 

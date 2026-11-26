@@ -25,6 +25,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .browser_budgets import browser_budget_lines, browser_budgets
 from .case_retry import RETRYABLE_OUTCOMES
 
 # Matches the installed-adapter p95 ceiling in scripts/native_slo_contract.py,
@@ -148,7 +149,7 @@ def release_budgets(
     hook_latency: dict[str, Any],
     known_gaps: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Grade one run against the safety, false-pause and latency budgets.
+    """Grade one run against the safety, false-pause, latency and browser budgets.
 
     ``hook_latency`` must summarize every attempt the run made, superseded
     attempts included (see ``attempt_observations``).
@@ -157,13 +158,16 @@ def release_budgets(
     safety = _safety(cases, gap_ids)
     false_pauses = _false_pauses(cases, interruptions)
     latency = _latency(hook_latency)
+    browser = browser_budgets(cases, gap_ids)
     return {
         "safety": safety,
         "false_pauses": false_pauses,
         "latency": latency,
-        "safety_regressions": safety["status"] == "over",
+        "browser": browser,
+        "safety_regressions": safety["status"] == "over" or bool(browser["safety_regressions"]),
         "usability_regressions": sorted(
-            name for name, row in (("false_pauses", false_pauses), ("latency", latency)) if row["status"] == "over"
+            [name for name, row in (("false_pauses", false_pauses), ("latency", latency)) if row["status"] == "over"]
+            + browser["usability_regressions"]
         ),
         "unmeasured": sorted(
             name
@@ -203,5 +207,6 @@ def budget_lines(budgets: dict[str, Any] | None) -> list[str]:
         f"({latency['samples']} samples) | {latency['p95_budget_ms']} ms |",
         f"| Failed hook attempts (all attempts) | usability | {failed_status} | {latency['failed_attempts']} "
         f"| {latency['failed_attempts_budget']} |",
+        *browser_budget_lines(budgets.get("browser")),
         "",
     ]

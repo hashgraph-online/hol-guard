@@ -348,6 +348,22 @@ fn workspace_argv(input: &Input) -> Result<Vec<String>, RestrictedPytestError> {
     }
     masks.sort();
     masks.dedup();
+    // A committed, secret-free document those patterns name, which the read
+    // review already opens, is bound read-only over itself instead of being
+    // hidden, so a recursive search can read it and nothing can write,
+    // replace or rename it. Only a file the walk itself masked, outside every
+    // hidden directory, is reopened.
+    let documents: Vec<PathBuf> =
+        crate::pretool::search_scope_tracked::sandbox_readable_documents(&input.workspace)
+            .into_iter()
+            .filter(|document| {
+                masks.contains(&(document.clone(), false))
+                    && !masks
+                        .iter()
+                        .any(|(path, directory)| *directory && document.starts_with(path))
+            })
+            .collect();
+    masks.retain(|(path, directory)| *directory || !documents.contains(path));
     let mut argv = base_argv(&backend, &exec_roots);
     for file in &input.read_files {
         let regular = std::fs::symlink_metadata(file).is_ok_and(|meta| meta.file_type().is_file());
@@ -388,6 +404,10 @@ fn workspace_argv(input: &Input) -> Result<Vec<String>, RestrictedPytestError> {
         } else {
             argv.extend(["--ro-bind".to_owned(), "/dev/null".to_owned(), path]);
         }
+    }
+    for document in documents {
+        let document = document.to_string_lossy().into_owned();
+        argv.extend(["--ro-bind".to_owned(), document.clone(), document]);
     }
     argv.extend(["--chdir".to_owned(), workspace, "--".to_owned()]);
     argv.extend(input.command.iter().cloned());

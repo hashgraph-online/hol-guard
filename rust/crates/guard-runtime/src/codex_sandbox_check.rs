@@ -1,5 +1,6 @@
 //! `codex-sandbox-check`: whether this process itself runs inside a macOS
-//! sandbox that confines it as tightly as a contained profile requires.
+//! or Linux sandbox that confines it as tightly as a contained profile
+//! requires.
 //!
 //! Guard leaves a contained call to Codex's own sandbox when its sink cannot
 //! start inside that sandbox (`codex_hook_bridge_contain_sandbox`). The hook
@@ -162,9 +163,14 @@ mod seatbelt {
     pub(super) use guard_seatbelt::{account_home, denies_network, denies_write, user_temp_dir};
 }
 
-/// Only macOS is known to refuse Guard's sink inside Codex's sandbox, so
-/// the hook never asks for this check elsewhere, and it never passes there.
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+#[path = "codex_sandbox_check_linux.rs"]
+mod seatbelt;
+
+/// Guard leaves a contained call to Codex's sandbox only on macOS and
+/// Linux, so the hook never asks for this check elsewhere, and it never
+/// passes there.
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 mod seatbelt {
     use std::path::{Path, PathBuf};
 

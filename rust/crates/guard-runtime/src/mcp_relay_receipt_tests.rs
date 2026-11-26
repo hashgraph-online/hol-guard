@@ -304,6 +304,21 @@ fn a_safe_alternative_block_writes_its_receipt_then_a_silent_row() {
 }
 
 #[test]
+fn a_reviewed_block_without_optional_firewall_evidence_still_composes() {
+    let record = edited(
+        reviewed(record("block", "policy-safe-alternative", "review")),
+        |record| {
+            record["identity"]["artifact"]["metadata"]
+                .as_object_mut()
+                .unwrap()
+                .remove("mcpSkillFirewall");
+        },
+    );
+    assert!(is_plain(&record));
+    assert!(compose(HOME, &record, &stamp()).is_some());
+}
+
+#[test]
 fn a_silent_row_carries_the_decision_and_appended_evidence() {
     let record = edited(
         reviewed(record(
@@ -542,4 +557,33 @@ fn a_receipt_committed_before_a_later_read_fails_is_not_handed_back() {
     assert!(unwritten.is_empty(), "{unwritten:?}");
     assert_eq!(count(&home, "runtime_receipts"), before + 1);
     let _ = std::fs::remove_dir_all(&home);
+}
+
+/// A policy block that is neither queued nor reviewed must carry the firewall
+/// evidence that authenticated its artifact, so the drain's diagnostic names
+/// that evidence rather than reporting an unknown rejection. An ask block
+/// keeps its older-catalog relief: its missing evidence is not the reason it
+/// was rejected.
+#[test]
+fn an_unqueued_block_without_firewall_evidence_is_rejected_for_that_evidence() {
+    let without_firewall = |record: Value| {
+        edited(record, |record| {
+            record["identity"]["artifact"]["metadata"]
+                .as_object_mut()
+                .unwrap()
+                .remove("mcpSkillFirewall");
+        })
+    };
+
+    let unqueued = without_firewall(record("block", "policy-block", "block"));
+    assert!(!is_plain(&unqueued));
+    assert_eq!(super::rejection_code(&unqueued), "firewall");
+
+    let queued = asked(without_firewall(record(
+        "block",
+        "approval-center-pending",
+        "review",
+    )));
+    assert!(is_plain(&queued));
+    assert_eq!(super::rejection_code(&queued), "unknown");
 }

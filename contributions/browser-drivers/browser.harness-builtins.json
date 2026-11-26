@@ -1,0 +1,145 @@
+{
+  "schemaVersion": "guard.browser-driver.v1",
+  "id": "browser.harness-builtins",
+  "name": "Harness built-in browser tools",
+  "publisher": {
+    "name": "HOL Guard",
+    "url": "https://github.com/hashgraph-online/hol-guard",
+    "verified": true
+  },
+  "referenceUrls": [
+    "https://github.com/cline/cline",
+    "https://github.com/openclaw/openclaw"
+  ],
+  "match": {
+    "mcpServerNames": [],
+    "packages": [],
+    "toolNamespaces": [],
+    "harnessTools": [
+      "browser",
+      "browser_action",
+      "open_url",
+      "visit_url"
+    ]
+  },
+  "profileMode": {
+    "default": "unknown"
+  },
+  "tools": [
+    {
+      "name": "browser",
+      "discriminator": "action",
+      "cases": {
+        "act": {
+          "verb": "Other"
+        },
+        "close": {
+          "verb": "TabControl"
+        },
+        "console": {
+          "verb": "Read"
+        },
+        "dialog": {
+          "verb": "Other"
+        },
+        "focus": {
+          "verb": "TabControl"
+        },
+        "navigate": {
+          "verb": "Navigate",
+          "url": [
+            "targetUrl",
+            "url"
+          ]
+        },
+        "open": {
+          "verb": "Navigate",
+          "url": [
+            "targetUrl",
+            "url"
+          ]
+        },
+        "pdf": {
+          "verb": "Download"
+        },
+        "profiles": {
+          "verb": "Read"
+        },
+        "screenshot": {
+          "verb": "Screenshot"
+        },
+        "snapshot": {
+          "verb": "Read"
+        },
+        "start": {
+          "verb": "Attach"
+        },
+        "status": {
+          "verb": "Read"
+        },
+        "stop": {
+          "verb": "TabControl"
+        },
+        "tabs": {
+          "verb": "Read"
+        },
+        "upload": {
+          "verb": "Upload",
+          "file": [
+            "paths"
+          ]
+        }
+      }
+    },
+    {
+      "name": "browser_action",
+      "discriminator": "action",
+      "cases": {
+        "click": {
+          "verb": "Click"
+        },
+        "close": {
+          "verb": "TabControl"
+        },
+        "hover": {
+          "verb": "Click"
+        },
+        "launch": {
+          "verb": "Navigate",
+          "url": [
+            "url"
+          ]
+        },
+        "resize": {
+          "verb": "Other"
+        },
+        "scroll_down": {
+          "verb": "Scroll"
+        },
+        "scroll_up": {
+          "verb": "Scroll"
+        },
+        "type": {
+          "verb": "Type",
+          "text": [
+            "text"
+          ]
+        }
+      }
+    },
+    {
+      "name": "open_url",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "visit_url",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    }
+  ]
+}

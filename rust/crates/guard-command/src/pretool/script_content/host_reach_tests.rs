@@ -1,4 +1,6 @@
-use super::python_reaches_host;
+fn python_reaches_host(source: &str) -> bool {
+    super::python_reaches_host(source, &super::Graph::of(&[source]))
+}
 
 #[test]
 fn programs_that_reach_the_host_are_held() {
@@ -9,6 +11,9 @@ fn programs_that_reach_the_host_are_held() {
         "import pyperclip\nprint(pyperclip.paste())\n",
         "import os\nos.kill(1, 9)\n",
         "from os import kill\nkill(1, 9)\n",
+        "from posix import kill\nkill(4242, 15)\n",
+        "from nt import kill\nkill(4242, 15)\n",
+        "from _signal import pthread_kill\npthread_kill(4242, 15)\n",
         "from os import (\n    kill,\n)\nkill(4242, 15)\n",
         "from os import *\nkill(1, 9)\n",
         "import os as proc\nproc.kill(4242, 15)\n",
@@ -28,6 +33,29 @@ fn programs_that_reach_the_host_are_held() {
         "x = 1; exec('print(x)')\n",
         "import builtins\nbuiltins.exec(src)\n",
         "import importlib\nimportlib.import_module('socket')\n",
+        "x = __import__('socket').create_connection\n",
+        "m = __import__('psutil')\n",
+        "m = __import__(name)\n",
+        "p = __import__('os'); p.kill(1, 9)\n",
+        "k = __import__('signal').pthread_kill\nk(1, 9)\n",
+        "p = __import__('subprocess').os\np.kill(4242, 15)\n",
+        "import subprocess\np = subprocess.os\np.kill(4242, 15)\n",
+        "from subprocess import os as p\np.kill(4242, 15)\n",
+        "import os\nk = os.kill\nk(4242, 15)\n",
+        "import posix\nposix.kill(4242, 15)\n",
+        "import tempfile\ntempfile._os.kill(4242, 15)\n",
+        "import random\nrandom._os.kill(4242, 15)\n",
+        "p = __import__('tempfile')\np._os.kill(4242, 15)\n",
+        "p = __import__('random')\np._os.kill(4242, 15)\n",
+        "import tempfile\np = tempfile._os\np.kill(4242, 15)\n",
+        "from tempfile import _os as p\np.kill(4242, 15)\n",
+        "import tempfile\nk = tempfile._os.kill\nk(4242, 15)\n",
+        "from importlib import import_module as load\nimport_module = lambda _: load('o' + 's')\np = import_module('json')\np.kill(4242, 15)\n",
+        "def f():\n    '../secret.txt'\nprint(open(getattr(f, '__d' 'oc__')).read())\n",
+        "def f():\n    '../secret.txt'\nprint(open(f.__code__.co_consts[0]).read())\n",
+        "class Sink:\n    def __setattr__(self, name, value):\n        print(open(value).read())\n\ndef f():\n    '../secret.txt'\n\nsink = Sink()\nsink.__doc__ = f.__doc__\n",
+        "b = __import__('builtins'); b.eval(text)\n",
+        "import importlib\nimportlib.import_module('importlib').import_module(name)\n",
         "import glob\nprint(glob.glob('/app/*'))\n",
         "import glob\nprint(glob.glob('/dev/*'))\n",
         "import os\nprint(os.listdir('/'))\n",
@@ -94,6 +122,19 @@ fn programs_that_reach_the_host_are_held() {
         "print(open(f'{\"etc\":/>4}/passwd').read())\n",
         "print(open(f'{\"etc\":{\"/\"}>4}/passwd').read())\n",
         "a = b = True\nopen(f'{\".\" if a else \"\"}{\"git\" if b else \"\"}/config', 'w').write('')\n",
+        "'''/etc/passwd'''\nprint(open(__doc__).read())\n",
+        "def f():\n    '/etc/passwd'\nimport inspect\nprint(open(inspect.getdoc(f)).read())\n",
+        "x = (\n    '/etc/passwd'\n)\nprint(open(x).read())\n",
+        "if True:\n    f'{open(\"/etc/passwd\").read()}'\n",
+        // A docstring naming an outside path is scanned even when no reader
+        // the scan knows appears; only reStructuredText markup lines go.
+        "class C:\n    \"\"\"../sample file.txt\"\"\"\n",
+        "def f():\n    \"\"\"Reads /etc/passwd for the demo.\n\n    .. note:: x\n    \"\"\"\n",
+        // A reST comment line keeps its text; doctest reads docstrings back.
+        "def f():\n    \"\"\".. ../sample.txt\"\"\"\n",
+        "import doctest\ndef f():\n    \"\"\".. include:: ../sample.txt\"\"\"\nv = doctest.DocTestFinder().find(f)[0].docstring.split()[2]\nprint(open(v).read())\n",
+        // A helper rebinding the import function in another source.
+        "m = __import__('reboot')\nimport builtins, os\nsetattr(builtins, '__imp' + 'ort__', os.system)\n",
     ] {
         assert!(python_reaches_host(source), "{source}");
     }
@@ -102,6 +143,8 @@ fn programs_that_reach_the_host_are_held() {
 #[test]
 fn workspace_programs_stay_contained() {
     for source in [
+        "self._module = __import__('concurrent.futures').futures\n",
+        "import importlib\njson = importlib.import_module(\"json\")\n",
         "from collections import OrderedDict\nd = OrderedDict([('a', 1)])\nprint(list(d))\n",
         "import glob\nimport re\nprint(sorted(glob.glob('*.md')))\n",
         "import json\nimport re\nprint(json.dumps({'m': bool(re.match(r'a+', 'aaa'))}))\n",
@@ -123,6 +166,9 @@ fn workspace_programs_stay_contained() {
         "import subprocess\nsubprocess.run(['git', 'config', '--get', 'user.name'])\n",
         "import os\nos.system('git status --short')\n",
         "import subprocess\np = subprocess.Popen(['sleep', '1'])\np.kill()\n",
+        "import signal, subprocess\nsignal.signal(signal.SIGINT, signal.SIG_DFL)\np = subprocess.Popen(['sleep', '1'])\np.kill()\n",
+        "from importlib import import_module\njson = import_module('json')\n",
+        "def f():\n    \"\"\"Read it.\n\n    .. note:: see ../docs\n    \"\"\"\nx = getattr(f, 'name', None)\n",
         "import json\nprint('see https://example.invalid/docs for more')\n",
         "import json\nprint('it\\'s fine', open('README.md').read())\n",
         "import json\nprint(r'\\d+\\.\\w', 'a\\tb\\n')\n",
@@ -145,6 +191,8 @@ fn workspace_programs_stay_contained() {
         "import os\nos.system('>/tmp/out.txt git log -1')\n",
         "import json\nprint(f'{\"Name\":<20}{\"Size\":>10}', f'{title:-^40}')\n",
         "import json\nprint(f'{name:{width}}/{size:>{w}}', f'{\"Total\":{width}}')\n",
+        "\"\"\"Tools.\n\n.. [1] see ../docs\n\"\"\"\nimport json\n",
+        "def chunked(it):\n    \"\"\"Split it.\n\n    .. deprecated:: 11.0\n    \"\"\"\n    return it\n",
     ] {
         assert!(!python_reaches_host(source), "{source}");
     }

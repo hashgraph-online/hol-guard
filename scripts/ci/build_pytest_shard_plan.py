@@ -79,6 +79,7 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms",
         "tests/test_runtime_transition_configured_inverse.py::test_configured_native_inverse_restores_binding_store_and_selection",
         "tests/test_python_capability_cleanup_gate.py::test_cleanup_contract_covers_every_scoped_hook_capability",
+        "tests/test_guard_daemon_policy_authority.py::test_package_reuses_native_signed_policy_through_running_daemon",
     }
 )
 # The benign and replay gates expect the Linux workspace sandbox. Coverage

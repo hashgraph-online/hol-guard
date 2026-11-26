@@ -394,11 +394,11 @@ pub(super) fn contained_core_in(
     if producer.contains(['<', '>']) {
         return None;
     }
-    if core
-        .arguments
-        .iter()
-        .any(|argument| argument.contains(['<', '>', '|', '&', ';']))
-    {
+    if core.arguments.iter().any(|argument| {
+        argument
+            .chars()
+            .any(|character| super::sink_peel::CORE_ARGUMENT_REJECT.contains(character))
+    }) {
         return None;
     }
     let mut peeled = model.clone();

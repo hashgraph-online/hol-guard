@@ -360,6 +360,116 @@ fn private_directory(path: &Path, uid: u32) -> bool {
     })
 }
 
+/// The version-manager releases a command starts by their own path.
+///
+/// A session's PATH names one Node or Python release, but a command can start
+/// another release the same manager installed by spelling its path, such as
+/// `~/.nvm/versions/node/v22.1.0/bin/node ./node_modules/typescript/bin/tsc`.
+/// Discovery that reads only the PATH never sees that release, so the sandbox
+/// could not start it and the run was reviewed instead of contained. The
+/// release is admitted exactly as a PATH entry naming the same `bin` would be:
+/// one of the manager prefixes that grant a whole release directory, with the
+/// same ownership, sealing and credential-folder checks. A program anywhere
+/// else is left to the PATH.
+pub(in crate::restricted_pytest) fn named_release_roots<'a>(
+    programs: impl IntoIterator<Item = &'a str>,
+    home: Option<&Path>,
+    workspace: &Path,
+) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    // Programs that cannot name a release are dropped before the limit, so
+    // bare names ahead of a release path never push it out of the window.
+    for program in programs
+        .into_iter()
+        .filter(|program| release_candidate(program))
+        .take(RELEASE_CANDIDATE_LIMIT)
+    {
+        let program = Path::new(program);
+        let Some(bin) = program.parent() else {
+            continue;
+        };
+        let Ok(canonical) = bin.canonicalize() else {
+            continue;
+        };
+        let Some(release) = canonical.parent() else {
+            continue;
+        };
+        let managed = homes(home).iter().any(|home| {
+            MANAGED_HOME_PREFIXES
+                .iter()
+                .filter(|(_, release_grant)| *release_grant)
+                .map(|(prefix, _)| home.join(prefix))
+                .any(|base| release != base && path_is_within(release, &base))
+        });
+        if !managed {
+            continue;
+        }
+        // Only the manager's own grant, which leads with the release
+        // directory. Any other acceptance of this `bin` belongs to the PATH.
+        let Some(accepted) = accept_entry(bin, home, workspace) else {
+            continue;
+        };
+        if accepted.first().map(PathBuf::as_path) != Some(release) {
+            continue;
+        }
+        for root in accepted {
+            if !roots.contains(&root) {
+                roots.push(root);
+            }
+        }
+    }
+    roots
+}
+
+/// How many release candidates one command is read for.
+const RELEASE_CANDIDATE_LIMIT: usize = 16;
+
+/// Whether `program` is an absolute path whose parent directory is a `bin`:
+/// the only shape [`named_release_roots`] can grant.
+fn release_candidate(program: &str) -> bool {
+    let path = Path::new(program);
+    path.is_absolute()
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == OsStr::new("bin"))
+}
+
+/// The absolute paths `text` holds, unquoted: the candidates
+/// [`named_release_roots`] reads when a plan has only the command text.
+///
+/// Words split on whitespace and `;`, `&`, `|`, `(` and `)` outside quotes;
+/// a quoted path keeps its spaces and delimiters. Only release candidates are
+/// kept, under the same limit [`named_release_roots`] applies.
+pub(in crate::restricted_pytest) fn absolute_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut quote: Option<char> = None;
+    for character in text.chars() {
+        match quote {
+            Some(open) if character == open => quote = None,
+            Some(_) => word.push(character),
+            None if matches!(character, '\'' | '"') => quote = Some(character),
+            None if character.is_whitespace()
+                || matches!(character, ';' | '&' | '|' | '(' | ')') =>
+            {
+                if !word.is_empty() {
+                    words.push(std::mem::take(&mut word));
+                }
+            }
+            None => word.push(character),
+        }
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words
+        .into_iter()
+        .filter(|word| release_candidate(word))
+        .take(RELEASE_CANDIDATE_LIMIT)
+        .collect()
+}
+
 #[cfg(test)]
 #[path = "user_tools_tests.rs"]
 mod tests;

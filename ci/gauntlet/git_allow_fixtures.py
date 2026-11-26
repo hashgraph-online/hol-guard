@@ -76,9 +76,14 @@ GIT_ALLOW_RELATIVE_HOOKS_CASE = "git-allow-worktree-from-repo-relative-hooks-pat
 # destination that does not exist yet, so the read opens what the repository
 # supplies at the ref the add named, and the user's ALLOW has to carry it.
 GIT_ALLOW_READ_NEW_CHECKOUT_CASE = "git-allow-worktree-add-then-read-new-checkout"
+# A plain rebase onto the fetched branch, then reads. A rebase that runs no
+# command of its own (no --exec, -x or interactive todo) records no
+# configuration, so the user's ALLOW carries the reads after it.
+GIT_ALLOW_REBASE_CASE = "git-allow-rebase-then-reads"
 GIT_ALLOW_CASES = frozenset(
     {
         GIT_ALLOW_MERGE_CASE,
+        GIT_ALLOW_REBASE_CASE,
         GIT_ALLOW_STASH_CASE,
         GIT_ALLOW_ROUTED_MERGE_CASE,
         GIT_ALLOW_REF_READS_CASE,
@@ -324,3 +329,22 @@ def configure_git_allow_controls(daemon: object, guard_home: Path) -> dict[str, 
         "enabled_permissions": permissions,
         "control_revision": revision,
     }
+
+
+# Stages an edit to a tracked source file, then reads the status back.
+GIT_STAGE_THEN_STATUS_CASE = "omp-native-git-stage-then-status-trailing-report"
+STAGED_SOURCE_FILE = "src/one.ts"
+STAGED_SOURCE_LINE = "export const staged = true;\n"
+
+
+def add_unstaged_source_edit(workspace: Path, scenario_id: str | None) -> None:
+    """Leave one tracked source file edited after the baseline commit.
+
+    Without an edit, ``git add`` on the unchanged file stages nothing and the
+    case could pass without ever adding a change to the index.
+    """
+    if scenario_id != GIT_STAGE_THEN_STATUS_CASE:
+        return
+    target = workspace / STAGED_SOURCE_FILE
+    with target.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(STAGED_SOURCE_LINE)

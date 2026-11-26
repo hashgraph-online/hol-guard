@@ -36,6 +36,17 @@ const PRESERVE_UNQUOTED_BACKSLASH: bool = cfg!(windows);
 /// sandbox, not to a shell, so a redirection or list operator inside a word
 /// would be passed through as text rather than obeyed.
 pub(in crate::pretool) const ARGUMENT_REJECT: &str = "<>|&;";
+/// [`ARGUMENT_REJECT`] for the words of a peeled core. The lexer ends a word
+/// at every `|` the shell would act on, so a `|` still inside one was quoted
+/// or escaped and reaches the program as text, as in the title alternation of
+/// `vitest run -t "loads|saves"`. The core keeps that text: `shell_quote`
+/// quotes such a word back whole. Windows keeps the whole screen: its quoting
+/// is not POSIX single quotes, so a rejoined `|` is not shown to survive there.
+pub(in crate::pretool) const CORE_ARGUMENT_REJECT: &str = if cfg!(windows) {
+    ARGUMENT_REJECT
+} else {
+    "<>&;"
+};
 /// The quiet `cd` suffix the peel resolves itself instead of the shell.
 const QUIET_SUFFIX: &str = "2>/dev/null";
 /// The longest label a final `; echo "<label>$?"` may carry.
@@ -106,6 +117,11 @@ pub(super) fn peel(
             characters.pop();
         }
     }
+    // A trailing `> <scratch log> 2>&1` is written by the sink itself.
+    let log = scratch_log::log_redirect(&characters);
+    if let Some((start, _, _)) = &log {
+        characters.truncate(*start);
+    }
     let quiet = quiet_cd(&characters);
     if let Some((kept, end)) = quiet {
         characters.drain(kept..end);
@@ -126,7 +142,7 @@ pub(super) fn peel(
     // The text `directory` was resolved from, which decides whether a `\\?\`
     // prefix on it is the caller's or one Windows generated.
     let mut spelled = PathBuf::from(workspace);
-    let mut wrapped = report.is_some();
+    let mut wrapped = report.is_some() || log.is_some();
     let mut output: Option<ContainedOutput> = None;
 
     if tokens.first().map(word) == Some("cd") {
@@ -185,7 +201,16 @@ pub(super) fn peel(
         // second command follows, and the edge roots that call's sandbox at
         // the repository anyway, so the list is rejoined there as it is after
         // a `cd` to the root itself. A lone command keeps the peel it has.
-        let listed = tokens.iter().any(|token| operator(token) == Some("&&"));
+        // The classifier contains a list joined by `;` as it does one joined
+        // by `&&`, so the sink reads both: refusing the `;` here sent the run
+        // to the session's sandbox, which cannot follow the `cd`.
+        let listed = tokens.iter().any(list_separator);
+        if log.is_some() && (listed || into_sibling_root || (root.is_some() && !within)) {
+            // The shell writes only the last command's output to the file,
+            // and the sibling-root rejoin below runs the list without the
+            // peeled redirect, so the file would never be written.
+            return Err("unsupported wrapper shape");
+        }
         if into_sibling_root || (root.is_some() && !within && listed) {
             // `cd <sibling root> && a && b` is re-authorized whole in that
             // root. A filter after `a && b` would apply to `b` alone, so none
@@ -218,7 +243,15 @@ pub(super) fn peel(
         }
     }
 
-    if let Some(index) = tokens.iter().position(|token| operator(token) == Some("|")) {
+    if let Some((_, file, merge_stderr)) = log {
+        // Any pipe or redirect left in the text is refused below: the file
+        // takes the core's output whole.
+        output = Some(ContainedOutput {
+            merge_stderr,
+            file: Some(file),
+            ..passthrough()
+        });
+    } else if let Some(index) = tokens.iter().position(|token| operator(token) == Some("|")) {
         let stages = filter_chain(&tokens[index + 1..])?;
         tokens.truncate(index);
         let merge_stderr = tokens.last().map(operator) == Some(Some("2>&1"));
@@ -273,7 +306,7 @@ pub(super) fn peel(
             || (Some(index) != program
                 && value
                     .chars()
-                    .any(|character| ARGUMENT_REJECT.contains(character)))
+                    .any(|character| CORE_ARGUMENT_REJECT.contains(character)))
     });
     if !exact || tokens.is_empty() || rejected {
         return Err("unsupported wrapper shape");
@@ -320,6 +353,7 @@ fn passthrough() -> ContainedOutput {
         success_label: None,
         failure_label: None,
         stages: Vec::new(),
+        file: None,
     }
 }
 
@@ -672,12 +706,14 @@ fn lexical(path: &Path) -> PathBuf {
     resolved
 }
 
-/// `a && b && c` of plain words, rejoined, or `None` for any other shape.
+/// `a && b; c` of plain words, rejoined, or `None` for any other shape.
 ///
-/// Each command may send its stderr to stdout or to `/dev/null`, and may bound
-/// its output with one `head` or `tail` of a line or byte count. The filter
-/// stays in the rejoined text, where the sandbox's shell applies it to that
-/// command alone, as the issued text did.
+/// The commands may be joined by `&&` or `;`, and each separator is written
+/// back as it was issued, so a later command runs exactly when the issued
+/// text ran it. Each command may send its stderr to stdout or to `/dev/null`,
+/// and may bound its output with one `head` or `tail` of a line or byte
+/// count. The filter stays in the rejoined text, where the sandbox's shell
+/// applies it to that command alone, as the issued text did.
 ///
 /// A lone command is rejoined only when the peel refuses its pipeline, so a
 /// shape the peel already reads keeps its narrower sink. Its pipeline may run
@@ -688,15 +724,18 @@ fn lexical(path: &Path) -> PathBuf {
 /// there bounds only the command it follows while the rest of the list still
 /// runs.
 fn joined_list(tokens: &[Token]) -> Option<String> {
-    let lone = !tokens.iter().any(|token| operator(token) == Some("&&"));
-    let mut commands = Vec::new();
-    for command in tokens.split(|token| operator(token) == Some("&&")) {
-        let mut stages = command.split(|token| operator(token) == Some("|"));
+    let lone = !tokens.iter().any(list_separator);
+    let mut rejoined = String::new();
+    let mut commands = 0usize;
+    let mut rest = tokens;
+    loop {
+        let end = rest.iter().position(list_separator).unwrap_or(rest.len());
+        let mut stages = rest[..end].split(|token| operator(token) == Some("|"));
         let (words, redirect) = stderr_redirect(stages.next()?);
-        let mut text = plain_words(words)?;
+        rejoined.push_str(&plain_words(words)?);
         if let Some(redirect) = redirect {
-            text.push(' ');
-            text.push_str(redirect);
+            rejoined.push(' ');
+            rejoined.push_str(redirect);
         }
         let mut filters = 0usize;
         for stage in stages {
@@ -704,27 +743,41 @@ fn joined_list(tokens: &[Token]) -> Option<String> {
             if !lone && filters > 1 {
                 return None;
             }
-            text.push_str(" | ");
-            text.push_str(&filter_stage(stage, lone)?);
+            rejoined.push_str(" | ");
+            rejoined.push_str(&filter_stage(stage)?);
         }
         if redirect.is_some() && filters == 0 {
             return None;
         }
-        commands.push(text);
+        commands += 1;
+        let Some(separator) = rest.get(end) else {
+            break;
+        };
+        rejoined.push_str(if operator(separator) == Some(";") {
+            "; "
+        } else {
+            " && "
+        });
+        rest = &rest[end + 1..];
     }
     let piped = tokens.iter().any(|token| operator(token) == Some("|"));
-    if commands.len() < 2 && !(piped && peel_declines(tokens)) {
+    if commands < 2 && !(piped && peel_declines(tokens)) {
         return None;
     }
-    Some(commands.join(" && "))
+    Some(rejoined)
+}
+
+/// The `&&` or `;` between two commands of a rejoined list.
+fn list_separator(token: &Token) -> bool {
+    matches!(operator(token), Some("&&" | ";"))
 }
 
 /// One filter stage's text, or `None` when it is not a reader of standard
 /// input. A `head` or `tail` is written back from the count this module read,
 /// rather than copied, so the rejoined bound is one the peel understood. Any
-/// other reader is rejoined only for a lone command, which is the shape the
-/// peel would otherwise refuse outright.
-fn filter_stage(tokens: &[Token], lone: bool) -> Option<String> {
+/// other reader is written back as the words it was issued as, which is what
+/// the root's shell then applies to the command before it.
+fn filter_stage(tokens: &[Token]) -> Option<String> {
     let (program, arguments) = tokens.split_first()?;
     if tokens.iter().any(|token| token.1) {
         return None;
@@ -736,7 +789,7 @@ fn filter_stage(tokens: &[Token], lone: bool) -> Option<String> {
         let unit = if bytes { "-c" } else { "-n" };
         return Some(format!("{program} {unit} {count}"));
     }
-    if !lone || !output_filters::rejoined_stage(program, &arguments) {
+    if !output_filters::rejoined_stage(program, &arguments) {
         return None;
     }
     plain_words(tokens)
@@ -813,6 +866,9 @@ fn inline_program_index(tokens: &[Token]) -> Option<usize> {
 
 #[path = "sink_peel_report.rs"]
 mod report;
+
+#[path = "sink_peel_log.rs"]
+pub(in crate::pretool) mod scratch_log;
 
 use report::trailing_report;
 

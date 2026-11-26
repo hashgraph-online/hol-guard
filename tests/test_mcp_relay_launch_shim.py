@@ -121,8 +121,7 @@ def test_the_command_hands_its_argv_to_the_relay(monkeypatch: pytest.MonkeyPatch
         launched.append(argv)
 
     monkeypatch.setattr(launch, "native_hook_bridge_executable", executable)
-    monkeypatch.setattr(launch.os, "name", "posix")
-    monkeypatch.setattr(launch.os, "execv", exec_relay)
+    monkeypatch.setattr(launch, "os", SimpleNamespace(name="posix", execv=exec_relay))
 
     launch.run_relay(["-m", "codex_plugin_scanner.cli", "guard"], guard_home=Path("/guard/home"))
 

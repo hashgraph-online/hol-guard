@@ -89,6 +89,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
                 cwd: Some(&cwd),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                go_toolchain_inert: false,
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
@@ -130,6 +131,117 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
         format!("{add} && cd {fresh}:stream && git log -1"),
         // Git Bash resolves a root-relative path against its own root.
         format!("{add} && cd /scratch-leaf && git log -1"),
+    ] {
+        assert_ne!(action(&command), "allow", "{command}");
+    }
+}
+
+/// The pre-tool action for an Oh My Pi shell command run from `cwd`.
+fn action_in(command: &str, home: &str, cwd: &str) -> String {
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_names: ["GIT_CONFIG_NOSYSTEM", "HOME", "PATH"]
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect(),
+        environment_digest: "0".repeat(64),
+        home: Some(home.to_owned()),
+        git_config_no_system: true,
+        ..Default::default()
+    };
+    let controls = git_helper_fixture::github_controls("enabled");
+    guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+        Some(&controls),
+        None,
+        guard_command::pretool::PathContext {
+            home_dir: Some(home),
+            cwd: Some(cwd),
+            ..Default::default()
+        },
+        Some(&environment),
+    )
+    .minimum_action
+}
+
+#[test]
+fn worktree_add_beside_the_checkout_then_cd_up_into_it_is_proved_on_windows() {
+    let parent = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
+    std::fs::create_dir_all(&parent).unwrap();
+    let home = parent
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-worktree-relative-cd-{}", std::process::id()));
+    let _cleanup = FixtureCleanup(home.clone());
+    // Agents work in a clone, so the checkout has an `origin` to branch
+    // from. A repository with a remote is what keeps Git's read floor on.
+    let upstream = home.join("upstream");
+    std::fs::create_dir_all(&upstream).unwrap();
+    git(&upstream, &["init", "--quiet", "-b", "main"]);
+    git(&upstream, &["config", "user.name", "Guard Fixture"]);
+    git(
+        &upstream,
+        &["config", "user.email", "guard-fixture@example.invalid"],
+    );
+    std::fs::write(upstream.join("tracked.txt"), "fixture\n").unwrap();
+    git(&upstream, &["add", "tracked.txt"]);
+    git(&upstream, &["commit", "--quiet", "-m", "fixture"]);
+    let work = home.join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    git(&work, &["clone", "--quiet", &spelled(&upstream), "project"]);
+    let repository = work.join("project");
+    let home_text = spelled(&home);
+    let cwd = spelled(&repository);
+    let add = "git worktree add -b review ../review-wt HEAD";
+    let action = |command: &str| action_in(command, &home_text, &cwd);
+    for command in [
+        format!(
+            "{add} && cd ../review-wt && git status --short && git rev-parse --abbrev-ref HEAD"
+        ),
+        "git worktree add -b review ../review-wt origin/main && cd ../review-wt && git status --short"
+            .to_owned(),
+    ] {
+        assert_eq!(action(&command), "allow", "{command}");
+    }
+    // The checkout a relative `cd` enters is the one the add creates only
+    // when the shell's directory is spelled as its real path.
+    let backslashed = cwd.replace('/', "\\");
+    assert_eq!(
+        action_in(
+            &format!("{add} && cd ../review-wt && git status --short"),
+            &home_text,
+            &backslashed
+        ),
+        "allow"
+    );
+    assert_ne!(
+        action_in(
+            &format!("{add} && cd ../review-wt && git status --short"),
+            &home_text,
+            &cwd.to_uppercase()
+        ),
+        "allow"
+    );
+    for command in [
+        // A bare name goes through the CDPATH search.
+        format!("{add} && cd review-wt && git status --short"),
+        // A `.` part stays reviewed here as on every platform.
+        format!("{add} && cd ./../review-wt && git status --short"),
+        // A backslash reads differently in Git Bash and PowerShell.
+        format!("{add} && cd ..\\review-wt && git status --short"),
+        // Other directories, and other spellings of this one.
+        format!("{add} && cd ../Review-WT && git status --short"),
+        format!("{add} && cd ../review-wt/.. && git status --short"),
+        format!("{add} && cd ../../review-wt && git status --short"),
+        format!("{add} && cd .. && git status --short"),
+        format!("{add} && cd ../review-wt:stream && git status --short"),
+        format!("{add} && cd ../review-wt. && git status --short"),
+        // Climbing past the drive.
+        format!(
+            "{add} && cd ../../../../../../../../../../../../../../../review-wt && git status --short"
+        ),
     ] {
         assert_ne!(action(&command), "allow", "{command}");
     }

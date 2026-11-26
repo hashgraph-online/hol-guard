@@ -9,7 +9,8 @@
 
 use super::GenericSignals;
 use crate::pretool::search_scope_tracked::names::{
-    self, command_words, moves_directory, resolves_to_tracked, without_tracked_words,
+    self, command_words, moves_directory, resolves_to_tracked, resolves_to_tracked_dotenv_template,
+    without_tracked_words,
 };
 use crate::pretool::secret_aliases::decision_names_secret_alias;
 use crate::pretool::{sensitive_command, sensitive_command_input, PathContext, PreToolDecisionV1};
@@ -44,7 +45,14 @@ impl GenericSignals {
             .path_values
             .iter()
             .filter(|value| sensitive_command(value))
-            .all(|value| resolves_to_tracked(value, cwd));
+            // A repository commits `.env.example` beside the source it
+            // documents. Its name holds a bare `.env`, so the location screen
+            // reads it as the local dotenv file; the index and the secret
+            // scan a tracked document already passes are what prove it is the
+            // template its name claims.
+            .all(|value| {
+                resolves_to_tracked(value, cwd) || resolves_to_tracked_dotenv_template(value, cwd)
+            });
         let Some(command) = self.command.as_deref() else {
             return paths_proven;
         };
@@ -57,8 +65,24 @@ impl GenericSignals {
         paths_proven && {
             let moves = moves_directory(model);
             let refs = crate::pretool::ref_name_words::ref_names(model, cwd, moves);
-            without_tracked_words(command, command_words(model), cwd, moves, &refs)
-                .is_some_and(|rest| !sensitive_command_input(&rest))
+            // A chain of plain readers may name a committed `.env.example`;
+            // the same template proof the path values pass clears its word.
+            let templates = crate::shell_template_reads::chain_reads_only(
+                command,
+                cwd.map(std::path::Path::new),
+                None,
+            );
+            let listing = crate::pretool::search_scope_tracked::listing::listing_only(model);
+            without_tracked_words(
+                command,
+                command_words(model),
+                cwd,
+                moves,
+                &refs,
+                templates,
+                listing,
+            )
+            .is_some_and(|rest| !sensitive_command_input(&rest))
         }
     }
 }

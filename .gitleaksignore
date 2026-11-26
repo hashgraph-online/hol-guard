@@ -273,3 +273,20 @@ a3d54c9b6298f3905bfb176744259c771d72364c:rust/crates/guard-runtime/src/daemon_ed
 812a4ae4cfb328a2044b47ad03630cbb51e30e20:src/codex_plugin_scanner/guard/codex_hook_repair_request.py:generic-api-key:213
 # Synthetic test value in a redaction test, replaced in a later commit.
 476446b7a103dba46e2378de5ae361286614e5f5:rust/crates/guard-runtime/src/cloud_event_sync_tests.rs:generic-api-key:78
+# Synthetic test values in scanner unit tests, replaced with runtime-built values in a later commit.
+b197d4bdc2d5810feb5475c3d5f5f3884e97fda1:rust/crates/guard-scanner/src/path_segment.rs:generic-api-key:48
+b197d4bdc2d5810feb5475c3d5f5f3884e97fda1:rust/crates/guard-scanner/src/path_segment.rs:generic-api-key:49
+b197d4bdc2d5810feb5475c3d5f5f3884e97fda1:rust/crates/guard-scanner/src/result_pass.rs:generic-api-key:86
+b197d4bdc2d5810feb5475c3d5f5f3884e97fda1:rust/crates/guard-scanner/src/result_pass.rs:generic-api-key:87
+
+# Synthetic Git signing key IDs in signing-key test vectors: a key ID is a public identifier, not a credential.
+a2746004b391051a55a13e9195a73b247303fdd2:tests/fixtures/benign_false_positive_gate.json:generic-api-key:30129
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:416
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:417
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:419
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:424
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:425
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:426
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/tests/pretool_extension_allow_git_signing_key.rs:generic-api-key:140
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/tests/pretool_extension_allow_git_signing_key.rs:generic-api-key:158
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/tests/pretool_extension_allow_git_signing_key.rs:generic-api-key:159

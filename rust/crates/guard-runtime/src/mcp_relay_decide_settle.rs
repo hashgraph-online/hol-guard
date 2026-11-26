@@ -57,6 +57,7 @@ pub(super) fn settle(
                 tool,
                 server,
                 &policy_action,
+                &decision.signals,
             );
             let data = json!({"approvalRequests": [], "guardPolicyAction": policy_action});
             (
@@ -237,12 +238,22 @@ pub(super) fn settle_package(
     policy_store: &PolicySnapshotStore,
 ) -> Result<Answer, &'static str> {
     let queued;
+    // The block an ask row is answered with is the only record naming that
+    // row, so its receipt's room is promised before the row is written.
+    let mut reserved = None;
+    let mut held = None;
     let answer = match &packaged.outcome {
         package_lane::PackageOutcome::Answered(answer) => answer,
         // The row the bound `ask` mode writes reads the store this holds, so
         // the answer is only completed here.
         package_lane::PackageOutcome::AskPackage(asked) => {
             room_for_row(policy_store)?;
+            reserved = Some(
+                policy_store
+                    .direct_evidence()
+                    .reserve()
+                    .ok_or(EVIDENCE_FULL)?,
+            );
             queued = package_ask::queue(request, admitted, resolved, &packaged.artifact, asked)?;
             &queued
         }
@@ -250,6 +261,14 @@ pub(super) fn settle_package(
         // answer carries the notices of once they are written.
         package_lane::PackageOutcome::ObservePackage { answer, observed } => {
             room_for_row(policy_store)?;
+            // The forward the observed rows ride on is held only after they
+            // are written, so its slot is promised first.
+            held = Some(
+                policy_store
+                    .mcp_relay_pending()
+                    .reserve(Instant::now())
+                    .ok_or(EVIDENCE_FULL)?,
+            );
             queued = package_observe::queue(
                 request,
                 admitted,
@@ -330,15 +349,25 @@ pub(super) fn settle_package(
     match answer.block.clone() {
         // As for a tool call, the relay commits the ticket once the child
         // answered the forward.
-        None => policy_store
-            .mcp_relay_pending()
-            .hold(evidence, Instant::now())
-            .map(|ticket| Answer::Forward { ticket })
-            .ok_or(EVIDENCE_FULL),
-        Some((message, data)) if policy_store.direct_evidence().offer(evidence) => {
-            Ok(Answer::Block { message, data })
+        None => match held {
+            Some(slot) => slot.hold(evidence, Instant::now()),
+            None => policy_store
+                .mcp_relay_pending()
+                .hold(evidence, Instant::now()),
         }
-        Some(_) => Err(EVIDENCE_FULL),
+        .map(|ticket| Answer::Forward { ticket })
+        .ok_or(EVIDENCE_FULL),
+        Some((message, data)) => {
+            let offered = match reserved {
+                Some(slot) => slot.offer(evidence),
+                None => policy_store.direct_evidence().offer(evidence),
+            };
+            if offered {
+                Ok(Answer::Block { message, data })
+            } else {
+                Err(EVIDENCE_FULL)
+            }
+        }
     }
 }
 

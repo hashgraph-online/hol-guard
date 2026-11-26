@@ -126,6 +126,37 @@ fn a_later_saved_block_prevents_the_drain_allow_without_losing_the_receipt() {
 }
 
 #[test]
+fn an_expired_saved_block_does_not_stop_the_drain_allow() {
+    let home = store_home("relay-remember-block-expired", true);
+    Connection::open(home.join("guard.db"))
+        .unwrap()
+        .execute(
+            "insert into policy_decisions
+             (harness, scope, artifact_id, artifact_hash, action, source, updated_at, expires_at)
+             values (?1, 'artifact', ?2, ?3, 'block', 'runtime-test', ?4, ?4)",
+            [
+                "codex",
+                "codex:project:shell:run_command",
+                "guard-approval-context:v1:0123456789abcdef",
+                "2026-01-01T00:00:00Z",
+            ],
+        )
+        .unwrap();
+    let unwritten = write(home.to_str().unwrap(), vec![remembered()]);
+    assert!(unwritten.is_empty(), "{unwritten:?}");
+    let allows = saved_allows(&home);
+    assert!(
+        allows
+            .iter()
+            .any(|(_, action, source, key_id)| action == "allow"
+                && source == "runtime-inline"
+                && key_id.is_some()),
+        "{allows:?}"
+    );
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
 fn without_a_key_the_receipt_is_still_written() {
     let home = store_home("relay-remember-unkeyed", false);
     let before = count(&home, "runtime_receipts");

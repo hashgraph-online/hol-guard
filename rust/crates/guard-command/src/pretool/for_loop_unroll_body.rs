@@ -157,6 +157,43 @@ fn body_items_at<'a>(
                 at_word_start = true;
                 i += 1;
             }
+            // `{ list; }` in command position groups a list in the current
+            // shell, as `[ -f "$f" ] && { printf …; sed -n … "$f"; }` reads a
+            // file only when the test holds. Its list is read the way a
+            // subshell's is and written back with the braces, so the proofs
+            // below read the group, `cd` and all, as the shell runs it. A
+            // brace anywhere else is a word or an expansion this grammar does
+            // not model.
+            '{' if command_position
+                && depth < MAX_GROUP_DEPTH
+                && rest[1..].starts_with([' ', '\t', '\n']) =>
+            {
+                let (inner, _, after) = body_items_at(
+                    &text[byte + 1..],
+                    name,
+                    &["}"],
+                    depth + 1,
+                    rewrites_references,
+                )?;
+                if inner.is_empty()
+                    || !inner
+                        .iter()
+                        .all(|(list_item, _)| stages_are_plain(list_item))
+                {
+                    return None;
+                }
+                item.push_str("{ ");
+                for (inner_item, separator) in &inner {
+                    item.push_str(inner_item);
+                    item.push_str(separator);
+                }
+                item.push('}');
+                at_word_start = false;
+                command_position = false;
+                redirect_target = false;
+                let consumed = text.len() - after.len();
+                i = chars.partition_point(|(index, _)| *index < consumed);
+            }
             '`' | '{' | '}' => return None,
             // A `(` in command position opens a subshell, whose body is a
             // command list read the same way this one is. The group runs what
@@ -511,14 +548,145 @@ const MARKER: char = '\u{1}';
 /// larger word keeps its review. A reference the body quotes on its own is
 /// read here as the whole word it is, because `unquote_whole_references` has
 /// already taken the quotes off.
+///
+/// A reference followed by a plain relative path, as in `cat $d/package.json`,
+/// stands alone as well. Written out it is `cat packages/*/package.json`: the
+/// pattern then has a wildcard directory, and the glob proof that walks it
+/// refuses every matched directory whose name holds whitespace or a glob
+/// character, so no name the loop would split or expand again is admitted.
+/// The loop reads `<match>/package.json` for every match, and those that
+/// exist are exactly the words the written-out pattern expands to; the rest
+/// read nothing.
+///
+/// A space, `|` or `;` ends a word only outside quotes: in `cat "x;$f;"` they
+/// are letters of one quoted word glued to the reference.
 pub(crate) fn references_stand_alone(item: &str) -> bool {
     let chars: Vec<char> = item.chars().collect();
+    let quoted = quoted_positions(&chars);
+    let boundary_at = |at: usize| {
+        chars
+            .get(at)
+            .is_none_or(|&character| !quoted[at] && word_boundary(Some(character)))
+    };
     chars.iter().enumerate().all(|(index, &current)| {
         current != MARKER
-            || (index.checked_sub(1).is_none_or(|before| {
-                word_boundary(Some(chars[before])) && !escaped(&chars, before)
-            }) && word_boundary(chars.get(index + 1).copied()))
+            || (index
+                .checked_sub(1)
+                .is_none_or(|before| boundary_at(before) && !escaped(&chars, before))
+                && (boundary_at(index + 1)
+                    || plain_path_suffix(&chars, index + 1).is_some_and(boundary_at)))
     })
+}
+
+/// For each character, whether it sits inside single or double quotes. The
+/// quote characters themselves count as quoted, so neither ends a word.
+fn quoted_positions(chars: &[char]) -> Vec<bool> {
+    let (mut single, mut double) = (false, false);
+    chars
+        .iter()
+        .enumerate()
+        .map(|(index, &current)| {
+            let opens_or_closes = match current {
+                '\'' if !double && (single || !escaped(chars, index)) => {
+                    single = !single;
+                    true
+                }
+                '"' if !single && !escaped(chars, index) => {
+                    double = !double;
+                    true
+                }
+                _ => false,
+            };
+            opens_or_closes || single || double
+        })
+        .collect()
+}
+
+/// The end of a `/name/name` run that starts at `start`: one or more visible
+/// or hidden components of plain filename characters, none of them `.` or
+/// `..`, so the suffix only ever descends below the matched name.
+fn plain_path_suffix(chars: &[char], start: usize) -> Option<usize> {
+    if chars.get(start) != Some(&'/') {
+        return None;
+    }
+    let end = chars[start..]
+        .iter()
+        .position(|character| {
+            !(character.is_ascii_alphanumeric()
+                || matches!(character, '/' | '.' | '_' | '-' | '+' | '@' | ','))
+        })
+        .map_or(chars.len(), |offset| start + offset);
+    let suffix: String = chars[start + 1..end].iter().collect();
+    suffix
+        .split('/')
+        .all(|component| !component.is_empty() && component != "." && component != "..")
+        .then_some(end)
+}
+
+/// The commands of an item, cut at the `;`, `&&` and `||` that separate them
+/// and at the braces of a `{ …; }` group, outside quotes. A group's list is
+/// written back into one item, so a reference that ends one of its commands
+/// stands beside `;` rather than a space; each command is held to the
+/// reference rules on its own. Pipelines stay whole.
+pub(crate) fn grouped_commands(item: &str) -> Vec<&str> {
+    let bytes = item.as_bytes();
+    let mut pieces = Vec::new();
+    let (mut single, mut double) = (false, false);
+    let (mut start, mut index) = (0, 0);
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if byte == b'\\' && !single {
+            index += 2;
+            continue;
+        }
+        match byte {
+            b'\'' if !double => single = !single,
+            b'"' if !single => double = !double,
+            _ if single || double => {}
+            b';' | b'{' | b'}' => {
+                pieces.push(&item[start..index]);
+                start = index + 1;
+            }
+            b'&' | b'|' if bytes.get(index + 1) == Some(&byte) => {
+                pieces.push(&item[start..index]);
+                start = index + 2;
+                index += 2;
+                continue;
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    pieces.push(&item[start.min(item.len())..]);
+    pieces
+        .into_iter()
+        .map(str::trim)
+        .filter(|piece| !piece.is_empty())
+        .collect()
+}
+
+/// Whether `item` only prints, with every reference inside double quotes.
+///
+/// `echo "### $f"` labels each file a loop prints. Inside double quotes the
+/// shell neither splits nor expands the matched name, so the item prints one
+/// argument and reads nothing, whatever name the loop hands it. Written out
+/// over the loop's pattern it prints the pattern instead, which is the same
+/// work: text to standard output. That holds only for a lone `echo`, or a
+/// `printf` whose format is a single-quoted literal the reference cannot
+/// reach, with no redirection, pipe or group that could carry the name
+/// anywhere else.
+pub(crate) fn prints_quoted_references(item: &str) -> bool {
+    let Some((command, rest)) = item.split_once(' ') else {
+        return false;
+    };
+    let printer = match command {
+        "echo" => true,
+        "printf" => rest.trim_start().starts_with('\''),
+        _ => false,
+    };
+    printer
+        && !item.contains(['|', '<', '>', '(', ')', '{', '}', '&', ';', '`'])
+        && references_are_quoted(item)
 }
 
 /// Whether every reference in `item` stands inside quotes of the body's own.
@@ -550,7 +718,9 @@ pub(crate) fn references_are_quoted(item: &str) -> bool {
 /// Whether the character beside a reference ends the word, counting the ends
 /// of the item itself.
 fn word_boundary(character: Option<char>) -> bool {
-    character.is_none_or(|character| character.is_whitespace() || character == '|')
+    // An unquoted `;` ends a word as a space does. A `{ …; }` group is
+    // written back into one item, so `"$f";` closes its last command there.
+    character.is_none_or(|character| character.is_whitespace() || matches!(character, '|' | ';'))
 }
 
 /// Cutting a body item into the stages the shell reads.
@@ -608,13 +778,18 @@ pub(crate) fn unquote_whole_references(item: &str) -> String {
         if !in_double
             && current == '"'
             && chars.get(index + 1) == Some(&MARKER)
-            && chars.get(index + 2) == Some(&'"')
             && word_boundary(index.checked_sub(1).map(|before| chars[before]))
-            && word_boundary(chars.get(index + 3).copied())
         {
-            out.push(MARKER);
-            index += 3;
-            continue;
+            // `"$d"` or `"$d/package.json"`: the quoted run holds only the
+            // reference and a plain path below it, which no split or glob
+            // expansion would change.
+            let close = plain_path_suffix(&chars, index + 2).unwrap_or(index + 2);
+            if chars.get(close) == Some(&'"') && word_boundary(chars.get(close + 1).copied()) {
+                out.push(MARKER);
+                out.extend(&chars[index + 2..close]);
+                index = close + 1;
+                continue;
+            }
         }
         if current == '\\' && index + 1 < chars.len() {
             out.push(current);
@@ -629,6 +804,11 @@ pub(crate) fn unquote_whole_references(item: &str) -> String {
         index += 1;
     }
     out
+}
+
+/// Whether a body item reads the loop variable anywhere in its text.
+pub(crate) fn reads_the_variable(item: &str) -> bool {
+    item.contains(MARKER)
 }
 
 pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
@@ -742,4 +922,39 @@ pub(crate) fn redirect_tail(tail: &str) -> Option<String> {
         }
     }
     Some(tail.to_owned())
+}
+
+#[cfg(test)]
+mod quoted_boundary_tests {
+    use super::{references_stand_alone, MARKER};
+
+    fn item(text: &str) -> String {
+        text.replace("$f", &MARKER.to_string())
+    }
+
+    #[test]
+    fn a_reference_stands_alone_beside_an_unquoted_end_of_word() {
+        for text in [
+            "cat $f",
+            "cat $f | head",
+            "cat $f;",
+            "{ cat $f; }",
+            "cat $f/package.json",
+        ] {
+            assert!(references_stand_alone(&item(text)), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_quoted_space_bar_or_semicolon_does_not_end_the_word() {
+        for text in [
+            "cat \"x;$f;\"",
+            "cat \"x $f \"",
+            "cat \"x|$f|\"",
+            "cat 'x;'$f",
+            "cat \"x;$f/package.json;\"",
+        ] {
+            assert!(!references_stand_alone(&item(text)), "{text}");
+        }
+    }
 }

@@ -43,6 +43,9 @@ pub struct ContainedOutput {
     pub failure_label: Option<String>,
     /// Each stage of a `pipe` chain, as its program followed by arguments.
     pub stages: Vec<Vec<String>>,
+    /// The scratch log a trailing `> FILE` names, which the sink writes the
+    /// captured output to instead of printing it.
+    pub file: Option<PathBuf>,
 }
 
 /// A `git worktree add <checkout> && cd <checkout> && <checks>` chain, split
@@ -216,6 +219,9 @@ fn sibling_route(
     workspace_contained::sibling::sibling_run(&model, context)
 }
 
+#[cfg(test)]
+#[path = "contained_wrapper_plan_filter_tests.rs"]
+mod filter_tests;
 #[cfg(test)]
 #[path = "contained_wrapper_plan_tests.rs"]
 mod tests;

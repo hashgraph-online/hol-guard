@@ -166,6 +166,12 @@ mod skill_directory_identity;
 pub use skill_directory_identity::*;
 mod browser_mcp_intent;
 pub use browser_mcp_intent::*;
+mod browser_action;
+pub use browser_action::*;
+mod provider_signal;
+pub use provider_signal::*;
+mod provider_integration;
+pub use provider_integration::*;
 mod risk_action_config;
 pub use risk_action_config::*;
 mod harness_posture_config;
@@ -482,6 +488,23 @@ pub struct GuardHookEdgeResultV2 {
     pub event_name: String,
     pub payload_kind: GuardHookPayloadKindV2,
     pub result: Value,
+    /// Whether the native `PreToolUse` result requires the Python adapter to
+    /// pause for an approval. Rust derives this from `minimum_action` and
+    /// checks it before the edge is returned, so the adapter never classifies
+    /// policy actions itself.
+    #[serde(default)]
+    pub requires_approval: bool,
+    /// Whether a recording-only `PreToolUse` answer is returned as-is instead
+    /// of entering the daemon's approval and containment control path. Rust
+    /// derives this from the envelope posture and the checked result, so the
+    /// adapter does not classify Watch outcomes from policy fields.
+    #[serde(default)]
+    pub recording_only_response: bool,
+    /// The custom extension-rule outcome the edge returned for this
+    /// `PreToolUse`, when one was evaluated. The adapter uses this stamp to
+    /// route a blocked rule response without reinterpreting the rule object.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_cli_rule_blocked: Option<bool>,
     /// The harness-specific JSON a hook must print for `result`, rendered by
     /// the resident so no other layer interprets the verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1,9 +1,10 @@
 //! Read-only `git` invocations proven without a review.
 //!
-//! Status, diff, log, show, grep, rev-parse, merge-base, ls-files, `remote -v`, `worktree list`,
-//! branch listings, `show-ref`, `for-each-ref`, `rev-list` commit walks, `hash-object`, `config`,
-//! `ls-tree`, `cat-file` and `sparse-checkout list` reads. Diff-style reads that can run a configured helper need the
-//! helper-context probe or both `--no-ext-diff` and `--no-textconv`.
+//! Status, diff, log, `whatchanged`, `range-diff`, show, grep, rev-parse, merge-base, ls-files,
+//! `remote -v`, `worktree list`, branch listings, `show-ref`, `for-each-ref`, `rev-list` commit
+//! walks, `hash-object`, `config`, `ls-tree`, `cat-file` and `sparse-checkout list` reads.
+//! Diff-style reads that can run a configured helper need the helper-context probe or both
+//! `--no-ext-diff` and `--no-textconv`.
 
 #[path = "git_log_names.rs"]
 mod log_names;
@@ -61,6 +62,60 @@ fn tracked_target(value: &str, leading: &[String], context: super::PathContext<'
             .all(|option| matches!(option.as_str(), "--no-pager" | "-P")))
         && !super::sensitive_path_argument(value)
         && super::search_scope_tracked::names::resolves_to_tracked(value, context.cwd)
+}
+
+/// A plain exclusion pathspec after `--`: `:!name`, `:^name` or
+/// `:(exclude)name`. An exclusion only removes paths from what the read
+/// prints. With no other pathspec Git reads as if none were given, so the
+/// read never covers more than it would without the exclusion, and the path
+/// it names is never opened. Any further magic (`:!/name`, `:(exclude,glob)`)
+/// and a value before `--`, where Git may read it as an index object name,
+/// keep the review.
+fn exclusion_pathspec(arguments: &[String], index: usize) -> bool {
+    let value = arguments[index].as_str();
+    let path = value
+        .strip_prefix(":!")
+        .or_else(|| value.strip_prefix(":^"))
+        .or_else(|| value.strip_prefix(":(exclude)"));
+    arguments[..index].iter().any(|argument| argument == "--")
+        && path.is_some_and(|path| !path.is_empty() && !path.starts_with([':', '/', '!', '^', '(']))
+}
+
+/// A pathspec after `--` that names a sign-in or token feature directory
+/// inside the repository, such as `src/api/auth`, or a directory or document
+/// below one. Git filters the read to that part of the tree, which an
+/// unfiltered read already covers, and the credential-name screen refused it
+/// only for the directory's name. `--no-index` compares files on disk rather
+/// than tracked content, so it keeps the review.
+fn feature_pathspec(arguments: &[String], index: usize, context: super::PathContext<'_>) -> bool {
+    let Some(separator) = arguments[..index]
+        .iter()
+        .rposition(|argument| argument == "--")
+    else {
+        return false;
+    };
+    // Git switches to its filesystem comparison mode when any pathspec names
+    // an object outside the worktree, even without an explicit `--no-index`.
+    // The feature-directory exemption only covers tracked repository reads.
+    let filesystem_comparison = arguments[separator + 1..].iter().any(|argument| {
+        let path = std::path::Path::new(argument);
+        argument.starts_with('~')
+            || path.is_absolute()
+            || path
+                .components()
+                .any(|component| component == std::path::Component::ParentDir)
+    });
+    !filesystem_comparison
+        && !arguments.iter().any(|argument| argument == "--no-index")
+        && crate::command_compatibility::git_operand_directory(arguments, context).is_some_and(
+            |directory| {
+                super::read_paths::feature_directories::feature_pathspec(
+                    &directory,
+                    &arguments[index],
+                    context.home_dir,
+                )
+            },
+        )
 }
 
 pub(super) fn safe_git_arguments(
@@ -147,9 +202,11 @@ pub(super) fn safe_git_arguments(
     if arguments.iter().enumerate().any(|(index, value)| {
         !search_text.contains(&index)
             && replacement != Some(index)
+            && !exclusion_pathspec(arguments, index)
             && ((value.starts_with(':') && !index_objects.contains(&index))
                 || (super::sensitive_read_path_argument(value)
-                    && listed.is_none_or(|start| index < start)))
+                    && listed.is_none_or(|start| index < start)
+                    && !feature_pathspec(arguments, index, context)))
     }) {
         return false;
     }
@@ -196,7 +253,7 @@ pub(super) fn safe_git_arguments(
     }
     if matches!(
         subcommand,
-        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout"
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "fsck" | "sparse-checkout"
     ) {
         // A shortlog pages (pager.shortlog) and all of them run under the
         // repository's configuration, so the probe clears them first.
@@ -247,14 +304,46 @@ pub(super) fn safe_git_arguments(
         // `core.fsmonitor`, so the configuration probe clears it first. Git
         // quotes the line it could not read, so each named patch goes through
         // the ordinary read screen: a workspace name that is a link to a
-        // private file is not a patch this proof read.
+        // private file is not a patch this proof read. Git opens each patch
+        // in the directory a `-C` route selects, so it is screened there.
+        let Some(directory) =
+            crate::command_compatibility::git_operand_directory(with_route, context)
+        else {
+            return false;
+        };
+        let directory = directory.to_string_lossy();
         return allow_helper_context
             && super::git_apply_check::patch_targets(&arguments[1..]).is_some_and(|patches| {
                 patches.iter().all(|patch| {
                     super::read_paths::bounded_file_read_target(
                         patch,
                         context.home_dir,
-                        context.cwd,
+                        Some(directory.as_ref()),
+                    )
+                })
+            });
+    }
+    if subcommand == "merge-file" {
+        // `-p` prints the three-way merge of three files and writes none of
+        // them, but `pager.merge-file` can still name a program, so the
+        // configuration probe clears that first. Each of the three goes
+        // through the ordinary read screen, as a printed merge quotes them.
+        // Git opens them in the directory a `-C` route selects, so they are
+        // screened there; a route with no known directory (`--git-dir`)
+        // keeps the review.
+        let Some(directory) =
+            crate::command_compatibility::git_operand_directory(with_route, context)
+        else {
+            return false;
+        };
+        let directory = directory.to_string_lossy();
+        return allow_helper_context
+            && super::git_merge_file_read::read_targets(&arguments[1..]).is_some_and(|files| {
+                files.iter().all(|file| {
+                    super::read_paths::bounded_file_read_target(
+                        file,
+                        context.home_dir,
+                        Some(directory.as_ref()),
                     )
                 })
             });
@@ -302,6 +391,8 @@ pub(super) fn safe_git_arguments(
             | "diff-index"
             | "diff-tree"
             | "log"
+            | "whatchanged"
+            | "range-diff"
             | "show"
             | "rev-parse"
             | "ls-files"
@@ -351,24 +442,43 @@ pub(super) fn safe_git_arguments(
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
     }
-    // These read through the diff machinery, so without the
-    // configuration probe only the spelling that turns the external driver
-    // and the textconv filter off is proven. A `-C` route that discovers no
+    // These read through the diff machinery, so without the configuration
+    // probe only the spelling that turns the external driver and the
+    // textconv filter off is proven. That pair is the whole helper surface
+    // of a comparison between two trees, and nothing more.
+    //
+    // A commit walk reads past it. `log.showSignature`, a `%G` placeholder
+    // and a `pretty.*` alias carrying one each start the configured
+    // verification program, and neither switch touches that setting;
+    // `range-diff` also assembles an inner `git log -p` and passes neither
+    // switch down to it, so a configured `diff.<driver>.textconv` still runs
+    // with both of them on the command line. The walks are therefore proven
+    // by the probe, which screens all of it, and never by the pair alone.
+    //
+    // A `-C` route that discovers no
     // repository needs neither: Git dies in its own setup before it reads a
     // diff, textconv, pager or filter setting, so there is no configured
     // helper for the options to turn off. `git cherry` runs no helper of its
     // own, but it still prints under `pager.cherry`, so it asks for the same
     // clearance and has no spelling of its own that answers instead: the two
     // diff switches are not options it defines.
-    let helpers_off = active_options
-        .iter()
-        .any(|argument| argument == "--no-ext-diff")
+    let helpers_off = !super::git_history_reads::verifies_signatures(subcommand)
+        && active_options
+            .iter()
+            .any(|argument| argument == "--no-ext-diff")
         && active_options
             .iter()
             .any(|argument| argument == "--no-textconv");
     let diff_family = matches!(
         subcommand,
-        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show"
+        "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
+            | "log"
+            | "whatchanged"
+            | "range-diff"
+            | "show"
     );
     if (diff_family || subcommand == "cherry")
         && !(allow_helper_context
@@ -409,6 +519,8 @@ pub(super) fn inspection_writes_nothing(
             | "diff-index"
             | "diff-tree"
             | "log"
+            | "whatchanged"
+            | "range-diff"
             | "show"
             | "grep"
             | "merge-base"
@@ -437,49 +549,71 @@ pub(super) fn inspection_writes_nothing(
 }
 
 #[cfg(test)]
+#[path = "git_reads_change_listing_tests.rs"]
+mod change_listing_tests;
+
+#[cfg(test)]
 #[path = "git_reads_config_pattern_tests.rs"]
 mod config_pattern_tests;
 
 #[cfg(test)]
-mod tests {
-    use super::names_refused_option;
+#[path = "git_reads_option_name_tests.rs"]
+mod option_name_tests;
 
-    /// Git takes any unambiguous prefix of a long option, so a read that
-    /// disables both helpers in full can turn one back on in an abbreviation
-    /// the screen never compared against.
-    #[test]
-    fn an_abbreviated_helper_names_the_option_it_resolves_to() {
-        for word in [
-            "--textconv",
-            "--textcon",
-            "--textc",
-            "--ext-diff",
-            "--ext-d",
-            "--output",
-            "--outp",
-            "--output=/tmp/changed.patch",
-            "-o",
-        ] {
-            assert!(names_refused_option(word), "{word}");
+#[cfg(test)]
+mod feature_pathspec_tests {
+    use super::feature_pathspec;
+    use crate::pretool::PathContext;
+    use std::path::{Path, PathBuf};
+
+    struct Fixture(PathBuf);
+
+    impl Fixture {
+        fn new() -> Self {
+            let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../target/git-feature-pathspec-tests")
+                .join(std::process::id().to_string());
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join(".git")).unwrap();
+            std::fs::write(root.join(".git/HEAD"), "ref: refs/heads/main\n").unwrap();
+            std::fs::create_dir_all(root.join("src/lib/auth")).unwrap();
+            std::fs::write(root.join("src/lib/auth/README.md"), "source\n").unwrap();
+            Self(root)
         }
     }
 
-    /// `--text` is the comparison verbs' own "treat the file as text", and
-    /// Git answers an exact spelling with the option that owns it, so reading
-    /// it as a prefix of `--textconv` would refuse an ordinary read.
-    #[test]
-    fn a_word_a_verb_spells_in_full_is_not_an_abbreviation() {
-        for word in [
-            "--text",
-            "--no-textconv",
-            "--no-ext-diff",
-            "--oneline",
-            "--topo-order",
-            "--",
-            "-O",
-            "HEAD",
-        ] {
-            assert!(!names_refused_option(word), "{word}");
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    fn context(root: &Path) -> PathContext<'_> {
+        let cwd = root.to_str();
+        PathContext {
+            cwd,
+            ..PathContext::default()
+        }
+    }
+
+    #[test]
+    fn feature_pathspec_refuses_an_implicit_no_index_sibling_comparison() {
+        let fixture = Fixture::new();
+        let arguments = ["diff", "--", "src/lib/auth", "../reference"].map(str::to_owned);
+        assert!(!feature_pathspec(&arguments, 2, context(&fixture.0)));
+    }
+
+    #[test]
+    fn feature_pathspec_refuses_a_shell_home_sibling_comparison() {
+        let fixture = Fixture::new();
+        let arguments = ["diff", "--", "src/lib/auth", "~/scratch"].map(str::to_owned);
+        assert!(!feature_pathspec(&arguments, 2, context(&fixture.0)));
+    }
+
+    #[test]
+    fn feature_pathspec_keeps_an_in_repository_pathspec_read() {
+        let fixture = Fixture::new();
+        let arguments = ["diff", "--", "src/lib/auth", "README.md"].map(str::to_owned);
+        assert!(feature_pathspec(&arguments, 2, context(&fixture.0)));
     }
 }

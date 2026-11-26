@@ -392,6 +392,28 @@ fn read_plumbing_answers_to_the_porcelain_owner_it_belongs_to() {
     }
 }
 
+/// `git whatchanged` is `git log` with each commit's raw diff attached, and
+/// `git range-diff` prints the comparison `git diff` owns across two ranges
+/// of commits that are already recorded. Neither had an owner of its own, so
+/// each fell to the blanket attribution every unnamed subcommand reaches,
+/// which reports all forty-three git rules as uncertain and sends an everyday
+/// read to review. Each now answers to the read permission it belongs to, so
+/// the permission a user disables works on the spelling they disabled it for.
+#[test]
+fn the_change_listings_answer_to_the_read_owner_they_belong_to() {
+    for (command, rule_id) in [
+        ("git whatchanged -3", "command.git.log"),
+        ("git whatchanged --oneline -5", "command.git.log"),
+        ("git range-diff main...HEAD", "command.git.diff"),
+        ("git range-diff HEAD~1...HEAD", "command.git.diff"),
+    ] {
+        let matches = observations(command).rule_matches;
+        assert_eq!(matches.len(), 1, "{command}");
+        assert_eq!(matches[0].rule_id, rule_id, "{command}");
+        assert!(!matches[0].uncertainty, "{command}");
+    }
+}
+
 /// `git annotate` is `git blame` printed in another format: the same walk,
 /// the same options and the same `blame.*` settings. Without an owner it fell
 /// to the blanket attribution every unnamed subcommand reaches, which reports
@@ -722,5 +744,69 @@ fn the_staging_synonym_owns_the_same_rules_as_adding() {
     assert!(
         owners("git frobnicate -A").len() > 1,
         "an unrecognised subcommand must still raise the Git rules"
+    );
+}
+
+fn status_uncertain(command: &str) -> bool {
+    let model = crate::parse_command(
+        &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
+    )
+    .unwrap();
+    // A context the layer refuses outright is stricter than uncertainty.
+    let Ok(observations) = crate::command_compatibility::compatibility_observations(&model, None)
+    else {
+        return true;
+    };
+    observations
+        .rule_matches
+        .iter()
+        .find(|item| item.rule_id == "command.git.status")
+        .unwrap_or_else(|| panic!("{command}: no status match"))
+        .uncertainty
+}
+
+/// Agents name a folder once and reuse it: `out_dir=/tmp/report; git status`.
+/// A lowercase shell variable is not one Git or a program it starts reads, so
+/// the later Git read is not steered by it. Git's own settings, curl's proxy
+/// names and the names a shell ties to its state still steer it, and any
+/// non-Git program after the assignment stays steered.
+#[test]
+fn a_lowercase_shell_variable_does_not_steer_a_later_git_read() {
+    for command in [
+        "out_dir=/tmp/report; git status --short",
+        "work_dir=\"$HOME/projects\"; git status --short",
+        "a=1; b2=2; git status --short",
+    ] {
+        assert!(!status_uncertain(command), "{command}");
+    }
+    for command in [
+        "PAGER=/tmp/x; git status --short",
+        "GIT_DIR=/tmp/elsewhere; git status --short",
+        "http_proxy=http://127.0.0.1:9; git status --short",
+        "cdpath=/tmp; git status --short",
+        "out_dir=/tmp/r; EDITOR=/tmp/x; git status --short",
+    ] {
+        assert!(status_uncertain(command), "{command}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_home_relative_route_resolves_operands_under_home() {
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("~/project"), Some("/home/dev")),
+        Some(std::path::PathBuf::from("/home/dev/project"))
+    );
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("~"), Some("/home/dev")),
+        Some(std::path::PathBuf::from("/home/dev"))
+    );
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("~/project"), None),
+        None
+    );
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("sub"), Some("/home/dev")),
+        Some(std::path::PathBuf::from("/work/cwd/sub"))
     );
 }

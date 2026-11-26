@@ -21,6 +21,8 @@ struct Tool {
     expected_entry: Option<String>,
     entries: Vec<String>,
     build: bool,
+    /// The subdirectory the command named for the run, when it named one.
+    directory: Option<String>,
 }
 
 pub(super) fn evaluate(operation: &str, input: &Value) -> Option<Value> {
@@ -121,6 +123,15 @@ fn prepare(input: &Value) -> Result<Value, RestrictedPytestError> {
     let tool = route(&argv, &requested("workspace")?, &requested("cwd")?)?;
     let mut node = request.clone();
     node.insert("command".to_owned(), json!(["node", "--test"]));
+    // The command named the directory the run starts in, so the run starts
+    // there: the entrypoint is resolved from that project's `node_modules`,
+    // its config is the one the tool reads, and a build writes its output
+    // below it. The directory is handed to the Node plan rather than joined
+    // afterwards, so it passes the same resolution every contained run's
+    // working directory does and an escape is refused there.
+    if let Some(relative) = &tool.directory {
+        node.insert("cwd".to_owned(), json!(requested("cwd")?.join(relative)));
+    }
     let Value::Object(mut plan) = ask("prepare_node", Value::Object(node))? else {
         return Err(invalid_request());
     };
@@ -259,12 +270,18 @@ fn tool(reply: &Value) -> Option<Tool> {
     if reply.get("kind")? != "tool" || !reply.get("name")?.is_string() || entries.is_empty() {
         return None;
     }
+    let directory = match reply.get("directory").unwrap_or(&Value::Null) {
+        Value::Null => None,
+        Value::String(directory) => Some(directory.clone()),
+        _ => return None,
+    };
     Some(Tool {
         arguments: words(reply.get("arguments"))?,
         runtime_arguments: words(reply.get("runtime_arguments"))?,
         expected_entry,
         entries,
         build,
+        directory,
     })
 }
 

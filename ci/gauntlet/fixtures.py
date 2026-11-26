@@ -15,15 +15,17 @@ from pathlib import Path
 
 from .branch_return_fixtures import branch_return_checks
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
+from .cargo_package_fixtures import add_cargo_package
 from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .design_token_fixtures import add_design_token_documents
 from .edge_clone_fixtures import write_edge_clone
 from .extension_adapters import EXTENSION_ADAPTERS
 from .extension_allow_fixtures import extension_allow_checks
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
+from .feature_folder_fixtures import add_feature_folder
 from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .fixture_remotes import INSTEAD_OF_CASE, add_checkout_origin
-from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
+from .git_allow_fixtures import add_git_allow_shape, add_unstaged_source_edit, git_allow_checks
 from .git_rules_cases import git_rules_checks
 from .heredoc_commit_fixtures import add_heredoc_commit_change, heredoc_commit_checks
 from .output_cases import add_output_fixture
@@ -52,7 +54,12 @@ from .review_fixtures import (
 )
 from .runtime_cases import runtime_case_checks
 from .script_cases import script_case_checks
+from .search_diff_fixtures import add_search_and_diff_content
 from .session_folder import session_folder_checks
+from .git_exclude_fixtures import add_own_exclude_setting
+from .package_store_fixtures import add_package_store_checkout
+from .backfill_fixtures import add_backfill_shapes, add_hidden_script_checkout
+from .nested_package_fixtures import add_nested_workspace_package
 from .sibling_runner_fixtures import add_sibling_test_runner
 from .supply_chain import supply_chain_checks
 from .workspace_runner_fixtures import (
@@ -71,6 +78,16 @@ SECURITY_NOTES = "Public configuration guide.\nSet API_KEY in your local .env fi
 # prints the name, so a pattern that prints the same names must print it too.
 ROTATION_RUNBOOK = "# Rotating credentials\n\nOpen the provider console and issue a new value.\n"
 
+# A committed page named for the client authentication method it describes.
+# ``private_key_jwt`` is an OpenID Connect method, so the name says what the
+# page covers; the page holds no key. Reads of it, and recursive searches of
+# the directory holding it, used to ask for review because the name carried
+# the marker a key container is named with.
+CLIENT_AUTH_PAGE = (
+    "# private_key_jwt\n\nThe client signs a JWT assertion with its own key and posts it\n"
+    "to the token endpoint.\n"
+)
+
 SOURCE_FILES = {
     "src/settings.ts": SETTINGS_BEFORE,
     "src/one.ts": SOURCE,
@@ -87,11 +104,17 @@ SOURCE_FILES = {
 def _scenario_indices() -> dict[str, int]:
     # Deferred: catalog.py already imports fixtures.py at module load.
     from .approval_retry import CATALOG as APPROVAL_RETRY_CATALOG
+    from .browser_cases import BROWSER_CATALOG
     from .catalog import CONNECTOR_CATALOG, load_catalog
 
     # The core catalog numbers first so its fixture directories keep their names, and each
     # lane catalog that runs through run_harness_case follows it with distinct numbers.
-    scenarios = load_catalog() + load_catalog(APPROVAL_RETRY_CATALOG) + load_catalog(CONNECTOR_CATALOG)
+    scenarios = (
+        load_catalog()
+        + load_catalog(APPROVAL_RETRY_CATALOG)
+        + load_catalog(CONNECTOR_CATALOG)
+        + load_catalog(BROWSER_CATALOG)
+    )
     return {scenario.id: index for index, scenario in enumerate(scenarios, start=1)}
 
 
@@ -280,6 +303,8 @@ def create_fixture(
     for path in [
         workspace / "src",
         workspace / "docs",
+        workspace / "docs/auth-evidence",
+        workspace / "docs/secret-rotation",
         workspace / "output",
         workspace / "aliases",
         workspace / "deletion-target",
@@ -292,6 +317,8 @@ def create_fixture(
         **SOURCE_FILES,
         "docs/security-notes.md": SECURITY_NOTES,
         "docs/credential-rotation-runbook.md": ROTATION_RUNBOOK,
+        "docs/auth-evidence/private-key-jwt-client-auth.md": CLIENT_AUTH_PAGE,
+        "docs/secret-rotation/overview.md": "# Rotation\n\nHow the schedule is planned.\n",
         "deletion-target/keep.txt": "This directory must survive the protection test.\n",
         ".env": "API_KEY=" + canary + "\n",
     }
@@ -333,6 +360,7 @@ def create_fixture(
             "Gauntlet on Windows needs symlink creation: enable Developer Mode or run elevated"
         ) from error
     os.link(workspace / ".env", workspace / "aliases/linked.txt")
+    add_feature_folder(workspace, scenario_id)
     environment = {k: os.environ[k] for k in ("PATH", "SYSTEMROOT", "WINDIR") if k in os.environ}
     environment.update(HOME=str(home), USERPROFILE=str(home), GIT_CONFIG_NOSYSTEM="1")
     commands = [
@@ -370,9 +398,16 @@ def create_fixture(
     add_workspace_test_runner(workspace, scenario_id)
     add_output_fixture(workspace, scenario_id)
     add_route_group_directory(workspace, scenario_id)
+    add_unstaged_source_edit(workspace, scenario_id)
+    add_own_exclude_setting(workspace, environment, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
     add_home_bun_runtime(home, scenario_id)
     add_design_token_documents(workspace, scenario_id)
+    add_cargo_package(workspace, scenario_id)
+    add_search_and_diff_content(workspace, scenario_id)
+    add_nested_workspace_package(workspace, environment, scenario_id)
+    add_backfill_shapes(workspace, environment, scenario_id)
+    add_hidden_script_checkout(home, environment, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)
@@ -474,6 +509,7 @@ LFS_GITCONFIG = (
 
 ALIAS_ESCAPES_CASE = "omp-native-git-global-alias-escapes"
 LARGE_GITCONFIG_CASE = "omp-native-git-large-global-config"
+HEADER_GITCONFIG_CASE = "omp-native-git-config-identity-beside-header"
 # Extra global gitconfig text per scenario, appended to the LFS baseline. Each is ordinary
 # developer configuration that real sessions carry; none runs code or names a credential.
 INSTEAD_OF_GITCONFIG = (
@@ -484,6 +520,10 @@ ALIAS_ESCAPES_GITCONFIG = (
     '[alias]\n\tlg = "log --format=\\"%h %s\\""\n\tst = status --short --branch\n'
     '\tsubject = "log -1 --format=\\"%s\\""\n'
 )
+# A per-host request header: the kind of entry a whole-listing credential screen
+# refuses, set beside the user identity a pattern read prints. The value names
+# nothing secret.
+HEADER_GITCONFIG = '[http "https://git.example.test/"]\n\textraHeader = X-Trace: fixture\n'
 LARGE_GITCONFIG_MIN_BYTES = 256 * 1024 + 4096
 
 
@@ -506,6 +546,7 @@ def gitconfig_variant(scenario_id: str | None) -> str:
         ALIAS_ESCAPES_CASE: ALIAS_ESCAPES_GITCONFIG,
         INSTEAD_OF_CASE: INSTEAD_OF_GITCONFIG,
         LARGE_GITCONFIG_CASE: _large_gitconfig(),
+        HEADER_GITCONFIG_CASE: HEADER_GITCONFIG,
     }
     return LFS_GITCONFIG + extras.get(scenario_id or "", "")
 
@@ -775,7 +816,8 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     ):
         _git(args, sibling, environment)
     add_home_tools(home)
-    add_sibling_test_runner(home, scenario_id)
+    add_sibling_test_runner(home, scenario_id, environment)
+    add_package_store_checkout(home, scenario_id)
     # A clone with ignored local configuration files beside its code.
     write_edge_clone(home, environment)
     add_checkout_origin(main, environment, scenario_id)

@@ -33,6 +33,8 @@ const AGENT_PROGRAMS: &[&str] = &[
     r#"const d = await commit.draft(); print(await d.commit("Fix punctuation in slugs", ["Normalize punctuation."]));"#,
     "const d=await commit.draft(); return await d.take(['index.html','style.css','game.js']);",
     "const d = await commit.draft(); await d.take('docs/environment.md'); await d.commit('Document local development environment', ['Add verified details.']);",
+    // Agents take a listed set of paths one at a time.
+    "const d = await commit.draft(); for (const p of ['src/schema.js', 'test/schema.test.js']) await d.take(p); return await d.commit('Add user schema');",
     "const d = await commit.draft(); await d.drop('notes.md'); print(await d.diff()); return await d.commit('Add report', {body: 'One line.', fixes: [12], noVerify: true});",
     r#"const d = await commit.draft(); return await d.commit({body:"Fix sum to include first value\n\nStart iteration at index 0."});"#,
     r#"const d = await commit.draft(); return await d.commit({subject: "docs: document the environment", body: ["- Add Node and npm details."]});"#,
@@ -106,7 +108,10 @@ fn a_commit_program_outside_the_grammar_stays_reviewed() {
         "const d = await commit.draft(); return await d.show('config/.env.local');",
         "const d = await commit.draft(); return await d.show('deploy/id_rsa', {silent: true});",
         "const d = await commit.draft(); return await d.show(['notes.md', '.env']);",
-        "const d = await commit.draft(); for (const p of ['a']) await d.take(p); return await d.commit('x');",
+        // A path loop is a selection only when its body is one take or drop.
+        "const d = await commit.draft(); for (const p of ['a']) await d.commit(p);",
+        "const d = await commit.draft(); for (const p of ['.env']) await d.show(p);",
+        "const d = await commit.draft(); for (const p of [x]) await d.take(p); return await d.commit('x');",
         "const d = await import('xd://eval/commit'); print(d)",
         "const m = 'x'; const d = await commit.draft(); return await d.commit(m);",
         "const d = await commit.draft({ cwd: '/' }); return await d.commit('x');",
@@ -194,9 +199,29 @@ fn reading_the_commit_prelude_docs_is_allowed() {
     for code in [
         "return await read('xd://eval/commit');",
         "await read('xd://eval/commit');",
+        // Oh My Pi 19 serves the same docs under `help://`.
+        "return await read(\"help://eval/commit\");",
+        "print(await read('help://eval'));",
     ] {
         let result = eval(&session, code);
         assert_eq!(result.minimum_action, "allow", "{code}");
+    }
+}
+
+/// A `help://` read that is not one of the host's doc pages keeps its
+/// review: a path below the topic, a parent step, a hidden name, or another
+/// selector than the one the prelude adds.
+#[test]
+fn help_reads_outside_the_doc_grammar_stay_reviewed() {
+    let session = session("omp-eval-help-escape");
+    for code in [
+        "return await read('help://eval/../../.ssh/id_rsa');",
+        "return await read('help://eval/commit/more');",
+        "return await read('help://.hidden');",
+        "return await read('help://~/notes');",
+    ] {
+        let result = eval(&session, code);
+        assert_ne!(result.minimum_action, "allow", "{code}");
     }
 }
 

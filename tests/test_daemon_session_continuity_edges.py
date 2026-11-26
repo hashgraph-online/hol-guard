@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
+from codex_plugin_scanner.guard.native_hook_render import (
     availability_harness_response,
     canonical_hook_event_name,
     hook_event_is_permission_request,
@@ -13,7 +13,7 @@ from codex_plugin_scanner.guard.hook_review.hook_availability_policy import (
 
 
 def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+    from codex_plugin_scanner.guard import native_hook_availability as policy
 
     monkeypatch.setattr(
         policy,
@@ -73,7 +73,7 @@ def test_native_policy_not_ready_pretool_denies_without_interrupting_session(tmp
 
 
 def test_copilot_permission_request_v2_uses_behavior_deny_shape(monkeypatch) -> None:
-    from codex_plugin_scanner.guard.hook_review import hook_availability_policy as policy
+    from codex_plugin_scanner.guard import native_hook_availability as policy
 
     monkeypatch.setattr(
         policy,

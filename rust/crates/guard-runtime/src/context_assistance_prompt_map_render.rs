@@ -37,3 +37,13 @@ pub(super) fn render(blocks: &[(String, Vec<Entry>)]) -> Option<Rendered> {
     );
     (listed > 0).then_some(Rendered { text, shown })
 }
+
+/// Lines quoted from files: code, held to their own limits.
+pub(super) fn quoted(entries: Vec<String>) -> Vec<Entry> {
+    let code = |text: String| Entry {
+        code: text.len(),
+        text,
+        shown: Vec::new(),
+    };
+    entries.into_iter().map(code).collect()
+}

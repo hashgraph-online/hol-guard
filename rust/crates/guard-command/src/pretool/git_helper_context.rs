@@ -101,7 +101,11 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         .unwrap_or(arguments.len());
                     let active_options = &arguments[1..option_end];
                     match arguments[0].as_str() {
-                        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" => {
+                        // A comparison between two trees starts an
+                        // external driver and a textconv filter and nothing
+                        // else, so turning both off leaves it no helper to
+                        // run.
+                        "diff" | "diff-files" | "diff-index" | "diff-tree" => {
                             !(active_options
                                 .iter()
                                 .any(|argument| argument == "--no-ext-diff")
@@ -109,6 +113,15 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                                     .iter()
                                     .any(|argument| argument == "--no-textconv"))
                         }
+                        // A commit walk reads past that pair.
+                        // `log.showSignature`, a `%G` placeholder and a
+                        // `pretty.*` alias carrying one each start the
+                        // configured verification program, which neither
+                        // switch touches, and `range-diff` assembles an inner
+                        // `git log -p` that is never given the switches at
+                        // all. The probe screens all of it, so the walks ask
+                        // for it however they are spelled.
+                        "log" | "whatchanged" | "show" | "range-diff" => true,
                         // A clean filter is the only helper hash-object runs.
                         "hash-object" => {
                             !super::git_hash_object::filters_disabled(&arguments[1..])
@@ -150,7 +163,7 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // and every listing reads the repository's
                         // configuration.
                         "shortlog" | "check-ignore" | "count-objects" | "check-attr"
-                        | "sparse-checkout" => true,
+                        | "fsck" | "sparse-checkout" => true,
                         // A bisect log replays through the pager, a note
                         // prints through it too, and a replacement listing
                         // reads the repository's configuration to print the
@@ -162,6 +175,9 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // Reading the files the patch names refreshes the
                         // index, which starts a configured core.fsmonitor.
                         "apply" => true,
+                        // A printed merge starts no driver and refreshes no
+                        // index, but pager.merge-file can still name a program.
+                        "merge-file" => true,
                         // A status line is printed from the superproject,
                         // whose index it reads, so a configured
                         // core.fsmonitor there can start. The read forms are
@@ -242,21 +258,49 @@ fn helper_proof(
     // original one when it failed. Inspect each read in every directory it
     // can run in, the split the Git execution-context floor already makes,
     // and keep the strongest answer any of them produced.
-    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd(model, context) {
+    // Each part is inspected again by this same split, so a later `cd` in a
+    // part moves that part's reads in turn rather than leaving them probed in
+    // the directory the part started in.
+    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd_nested(model, context) {
         let moved = PathContext {
             cwd: Some(&cwd),
             ..context
         };
-        let moved_proof = segments_proof(&rest, moved, deadline, environment);
-        return moved_proof.max(segments_proof(&rest, context, deadline, environment));
+        let moved_proof = helper_proof(&rest, moved, deadline, execution_environment);
+        return moved_proof.max(helper_proof(
+            &rest,
+            context,
+            deadline,
+            execution_environment,
+        ));
     }
-    if let Some((cwd, rest, tail)) = super::safe_reads::leading_and_cd(model, context) {
+    if let Some((cwd, rest, tail)) = super::safe_reads::leading_and_cd_nested(model, context) {
         let moved = PathContext {
             cwd: Some(&cwd),
             ..context
         };
-        let moved_proof = segments_proof(&rest, moved, deadline, environment);
-        return moved_proof.max(segments_proof(&tail, context, deadline, environment));
+        let moved_proof = helper_proof(&rest, moved, deadline, execution_environment);
+        return moved_proof.max(helper_proof(
+            &tail,
+            context,
+            deadline,
+            execution_environment,
+        ));
+    }
+    // `cd <a> && git status && cd <b> && git log`: each run of steps between
+    // `cd`s runs only in the directory it entered, so it is probed there.
+    if let Some(parts) = super::safe_reads::and_chained_cds(model, context) {
+        return parts
+            .iter()
+            .map(|(part, cwd)| {
+                let there = PathContext {
+                    cwd: cwd.as_deref().or(context.cwd),
+                    ..context
+                };
+                segments_proof(part, there, deadline, environment)
+            })
+            .max()
+            .unwrap_or(HelperProof::Refused);
     }
     // After a verified `cd`, the Git process reads configuration from the new
     // directory, so the probe must run there rather than in the reported cwd.

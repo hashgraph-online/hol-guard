@@ -20,6 +20,10 @@ mod tests;
 #[path = "node_tool_modes.rs"]
 pub(crate) mod node_tool_modes;
 
+#[path = "node_tool_directory.rs"]
+pub(crate) mod node_tool_directory;
+
+pub(crate) use node_tool_directory::{runner_options_peeled, workspace_relative};
 pub(crate) use node_tool_modes::{
     config_declares_no_emit, entry_tool, local_bin_entry, local_package_entry, supported_tool,
     supported_tool_in,
@@ -63,6 +67,10 @@ pub(crate) enum NodeToolRoute {
         expected_entry: Option<String>,
         entries: &'static [&'static str],
         mode: ToolMode,
+        /// The subdirectory the command named for the run to start in, when
+        /// it named one. The sink joins it to the working directory it was
+        /// given, so the tool runs where the command said it would.
+        directory: Option<String>,
     },
     /// The command is not one of the supported runs.
     Invalid {
@@ -251,6 +259,7 @@ fn gate(
     runtime_arguments: Vec<String>,
     expected_entry: Option<String>,
     directory: Option<&Path>,
+    named_directory: Option<String>,
 ) -> NodeToolRoute {
     // One reading of the project answers both questions: whether the run is
     // one this route admits, and whether the `--noEmit` it is admitted for
@@ -281,6 +290,7 @@ fn gate(
         expected_entry,
         entries,
         mode,
+        directory: named_directory,
     }
 }
 
@@ -316,10 +326,10 @@ pub(crate) fn node_tool_route(
             );
         }
         arguments.extend_from_slice(tail);
-        return gate(name, arguments, Vec::new(), None, directory);
+        return gate(name, arguments, Vec::new(), None, directory, None);
     }
     let Some((program, rest)) = command.split_first() else {
-        return gate("", Vec::new(), Vec::new(), None, directory);
+        return gate("", Vec::new(), Vec::new(), None, directory, None);
     };
     let mut name = program_name(program, windows);
     let mut arguments = rest.to_vec();
@@ -330,6 +340,10 @@ pub(crate) fn node_tool_route(
     }
     let mut runtime_arguments = Vec::new();
     let mut expected_entry = None;
+    // The directory the command named for the run, as it spelled it, and the
+    // directory the run then reads its project from.
+    let mut named_directory = None;
+    let mut run_directory = directory.map(Path::to_path_buf);
     if crate::contained_argv::manager_reporting_options_peeled(&name, &arguments)
         .first()
         .is_some_and(|word| local_bin_verb(&name, word))
@@ -362,9 +376,15 @@ pub(crate) fn node_tool_route(
             task: task.to_owned(),
         };
     } else if matches!(name.as_str(), "bunx" | "npx") {
-        if arguments.first().is_some_and(|word| word == "--no-install") {
-            arguments.remove(0);
+        let (named, rest) = runner_options_peeled(&name, &arguments, directory);
+        // A `tsc` run reads its no-emit mode from the project it stands in,
+        // so the directory the command named is the directory this reading
+        // has to use as well.
+        if let Some(named) = named {
+            run_directory = run_directory.map(|base| base.join(&named));
+            named_directory = Some(named);
         }
+        arguments = rest.to_vec();
         if arguments.is_empty() {
             return invalid("Missing local runner.");
         }
@@ -388,7 +408,8 @@ pub(crate) fn node_tool_route(
         arguments,
         runtime_arguments,
         expected_entry,
-        directory,
+        run_directory.as_deref(),
+        named_directory,
     )
 }
 
@@ -442,6 +463,7 @@ pub(crate) fn route_reply(
             expected_entry,
             entries,
             mode,
+            directory,
         } => Ok(json!({
             "kind": "tool",
             "name": name,
@@ -449,6 +471,7 @@ pub(crate) fn route_reply(
             "runtime_arguments": runtime_arguments,
             "expected_entry": expected_entry,
             "entries": entries,
+            "directory": directory,
             "mode": match mode {
                 ToolMode::Report => "report",
                 ToolMode::Build => "build",

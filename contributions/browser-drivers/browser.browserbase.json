@@ -1,0 +1,120 @@
+{
+  "schemaVersion": "guard.browser-driver.v1",
+  "id": "browser.browserbase",
+  "name": "Browserbase MCP (Stagehand)",
+  "publisher": {
+    "name": "HOL Guard",
+    "url": "https://github.com/hashgraph-online/hol-guard",
+    "verified": true
+  },
+  "referenceUrls": [
+    "https://github.com/browserbase/mcp-server-browserbase",
+    "https://github.com/browserbase/stagehand"
+  ],
+  "referenceVersion": "3.0.0",
+  "match": {
+    "mcpServerNames": [
+      "browserbase"
+    ],
+    "packages": [
+      "@browserbasehq/mcp",
+      "@browserbasehq/mcp-server-browserbase"
+    ],
+    "toolNamespaces": [
+      "mcp__browserbase__"
+    ],
+    "harnessTools": []
+  },
+  "profileMode": {
+    "default": "remote-debugging"
+  },
+  "tools": [
+    {
+      "name": "act",
+      "verb": "Other",
+      "script": [
+        "action"
+      ]
+    },
+    {
+      "name": "browserbase_screenshot",
+      "verb": "Screenshot"
+    },
+    {
+      "name": "browserbase_session_close",
+      "verb": "TabControl"
+    },
+    {
+      "name": "browserbase_session_create",
+      "verb": "Attach"
+    },
+    {
+      "name": "browserbase_stagehand_act",
+      "verb": "Other",
+      "script": [
+        "action"
+      ]
+    },
+    {
+      "name": "browserbase_stagehand_agent",
+      "verb": "Other",
+      "script": [
+        "prompt"
+      ]
+    },
+    {
+      "name": "browserbase_stagehand_extract",
+      "verb": "Other",
+      "script": [
+        "instruction"
+      ]
+    },
+    {
+      "name": "browserbase_stagehand_get_url",
+      "verb": "Read"
+    },
+    {
+      "name": "browserbase_stagehand_navigate",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "browserbase_stagehand_observe",
+      "verb": "Other",
+      "script": [
+        "instruction"
+      ]
+    },
+    {
+      "name": "end",
+      "verb": "TabControl"
+    },
+    {
+      "name": "extract",
+      "verb": "Other",
+      "script": [
+        "instruction"
+      ]
+    },
+    {
+      "name": "navigate",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "observe",
+      "verb": "Other",
+      "script": [
+        "instruction"
+      ]
+    },
+    {
+      "name": "start",
+      "verb": "Attach"
+    }
+  ]
+}

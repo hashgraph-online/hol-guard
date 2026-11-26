@@ -70,15 +70,71 @@ pub(in crate::pretool) fn unproven(canonical: &Path, cwd: Option<&str>) -> bool 
     guard_secure_fs::credential_named_path(canonical) && !tracked_document(canonical, cwd)
 }
 
+/// [`unproven`] for a path a request names, rather than for what a command
+/// does with one. A repository commits `.env.example` beside the source it
+/// documents, and the index and secret screens a tracked document already
+/// passes are the proof that the file is the template its name claims.
+pub(in crate::pretool) fn unproven_request(canonical: &Path, cwd: Option<&str>) -> bool {
+    unproven(canonical, cwd) && !tracked_dotenv_template(canonical, cwd)
+}
+
+/// Whether `path` is a committed dotenv template of the session's repository
+/// whose values are the placeholders such a template documents.
+///
+/// The index membership and the secret screen are the ones
+/// [`tracked_document`] applies. What this does not apply is the
+/// document-extension list, because a template carries the suffix its
+/// ecosystem gave it rather than a document's, and the dotenv family screen,
+/// because the template is the file the family screen is being read past. A
+/// template holding a real value fails the secret screen and keeps its
+/// review.
+///
+/// The directories above the template are screened as the directories they
+/// are, so a template parked inside `.gnupg` or beside `.aws/credentials`
+/// keeps that family whatever the index says about it.
+pub(in crate::pretool) fn tracked_dotenv_template(path: &Path, cwd: Option<&str>) -> bool {
+    if !path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(guard_secure_fs::dotenv_template_basename)
+    {
+        return false;
+    }
+    if path
+        .parent()
+        .is_some_and(|parent| guard_secure_fs::sensitive_path_family(parent).is_some())
+    {
+        return false;
+    }
+    let Some(workspace) = cwd.and_then(|root| std::fs::canonicalize(root).ok()) else {
+        return false;
+    };
+    let same_tree =
+        repository_root(&workspace).is_some_and(|root| repository_root(path) == Some(root));
+    (same_tree
+        || super::super::worktree_writes::same_repository_worktree(&workspace, path)
+        || super::super::worktree_writes::primary_checkout_of_worktree(&workspace, path))
+        && !path
+            .components()
+            .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
+        && WALK.with(|walk| match walk.borrow_mut().as_mut() {
+            Some(tracked) => tracked.non_secret(path),
+            None => TrackedFiles::default().non_secret(path),
+        })
+}
+
 /// Whether `canonical` is a tracked, secret-free document of the session's
-/// repository or of a linked worktree of the same repository.
+/// repository, of a linked worktree of the same repository, or of the primary
+/// checkout a session running from a worktree was cut from.
 pub(in crate::pretool) fn tracked_document(canonical: &Path, cwd: Option<&str>) -> bool {
     let Some(workspace) = cwd.and_then(|root| std::fs::canonicalize(root).ok()) else {
         return false;
     };
     let same_tree =
         repository_root(&workspace).is_some_and(|root| repository_root(canonical) == Some(root));
-    (same_tree || super::super::worktree_writes::same_repository_worktree(&workspace, canonical))
+    (same_tree
+        || super::super::worktree_writes::same_repository_worktree(&workspace, canonical)
+        || super::super::worktree_writes::primary_checkout_of_worktree(&workspace, canonical))
         && committed_document(canonical)
 }
 
@@ -93,7 +149,7 @@ pub(in crate::pretool) fn committed_document(path: &Path) -> bool {
         && !path
             .components()
             .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
-        && guard_secure_fs::sensitive_path_family(path).is_none()
+        && guard_secure_fs::sensitive_path_family_beside_name_proof(path).is_none()
         && WALK.with(|walk| match walk.borrow_mut().as_mut() {
             Some(tracked) => tracked.non_secret(path),
             None => TrackedFiles::default().non_secret(path),
@@ -117,6 +173,69 @@ pub(in crate::pretool) fn committed_image(path: &Path) -> bool {
         })
 }
 
+/// Whether `value`, a path as a request spelled it, resolves to a committed
+/// dotenv template [`tracked_dotenv_template`] proves.
+///
+/// The name the request wrote is screened as well as the file it resolves to.
+/// A link named `.env`, or one parked in a credential store, reads as the
+/// secret it is named after whatever it points at, so the relief covers only
+/// a request that both spells a template and lands on one.
+pub(in crate::pretool) fn resolves_to_tracked_dotenv_template(
+    value: &str,
+    cwd: Option<&str>,
+) -> bool {
+    let supplied = Path::new(value);
+    if !supplied
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(guard_secure_fs::dotenv_template_basename)
+    {
+        return false;
+    }
+    let target = match cwd {
+        _ if supplied.is_absolute() => supplied.to_path_buf(),
+        Some(cwd) => Path::new(cwd).join(supplied),
+        None => return false,
+    };
+    if target
+        .parent()
+        .is_some_and(|parent| guard_secure_fs::sensitive_path_family(parent).is_some())
+    {
+        return false;
+    }
+    std::fs::canonicalize(target).is_ok_and(|canonical| tracked_dotenv_template(&canonical, cwd))
+}
+
+/// Whether `value`, a path as a request spelled it, names a document whose
+/// only sensitive family is the key-name rule and resolves to one
+/// [`tracked_document`] proves.
+///
+/// The spelled path is screened as well as the file it resolves to, so a
+/// document parked in a key container, or a link named for a key file that
+/// points at a committed page, keeps its review. A relative request is
+/// screened where it lands, so the directories above a bare name requested
+/// from inside a credential store keep their family.
+pub(in crate::pretool) fn resolves_to_tracked_key_named_document(
+    value: &str,
+    cwd: Option<&str>,
+) -> bool {
+    let supplied = Path::new(value);
+    let target = match cwd {
+        _ if supplied.is_absolute() => supplied.to_path_buf(),
+        Some(cwd) => Path::new(cwd).join(supplied),
+        None => return false,
+    };
+    guard_secure_fs::sensitive_path_family_beside_name_proof(supplied).is_none()
+        && target
+            .parent()
+            .is_none_or(|parent| guard_secure_fs::sensitive_path_family(parent).is_none())
+        && supplied
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(guard_secure_fs::wallet_key_named)
+        && resolves_to_tracked(value, cwd)
+}
+
 /// Whether `value`, a path as a command or tool spelled it, resolves to a
 /// document [`tracked_document`] proves.
 pub(in crate::pretool) fn resolves_to_tracked(value: &str, cwd: Option<&str>) -> bool {
@@ -131,7 +250,9 @@ pub(in crate::pretool) fn resolves_to_tracked(value: &str, cwd: Option<&str>) ->
 
 /// `text` with one occurrence of each credential-named word of `words` left
 /// out, or `None` when one of those words is anything but a path to a proven
-/// tracked document or a ref name of `refs`. Only an occurrence that stands as a shell word of its own
+/// tracked document, a ref name of `refs`, or, when `listing` is set because
+/// the command only lists directories, a listed directory that shows only
+/// committed names. Only an occurrence that stands as a shell word of its own
 /// is removed, once per word, so a redirect target, assignment or script word
 /// that repeats the path stays in place for the caller's screen. When `moves`
 /// is set the command changes directory first, so a relative path may name a
@@ -142,13 +263,19 @@ pub(in crate::pretool) fn without_tracked_words<'a>(
     cwd: Option<&str>,
     moves: bool,
     refs: &BTreeSet<String>,
+    templates: bool,
+    listing: bool,
 ) -> Option<String> {
     let mut rest = text.to_owned();
     for word in words.into_iter().filter(|word| sensitive_command(word)) {
         if !refs.contains(word.as_str()) {
             operand(word)
                 .filter(|value| !moves || Path::new(value).is_absolute())
-                .filter(|value| resolves_to_tracked(value, cwd))?;
+                .filter(|value| {
+                    resolves_to_tracked(value, cwd)
+                        || (templates && resolves_to_tracked_dotenv_template(value, cwd))
+                        || (listing && super::listing::resolves_to_listed_directory(value, cwd))
+                })?;
         }
         if let Some(at) = standalone(&rest, word) {
             rest.replace_range(at..at + word.len(), " ");
@@ -167,7 +294,10 @@ pub(in crate::pretool) fn screened<'a>(
 ) -> String {
     let moves = moves_directory(model);
     let refs = crate::pretool::ref_name_words::ref_names(model, cwd, moves);
-    without_tracked_words(&text, words, cwd, moves, &refs).unwrap_or(text)
+    let words: Vec<&String> = words.into_iter().collect();
+    let templates = crate::shell_template_reads::names_template_reads(model, &words, cwd);
+    let listing = super::listing::listing_only(model);
+    without_tracked_words(&text, words, cwd, moves, &refs, templates, listing).unwrap_or(text)
 }
 
 /// The text a credential-word screen reads for `segment`: `text`, or the
@@ -264,6 +394,64 @@ pub(in crate::pretool) fn secret_object(text: &str) -> bool {
         }
 }
 
+/// Whether `text` holds a JSON Web Key with private material: a `kty` member
+/// beside a filled `d`, `p`, `q`, `dp`, `dq`, `qi` or `k` member. A JWK keeps
+/// its secret in these one-letter members, which the credential scan does not
+/// read as assignments, so a key-named document holding one, in JSON, YAML,
+/// TOML or a fenced block of Markdown, would otherwise pass as clean. A JSON
+/// document is read again after decoding so an escape cannot spell a member
+/// past the plain reading; outside JSON, [`secret_object`] already refuses a
+/// document that holds a backslash.
+pub(in crate::pretool) fn private_jwk(text: &str) -> bool {
+    plain_private_jwk(text)
+        || serde_json::from_str::<Value>(text)
+            .is_ok_and(|value| plain_private_jwk(&value.to_string()))
+}
+
+fn plain_private_jwk(text: &str) -> bool {
+    keyed_value(text, "kty", 1)
+        && ["d", "p", "q", "dp", "dq", "qi", "k"]
+            .iter()
+            .any(|member| keyed_value(text, member, 16))
+}
+
+/// Whether `key` appears as a member name, at a word boundary and followed by
+/// `:` or `=`, whose value opens with at least `min` base64url characters.
+/// A value this plain reading cannot see counts as filled: one that starts on
+/// the next line, after a YAML block-scalar header, tag, anchor, alias or
+/// comment, or inside a TOML multiline string.
+fn keyed_value(text: &str, key: &str, min: usize) -> bool {
+    text.match_indices(key).any(|(at, _)| {
+        if text[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            return false;
+        }
+        let rest = text[at + key.len()..]
+            .trim_start_matches(['"', '\''])
+            .trim_start_matches([' ', '\t']);
+        let Some(value) = rest.strip_prefix([':', '=']) else {
+            return false;
+        };
+        let value = value.trim_start_matches([' ', '\t']);
+        let quoted = value.trim_start_matches(['"', '\'']);
+        hidden_value(value)
+            || hidden_value(quoted)
+            || quoted
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .count()
+                >= min
+    })
+}
+
+/// Whether a member's value does not start on its own line as plain text.
+fn hidden_value(value: &str) -> bool {
+    value.is_empty() || value.starts_with(['\n', '\r', '|', '>', '!', '&', '*', '#'])
+}
+
 /// Whether `text`, a value a tool call carries such as an edit's new text or
 /// a command, declares a `Secret` kind in plain or JSON spelling.
 pub(in crate::pretool) fn declares_secret_object(text: &str) -> bool {
@@ -310,3 +498,11 @@ mod tests;
 #[cfg(test)]
 #[path = "tracked_image_tests.rs"]
 mod image_tests;
+
+#[cfg(test)]
+#[path = "tracked_private_jwk_tests.rs"]
+mod private_jwk_tests;
+
+#[cfg(test)]
+#[path = "tracked_key_named_reads_tests.rs"]
+mod key_named_reads_tests;

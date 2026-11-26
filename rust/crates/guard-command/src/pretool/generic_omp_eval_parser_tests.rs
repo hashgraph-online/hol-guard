@@ -116,6 +116,8 @@ fn literal_sh_is_parsed_as_one_shell_call() {
         "await sh`git status`",
         "console.log(await sh('git status'))",
         "const out = await sh('git status'); display(out);",
+        "await sh('git status', { timeout: 30 })",
+        "await sh('git status', {\"timeout\": 120,})",
     ] {
         let calls = parse_program(code).unwrap_or_else(|| panic!("{code}"));
         assert_eq!(calls.len(), 1, "{code}");
@@ -125,6 +127,11 @@ fn literal_sh_is_parsed_as_one_shell_call() {
     for code in [
         "await sh('git status', { cwd: 'sub' })",
         "await sh('git status', {})",
+        "await sh('git status', { timeout: 30, cwd: 'sub' })",
+        "await sh('git status', { timeout: '30' })",
+        "await sh('git status', { timeout: -1 })",
+        "await sh('git status', { timeout: 30 }, {})",
+        "await sh`git status`, { timeout: 30 }",
         "await sh(`git ${'status'}`)",
         "await sh`git ${'status'}`",
         "await sh`git status\\n`",
@@ -178,6 +185,46 @@ fn a_commit_draft_is_one_commit_call_in_its_repository() {
         // A name bound again stops being the draft.
         "let d = await commit.draft(); let d = 1; await d.take('a');",
         "const commit = 1;",
+    ] {
+        assert!(parse_program(code).is_none(), "{code}");
+    }
+}
+
+/// A loop over listed paths taking (or dropping) each one is the same
+/// selection as the unrolled calls, and the draft is still one commit call.
+#[test]
+fn a_loop_taking_listed_paths_is_the_draft_selection() {
+    for code in [
+        "const d = await commit.draft(); for (const p of ['a.js', 'b.js']) await d.take(p); return await d.commit('x', ['- y']);",
+        "const d = await commit.draft(); for (let p of [\"a.js\"]) { await d.drop(p); } await d.commit('x');",
+        "const d = await commit.draft();\nfor (const path of ['a.js'])\n  await d.take(path);\nprint(await d.commit('x'));",
+    ] {
+        let calls = parse_program(code).unwrap_or_else(|| panic!("{code}"));
+        assert_eq!(calls.len(), 1, "{code}");
+        assert_eq!(calls[0].tool, "commit", "{code}");
+    }
+    for code in [
+        // Only string literals, only take or drop, only the loop name.
+        "const d = await commit.draft(); for (const p of []) await d.take(p);",
+        "const d = await commit.draft(); for (const p of ['']) await d.take(p);",
+        "const d = await commit.draft(); for (const p of [1]) await d.take(p);",
+        "const d = await commit.draft(); for (const p of [['a']]) await d.take(p);",
+        "const q = 'a'; const d = await commit.draft(); for (const p of [q]) await d.take(p);",
+        "const d = await commit.draft(); for (const p of ['a']) await d.commit(p);",
+        "const d = await commit.draft(); for (const p of ['a']) await d.show(p);",
+        "const d = await commit.draft(); for (const p of ['a']) await d.take(p + 'x');",
+        "const d = await commit.draft(); for (const p of ['a']) await d.take(p, {grep: 'x'});",
+        "const d = await commit.draft(); for (const p of ['a']) { await d.take(p); await d.commit(p); }",
+        "const d = await commit.draft(); for (const p of ['a']) sh(p);",
+        "const d = await commit.draft(); for (const p in ['a']) await d.take(p);",
+        "const d = await commit.draft(); for (var p of ['a']) await d.take(p);",
+        "const d = await commit.draft(); for (p of ['a']) await d.take(p);",
+        // The loop name may not shadow the draft or another binding.
+        "const d = await commit.draft(); for (const d of ['a']) await d.take(d);",
+        "const p = 1; const d = await commit.draft(); for (const p of ['a']) await d.take(p);",
+        // The body runs on a draft, not on an unbound or other name.
+        "for (const p of ['a']) await d.take(p);",
+        "const e = 1; for (const p of ['a']) await e.take(p);",
     ] {
         assert!(parse_program(code).is_none(), "{code}");
     }

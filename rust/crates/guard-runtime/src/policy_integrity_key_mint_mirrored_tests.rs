@@ -248,3 +248,114 @@ fn a_keyring_write_clears_a_stale_marker() {
     assert_eq!(mint_with(&home.0, &FakeKeyring::default()), Minted::Present);
     assert_eq!(vault(&home.0).get_secret(&marker(&home.0)), None);
 }
+
+#[test]
+fn a_control_state_mirrors_only_into_a_keyring_copy_python_would_prefer() {
+    let refused = || Err(WriteFailure::Refused);
+    assert!(mirror_control_state(
+        Existing::Absent,
+        Some(3),
+        refused,
+        || false
+    ));
+    assert!(mirror_control_state(
+        Existing::Present(Some(3)),
+        Some(3),
+        || Ok(()),
+        || false
+    ));
+    assert!(!mirror_control_state(
+        Existing::Present(Some(3)),
+        Some(3),
+        refused,
+        || true
+    ));
+    assert!(!mirror_control_state(
+        Existing::Unreadable,
+        Some(3),
+        || Ok(()),
+        || true
+    ));
+    // No Secret Service: the vault write stands only once the vault is
+    // marked as the copy Python reads.
+    assert!(mirror_control_state(
+        Existing::NoService,
+        Some(3),
+        refused,
+        || true
+    ));
+    assert!(!mirror_control_state(
+        Existing::NoService,
+        Some(3),
+        || Ok(()),
+        || false
+    ));
+}
+
+#[test]
+fn an_unsettled_keyring_update_keeps_the_vault_only_once_it_is_preferred() {
+    // The keyring may still commit, so the vault is never put back under it:
+    // it stands as the copy Python reads, or the write is refused.
+    let unsettled = || Err(WriteFailure::Unsettled);
+    assert!(mirror_control_state(
+        Existing::Present(Some(3)),
+        Some(3),
+        unsettled,
+        || true
+    ));
+    assert!(!mirror_control_state(
+        Existing::Present(Some(3)),
+        Some(3),
+        unsettled,
+        || false
+    ));
+}
+
+#[test]
+fn a_keyring_copy_at_a_higher_generation_is_never_lowered() {
+    // Python would trust the lowered copy on its next read.
+    assert!(!mirror_control_state(
+        Existing::Present(Some(4)),
+        Some(3),
+        || Ok(()),
+        || true
+    ));
+    assert!(mirror_control_state(
+        Existing::Present(Some(3)),
+        Some(4),
+        || Ok(()),
+        || false
+    ));
+    // A copy that names no generation is brought in step.
+    assert!(mirror_control_state(
+        Existing::Present(None),
+        Some(1),
+        || Ok(()),
+        || false
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_marked_vault_is_preferred_without_reading_the_keyring() {
+    let home = home("vault-preferred");
+    let mut store = vault(&home.0);
+    store.ensure_ready().expect("ready");
+    assert!(!vault_preferred(&mut store, &key_ref(&home.0)));
+    assert!(prefer_vault(&mut store, &key_ref(&home.0)));
+    assert!(vault_preferred(&mut vault(&home.0), &key_ref(&home.0)));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_vault_marked_preferred_is_the_copy_python_reads() {
+    let home = home("prefer-vault");
+    let mut store = vault(&home.0);
+    store.ensure_ready().expect("ready");
+    assert!(prefer_vault(&mut store, &key_ref(&home.0)));
+    assert_eq!(
+        vault(&home.0).get_secret(&marker(&home.0)).as_deref(),
+        Some("1")
+    );
+    assert!(prefer_vault(&mut store, &key_ref(&home.0)));
+}

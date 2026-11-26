@@ -282,7 +282,10 @@ pub(crate) fn requires_header_token(path: &str) -> bool {
             && matches!(parts[3], "items" | "status"))
         || (n == 4
             && starts_with(&parts, &["v1", "requests"])
-            && matches!(parts[3], "approve" | "block" | "resume" | "live-decision"))
+            && matches!(
+                parts[3],
+                "approve" | "block" | "resume" | "live-decision" | "runtime-upgrade"
+            ))
         || (n == 4
             && starts_with(&parts, &["v1", "harnesses"])
             && HARNESS_ACTIONS.contains(&parts[3]))
@@ -366,7 +369,7 @@ pub(crate) fn local_surface_session_allowed(method: &str, path: &str) -> bool {
                 || path == "/v1/plugins/updates/dismiss"
                 || (n == 4
                     && starts_with(&parts, &["v1", "requests"])
-                    && matches!(parts[3], "approve" | "block" | "resume"))
+                    && matches!(parts[3], "approve" | "block" | "resume" | "runtime-upgrade"))
                 || (n == 4
                     && starts_with(&parts, &["v1", "operations"])
                     && matches!(parts[3], "items" | "status"))

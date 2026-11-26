@@ -118,6 +118,27 @@ fn url_password(found: &regex::Captures<'_>) -> bool {
             || secret.chars().count() >= 8)
 }
 
+/// Whether `name = value` is Git's `user.signingkey` set to an OpenPGP key ID
+/// or fingerprint: eight, sixteen or forty hex digits, with an optional `0x`
+/// and the trailing `!` that pins a subkey. That value picks the key GnuPG signs
+/// with from the user's keyring. It is a public identifier, printed by
+/// `gpg --list-keys` and published with the key, not a credential, so
+/// `git -c user.signingkey=<id> commit -S` writes no secret into the command.
+///
+/// Only the dotted Git name is read. A bare `signingKey` holding hex digits is
+/// the way an HMAC or JWT secret is written in code, and keeps its screen.
+fn git_signing_key_id(name: &str, value: &str) -> bool {
+    if !name.eq_ignore_ascii_case("user.signingkey") {
+        return false;
+    }
+    let id = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+        .unwrap_or(value);
+    let id = id.strip_suffix('!').unwrap_or(id);
+    matches!(id.len(), 8 | 16 | 40) && id.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 /// Whether `text` holds a credential that looks real.
 pub(super) fn holds_literal_secret(text: &str) -> bool {
     let text = match text.char_indices().nth(SCAN_LIMIT) {
@@ -226,7 +247,9 @@ fn holds_spelled_secret(text: &str) -> bool {
         let value = found.name("v").or_else(|| found.name("b"));
         !text[whole.end()..].starts_with('(')
             && !NOT_A_SECRET_NAME.is_match(&found["k"])
-            && value.is_some_and(|value| looks_random(value.as_str()))
+            && value.is_some_and(|value| {
+                looks_random(value.as_str()) && !git_signing_key_id(&found["k"], value.as_str())
+            })
     }) || strong::holds_proven_secret(text)
         || oauth::holds_oauth_credential(text)
         || bare::holds_bare_secret(text)

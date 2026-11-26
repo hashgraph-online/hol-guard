@@ -298,6 +298,11 @@ const CONTAINED_WRAPPER = new RegExp(
   `^${QUOTED}(?: '-I' '-c' ${QUOTED} 'guard')? 'execute-contained-test' '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
     `'--request-file' (${QUOTED}) '--request-sha256' '[0-9a-f]{64}'(?: '--home' ${QUOTED})?$`,
 );
+// The runtime's own sink, for a sandbox requirement the bridge marked for it. It always names its home.
+const NATIVE_SINK_WRAPPER = new RegExp(
+  `^${QUOTED} 'contained-workspace-sink' '--harness' 'omp' '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
+    `'--request-file' (${QUOTED}) '--request-sha256' '[0-9a-f]{64}' '--home' ${QUOTED}$`,
+);
 const BASH_OWNER_WRAPPER = new RegExp(
   `^${QUOTED} 'execute-bound-bash' '--harness' 'omp' '--operation-id' 'bash-operation:[0-9a-f]{64}' ` +
     `'--host-owner-pid' '[0-9]+' '--tool-call-id' ${QUOTED} '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
@@ -309,7 +314,7 @@ const BASH_OWNER_WRAPPER = new RegExp(
 function containedRequest(event: JsonRecord): JsonRecord | undefined {
   const command = (event.args as JsonRecord | undefined)?.command;
   if (event.toolName !== "bash" || typeof command !== "string") return undefined;
-  const match = CONTAINED_WRAPPER.exec(command) ?? BASH_OWNER_WRAPPER.exec(command);
+  const match = CONTAINED_WRAPPER.exec(command) ?? NATIVE_SINK_WRAPPER.exec(command) ?? BASH_OWNER_WRAPPER.exec(command);
   const path = match?.[1]?.slice(1, -1).replaceAll("'\\''", "'");
   if (!path || basename(path) !== "request.json" || !basename(dirname(path)).startsWith("hol-guard-contained-test-")) {
     return undefined;

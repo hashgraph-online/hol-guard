@@ -14,7 +14,12 @@ fn request(action: &str, payload: Value) -> CommandEnvelopeRequestV1 {
         payload,
         integrity_key_b64: Some(Base64UrlUnpadded::encode_string(KEY)),
         integrity_key_id: Some(KEY_ID.to_owned()),
+        resident_key: false,
     }
+}
+
+fn answered(request: &CommandEnvelopeRequestV1) -> Value {
+    evaluate(request, None)
 }
 
 fn grant() -> Value {
@@ -27,7 +32,7 @@ fn grant() -> Value {
 }
 
 fn signed_grant() -> Value {
-    evaluate(&request(COMMAND_ENVELOPE_ACTION_SIGN, grant()))["result"].clone()
+    answered(&request(COMMAND_ENVELOPE_ACTION_SIGN, grant()))["result"].clone()
 }
 
 fn reason(answer: &Value) -> String {
@@ -36,7 +41,7 @@ fn reason(answer: &Value) -> String {
 
 #[test]
 fn signing_stamps_the_key_id_and_a_verifiable_signature() {
-    let answer = evaluate(&request(COMMAND_ENVELOPE_ACTION_SIGN, grant()));
+    let answer = answered(&request(COMMAND_ENVELOPE_ACTION_SIGN, grant()));
     assert_eq!(answer["accepted"], Value::Bool(true));
     let signed = &answer["result"];
     assert_eq!(signed["keyId"], Value::from(KEY_ID));
@@ -44,7 +49,7 @@ fn signing_stamps_the_key_id_and_a_verifiable_signature() {
     assert!(signed["signature"]
         .as_str()
         .is_some_and(|value| value.len() == 64));
-    let verified = evaluate(&request(COMMAND_ENVELOPE_ACTION_VERIFY, signed.clone()));
+    let verified = answered(&request(COMMAND_ENVELOPE_ACTION_VERIFY, signed.clone()));
     assert_eq!(verified["accepted"], Value::Bool(true));
     assert_eq!(verified["result"]["identity"], grant()["identity"]);
     assert_eq!(verified["result"].get("signature"), None);
@@ -69,7 +74,7 @@ fn signing_is_the_same_hmac_the_capability_envelope_uses() {
 fn a_tampered_grant_is_refused_rather_than_accepted() {
     let mut signed = signed_grant();
     signed["issuer"] = Value::from("attacker");
-    let answer = evaluate(&request(COMMAND_ENVELOPE_ACTION_VERIFY, signed));
+    let answer = answered(&request(COMMAND_ENVELOPE_ACTION_VERIFY, signed));
     assert_eq!(answer["accepted"], Value::Bool(false));
     assert_eq!(reason(&answer), "signed_payload_invalid_signature");
     assert_eq!(answer["result"], Value::Null);
@@ -81,7 +86,7 @@ fn a_grant_signed_under_another_key_is_refused() {
     let mut other = request(COMMAND_ENVELOPE_ACTION_VERIFY, signed);
     other.integrity_key_b64 = Some(Base64UrlUnpadded::encode_string(OTHER_KEY));
     assert_eq!(
-        reason(&evaluate(&other)),
+        reason(&answered(&other)),
         "signed_payload_invalid_signature"
     );
 }
@@ -91,20 +96,20 @@ fn a_grant_naming_another_key_id_is_refused_before_the_hmac() {
     let signed = signed_grant();
     let mut other = request(COMMAND_ENVELOPE_ACTION_VERIFY, signed);
     other.integrity_key_id = Some("key-2".to_owned());
-    assert_eq!(reason(&evaluate(&other)), "signed_payload_key_mismatch");
+    assert_eq!(reason(&answered(&other)), "signed_payload_key_mismatch");
 }
 
 #[test]
 fn missing_envelope_fields_report_the_python_codes() {
     assert_eq!(
-        reason(&evaluate(&request(
+        reason(&answered(&request(
             COMMAND_ENVELOPE_ACTION_VERIFY,
             Value::Null
         ))),
         "signed_payload_missing"
     );
     assert_eq!(
-        reason(&evaluate(&request(COMMAND_ENVELOPE_ACTION_VERIFY, grant()))),
+        reason(&answered(&request(COMMAND_ENVELOPE_ACTION_VERIFY, grant()))),
         "signed_payload_missing_signature"
     );
 }
@@ -113,10 +118,10 @@ fn missing_envelope_fields_report_the_python_codes() {
 fn a_caller_without_a_key_cannot_sign_or_verify() {
     let mut keyless = request(COMMAND_ENVELOPE_ACTION_SIGN, grant());
     keyless.integrity_key_b64 = None;
-    assert_eq!(reason(&evaluate(&keyless)), "local_signing_key_unavailable");
+    assert_eq!(reason(&answered(&keyless)), "local_signing_key_unavailable");
     let mut keyless = request(COMMAND_ENVELOPE_ACTION_VERIFY, signed_grant());
     keyless.integrity_key_id = None;
-    assert_eq!(reason(&evaluate(&keyless)), "local_signing_key_unavailable");
+    assert_eq!(reason(&answered(&keyless)), "local_signing_key_unavailable");
 }
 
 #[test]
@@ -125,13 +130,13 @@ fn digesting_an_identity_needs_no_key_and_is_stable() {
     let mut keyless = request(COMMAND_ENVELOPE_ACTION_DIGEST, identity.clone());
     keyless.integrity_key_b64 = None;
     keyless.integrity_key_id = None;
-    let answer = evaluate(&keyless);
+    let answer = answered(&keyless);
     assert_eq!(answer["accepted"], Value::Bool(true));
     let digest = answer["result"].as_str().expect("digest").to_owned();
     // Key order never changes the digest: the canonical encoding sorts keys.
     let reordered = json!({"operation": "guard.app.remove", "id": "job-1"});
     assert_eq!(
-        evaluate(&request(COMMAND_ENVELOPE_ACTION_DIGEST, reordered))["result"],
+        answered(&request(COMMAND_ENVELOPE_ACTION_DIGEST, reordered))["result"],
         Value::from(digest.clone())
     );
     assert_eq!(digest, envelope_digest(&identity).expect("digest"));
@@ -155,7 +160,7 @@ fn another_contract_or_action_is_refused_without_a_verdict() {
 #[test]
 fn the_reply_binds_its_request_without_covering_the_key() {
     let request = request(COMMAND_ENVELOPE_ACTION_SIGN, grant());
-    let encoded = evaluate_command_envelope_request(&request).expect("response");
+    let encoded = evaluate_command_envelope_request(&request, None).expect("response");
     let response: CommandEnvelopeResultV1 = serde_json::from_slice(&encoded).expect("decode");
     assert_eq!(response.schema, COMMAND_ENVELOPE_RESULT_SCHEMA);
     assert_eq!(response.request_id, "request-1");
@@ -163,12 +168,96 @@ fn the_reply_binds_its_request_without_covering_the_key() {
     assert_eq!(response.code, "ok");
     let mut other_key = request.clone();
     other_key.integrity_key_b64 = Some(Base64UrlUnpadded::encode_string(OTHER_KEY));
-    let encoded = evaluate_command_envelope_request(&other_key).expect("response");
+    let encoded = evaluate_command_envelope_request(&other_key, None).expect("response");
     let rotated: CommandEnvelopeResultV1 = serde_json::from_slice(&encoded).expect("decode");
     assert_eq!(rotated.request_sha256, response.request_sha256);
     let mut other_payload = request.clone();
     other_payload.payload = json!({"version": 2});
-    let encoded = evaluate_command_envelope_request(&other_payload).expect("response");
+    let encoded = evaluate_command_envelope_request(&other_payload, None).expect("response");
     let moved: CommandEnvelopeResultV1 = serde_json::from_slice(&encoded).expect("decode");
     assert_ne!(moved.request_sha256, response.request_sha256);
+}
+
+fn resident(action: &str, payload: Value) -> CommandEnvelopeRequestV1 {
+    let mut request = request(action, payload);
+    request.integrity_key_b64 = None;
+    request.integrity_key_id = None;
+    request.resident_key = true;
+    request
+}
+
+/// Stores a key in the vault the resident reads for `home`, as Python's
+/// encrypted-file store writes it, and returns the key id it derives.
+fn store_key(home: &Path) -> (String, String) {
+    let home = strip_verbatim(home.canonicalize().expect("home"));
+    let key_ref = crate::policy_integrity_resolver::build_scoped_secret_ref(
+        crate::policy_integrity_resolver::POLICY_INTEGRITY_KEY_REF,
+        &home,
+    );
+    let raw = [7_u8; 32];
+    let mut secrets = EncryptedFileSecretStore::new(&home);
+    secrets
+        .set_secret(&key_ref, &Base64UrlUnpadded::encode_string(&raw))
+        .expect("store key");
+    let material = policy_integrity_secret_material(&mut secrets, &home).expect("material");
+    (
+        Base64UrlUnpadded::encode_string(&material.raw_key),
+        material.key_id,
+    )
+}
+
+#[test]
+fn the_resident_signs_with_the_key_in_its_own_vault() {
+    let home = tempfile::tempdir().expect("home");
+    let (key_b64, key_id) = store_key(home.path());
+    let signed = evaluate(
+        &resident(COMMAND_ENVELOPE_ACTION_SIGN, grant()),
+        Some(home.path()),
+    );
+    assert_eq!(signed["accepted"], Value::Bool(true));
+    assert_eq!(signed["result"]["keyId"], Value::from(key_id.clone()));
+    let mut caller = request(COMMAND_ENVELOPE_ACTION_VERIFY, signed["result"].clone());
+    caller.integrity_key_b64 = Some(key_b64);
+    caller.integrity_key_id = Some(key_id.clone());
+    assert_eq!(answered(&caller)["accepted"], Value::Bool(true));
+    let verified = evaluate(
+        &resident(COMMAND_ENVELOPE_ACTION_VERIFY, signed["result"].clone()),
+        Some(home.path()),
+    );
+    // Verifying strips only the signature: the envelope keeps the key id it
+    // was signed under.
+    assert_eq!(verified["accepted"], Value::Bool(true));
+    let mut expected = grant();
+    expected["keyId"] = Value::from(key_id);
+    assert_eq!(verified["result"], expected);
+}
+
+#[test]
+fn a_resident_with_no_stored_key_or_no_home_has_no_key() {
+    let home = tempfile::tempdir().expect("home");
+    let sign = resident(COMMAND_ENVELOPE_ACTION_SIGN, grant());
+    assert_eq!(
+        reason(&evaluate(&sign, Some(home.path()))),
+        "local_signing_key_unavailable"
+    );
+    assert_eq!(
+        reason(&evaluate(&sign, None)),
+        "local_signing_key_unavailable"
+    );
+    let digest = resident(COMMAND_ENVELOPE_ACTION_DIGEST, json!({"id": "job-1"}));
+    assert_eq!(evaluate(&digest, None)["accepted"], Value::Bool(true));
+}
+
+#[test]
+fn asking_for_the_resident_key_while_sending_one_is_refused() {
+    let mut both = request(COMMAND_ENVELOPE_ACTION_SIGN, grant());
+    both.resident_key = true;
+    assert_eq!(refusal(&both), Some("native_command_envelope_invalid"));
+}
+
+#[test]
+fn asking_for_the_resident_key_while_naming_a_key_id_is_refused() {
+    let mut id_only = resident(COMMAND_ENVELOPE_ACTION_SIGN, grant());
+    id_only.integrity_key_id = Some("key-2".to_owned());
+    assert_eq!(refusal(&id_only), Some("native_command_envelope_invalid"));
 }

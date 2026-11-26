@@ -161,12 +161,15 @@ fn batch_in(
         }
         digests.push(digest_of(&bytes));
     }
-    let items = batch
-        .items
-        .iter()
-        .zip(digests)
-        .map(|(item, digest)| evaluate_to_result(item, digest, controls))
-        .collect();
+    // Every item inherits the same runtime environment, so the batch reads it once.
+    let items = guard_command::pretool::inherited_session::scope(|| {
+        batch
+            .items
+            .iter()
+            .zip(digests)
+            .map(|(item, digest)| evaluate_to_result(item, digest, controls))
+            .collect()
+    });
     match crate::encode_response(&CommandEffectBatchResultV1 {
         schema: COMMAND_EFFECT_BATCH_RESULT_SCHEMA.to_owned(),
         request_id: batch.request_id.clone(),

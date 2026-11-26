@@ -28,7 +28,7 @@ use std::time::Instant;
 use secret_service::blocking::SecretService;
 use secret_service::EncryptionType;
 
-use super::mirrored::{Primary, WriteFailure};
+use super::mirrored::{Existing, Primary, WriteFailure};
 
 /// `KeyringBackend.appid` for the Python library's own items.
 const APPLICATION: &str = "Python keyring library";
@@ -83,6 +83,75 @@ impl SecretServiceKeyring {
 
 fn read(service_name: &str, secret_id: &str) -> Result<Option<String>, ()> {
     let service = SecretService::connect(EncryptionType::Dh).map_err(|_| ())?;
+    read_from(&service, service_name, secret_id)
+}
+
+/// Read one item, telling a session bus with no Secret Service apart from a
+/// service that could not give the item. Only a confirmed absence counts as
+/// no service: no session bus, or a bus that says no one owns the Secret
+/// Service name. A timeout, a failed session negotiation or a busy bus may
+/// hide a keyring copy, so it reads as unreadable.
+fn lookup(service_name: &str, secret_id: &str) -> Existing {
+    let service = match SecretService::connect(EncryptionType::Dh) {
+        Ok(service) => service,
+        Err(error) => return connect_failure(&error),
+    };
+    match read_from(&service, service_name, secret_id) {
+        Ok(Some(copy)) => Existing::Present(stored_generation(&copy)),
+        Ok(None) => Existing::Absent,
+        Err(()) => Existing::Unreadable,
+    }
+}
+
+/// The control generation a keyring copy stores, when it is a control state.
+fn stored_generation(copy: &str) -> Option<u64> {
+    serde_json::from_str::<serde_json::Value>(copy)
+        .ok()?
+        .get("generation")?
+        .as_u64()
+}
+
+/// The bus's own answers for a name nobody owns: the session bus is up but
+/// no Secret Service is registered on it.
+const ABSENT_SERVICE_ERRORS: [&str; 2] = [
+    "org.freedesktop.DBus.Error.ServiceUnknown",
+    "org.freedesktop.DBus.Error.NameHasNoOwner",
+];
+
+fn connect_failure(error: &secret_service::Error) -> Existing {
+    use secret_service::Error as Service;
+    use zbus::fdo::Error as Fdo;
+    let absent = match error {
+        Service::Unavailable => true,
+        Service::ZbusFdo(Fdo::ServiceUnknown(_) | Fdo::NameHasNoOwner(_)) => true,
+        Service::Zbus(zbus::Error::FDO(fdo)) => {
+            matches!(**fdo, Fdo::ServiceUnknown(_) | Fdo::NameHasNoOwner(_))
+        }
+        Service::Zbus(zbus::Error::MethodError(name, _, _)) => {
+            ABSENT_SERVICE_ERRORS.contains(&name.as_str())
+        }
+        // No session bus at all: no address to dial (a headless or SSH
+        // session), or a bus socket that is not there. Any other I/O error
+        // reached a bus and stays unreadable.
+        Service::Zbus(zbus::Error::Address(_)) => true,
+        Service::Zbus(zbus::Error::InputOutput(io)) => matches!(
+            io.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+        ),
+        _ => false,
+    };
+    if absent {
+        Existing::NoService
+    } else {
+        Existing::Unreadable
+    }
+}
+
+fn read_from(
+    service: &SecretService<'_>,
+    service_name: &str,
+    secret_id: &str,
+) -> Result<Option<String>, ()> {
     let collection = service.get_default_collection().map_err(|_| ())?;
     if collection.is_locked().map_err(|_| ())? {
         return Err(());
@@ -109,11 +178,10 @@ fn refused<E>(_: E) -> WriteFailure {
 /// before it answered left the outcome unknown; a dismissed prompt, or any
 /// other error the service reports, created nothing.
 fn create_failure(error: &secret_service::Error) -> WriteFailure {
-    let _ = error;
-    // A submitted Secret Service request can fail after the service has
-    // accepted it. Treat every post-submit error as uncertain so the caller
-    // never mints a replacement key while this write may land.
-    WriteFailure::Unsettled
+    match error {
+        secret_service::Error::PromptDisconnected => WriteFailure::Unsettled,
+        _ => WriteFailure::Refused,
+    }
 }
 
 fn write(service_name: &str, secret_id: &str, value: &str) -> Result<(), WriteFailure> {
@@ -137,6 +205,16 @@ fn write(service_name: &str, secret_id: &str, value: &str) -> Result<(), WriteFa
         .map_err(|error| create_failure(&error))
 }
 
+impl SecretServiceKeyring {
+    /// What the keyring holds for `secret_id`, within the deadline. A
+    /// service that does not answer in time is unreadable, not absent.
+    pub(super) fn existing(&self, secret_id: &str) -> Existing {
+        let (service_name, secret_id) = (self.service_name.clone(), secret_id.to_owned());
+        self.bounded(None, move || Ok(lookup(&service_name, &secret_id)))
+            .unwrap_or(Existing::Unreadable)
+    }
+}
+
 impl Primary for SecretServiceKeyring {
     fn get(&self, secret_id: &str) -> Result<Option<String>, ()> {
         let (service_name, secret_id) = (self.service_name.clone(), secret_id.to_owned());
@@ -155,5 +233,69 @@ impl Primary for SecretServiceKeyring {
             None => None,
         };
         self.bounded(keep, move || write(&service_name, &secret_id, &value))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{connect_failure, Existing};
+
+    #[test]
+    fn only_a_confirmed_absent_service_counts_as_no_keyring() {
+        assert!(matches!(
+            connect_failure(&secret_service::Error::Unavailable),
+            Existing::NoService
+        ));
+        for error in [
+            zbus::fdo::Error::ServiceUnknown("org.freedesktop.secrets".to_owned()),
+            zbus::fdo::Error::NameHasNoOwner("org.freedesktop.secrets".to_owned()),
+        ] {
+            assert!(matches!(
+                connect_failure(&secret_service::Error::ZbusFdo(error.clone())),
+                Existing::NoService
+            ));
+            assert!(matches!(
+                connect_failure(&secret_service::Error::Zbus(zbus::Error::FDO(Box::new(
+                    error
+                )))),
+                Existing::NoService
+            ));
+        }
+        assert!(matches!(
+            connect_failure(&secret_service::Error::ZbusFdo(zbus::fdo::Error::TimedOut(
+                "bus busy".to_owned()
+            ))),
+            Existing::Unreadable
+        ));
+        for kind in [
+            std::io::ErrorKind::NotFound,
+            std::io::ErrorKind::ConnectionRefused,
+        ] {
+            let error = zbus::Error::InputOutput(std::sync::Arc::new(kind.into()));
+            assert!(matches!(
+                connect_failure(&secret_service::Error::Zbus(error)),
+                Existing::NoService
+            ));
+        }
+        assert!(matches!(
+            connect_failure(&secret_service::Error::Zbus(zbus::Error::Address(
+                "no session bus address".to_owned()
+            ))),
+            Existing::NoService
+        ));
+        let denied = zbus::Error::InputOutput(std::sync::Arc::new(
+            std::io::ErrorKind::PermissionDenied.into(),
+        ));
+        assert!(matches!(
+            connect_failure(&secret_service::Error::Zbus(denied)),
+            Existing::Unreadable
+        ));
+        for error in [
+            secret_service::Error::Crypto("negotiation failed"),
+            secret_service::Error::Locked,
+            secret_service::Error::PromptDisconnected,
+        ] {
+            assert!(matches!(connect_failure(&error), Existing::Unreadable));
+        }
     }
 }

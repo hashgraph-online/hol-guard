@@ -50,6 +50,7 @@ import pytest
 from ci.gauntlet.edge_clone_fixtures import write_edge_clone
 from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
+from ci.gauntlet.source_output_fixtures import FALLBACK_SOURCES
 from ci.gauntlet.source_output_fixtures import SOURCES as TOKEN_SOURCES
 from tests import codex_containment_route
 from tests.benign_fp_gate_configs import write_parent_design_tokens, write_parent_documents
@@ -73,6 +74,7 @@ from tests.benign_fp_gate_projects import (
     _bun_lockfile,
     _node_package,
     _node_toolchain,
+    _pnpm_store_package,
     _python_toolchain,
     _vendored_toolchain,
     _write,
@@ -175,6 +177,8 @@ class BenignFixture:
             "home_project": self.home / "project",
             "home_sibling": self.home / "other-project",
             "org_app": self.org / "app-portal",
+            # The docs folder of a sibling checkout whose design folder commits a design tool's dot-folder.
+            "docs_site_docs": self.org / "docs-site" / "docs",
             "org_wt": self.org.parent / "app-portal-fix",
             "org_clone": self.org.parent / "app-portal-clone",
             **hooked_cwds(self.org),
@@ -186,6 +190,15 @@ class BenignFixture:
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
             "feature_app": feature_app_path(self.home),
             "pnpm_monorepo": self.home / "Code" / "acme-platform",
+            # A package inside a workspace whose shared type-check base sits at
+            # the checkout root, one directory above the run.
+            "workspace_package": self.home / "Code" / "atlas-tools" / "packages" / "app",
+            # The same workspace's checkout root, where an agent starts before
+            # it steps into the package it wants to check.
+            "workspace_monorepo": self.home / "Code" / "atlas-tools",
+            # The package in that workspace whose base turns on `incremental`,
+            # so the same type check writes a build-info file.
+            "workspace_incremental_package": self.home / "Code" / "atlas-tools" / "packages" / "tool",
             "stale_lockfile_app": stale_lockfile_app_path(self.home),
             "linked_worktree": self.linked_worktree,
             "linked_sources": linked_sources_path(self.home),
@@ -260,6 +273,11 @@ def build_fixture(root: Path) -> BenignFixture:
     _application_database(worktree / ".tmp" / "app.db")
     # Worktree package borrowing the canonical checkout's installed node_modules through a symlink.
     _node_toolchain(parent / "dashboard")
+    # A second checkout beside the session whose dependencies pnpm installed.
+    # Resolving the launcher the package manager linked is how an agent finds
+    # which binary that project runs, and the shim is a link into the hidden
+    # content store below its `node_modules`.
+    _pnpm_store_package(home / "codegen-app", "codegen-kit", "2.1.0")
     _write(worktree / "dashboard" / "package.json", (parent / "dashboard" / "package.json").read_text())
     # pnpm's workspace root: `pnpm -w run build` runs the root package's script
     # from anywhere in the checkout. Only `packages` is set, so the install
@@ -269,8 +287,9 @@ def build_fixture(root: Path) -> BenignFixture:
     # The live Gauntlet's placeholder docs and field-copy source, read by its shell cases.
     _write(worktree / "docs" / "review-notes.md", REVIEW_NOTES)
     _write(worktree / "dashboard" / "src" / "session.js", SESSION_SOURCE)
-    # The live Gauntlet's token-handling sources (redirect route, link worker, HMAC helper).
-    for relative, text in TOKEN_SOURCES.items():
+    # The live Gauntlet's token-handling sources (redirect route, link worker, HMAC
+    # helper) and its Python link helper.
+    for relative, text in {**TOKEN_SOURCES, **FALLBACK_SOURCES}.items():
         _write(worktree / relative, text)
     # The test beside that source: a project file whose name reads like a
     # credential, named by the runner a session runs over it.

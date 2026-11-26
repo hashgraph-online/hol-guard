@@ -193,6 +193,7 @@ impl NativeCommandProgram {
             rule_indices,
             extension_rule_indices,
             baseline_allow_permissions,
+            extension_name_sets: std::sync::OnceLock::new(),
         })
     }
 }

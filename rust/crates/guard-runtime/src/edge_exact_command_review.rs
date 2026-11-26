@@ -22,6 +22,7 @@ use guard_contracts::{GuardHookEnvelopeV2, PreToolActionTypeV1, PreToolResultV1}
 use rusqlite::{params, Connection};
 use serde_json::Value;
 
+use crate::connector_setup::is_non_recognition;
 use crate::local_store_read::{
     open_read_only_cached, pre_tool_command, table_exists, STORE_FILE_NAME,
 };
@@ -169,16 +170,18 @@ pub(crate) fn apply_with_sources(
     if minimum >= ActionFloor::Block {
         return result;
     }
-    let reviewable = minimum <= ActionFloor::Warn;
+    // A grant answers a non-recognition hold, so a saved rule replaces it.
+    let reviewable = minimum <= ActionFloor::Warn
+        || (minimum < ActionFloor::SandboxRequired
+            && is_non_recognition(Some(&result.reason_code)));
     // A missing store holds no rule.
     let connection = match open_read_only_cached(&guard_home.join(STORE_FILE_NAME)) {
         Ok(Some(connection)) => connection,
         Ok(None) => return result,
         Err(_) => return unreadable(result, reviewable),
     };
-    // One read snapshot for the block and review rules, the allow rule and the
-    // signed bundle behind it, so a policy sync that commits between the reads
-    // cannot pair a newly signed allow with the rules from before it.
+    // One read snapshot for the rules and the signed bundle behind an allow, so
+    // a policy sync cannot pair a newly signed allow with older rules.
     let Ok(_snapshot) = connection.unchecked_transaction() else {
         return unreadable(result, reviewable);
     };
@@ -226,8 +229,7 @@ pub(crate) fn apply_with_sources(
     }
 }
 
-/// A store that exists but cannot be read may hold a block or review rule, so
-/// an allowed call is raised to review.
+/// A store Guard cannot read may hold a block or review rule, so it asks.
 fn unreadable(result: PreToolResultV1, reviewable: bool) -> PreToolResultV1 {
     if !reviewable {
         return result;
@@ -259,14 +261,12 @@ struct Unreadable;
 struct Rules {
     block: Option<Hit>,
     review: Option<Hit>,
-    /// Part of the line could not be read, so a rule may name a step that
-    /// was not looked up.
+    /// Part of the line was unread, so a rule may name a step not looked up.
     incomplete: bool,
 }
 
-/// The live block and review rules for `harness` or every harness that name
-/// one of the exact-command ids of the call's commands, under any spelling,
-/// everywhere or in its folder. A missing table holds no rule.
+/// Live block and review rules, for `harness` or all, naming an exact id of a
+/// command under any spelling, anywhere or in its folder. No table, no rule.
 fn matching_rules(
     connection: &Connection,
     harness: &str,
@@ -472,7 +472,9 @@ fn raise(mut result: PreToolResultV1, (reason_code, reason): (&str, &str)) -> Pr
     if ActionFloor::parse(&result.policy_action).is_none_or(|policy| policy < ActionFloor::Review) {
         result.policy_action = "review".into();
     }
-    result.minimum_action = "review".into();
+    if ActionFloor::parse(&result.minimum_action).is_none_or(|m| m < ActionFloor::Review) {
+        result.minimum_action = "review".into();
+    }
     result.decision = "deny".into();
     result.explicitly_benign = false;
     result.reason_code = reason_code.into();

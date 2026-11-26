@@ -20,6 +20,7 @@ fn context() -> crate::pretool::PathContext<'static> {
         cwd: Some(CWD),
         cdpath_unset: false,
         rustup_override_absent: false,
+        go_toolchain_inert: false,
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
@@ -227,6 +228,7 @@ fn file_writes_never_follow_an_existing_symlink() {
         cwd: Some(&cwd),
         cdpath_unset: false,
         rustup_override_absent: false,
+        go_toolchain_inert: false,
         cargo_config_inert: false,
         npm_config_inert: false,
         pip_config_inert: false,
@@ -329,10 +331,13 @@ fn contained_commands_with_an_output_redirect_keep_protected_execution() {
         "review"
     };
     // The sandbox cannot keep a write outside the workspace: Linux mounts a
-    // private /tmp and macOS refuses it. That redirect stays at review.
+    // private /tmp and macOS refuses it. A scratch log directly in the
+    // temporary directory is written by the sink itself, so it stays
+    // contained; any other file there stays at review.
     for (command, action) in [
         ("pnpm test > out.log", contained),
-        ("pnpm test > /tmp/guard-test.log 2>&1", "review"),
+        ("pnpm test > /tmp/guard-test.log 2>&1", contained),
+        ("pnpm test > /tmp/guard-test.json 2>&1", "review"),
     ] {
         let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
             "zcode",

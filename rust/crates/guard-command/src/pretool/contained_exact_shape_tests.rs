@@ -203,3 +203,56 @@ fn a_commit_reading_its_message_from_a_heredoc_plans() {
         assert!(!shaped(command, &ws), "{command}");
     }
 }
+
+/// A Python program fed on standard input after plain readers, or after a
+/// `cd` to the workspace itself, is sent to the sandbox by the decision; the
+/// sandbox must plan the same text or it refuses work the decision admitted.
+#[test]
+fn a_python_heredoc_after_readers_or_a_cd_into_the_workspace_plans() {
+    let ws = tree("heredoc-lead");
+    std::fs::create_dir_all(ws.join("pkg")).unwrap();
+    std::fs::write(ws.join("pkg/__init__.py"), "X = 1\n").unwrap();
+    let body = "<<'EOF'\nimport json\nprint(json.dumps({'probe': 1}))\nEOF";
+    let local = "<<'EOF'\nimport pkg\nprint(pkg.X)\nEOF";
+    let root = std::fs::canonicalize(&ws).unwrap();
+    for command in [
+        format!("git diff --check && git diff && python3 - {body}"),
+        format!("ls pkg; python3 - {local}"),
+        format!("git log --oneline -- pkg | head -20; python3 - {local}"),
+        format!("cd {} && python3 - {body}", root.display()),
+        format!("cd '{}' && python3 - {local}", root.display()),
+    ] {
+        assert!(shaped(&command, &ws), "{command}");
+    }
+}
+
+/// The sandbox takes a lead only where the decision did: a writer, a reader
+/// the projection rewrote, or a `cd` anywhere but the workspace root keeps the
+/// text unplanned.
+#[test]
+fn a_python_heredoc_after_another_lead_does_not_plan() {
+    let ws = tree("heredoc-other-lead");
+    std::fs::create_dir_all(ws.join("pkg")).unwrap();
+    std::fs::write(ws.join("pkg/__init__.py"), "X = 1\n").unwrap();
+    let local = "<<'EOF'\nimport pkg\nprint(pkg.X)\nEOF";
+    let root = std::fs::canonicalize(&ws).unwrap();
+    for command in [
+        format!("sed -i 's/X = 1/X = 2/' pkg/__init__.py; python3 - {local}"),
+        format!("ls > pkg/__init__.py; python3 - {local}"),
+        format!("cd pkg && python3 - {local}"),
+        format!("cd {} && python3 - {local}", root.join("pkg").display()),
+        format!("cd . && python3 - {local}"),
+    ] {
+        assert!(!shaped(&command, &ws), "{command}");
+    }
+    // A logical `cd` drops `link` before `..` and lands in `other`, while
+    // canonicalizing follows the link into `pkg` and climbs to the root.
+    std::fs::create_dir_all(ws.join("other")).unwrap();
+    std::os::unix::fs::symlink(ws.join("pkg"), ws.join("other/link")).unwrap();
+    for command in [
+        format!("cd {}/other/link/.. && python3 - {local}", root.display()),
+        format!("cd {}/pkg/.. && python3 - {local}", root.display()),
+    ] {
+        assert!(!shaped(&command, &ws), "{command}");
+    }
+}

@@ -111,6 +111,14 @@ fn resolve_saved(
         decision.source = "heuristic".to_owned();
         decision.summary = "This MCP connector has not been set up on this device.".to_owned();
     }
+    let empty;
+    let saved = match (saved, connection, leg.is_some()) {
+        (None, Some(connection), true) => {
+            empty = store::empty(connection, &request.guard_home)?;
+            Some(&empty)
+        }
+        (saved, _, _) => saved,
+    };
     let packaged = match leg {
         Some(PackageLeg::Decide(intent)) => {
             let inputs = package_leg::package_inputs(

@@ -34,7 +34,7 @@ from .case_helpers import (
     read_case_logs,
     ready_watch_binding,
 )
-from .case_retry import CaseRetries, case_fixture_name
+from .case_retry import CaseRetries, case_fixture_name, worker_death_assessment
 from .case_worker import SubprocessCaseWorker
 from .catalog import CATALOG, WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
@@ -63,7 +63,7 @@ from .input_evidence import (
 )
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
-from .native_routes import await_native_routes
+from .native_routes import SinkReceiptTally, await_native_routes
 from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_private_temp
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
@@ -183,6 +183,8 @@ def run_case(
         "guard_observations": [],
         "native_routes": {},
         "resident_direct_answers": 0,
+        "sink_receipt_routes": {},
+        "sink_receipt_calls": {},
         "inference": {"live_rounds": [], "canary_export_violations": 0},
         "filesystem": {},
         "egress_requests": [],
@@ -272,6 +274,7 @@ def run_case(
                     case["business_policy"], publisher.current_snapshot(), policy_snapshot
                 )
             worker = daemon._server.hook_worker
+            receipt_tally = SinkReceiptTally(worker)
             if scenario.oracle == "blocked-extension":
                 extension_receipt_ids = native_probe.persisted_native_receipt_ids(worker.store)
                 extension_receipt_writer = daemon._server.runtime_hook_evidence_writer
@@ -398,9 +401,10 @@ def run_case(
             # A bridged hook is answered either by a live resident, which counts
             # it itself, or by the daemon, which routes it; read both once the
             # case's observations say how many answers to account for.
-            case["native_routes"], case["resident_direct_answers"] = await_native_routes(
-                worker, len(case["guard_observations"])
+            case["native_routes"], case["resident_direct_answers"], tallied = await_native_routes(
+                worker, len(case["guard_observations"]), tally=receipt_tally
             )
+            case["sink_receipt_routes"], case["sink_receipt_calls"] = tallied["routes"], tallied["calls"]
             if proofs := request_proofs(host_log, fixture.workspace, replacements):
                 case["contained_request_proofs"] = proofs
             if scenario.oracle == "blocked-extension":
@@ -671,6 +675,28 @@ def run_suite(
             )
 
         (output / "cases").mkdir(parents=True, exist_ok=True)
+
+        def worker_died(index: int, exc: BaseException) -> dict[str, Any]:
+            """A dead worker recorded no verdict; publish that as this case's harness error.
+
+            The case file is written so the summary, retry archive and verifier all see
+            one record per case. A harness error never counts as a pass, so the only
+            effect is that the case can be re-run instead of the attempt being lost.
+            """
+            scenario = selected[index]
+            returncode = getattr(exc, "returncode", None)
+            assessment = worker_death_assessment(returncode)
+            case = {
+                "id": scenario.id,
+                "expectation": scenario.expectation,
+                "scenario_id": scenario.id,
+                "assessment": assessment,
+                "guard_observations": [],
+                "worker_exit": {"returncode": returncode, "stderr_tail": getattr(exc, "stderr_tail", "")},
+            }
+            (output / "cases" / f"{scenario.id}.json").write_text(json.dumps(case, indent=2) + "\n")
+            return {"assessment": assessment, "guard_observations": []}
+
         # Ordinary cases run first so the short single-attempt protection cases
         # fill the tail; evidence stays in catalog order through record().
         order = [i for i, s in enumerate(selected) if s.expectation == "allow"] + [
@@ -689,6 +715,7 @@ def run_suite(
             ),
             retry=((lambda index, result: want_retry(selected[index].id, result)) if case_retries else None),
             cancel_retry=((lambda index, _result: retries.restore(selected[index].id)) if case_retries else None),
+            worker_died=worker_died,
             admit=gate,
             slots=slot_pool,
         )

@@ -193,6 +193,15 @@ fn a_render_setting_keeps_only_the_note_show_reviewed() {
         let session = session(&format!("notes-render-{index}"));
         annotate(&session.home, &session.primary);
         git(&session.home, &session.primary, &["config", key, value]);
+        if key == "log.showSignature" {
+            // The signature check runs the program the repository names,
+            // not one the user chose.
+            git(
+                &session.home,
+                &session.primary,
+                &["config", "gpg.program", "./synthetic-never-execute"],
+            );
+        }
         for command in ["git notes show HEAD", "git notes --ref build show HEAD"] {
             let result = session.evaluate_at(command, &session.primary);
             assert_ne!(

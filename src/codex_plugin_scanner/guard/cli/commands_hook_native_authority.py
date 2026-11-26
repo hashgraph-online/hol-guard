@@ -13,16 +13,18 @@ from typing import Any, TextIO
 
 from ..harness_context import HarnessContext
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
-from ..hook_failure_bridge import RUNTIME_MISSING, native_hook_failure, native_stderr_hook_failure
-from ..hook_review.hook_availability_policy import (
+from ..hook_failure_bridge import native_hook_failure, native_stderr_hook_failure, outage_stderr_failure
+from ..hook_review.hook_fail_closed import fail_closed_response
+from ..hook_review.hook_worker import HookWorker
+from ..hook_review.hook_worker_unavailable import withhold_structured_destination, withholds_structured_destination
+from ..native_hook_availability import (
     availability_harness_response,
     canonical_hook_event_name,
     hook_event_pauses_when_unavailable,
 )
-from ..hook_review.hook_fail_closed import fail_closed_response
-from ..hook_review.hook_worker import HookWorker
-from ..hook_review.hook_worker_unavailable import withhold_structured_destination, withholds_structured_destination
-from ..native_hook_render import native_cli_hook_emit
+from ..native_hook_render import (
+    native_cli_hook_emit,
+)
 from ..native_payload_facts import native_cli_hook_admission
 from ..resident_evidence_client import ResidentEvidenceClient
 from ..runtime_health.diagnostics import DaemonDiagnostics
@@ -60,12 +62,19 @@ def _delivery_deadline(deadline: float | None) -> float | None:
     return max(deadline, time.monotonic() + _DELIVERY_BUDGET_SECONDS)
 
 
-def _failure_output(harness: str, event_name: str, reason: str) -> tuple[str, str, int]:
+def _failure_output(
+    harness: str,
+    event_name: str,
+    reason: str,
+    *,
+    deadline: float | None = None,
+    reason_code: str | None = None,
+) -> tuple[str, str, int]:
     """The runtime's fixed fail-closed answer, or a block that names the repair."""
 
-    failure = native_hook_failure(harness, event_name, reason)
+    failure = native_hook_failure(harness, event_name, reason, reason_code=reason_code, deadline=deadline)
     if failure is None:
-        return "", RUNTIME_MISSING, 2
+        return outage_stderr_failure(event_name)
     return failure[0], "", failure[1]
 
 
@@ -82,6 +91,9 @@ def _bridge_hook_output(
     The resident reshapes the daemon's answer into the harness's wire format.
     When it cannot, the harness gets the fixed fail-closed payload its bridge
     writes for an outage; nothing reads the answer in Python.
+
+    ``deadline`` is expected to carry the delivery floor already, as
+    :func:`emit_hook_review` applies it on the way in.
     """
 
     rendered = native_cli_hook_emit(
@@ -96,11 +108,28 @@ def _bridge_hook_output(
             and not isinstance(exit_code, bool)
         ):
             return stdout, stderr, exit_code
+    # The review is over; what is left is writing the refusal the harness
+    # reads, on the same delivery floor a decided answer gets. ``deadline``
+    # already carries that floor - ``emit_hook_review`` applies it before this
+    # runs - so flooring it again here would hand the fail-closed render a
+    # second full budget and let it land past the hook's own deadline.
     if canonical == "muse":
-        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON)
+        return native_stderr_hook_failure(canonical, event_name, _BRIDGE_BLOCK_REASON, deadline=deadline)
     if canonical == "hermes":
-        return _failure_output(canonical, event_name, _BRIDGE_BLOCK_REASON)
-    return _failure_output(canonical, event_name, _RENDER_FAILURE_REASON)
+        return _failure_output(
+            canonical,
+            event_name,
+            _BRIDGE_BLOCK_REASON,
+            deadline=deadline,
+            reason_code="native_hook_render_unavailable",
+        )
+    return _failure_output(
+        canonical,
+        event_name,
+        _RENDER_FAILURE_REASON,
+        deadline=deadline,
+        reason_code="native_hook_render_unavailable",
+    )
 
 
 def _record_native_hook_exception(guard_home: Path, *, harness: str, event_name: str) -> None:

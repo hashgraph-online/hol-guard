@@ -201,12 +201,6 @@ fn decide_once(
             policy_action,
             remember: true,
         } => {
-            if !policy_store
-                .mcp_relay_pending()
-                .has_headroom(Instant::now())
-            {
-                return Err(EVIDENCE_FULL);
-            }
             // The remembered allow is an artifact-scoped policy write, and the
             // approval gate holds every allow to a decision while it is
             // enabled. `upsert_policy` raising `ApprovalGateError` is what

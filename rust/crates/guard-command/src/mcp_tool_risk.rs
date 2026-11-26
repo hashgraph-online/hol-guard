@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use std::net::IpAddr;
 use std::sync::OnceLock;
 
-const NAMES: [&str; 15] = [
+const NAMES: [&str; 16] = [
     "filesystem_access",
     "command_execution",
     "destructive_mutation",
@@ -23,6 +23,7 @@ const NAMES: [&str; 15] = [
     "browser_external_domain",
     "browser_shared_profile",
     "browser_sensitive_surface",
+    "browser_guard_origin",
 ];
 const FILESYSTEM: u16 = 1;
 const COMMAND: u16 = 1 << 1;
@@ -365,6 +366,9 @@ pub fn evaluate_tool_risk(
         }
         if browser.sensitive_surface {
             bits |= 1 << 14;
+        }
+        if browser.guard_origin {
+            bits |= 1 << 15;
         }
     }
     let mut categories = Vec::with_capacity(bits.count_ones() as usize);

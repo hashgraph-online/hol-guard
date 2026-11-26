@@ -433,7 +433,10 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 )
             }
             ResidentOperationV1::CommandEnvelope(request) => {
-                crate::command_envelope_op::evaluate_command_envelope_request(&request)
+                crate::command_envelope_op::evaluate_command_envelope_request(
+                    &request,
+                    policy_store.map(PolicySnapshotStore::guard_home),
+                )
             }
             ResidentOperationV1::ContainedWrapperPlan(request) => {
                 crate::contained_wrapper_plan_op::evaluate_contained_wrapper_plan_request(&request)

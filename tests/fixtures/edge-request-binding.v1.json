@@ -41,6 +41,8 @@
           "decision": "block",
           "reason": "HOL Guard requires review for this bounded action."
         },
+        "requires_approval": true,
+        "recording_only_response": false,
         "containment_route": "none",
         "receipt": {
           "schema": "guard-native-hook-decision-receipt.v1",
@@ -102,6 +104,8 @@
           "explicitly_benign": true
         },
         "harness_response": {},
+        "requires_approval": false,
+        "recording_only_response": false,
         "containment_route": "none",
         "receipt": {
           "schema": "guard-native-hook-decision-receipt.v1",
@@ -166,6 +170,8 @@
           "decision": "block",
           "reason": "HOL Guard requires review for this bounded action."
         },
+        "requires_approval": true,
+        "recording_only_response": false,
         "containment_route": "none",
         "receipt": {
           "schema": "guard-native-hook-decision-receipt.v1",
@@ -229,6 +235,8 @@
           "decision": "block",
           "reason": "HOL Guard requires review for this bounded action."
         },
+        "requires_approval": true,
+        "recording_only_response": false,
         "containment_route": "none",
         "receipt": {
           "schema": "guard-native-hook-decision-receipt.v1",
@@ -293,6 +301,8 @@
           "decision": "block",
           "reason": "HOL Guard requires review for this bounded action."
         },
+        "requires_approval": true,
+        "recording_only_response": false,
         "containment_route": "none",
         "receipt": {
           "schema": "guard-native-hook-decision-receipt.v1",
@@ -357,6 +367,8 @@
           "decision": "block",
           "reason": "HOL Guard requires review for this bounded action."
         },
+        "requires_approval": true,
+        "recording_only_response": false,
         "containment_route": "none",
         "receipt": {
           "schema": "guard-native-hook-decision-receipt.v1",

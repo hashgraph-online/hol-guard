@@ -71,6 +71,15 @@ Packs in `contributions/cloud-actions/` follow
 `hol-guard command explain --cloud`, and fill in the **Cloud action pack** pull-request template. Leave
 `provider.publisher.verified` as `false`, and use synthetic identifiers in every fixture.
 
+## Browser driver contributions
+
+Profiles in `contributions/browser-drivers/` follow
+[Contribute a browser driver profile](docs/guard/extensions/browser-driver-contributing.md). Draft with
+`hol-guard extensions generate --browser`, check with `hol-guard extensions validate --browser` and
+`hol-guard browser explain`, and fill in the **Browser driver profile** pull-request template,
+including its Installed Guard check. Leave `publisher.verified` as `false`, never claim a generic
+name, and use synthetic origins and identifiers in every gate row and Gauntlet case.
+
 ## Repository review guidance
 
 ### File-size review policy

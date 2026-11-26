@@ -194,6 +194,8 @@ fn raw_paging(
             | "diff-index"
             | "diff-tree"
             | "log"
+            | "whatchanged"
+            | "range-diff"
             | "show"
             | "blame"
             | "annotate"
@@ -215,10 +217,12 @@ fn raw_paging(
             | "check-ignore"
             | "count-objects"
             | "check-attr"
+            | "fsck"
             | "sparse-checkout"
             | "rev-parse"
             | "ls-files"
             | "apply"
+            | "merge-file"
             | "bisect"
             | "notes"
             | "replace"
@@ -260,6 +264,7 @@ fn raw_paging(
             | "check-ignore"
             | "count-objects"
             | "check-attr"
+            | "fsck"
             | "sparse-checkout"
             | "rev-parse"
             | "ls-files"
@@ -280,6 +285,11 @@ fn raw_paging(
     // Only the patch check reads; every other apply writes, and its own
     // review decides it.
     if operation == "apply" && !super::git_apply_check::is_check_only(&remaining[1..]) {
+        return Raw::NotModelled;
+    }
+    // Only the printing merge reads; without `-p` it writes the first file,
+    // and its own review decides it.
+    if operation == "merge-file" && !super::git_merge_file_read::is_read_only(&remaining[1..]) {
         return Raw::NotModelled;
     }
     // A plain configuration write is no read; its own proof decides it.
@@ -503,7 +513,7 @@ fn probe(
             "config",
             "--null",
             "--get-regexp",
-            "^(core\\.fsmonitor|core\\.excludesfile|core\\.attributesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
+            "^(core\\.fsmonitor|core\\.excludesfile|core\\.attributesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|fsck\\.skiplist|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
         ])
 ,
         deadline, CONFIG_LIMIT,
@@ -559,13 +569,16 @@ fn probe(
         .iter()
         .skip(1)
         .take_while(|value| value.as_str() != "--");
-    // Deliberately conservative: an explicit signature request always needs
-    // review, even if a later --no-show-signature would disable it. We do not
-    // claim to prove the complete signature-format/helper option grammar.
+    // Deliberately conservative: an explicit signature request is read as
+    // one even if a later --no-show-signature would disable it. It starts the
+    // configured verification program, so it is cleared only below, once the
+    // program is shown to be one the user chose.
+    let verifies = super::git_history_reads::verifies_signatures(rendering);
+    let mut signature_requested = options
+        .clone()
+        .any(|value| value.as_str() == "--show-signature" || (verifies && value.contains("%G")));
     if options.clone().any(|value| {
-        value.as_str() == "--show-signature"
-            || (super::git_history_reads::verifies_signatures(rendering) && value.contains("%G"))
-            || value.starts_with("--remerge-diff")
+        value.starts_with("--remerge-diff")
             || value == "--diff-merges=remerge"
             || value == "--submodule=diff"
     }) {
@@ -594,17 +607,41 @@ fn probe(
         .map(String::as_str)
         .filter(|value| value.starts_with('-'))
         .collect::<Vec<_>>();
-    let textconv_runs = !no_textconv && textconv::may_run(rendering, &option_flags);
+    // `range-diff` reads each range through an inner `git log -p` it builds
+    // itself and passes neither of its own switches down to that child, so a
+    // configured `diff.<driver>.textconv` still runs with `--no-textconv` on
+    // the command line. For that one rendering the switch proves nothing and
+    // only `may_run` decides.
+    let textconv_runs =
+        (!no_textconv || rendering == "range-diff") && textconv::may_run(rendering, &option_flags);
     // An external driver renders a diff, so only a read that renders one can
     // start it. A tag listing, a clean preview, a ref listing or an ignore
     // check prints names, and a configured driver leaves all of them alone.
     let renders_diff = matches!(
         rendering,
-        "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "show" | "reflog" | "stash"
+        "diff"
+            | "diff-files"
+            | "diff-index"
+            | "diff-tree"
+            | "log"
+            | "whatchanged"
+            | "range-diff"
+            | "show"
+            | "reflog"
+            | "stash"
     );
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
+        // Git reads the skip list named by every file it loads, so a later
+        // empty value does not take back the file an earlier one named: the
+        // check still opens it and can quote a line of it back. Every other
+        // setting here is decided by the last value, the way Git's own
+        // lookup reads it.
+        if key == "fsck.skiplist" && value.is_empty() {
+            effective.entry(key).or_insert(value);
+            continue;
+        }
         effective.insert(key, value);
     }
     let pager_key = format!("pager.{pager_operation}");
@@ -617,11 +654,11 @@ fn probe(
         // plumbing: Git starts no pager for any of them, so only their own
         // `pager.*` key can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
-        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
-        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
-        | "diff-index" | "diff-files" | "name-rev" | "show-branch" | "check-ref-format"
-        | "symbolic-ref" | "var" | "patch-id" | "stripspace" | "check-mailmap"
-        | "interpret-trailers" => false,
+        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "merge-file"
+        | "count-objects" | "check-attr" | "fsck" | "sparse-checkout" | "submodule"
+        | "rev-parse" | "ls-files" | "diff-index" | "diff-files" | "name-rev" | "show-branch"
+        | "check-ref-format" | "symbolic-ref" | "var" | "patch-id" | "stripspace"
+        | "check-mailmap" | "interpret-trailers" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
@@ -687,6 +724,12 @@ fn probe(
                         .all(|argument| argument.starts_with('-'))))
                 && !remaining.iter().any(|argument| argument == "--no-index"),
         )?;
+    // A child told to page with no program of its own reads `core.pager`
+    // itself, so the setting is read before the loop takes the map.
+    let core_pager = effective
+        .get("core.pager")
+        .copied()
+        .filter(|pager| !pager.is_empty() && *pager != "cat");
     for (key, value) in effective {
         let disabled = disabled_boolean(value);
         let unsafe_value = match key {
@@ -715,9 +758,11 @@ fn probe(
             // A verbose ignore check prints the rule that matched and the file
             // it came from. The repository's own ignore files are part of the
             // checkout, but a configured excludes file names anything, so the
-            // check keeps its review until someone reads that setting.
+            // check keeps its review unless the setting names the repository's
+            // own exclude file or a per-user ignore list.
             "core.excludesfile" => {
                 !value.is_empty()
+                    && !super::git_excludes_file::names_an_ignore_list(value, git_home)
                     && super::git_listing_reads::prints_rule_source(operation, &remaining[1..])
             }
             // An attribute check prints the attribute names and values of
@@ -736,15 +781,44 @@ fn probe(
                     && value != "cat"
             }
             key if key.starts_with("pager.") => {
-                key == pager_key
+                let own = key == pager_key;
+                // Git runs `commit-graph verify`, `refs verify` and
+                // `multi-pack-index verify` from inside `fsck`, and each child
+                // reads its own `pager.<command>` key. None of them pages by
+                // default, so only one of those keys starts a program there --
+                // but when one does, the program runs from a read that
+                // `pager.fsck` alone proved quiet. A child the key enables
+                // reads the rest of Git's pager chain for itself, `core.pager`
+                // included. Measured on Git 2.53.
+                let fsck_child = operation == "fsck"
+                    && matches!(
+                        key,
+                        "pager.commit-graph" | "pager.refs" | "pager.multi-pack-index"
+                    );
+                (own || fsck_child)
                     && !git_pager_disabled
                     && !disabled
                     && !value.is_empty()
                     && value != "cat"
-                    && if enabled_boolean(value) {
-                        paging
+                    && if own {
+                        if enabled_boolean(value) {
+                            paging
+                        } else {
+                            configured_paging
+                        }
+                    } else if enabled_boolean(value) {
+                        // A child told to page with no program of its own
+                        // reads `core.pager` itself, and only falls back to
+                        // `$PAGER` or Git's default when that setting is
+                        // absent. The parent's own key proved nothing about
+                        // either, so both decide whether a program runs.
+                        !no_pager
+                            && (core_pager.is_some()
+                                || !environment_pager.is_some_and(|disabled| disabled))
                     } else {
-                        configured_paging
+                        // A program named by the key itself overrides the
+                        // environment, exactly as the parent's own key does.
+                        !no_pager
                     }
             }
             "diff.external" => renders_diff && !no_external && !value.is_empty(),
@@ -756,29 +830,51 @@ fn probe(
             }
             key if key.starts_with("filter.") => filtered && !value.is_empty() && !filters_unused,
             "format.pretty" => {
-                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
+                signature_requested |= verifies && value.contains("%G");
+                false
             }
             key if key.starts_with("pretty.") => {
-                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
+                signature_requested |= verifies && value.contains("%G");
+                false
             }
             "log.showsignature" => {
-                super::git_history_reads::verifies_signatures(rendering) && !disabled
+                signature_requested |= verifies && !disabled;
+                false
             }
+            // A configured skip list names a file of object names Git reads
+            // before it checks anything, and a line of that file that is not
+            // an object name is quoted back in the diagnostic Git prints.
+            // A check that reads an arbitrary file and can echo a line of it
+            // keeps its review until someone reads that setting; an absent
+            // one leaves the check where it was.
+            "fsck.skiplist" => operation == "fsck" && !value.is_empty(),
             // Outside a repository grep would search every file under cwd.
             "grep.fallbacktonoindex" => operation == "grep" && !disabled,
             // A configured verification program (a very common developer
-            // setting) runs only when signature verification is requested.
-            // Every such request is rejected above: --show-signature,
-            // log.showSignature, %G placeholders in the command line,
-            // format.pretty or any pretty.* alias, for the reflog walk as
-            // much as for `log` and `show`. A bare gpg.* definition
-            // therefore cannot execute for the remaining reads.
+            // setting) runs only when signature verification is requested:
+            // --show-signature, log.showSignature, %G placeholders in the
+            // command line, format.pretty or any pretty.* alias, for the
+            // reflog walk as much as for `log` and `show`. Each of those
+            // marks the read above, and the read is cleared below only when
+            // every program it could start is one the user chose. A bare
+            // gpg.* definition cannot execute for the remaining reads.
             key if key.starts_with("gpg.") => false,
             _ => return None,
         };
         if unsafe_value {
             return Some(false);
         }
+    }
+    if signature_requested
+        && !super::git_signature_helper::user_chosen(
+            &command,
+            &home,
+            &cwd,
+            execution_environment,
+            deadline,
+        )
+    {
+        return Some(false);
     }
     if operation == "config" {
         return super::git_config_reads::credential_free(&command, &remaining[1..], deadline);

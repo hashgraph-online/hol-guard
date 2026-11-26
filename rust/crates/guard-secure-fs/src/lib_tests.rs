@@ -346,6 +346,37 @@ fn windows_name_aliases_keep_the_plain_path_classification() {
     assert_eq!(win32_name("notes.md:hidden"), "notes.md:hidden");
 }
 
+/// Project context and the post-tool source review run no committed-document
+/// proof, so a document named for a key stays refused there, in the workspace
+/// and outside it.
+#[test]
+fn source_classifiers_refuse_a_key_named_document() {
+    let root = fixture_root("key-named-document");
+    let home = root.join("home");
+    let workspace = home.join("workspace");
+    fs::create_dir_all(workspace.join("keys")).unwrap();
+    fs::write(workspace.join("keys/wallet-key.json"), "{}\n").unwrap();
+    fs::write(home.join("prod-private-key.yaml"), "kind: note\n").unwrap();
+
+    for (target, allow_external) in [
+        ("keys/wallet-key.json", false),
+        ("~/prod-private-key.yaml", true),
+    ] {
+        assert_eq!(
+            classify_source_path(target, &workspace, Some(&home), allow_external).reason_code,
+            "sensitive_basename",
+            "{target}"
+        );
+        assert_eq!(
+            classify_scannable_source_path(target, &workspace, Some(&home), allow_external)
+                .reason_code,
+            "sensitive_basename",
+            "{target}"
+        );
+    }
+    let _ = fs::remove_dir_all(root);
+}
+
 #[test]
 fn source_classifier_rejects_hidden_sensitive_and_escape_paths() {
     let root = fixture_root("classifier");

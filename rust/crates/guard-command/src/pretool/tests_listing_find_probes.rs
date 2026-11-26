@@ -129,7 +129,8 @@ fn recursive_listing_and_globs_stay_inside_clean_trees() {
         "ls /etc/*",
         "ls ~/*",
         "ls nothing/*",
-        "ls src/{a,b}",
+        // A brace names exact words, so it keeps the review of the worst one.
+        "ls {src,bad/.env}",
         // An unmatched bracket operand is read literally only when no class
         // could match a dotfile and recursion could not fall back to the cwd.
         "ls -R app/items/[slug]",

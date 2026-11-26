@@ -128,6 +128,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                go_toolchain_inert: false,
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
@@ -170,6 +171,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                go_toolchain_inert: false,
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
@@ -227,6 +229,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                go_toolchain_inert: false,
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
@@ -300,6 +303,7 @@ fn empty_git_pager_overrides_a_custom_pager_variable() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                go_toolchain_inert: false,
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
@@ -374,6 +378,7 @@ fn piped_git_output_never_starts_a_configured_pager() {
                 cwd: repository.to_str(),
                 cdpath_unset: false,
                 rustup_override_absent: false,
+                go_toolchain_inert: false,
                 cargo_config_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
@@ -393,5 +398,191 @@ fn piped_git_output_never_starts_a_configured_pager() {
             "{command}: {} / {}",
             result.reason_code, result.reason
         );
+    }
+}
+
+/// `fsck` runs `commit-graph verify`, `refs verify` and `multi-pack-index
+/// verify` as children, and each child consults its own `pager.<command>`
+/// key rather than `pager.fsck`. A program named by one of those keys runs
+/// from a check that `pager.fsck` alone would prove quiet, so the proof reads
+/// them too. Disabling the pager on the command line still allows the check:
+/// `--no-pager` and `-P` reach the children as well.
+#[test]
+fn fsck_reads_the_pager_keys_of_the_commands_it_runs() {
+    let root = std::env::temp_dir().join(format!("guard-git-fsck-pager-{}", std::process::id()));
+    let home = root.join("home");
+    let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    assert!(std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()
+        .unwrap()
+        .success());
+    let config = repository.join(".git/config");
+    let enabled = github_controls("enabled");
+    for (settings, command, expected) in [
+        ("", "git fsck --no-progress", "allow"),
+        (
+            "[pager]\ncommit-graph = ./synthetic-never-execute\n",
+            "git fsck --no-progress",
+            "deny",
+        ),
+        (
+            "[pager]\nrefs = ./synthetic-never-execute\n",
+            "git fsck --no-progress",
+            "deny",
+        ),
+        (
+            "[pager]\nmulti-pack-index = ./synthetic-never-execute\n",
+            "git fsck --no-progress",
+            "deny",
+        ),
+        ("[pager]\ncommit-graph = true\n", "git fsck", "deny"),
+        (
+            "[pager]\ncommit-graph = false\n",
+            "git fsck --no-progress",
+            "allow",
+        ),
+        (
+            "[pager]\ncommit-graph = cat\n",
+            "git fsck --no-progress",
+            "allow",
+        ),
+        (
+            "[pager]\ncommit-graph = ./synthetic-never-execute\n",
+            "git --no-pager fsck --no-progress",
+            "allow",
+        ),
+        (
+            "[pager]\nrefs = ./synthetic-never-execute\n",
+            "git -P fsck --no-progress",
+            "allow",
+        ),
+        // Another command's children are its own; a check of the object store
+        // is the only read that starts these three.
+        (
+            "[pager]\ncommit-graph = ./synthetic-never-execute\n",
+            "git status --short",
+            "allow",
+        ),
+    ] {
+        std::fs::write(&config, settings).unwrap();
+        for harness in ["omp", "zcode"] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&enabled),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            assert_eq!(
+                result.decision, expected,
+                "{harness}: {command}: {settings}"
+            );
+        }
+    }
+}
+
+/// A `pager.<child>` key that only says "page" leaves the program to the rest
+/// of Git's pager chain, and the child reads `core.pager` from the repository
+/// itself. A `PAGER` that pages nothing does not settle that: the configured
+/// program still runs ahead of it, so the check keeps its review until someone
+/// reads `core.pager` too. An empty or `cat` setting names no program, and a
+/// `GIT_PAGER` that pages nothing stops the child before it reads either.
+#[test]
+fn an_enabled_fsck_child_reads_the_configured_core_pager() {
+    let root = std::env::temp_dir().join(format!("guard-git-fsck-core-{}", std::process::id()));
+    let home = root.join("home");
+    let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    assert!(std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()
+        .unwrap()
+        .success());
+    let config = repository.join(".git/config");
+    let enabled = github_controls("enabled");
+    for (settings, git_pager_disabled, expected) in [
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\ncommit-graph = true\n",
+            false,
+            "deny",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\nrefs = true\n",
+            false,
+            "deny",
+        ),
+        (
+            "[core]\npager = ./synthetic-never-execute\n[pager]\ncommit-graph = true\n",
+            true,
+            "allow",
+        ),
+        (
+            "[core]\npager = cat\n[pager]\ncommit-graph = true\n",
+            false,
+            "allow",
+        ),
+        (
+            "[core]\npager = \n[pager]\ncommit-graph = true\n",
+            false,
+            "allow",
+        ),
+    ] {
+        std::fs::write(&config, settings).unwrap();
+        // `GIT_PAGER` answers only where the session actually carries it, so
+        // the row that turns it off names it too.
+        let mut environment_names: Vec<String> = vec!["GIT_CONFIG_NOSYSTEM".into(), "PAGER".into()];
+        if git_pager_disabled {
+            environment_names.push("GIT_PAGER".into());
+        }
+        let context = guard_contracts::GuardExecutionEnvironmentV1 {
+            path: std::env::var("PATH").unwrap(),
+            environment_names,
+            environment_digest: "0".repeat(64),
+            home: None,
+            git_pager_disabled,
+            pager_disabled: true,
+            xdg_config_home: None,
+            git_config_no_system: true,
+            ..Default::default()
+        };
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":"git fsck --no-progress"}}),
+            Some(&enabled),
+            None,
+            guard_command::pretool::PathContext {
+                literal_words: &[],
+                guard_home: None,
+                home_dir: home.to_str(),
+                cwd: repository.to_str(),
+                cdpath_unset: false,
+                rustup_override_absent: false,
+                go_toolchain_inert: false,
+                cargo_config_inert: false,
+                npm_config_inert: false,
+                pip_config_inert: false,
+                python_environment_inert: false,
+                shell_home_matches: false,
+                ripgrep_config_absent: false,
+                gem_config_absent: false,
+                http_config_absent: false,
+                openssl_config_absent: false,
+                psql_environment: Default::default(),
+                creates_nothing: false,
+            },
+            Some(&context),
+        );
+        assert_eq!(result.decision, expected, "core pager child: {settings}");
     }
 }

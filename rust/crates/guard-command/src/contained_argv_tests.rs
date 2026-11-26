@@ -349,3 +349,44 @@ fn contained_target_reads_a_bounded_inline_shell_as_its_script() {
 mod program;
 #[path = "contained_argv_script_tests.rs"]
 mod script;
+
+/// Bun reads its own `--cwd` ahead of the tool, so `bunx --cwd app tsc` is
+/// the `tsc` run the route admits, and the sink has to plan it as that tool
+/// rather than as a test runner the words in front of `tsc` never name.
+#[test]
+fn a_runner_directory_ahead_of_the_tool_keeps_the_tool_kind() {
+    for command in [
+        json!(["bunx", "--cwd", "app", "tsc", "--noEmit"]),
+        json!(["bunx", "--cwd=app", "tsc", "--noEmit"]),
+        json!([
+            "bunx",
+            "--no-install",
+            "--cwd",
+            "packages/app",
+            "eslint",
+            "src"
+        ]),
+        json!([
+            "bunx",
+            "--cwd",
+            "app",
+            "--no-install",
+            "prettier",
+            "--check",
+            "."
+        ]),
+        json!(["bun", "x", "--cwd", "app", "tsc", "--noEmit"]),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        assert_eq!(kind["value"]["node_tool"], true, "{command} {kind}");
+    }
+    // A test runner behind the same option stays a test run.
+    let command = json!(["bunx", "--cwd", "app", "vitest", "run"]);
+    let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+    assert_eq!(kind["value"]["node_tool"], false, "{kind}");
+    assert_eq!(kind["value"]["vitest"], true, "{kind}");
+    // npm has no `--cwd`, so the word after it is not peeled as a directory.
+    let command = json!(["npx", "--cwd", "app", "tsc"]);
+    let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+    assert_eq!(kind["value"]["node_tool"], false, "{kind}");
+}

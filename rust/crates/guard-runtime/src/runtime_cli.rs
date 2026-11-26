@@ -14,6 +14,10 @@ pub(super) fn run() -> Result<(), String> {
         return result;
     }
     match args.as_slice() {
+        [command, flag] if command == browser_explain_command::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&browser_explain_command::run_command(&bytes))
+        }
         [command, flag] if command == cloud_bundle_command::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&cloud_bundle_command::run_command(&bytes))

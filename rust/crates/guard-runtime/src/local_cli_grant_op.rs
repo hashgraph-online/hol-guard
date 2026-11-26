@@ -130,10 +130,12 @@ fn decide(request: &LocalCliGrantRequestV1) -> Result<Value, &'static str> {
         request.source,
         LocalCliIdentitySourceV1::RegistryPackage { .. }
     );
+    let accepted = crate::context_digest_local_cli::grant_identity_hashes(&request.source)
+        .map_err(|_| "native_local_cli_grant_identity_invalid")?;
     let state = grant_decision(
         &connection,
         &identity.cli_id,
-        &identity.identity_hash,
+        &accepted,
         registry_package,
         request.command_id.as_deref().unwrap_or(OTHER_COMMAND_ID),
         &request.options,
@@ -197,7 +199,13 @@ pub(crate) fn grant_unset(
     guard_home: &str,
     cli_id: &str,
     identity_hash: &str,
+    source: &LocalCliIdentitySourceV1,
 ) -> Result<Option<Undecided>, &'static str> {
+    let mut accepted =
+        crate::context_digest_local_cli::grant_identity_hashes(source).unwrap_or_default();
+    if !accepted.iter().any(|hash| hash == identity_hash) {
+        accepted = vec![identity_hash.to_owned()];
+    }
     let store_path = local_store_read::require_store_path(&store_text(guard_home), guard_home)
         .map_err(store_error)?;
     let Some(connection) = local_store_read::open_read_only(&store_path).map_err(store_error)?
@@ -218,7 +226,8 @@ pub(crate) fn grant_unset(
         .map_err(|_| STORE_UNAVAILABLE)?;
     Ok(match row {
         Some((stored_hash, state))
-            if stored_hash == identity_hash && matches!(state.as_str(), "allowed" | "blocked") =>
+            if accepted.contains(&stored_hash)
+                && matches!(state.as_str(), "allowed" | "blocked") =>
         {
             None
         }
@@ -322,7 +331,7 @@ fn store_error(error: StoreReadError) -> &'static str {
 fn grant_decision(
     connection: &Connection,
     cli_id: &str,
-    identity_hash: &str,
+    accepted_hashes: &[String],
     registry_package: bool,
     command_id: &str,
     options: &[String],
@@ -347,7 +356,7 @@ fn grant_decision(
         "blocked" => false,
         _ => return Ok(GrantState::None),
     };
-    if stored_hash != identity_hash {
+    if !accepted_hashes.contains(&stored_hash) {
         return Ok(GrantState::None);
     }
     if !allowed {

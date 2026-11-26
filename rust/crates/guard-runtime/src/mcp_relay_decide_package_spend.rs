@@ -113,8 +113,7 @@ pub(super) fn spend_package(
     let (published, key) = store::lookup_integrity(&admitted.binding)?;
     // The bound check compares the published state with the persisted one,
     // which the relay's own remembered write does not touch.
-    let verification = store::verification_state(&published);
-    let bound = integrity_evidence(&rows, &verification, key)?;
+    let bound = integrity_evidence(&rows, &published, key)?;
     // The rows are verified at the generation the decision read them at:
     // after the relay's own remembered allow re-signed every local row, that
     // is the generation the write was finalized at.
@@ -270,8 +269,7 @@ fn after_claim(
                 packaged.outcome,
                 package_lane::PackageOutcome::AskPackage(_)
             ) {
-                room_for_row(policy_store)?;
-                return queued(started, fresh, Write::Package(packaged));
+                return queued(started, policy_store, fresh, Write::Package(packaged));
             }
             spend_budget(started)?;
             settle_package(
@@ -303,7 +301,12 @@ fn after_claim(
                             policy_action,
                             &append,
                         )?;
-                        return queued(started, fresh, Write::Tool { prepared, append });
+                        return queued(
+                            started,
+                            policy_store,
+                            fresh,
+                            Write::Tool { prepared, append },
+                        );
                     }
                     queue::safe_alternative(
                         mode,
@@ -351,7 +354,16 @@ fn resolve_claimed(
 
 /// Hold a queued answer for the commit to write, if the claim still commits
 /// inside the relay's wait.
-fn queued(started: Instant, fresh: Resolved, write: Write) -> Result<Spent, &'static str> {
+/// A claim that queues an approval row needs room for the block's receipt.
+/// Checked here, inside the claim's transaction, so a full queue rolls the
+/// claim back; a claim that forwards or answers never needs that room.
+fn queued(
+    started: Instant,
+    policy_store: &PolicySnapshotStore,
+    fresh: Resolved,
+    write: Write,
+) -> Result<Spent, &'static str> {
+    room_for_row(policy_store)?;
     spend_budget(started)?;
     Ok(Spent::Queued(Box::new(Queued { fresh, write })))
 }

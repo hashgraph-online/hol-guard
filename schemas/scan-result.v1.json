@@ -144,6 +144,9 @@
         "$ref": "#/$defs/skippedTarget"
       }
     },
+    "guardCoverage": {
+      "$ref": "#/$defs/guardCoverage"
+    },
     "contributorReview": {
       "type": "object",
       "required": [
@@ -504,6 +507,67 @@
         "name": {"type": "string", "minLength": 1},
         "reason": {"type": "string", "minLength": 1},
         "sourcePath": {"type": ["string", "null"]}
+      }
+    },
+    "guardCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "detectedSurfaces", "harnesses", "boundary", "coverageUrl", "installUrl"],
+      "properties": {
+        "schemaVersion": {"const": "guard-coverage-bridge.v1"},
+        "detectedSurfaces": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "harnesses": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/guardCoverageHarness"}
+        },
+        "boundary": {"type": "string", "minLength": 1},
+        "coverageUrl": {"type": "string", "format": "uri"},
+        "installUrl": {"type": "string", "format": "uri"}
+      }
+    },
+    "guardCoverageHarness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "displayName", "coverage", "coverageUrl", "installUrl"],
+      "properties": {
+        "harness": {"type": "string", "minLength": 1},
+        "displayName": {"type": "string", "minLength": 1},
+        "coverage": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/guardCoverageSurface"}
+        },
+        "coverageUrl": {"type": "string", "format": "uri"},
+        "installUrl": {"type": "string", "format": "uri"}
+      }
+    },
+    "guardCoverageSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surface", "status", "claims"],
+      "properties": {
+        "surface": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "enum": ["configured", "observe_only", "unsupported", "unknown"]},
+        "claims": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/guardCoverageClaim"}
+        }
+      }
+    },
+    "guardCoverageClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "mode", "state", "actions"],
+      "properties": {
+        "event": {"type": "string", "minLength": 1},
+        "mode": {"type": "string", "minLength": 1},
+        "state": {"type": "string", "minLength": 1},
+        "actions": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
       }
     }
   }

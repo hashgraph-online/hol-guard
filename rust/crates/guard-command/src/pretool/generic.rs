@@ -15,7 +15,12 @@ pub(in crate::pretool) mod cursor_project_reads;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
 pub use env_prefix_projection::bindable_setting;
+#[cfg(test)]
+pub(crate) use omp::loopback_browser_program;
 pub use omp::omp_eval_commit_drafts;
+pub(crate) use omp::{
+    tokenize_browser_eval, BrowserEvalToken, BROWSER_EVAL_MAX_CODE_BYTES, BROWSER_EVAL_OPEN_KEYS,
+};
 #[path = "generic_cline_view.rs"]
 mod cline_view;
 #[path = "generic_extract.rs"]
@@ -51,6 +56,9 @@ pub fn omp_bash_execution_directory(
 #[cfg(all(test, unix))]
 #[path = "generic_omp_bash_cwd_tests.rs"]
 mod omp_bash_cwd_tests;
+#[cfg(all(test, windows))]
+#[path = "generic_omp_bash_cwd_windows_tests.rs"]
+mod omp_bash_cwd_windows_tests;
 #[path = "open_quote.rs"]
 mod open_quote;
 #[path = "process_substitution.rs"]
@@ -275,6 +283,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             cwd,
             cdpath_unset: false,
             rustup_override_absent: false,
+            go_toolchain_inert: false,
             cargo_config_inert: false,
             npm_config_inert: false,
             pip_config_inert: false,
@@ -613,6 +622,29 @@ fn evaluate_envelope(
             }
         }
     }
+    // A chain of plain reads of a committed dotenv template is judged as the
+    // same reads of a plain file; only an allow replaces the verdict.
+    if let Some(projected) = signals
+        .command
+        .as_deref()
+        .and_then(|command| crate::shell_template_reads::project(command, context.cwd))
+    {
+        let command = signals.command.as_deref().unwrap_or_default();
+        let projected_payload = payload_with_command(payload, command, &projected);
+        let projected = evaluate_envelope(
+            harness,
+            event,
+            &projected_payload,
+            controls,
+            deadline,
+            context,
+            execution_environment,
+            project_redirects,
+        );
+        if projected.minimum_action == "allow" {
+            return projected;
+        }
+    }
     // An inert environment prefix cannot change how the rest of the command
     // runs, so the command without it carries the whole verdict.
     if let Some(projected) = signals
@@ -799,12 +831,15 @@ fn evaluate_envelope(
         }
     }
 
-    if let Some(projection) = signals
+    if let Some(mut projection) = signals
         .command
         .as_deref()
         .filter(|_| project_redirects && !search_scope_proven && !apply_patch_proven)
         .and_then(|command| redirect_projection::project(command, context))
     {
+        projection.sink_log = signals.command.as_deref().is_some_and(|command| {
+            crate::pretool::sink_peel::scratch_log::sink_writes(command, context)
+        });
         let projected_payload = payload_with_command(
             payload,
             signals.command.as_deref().unwrap_or_default(),
@@ -1401,6 +1436,16 @@ fn evaluate_envelope(
         deadline,
         execution_environment,
     );
+    // An Oh My Pi built-in mounted as a bash command runs in its own shell as a
+    // tool call Guard reviews; the sandbox shell has no such command.
+    super::omp_tool_commands::settle(
+        &mut result,
+        command_model,
+        harness,
+        event,
+        payload,
+        execution_environment,
+    );
     super::workspace_contained::convert(
         &mut result,
         &pre_floor,
@@ -1544,25 +1589,7 @@ fn git_read_settled_by_allow(
     {
         return false;
     }
-    let answerable = match super::git_read_floor::allowable_review(
-        model,
-        context,
-        deadline,
-        execution_environment,
-    ) {
-        super::git_read_floor::AllowableReview::None => false,
-        super::git_read_floor::AllowableReview::EarlierSteps(steps)
-        | super::git_read_floor::AllowableReview::UnansweredProbe(steps) => {
-            super::git_read_after_allow::allow_settles_read_order(
-                model,
-                &steps,
-                context,
-                deadline,
-                execution_environment,
-            )
-        }
-    };
-    answerable
+    super::git_read_floor::allow_answers(model, context, deadline, execution_environment)
         && controls.explicit_allow_covers_command(
             model,
             observations,

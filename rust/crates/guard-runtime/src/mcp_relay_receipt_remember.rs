@@ -184,7 +184,7 @@ fn save_allow(
         return None;
     }
     let home = Path::new(guard_home).canonicalize().ok()?;
-    if saved_block_exists(&home, allow)? {
+    if saved_block_exists(&home, allow, now)? {
         return None;
     }
     if crate::approval_gate_consumers::require_policy_write(
@@ -224,7 +224,8 @@ fn save_allow(
 
 /// A block committed after the inline approval wins over the remembered allow.
 /// The receipt still records because this check only skips the policy write.
-fn saved_block_exists(home: &Path, allow: &Allow<'_>) -> Option<bool> {
+/// A live saved block only: an expired one no longer applies to the lookup.
+fn saved_block_exists(home: &Path, allow: &Allow<'_>, now: &str) -> Option<bool> {
     let connection = Connection::open(home.join(STORE_FILE_NAME)).ok()?;
     connection
         .query_row(
@@ -236,12 +237,14 @@ fn saved_block_exists(home: &Path, allow: &Allow<'_>) -> Option<bool> {
                   and coalesce(workspace, '') = coalesce(?4, '')
                   and coalesce(publisher, '') = ''
                   and action = 'block'
+                  and (expires_at is null or julianday(expires_at) > julianday(?5))
             )",
             rusqlite::params![
                 allow.harness,
                 allow.artifact_id,
                 allow.artifact_hash,
                 allow.workspace,
+                now,
             ],
             |row| row.get(0),
         )
@@ -278,6 +281,10 @@ fn signed(
         "version": 1,
     });
     if !put(home, &mut secrets, &control_ref, &pending) {
+        // The vault may hold the pending state while the keyring copy was not
+        // brought in step. Put the vault back, or every later save would find
+        // a pending generation and refuse.
+        restore_vault(&mut secrets, &control_ref, &current);
         return None;
     }
     args.insert(
@@ -296,18 +303,7 @@ fn signed(
         return finalized.get("generation").and_then(Value::as_u64);
     }
     if !committed {
-        // A failed mirror must not strand the vault's pending generation when
-        // the store write never committed. Restore the vault once, then try
-        // the primary mirror without rewriting the vault a second time.
-        if let Ok(serialized) = serde_json::to_string(&current) {
-            if secrets.set_secret(&control_ref, &serialized).is_ok() {
-                let _ = crate::policy_integrity_resolver::key_mint::mirror_existing_control_state(
-                    home,
-                    &control_ref,
-                    &serialized,
-                );
-            }
-        }
+        put(home, &mut secrets, &control_ref, &current);
     }
     // A committed write re-signed every local row at the next generation, so
     // the earlier state would reject them all as a rollback. The pending
@@ -343,6 +339,12 @@ fn control_state(
     put(home, secrets, control_ref, &initial).then_some(initial)
 }
 
+fn restore_vault(secrets: &mut EncryptedFileSecretStore, control_ref: &str, state: &Value) {
+    if let Ok(serialized) = serde_json::to_string(state) {
+        let _ = secrets.set_secret(control_ref, &serialized);
+    }
+}
+
 fn put(
     home: &Path,
     secrets: &mut EncryptedFileSecretStore,
@@ -357,6 +359,7 @@ fn put(
     }
     crate::policy_integrity_resolver::key_mint::mirror_existing_control_state(
         home,
+        secrets,
         control_ref,
         &serialized,
     )

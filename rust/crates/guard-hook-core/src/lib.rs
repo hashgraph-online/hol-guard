@@ -274,6 +274,74 @@ fn tracked_project_document(target: &str, request: &NativeHookRequestV1) -> bool
     })
 }
 
+/// The file a read's output comes from when it is the dotenv template the
+/// session's repository commits, such as `.env.example`. The read gate admits
+/// that read once the file proves it is tracked and holds no secret, so the
+/// output review repeats the same proof rather than answering the template as
+/// the local `.env`. The path the host read and the path the call named are
+/// each resolved once, against home for a `~/` spelling and the working
+/// directory otherwise, and must be the same file, which is the file the
+/// review reads and scans. The proof runs on each spelling with its `~/`
+/// expanded, so it screens the written name and the resolved file together. Only the read
+/// tool's output qualifies: a write or edit of the template is not the request
+/// the gate proved.
+///
+/// A committed page named for the key it documents
+/// (`private-key-jwt-client-auth.md`) is read on the same terms: the read gate
+/// admits it through the committed-document proof, so the output review
+/// repeats that proof instead of answering the page as a key file. Every
+/// spelling and the resolved file must pass the same one of the two proofs,
+/// so a link named like a template that lands on a key-named page, or the
+/// reverse, keeps the refusal.
+fn committed_named_document_read(
+    request: &NativeHookRequestV1,
+    candidate: &str,
+    target: &str,
+    cwd: &Path,
+    home: &Path,
+) -> Option<std::path::PathBuf> {
+    let read = request
+        .payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .is_some_and(|tool| tool.eq_ignore_ascii_case("read"));
+    if !read {
+        return None;
+    }
+    let resolve = |value: &str| {
+        let resolved = guard_secure_fs::resolve_candidate(value.trim(), Some(cwd), home).ok()?;
+        std::fs::canonicalize(resolved).ok()
+    };
+    let file = resolve(candidate)?;
+    if resolve(target)? != file {
+        return None;
+    }
+    // The proof screens the name as written as well as the file it resolves
+    // to: a link named `.env`, or one inside a credential store, stays the
+    // secret it is named after whatever it points at. So each spelling is
+    // proven with only its `~/` expanded, the way the read resolved it.
+    let proven = |value: &str, proof: fn(&str, Option<&str>) -> bool| {
+        let value = value.trim();
+        let spelled = match value.strip_prefix("~/") {
+            Some(rest) => home.join(rest),
+            None => Path::new(value).to_path_buf(),
+        };
+        spelled
+            .to_str()
+            .is_some_and(|spelled| proof(spelled, request.cwd.as_deref()))
+    };
+    // Prove the resolved file too: a link can be retargeted between resolving
+    // it above and the spelling proofs, and the review reads `file`.
+    let proven_by = |proof: fn(&str, Option<&str>) -> bool| {
+        proven(candidate, proof)
+            && proven(target, proof)
+            && file.to_str().is_some_and(|file| proven(file, proof))
+    };
+    (proven_by(guard_command::pretool::proven_tracked_dotenv_template)
+        || proven_by(guard_command::pretool::proven_tracked_key_named_document))
+    .then_some(file)
+}
+
 fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {
     let payload = &request.payload;
     let target = envelope_target(payload);
@@ -533,8 +601,11 @@ fn review_source(
         .map(Path::new)
         .unwrap_or_else(|| Path::new("."));
     let home = Path::new(&request.home_dir);
+    let template = committed_named_document_read(request, candidate, &target, cwd, home);
     if let Some((family, _)) = sensitive_path_family(Path::new(candidate)) {
-        return HookReviewResponseV1::deny("sensitive_path", sensitive_reason(family));
+        if template.is_none() {
+            return HookReviewResponseV1::deny("sensitive_path", sensitive_reason(family));
+        }
     }
     // A failed read of a missing file returns the host's error text, not file
     // content. No file backs the reference, so the presented text is reviewed
@@ -551,6 +622,8 @@ fn review_source(
         let decision = classify_scannable_source_path(value, cwd, Some(home), allow_external);
         if decision.allowed {
             decision.resolved_path
+        } else if template.is_some() {
+            template.clone()
         } else {
             repository_hidden_document(value, request, cwd, home)
         }

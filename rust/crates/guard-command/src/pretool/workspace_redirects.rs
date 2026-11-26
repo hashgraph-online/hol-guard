@@ -32,33 +32,49 @@ enum Quote {
 }
 
 /// The command with every literal-path redirect, descriptor copy and quoted
-/// `cat` heredoc removed. A quoted heredoc may also carry the message of a
-/// `git commit -F -`, or feed `python3` or `python3 -` a program that meets
-/// the bar a script file in the workspace meets (`redirect_stdin`); the
-/// projection keeps the interpreter, so every control still sees it. `None`
-/// when nothing was removed or any redirect has another form: process
-/// substitution, a computed or home-relative target, a descriptor above 2, a
-/// herestring, or a heredoc fed to anything else.
+/// `cat` heredoc removed, for the workspace sandbox's own shape of `raw`. A
+/// quoted heredoc may also carry the message of a `git commit -F -`, or feed
+/// `python3` or `python3 -` a program that meets the bar a script file in the
+/// workspace meets (`redirect_stdin`); the projection keeps the interpreter,
+/// so every control still sees it. `None` when nothing was removed or any
+/// redirect has another form: process substitution, a computed or
+/// home-relative target, a descriptor above 2, a herestring, or a heredoc fed
+/// to anything else.
+///
+/// A program fed to Python after plain readers or a `cd` is projected only
+/// where `contained`, which routes it to the sandbox, took its lead: readers
+/// exactly as `raw` runs them, or a `cd` to the absolute path of `workspace`,
+/// where the sandbox runs. Without that the sandbox refused a run the
+/// decision sent it.
+pub(crate) fn project_for_workspace(raw: &str, workspace: &Path) -> Option<String> {
+    let (projected, _, _, entered) = project_scan(raw)?;
+    (!entered || readers::lead_runs_in(&projected, raw, workspace)).then_some(projected)
+}
+
+/// [`project_for_workspace`] with no Python program after a lead taken, as
+/// every route but `contained` reads it.
+#[cfg(test)]
 pub(crate) fn project(raw: &str) -> Option<String> {
     project_scan(raw).and_then(|(projected, _, _, entered)| (!entered).then_some(projected))
 }
 
-/// [`project`], and whether any removed redirect names a file other than
-/// `/dev/null`, which no link in the workspace can retarget.
+/// The projection of `raw` with no Python program after a lead, and whether
+/// any removed redirect names a file other than `/dev/null`, which no link in
+/// the workspace can retarget.
 pub(crate) fn project_naming_files(raw: &str) -> Option<(String, bool)> {
     project_scan(raw).and_then(|(projected, _, names_files, entered)| {
         (!entered).then_some((projected, names_files))
     })
 }
 
-/// [`project`] with, for each byte of the projection, the index of the raw
+/// The projection of `raw` with, for each byte of the projection, the index of the raw
 /// character it came from. Bytes the projection inserts take the index of the
 /// redirect they replace.
 fn project_mapped(raw: &str) -> Option<(String, Vec<usize>)> {
     project_scan(raw).map(|(projected, map, _, _)| (projected, map))
 }
 
-/// The last field: Python after a leading `cd`, which only `contained` takes.
+/// The last field: Python after a leading `cd` or readers, which only `contained` takes.
 fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool, bool)> {
     let chars: Vec<char> = raw.chars().collect();
     let mut out = String::with_capacity(raw.len());
@@ -156,7 +172,7 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool, bool)> {
     // route the same command keeps without the redirect.
     let projected = crate::pretool::script_content::foreground_job(projected).unwrap_or(projected);
     let entered = wide && !crate::pretool::script_content::fed::python_alone(projected);
-    if entered && !cd::python_after_cd(projected) {
+    if entered && !readers::python_after_lead(projected) {
         return None;
     }
     let map = map[lead..lead + projected.len()].to_vec();
@@ -244,7 +260,7 @@ pub(super) fn contained(
     // followed by plain readers. One it declines, such as a write to
     // `.tool-versions`, or a chain beside local Git writes, runs here.
     let (stripped, _, names_files, entered) = project_scan(command)?;
-    if entered && !cd::enters_cwd(&stripped, context) {
+    if entered && !readers::lead_admitted(&stripped, command, context) {
         return None;
     }
     // Removing an input redirect drops the program it feeds, so a program
@@ -323,7 +339,7 @@ pub(super) fn contained(
     let raw = super::evaluate_envelope(
         harness,
         event,
-        &cd::reviewed_payload(payload, command, entered),
+        &readers::reviewed_payload(payload, command, &stripped, entered),
         None,
         deadline,
         context,
@@ -492,6 +508,8 @@ fn literal_target(target: &str) -> bool {
 
 #[path = "workspace_redirects_cd.rs"]
 mod cd;
+#[path = "workspace_redirects_readers.rs"]
+mod readers;
 #[cfg(test)]
 #[path = "workspace_redirects_tests.rs"]
 mod tests;

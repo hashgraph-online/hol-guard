@@ -43,15 +43,17 @@ fn reading_shape(text: &str, workspace: &Path, round: usize) -> Option<Shape> {
         if let Some(projected) = temp_cd::project(text) {
             return reading_shape(&projected, workspace, round).filter(runs_whole);
         }
-        // `git commit -m "$(cat <<'EOF' ... EOF)"` hands the program a literal
-        // message. The sandbox runs the raw text, where the real `cat` prints
-        // exactly the heredoc the projection already wrote, so the words the
-        // projection names are the words that run. Only that form is read
-        // here: `cat` is the one command the projection judges, so any other
-        // substitution leaves the text without a shape.
-        if let Some(shape) = chain_literals::inert::project(text, |body| body == "cat")
-            .and_then(|projected| reading_shape(&projected, workspace, round))
-            .filter(runs_whole)
+        // `git commit -m "$(cat <<'EOF' ... EOF)"` and
+        // `git commit -m "$(printf '...')"` hand the program a literal message.
+        // The sandbox runs the raw text, where the real `cat` or `printf`
+        // prints exactly the text the projection already wrote, so the words
+        // the projection names are the words that run. Only those forms are
+        // read here: `cat` and `printf` are the commands the projection judges
+        // for them, so any other substitution leaves the text without a shape.
+        if let Some(shape) =
+            chain_literals::inert::project(text, |body| body == "cat" || body == "printf")
+                .and_then(|projected| reading_shape(&projected, workspace, round))
+                .filter(runs_whole)
         {
             return Some(shape);
         }
@@ -96,7 +98,7 @@ pub(crate) fn runs_whole(shape: &Shape) -> bool {
 }
 
 fn literal_shape(text: &str, workspace: &Path) -> Option<Shape> {
-    match workspace_redirects::project(text) {
+    match workspace_redirects::project_for_workspace(text, workspace) {
         Some(projected) => workspace_redirects::contained_shape(text, &projected, workspace),
         None => {
             let model = parse_command(&CommandModelRequestV1 {

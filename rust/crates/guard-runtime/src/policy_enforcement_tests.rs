@@ -447,6 +447,8 @@ fn prompt_risk_classes_reject_non_prompt_duplicate_and_unordered_evidence() {
         "native_prompt_risk_classes_invalid"
     );
 }
+#[path = "policy_enforcement_dotenv_template_tests.rs"]
+mod dotenv_template_tests;
 #[path = "policy_enforcement_floor_cause_tests.rs"]
 mod floor_cause;
 #[path = "policy_enforcement_github_tests.rs"]

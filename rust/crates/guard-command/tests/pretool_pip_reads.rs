@@ -77,6 +77,7 @@ fn decide_in(
                     cwd: project.to_str(),
                     cdpath_unset: false,
                     rustup_override_absent: false,
+                    go_toolchain_inert: false,
                     cargo_config_inert: false,
                     npm_config_inert: false,
                     pip_config_inert: false,

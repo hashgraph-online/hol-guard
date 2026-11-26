@@ -240,6 +240,8 @@ def test_prompt_receipt_requires_matching_native_prompt_result() -> None:
         "harness": "claude-code",
         "event_name": "UserPromptSubmit",
         "payload_kind": "inline",
+        "requires_approval": False,
+        "recording_only_response": False,
         "result": result,
     }
     assert validate_native_decision_receipt(receipt) == receipt
@@ -378,6 +380,8 @@ def test_post_tool_edge_decoder_requires_a_receipt() -> None:
         "harness": "claude-code",
         "event_name": "PostToolUse",
         "payload_kind": "inline",
+        "requires_approval": False,
+        "recording_only_response": False,
         "result": result,
         "receipt": _receipt(),
     }

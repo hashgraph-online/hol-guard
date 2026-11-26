@@ -38,6 +38,7 @@ from ci.gauntlet.fixtures import (
     ALIAS_ESCAPES_CASE,
     BUN_TEST_FILE_CASE,
     BUN_TEST_SCRIPT_MARKER,
+    HEADER_GITCONFIG_CASE,
     INSTEAD_OF_CASE,
     LARGE_GITCONFIG_CASE,
     LARGE_GITCONFIG_MIN_BYTES,
@@ -53,7 +54,7 @@ from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.native_tools import native_tools_scope_error
 from ci.gauntlet.parent_fixtures import PARENT_WORKSPACE_CASE
 from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER, VITE_BUILD_MARKER
-from ci.gauntlet.source_output_fixtures import HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
+from ci.gauntlet.source_output_fixtures import FALLBACK_PATH, HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
 from ci.gauntlet.workspace_runner_fixtures import (
     HOME_BUN_ENTRY_CASE,
     WORKSPACE_QUIET_PACKAGE_TEST_CASE,
@@ -100,12 +101,16 @@ def test_gitconfig_variants_are_ordinary_and_sized() -> None:
     assert "insteadOf = acme:" in gitconfig_variant(INSTEAD_OF_CASE)
     large = gitconfig_variant(LARGE_GITCONFIG_CASE)
     assert len(large.encode()) > 256 * 1024 and len(large.encode()) >= LARGE_GITCONFIG_MIN_BYTES
-    for text in (alias, large, gitconfig_variant(INSTEAD_OF_CASE)):
+    header = gitconfig_variant(HEADER_GITCONFIG_CASE)
+    assert "extraHeader = X-Trace: fixture" in header
+    for text in (alias, large, header, gitconfig_variant(INSTEAD_OF_CASE)):
         assert "include" not in text.lower() and "!" not in text and "`" not in text
     assert gitconfig_variant(None) == gitconfig_variant("omp-native-git-compound-reads")
 
 
-@pytest.mark.parametrize("scenario_id", [ALIAS_ESCAPES_CASE, INSTEAD_OF_CASE, LARGE_GITCONFIG_CASE])
+@pytest.mark.parametrize(
+    "scenario_id", [ALIAS_ESCAPES_CASE, INSTEAD_OF_CASE, LARGE_GITCONFIG_CASE, HEADER_GITCONFIG_CASE]
+)
 def test_global_config_fixture_keeps_git_reads_working(tmp_path: Path, scenario_id: str) -> None:
     fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=scenario_id)
     config = (fixture.home / ".gitconfig").read_text(encoding="utf-8")
@@ -170,6 +175,7 @@ REALISM_IDS = {
     "omp-native-glob-recursive-shell-scripts",
     "omp-native-read-credential-placeholder-docs",
     "omp-native-shell-read-credential-placeholder-docs",
+    "omp-native-shell-read-credential-field-fallback-source",
     "omp-native-shell-linked-modules-build",
     "omp-native-shell-linked-modules-bun-entry",
     "omp-native-shell-doctl-reads",
@@ -310,6 +316,10 @@ def test_placeholder_docs_and_field_copies_match_the_reported_shapes(tmp_path: P
     assert "connect({ token: session.token, user: session.user })" in session
     assert "password: cfg.password, // database" in session
     for command in commands_for("omp-native-shell-read-credential-placeholder-docs"):
+        assert _shell(fixture, command).returncode == 0, command
+    links = (fixture.workspace / FALLBACK_PATH).read_text(encoding="utf-8")
+    assert "password=dest.password or self.password)" in links and "if self.password:" in links
+    for command in commands_for("omp-native-shell-read-credential-field-fallback-source"):
         assert _shell(fixture, command).returncode == 0, command
 
 

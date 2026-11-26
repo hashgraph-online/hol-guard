@@ -102,6 +102,8 @@ fn bounded_inspection(arguments: &[String]) -> bool {
     // read and workspace proofs remain the responsibility of the ordinary
     // command decision, not this classifier.
     (command == "apply" && crate::pretool::git_apply_check::is_check_only(rest))
+        // A printing three-way merge writes none of the files it reads.
+        || (command == "merge-file" && crate::pretool::git_merge_file_read::is_read_only(rest))
         // A stash listing and a `show` of one entry print; every other
         // stash spelling moves work and keeps its workspace attribution.
         || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
@@ -171,15 +173,43 @@ fn bounded_cached_diff_pathspec(operand: &str, directory: Option<&std::path::Pat
 /// it there, so an operand that is present beside the shell's own working
 /// directory proves nothing about the repository git actually reads; a relative
 /// route needs that working directory to resolve at all.
-fn operand_directory(cwd: Option<&str>, route: Option<&str>) -> Option<std::path::PathBuf> {
+fn operand_directory(
+    cwd: Option<&str>,
+    route: Option<&str>,
+    home_dir: Option<&str>,
+) -> Option<std::path::PathBuf> {
     let Some(route) = route else {
         return cwd.map(std::path::PathBuf::from);
     };
-    let route = std::path::PathBuf::from(route);
+    let route = if route == "~" {
+        std::path::PathBuf::from(home_dir?)
+    } else if let Some(relative) = route.strip_prefix("~/") {
+        std::path::Path::new(home_dir?).join(relative)
+    } else {
+        std::path::PathBuf::from(route)
+    };
     if route.is_absolute() {
         return Some(route);
     }
     cwd.map(|cwd| std::path::Path::new(cwd).join(route))
+}
+
+/// Where an admitted read's bare operands resolve. A `--git-dir` route
+/// reads a repository that need not be the one around that directory, so it
+/// has no operand directory a pathspec proof can rely on.
+pub(super) fn read_operand_directory(
+    arguments: &[String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    let (rest, route) = routed_with_route(arguments, context, true)?;
+    let global = &arguments[..arguments.len() - rest.len()];
+    if global
+        .iter()
+        .any(|argument| argument == "--git-dir" || argument.starts_with("--git-dir="))
+    {
+        return None;
+    }
+    operand_directory(context.cwd, route.as_deref(), context.home_dir)
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -286,9 +316,8 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
         "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
         // These listings only print, and their grammars already exclude the
         // forms that run a configured program; the read proof still decides.
-        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout" => {
-            crate::pretool::git_listing_reads::read_form(command, rest)
-        }
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "fsck"
+        | "sparse-checkout" => crate::pretool::git_listing_reads::read_form(command, rest),
         "rev-list" => !rest.iter().any(|argument| {
             matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
         }),
@@ -323,12 +352,12 @@ pub(super) fn inspection_arguments<'a>(
     let subcommand = remaining.first().map(String::as_str);
     let admitted = match subcommand {
         Some(
-            "status" | "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "cherry"
-            | "show" | "blame" | "annotate" | "describe" | "reflog" | "branch" | "hash-object"
-            | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree" | "config" | "grep"
-            | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" | "shortlog"
-            | "check-ignore" | "count-objects" | "check-attr" | "name-rev" | "show-branch"
-            | "check-ref-format" | "var" | "patch-id" | "stripspace",
+            "status" | "diff" | "diff-files" | "diff-index" | "diff-tree" | "log" | "whatchanged"
+            | "range-diff" | "cherry" | "show" | "blame" | "annotate" | "describe" | "reflog"
+            | "branch" | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote"
+            | "worktree" | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref"
+            | "rev-list" | "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "fsck"
+            | "name-rev" | "show-branch" | "check-ref-format" | "var" | "patch-id" | "stripspace",
         ) => true,
         // Both also have a spelling that opens a file the caller names, so
         // each is admitted only on the grammar that reads its own pipe.
@@ -344,6 +373,9 @@ pub(super) fn inspection_arguments<'a>(
         Some("tag") => crate::pretool::git_tag_listing::is_listing(&remaining[1..]),
         Some("clean") => crate::pretool::git_clean_preview::is_dry_run(&remaining[1..]),
         Some("apply") => crate::pretool::git_apply_check::is_check_only(&remaining[1..]),
+        // Without `-p` a three-way merge writes over its first file, so only
+        // the printing spelling is admitted.
+        Some("merge-file") => crate::pretool::git_merge_file_read::is_read_only(&remaining[1..]),
         // `stash` reaches the worktree in every spelling but the two that
         // print: a listing and a `show` of one entry.
         Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
@@ -526,17 +558,18 @@ fn routed_with_route<'a>(
 /// The owner a read subcommand answers to when it has no declarative rule of
 /// its own.
 ///
-/// `diff-tree`, `diff-index` and `diff-files` print the comparison `diff` owns,
-/// `cherry`
-/// lists the commits `log` owns and `annotate` is `blame` in another output
-/// format, built from the same walk and reading the same `blame.*` settings. Without this each would fall to the catch-all
+/// `diff-tree`, `diff-index`, `diff-files` and `range-diff` print the
+/// comparison `diff` owns, `cherry` lists the commits `log` owns,
+/// `whatchanged` is `log` with each commit's raw diff attached, and `annotate`
+/// is `blame` in another output format, built from the same walk and reading
+/// the same `blame.*` settings. Without this each would fall to the catch-all
 /// below, which leaves every git rule uncertain and sends an ordinary read to
 /// review; naming the owner instead keeps the permission a user disables
 /// working on the spelling they disabled it for.
 fn read_owner(command: &str) -> &str {
     match command {
-        "diff-tree" | "diff-index" | "diff-files" => "diff",
-        "cherry" => "log",
+        "diff-tree" | "diff-index" | "diff-files" | "range-diff" => "diff",
+        "cherry" | "whatchanged" => "log",
         "annotate" => "blame",
         other => other,
     }
@@ -714,7 +747,8 @@ pub(super) fn observe_with_contexts(
             let route = routed_with_route(arguments, context, true).and_then(|(_, route)| route);
             bounded_cached_diff(
                 &remaining[1..],
-                operand_directory(proof_context.cwd, route.as_deref()).as_deref(),
+                operand_directory(proof_context.cwd, route.as_deref(), proof_context.home_dir)
+                    .as_deref(),
             )
         })
     {

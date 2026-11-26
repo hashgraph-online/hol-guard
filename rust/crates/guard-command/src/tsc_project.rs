@@ -7,13 +7,21 @@
 //! carries no option at all. That run reached ordinary review for a mode the
 //! project had already declared.
 //!
-//! The reading is conservative in both directions. It answers only for a
-//! config inside the directory the run starts in, reached without a symlink
-//! and without a `..` step, and it refuses anything it cannot settle: a
-//! missing or unreadable file, a document it cannot parse, a value that is
-//! not a boolean, an `extends` it cannot resolve inside the same tree. A
-//! refusal costs the run nothing it had before — it keeps the review it
-//! already had.
+//! The reading is conservative in both directions. The project the command
+//! names has to sit inside the directory the run starts in, reached without
+//! a symlink and without a `..` step, and the reading refuses anything it
+//! cannot settle: a missing or unreadable file, a document it cannot parse,
+//! a value that is not a boolean, an `extends` it cannot resolve. A refusal
+//! costs the run nothing it had before — it keeps the review it already had.
+//!
+//! An `extends` is resolved inside the repository the run sits in rather
+//! than inside the run directory alone, because that is where a workspace
+//! keeps its shared base. A package in a monorepo writes an `extends` of
+//! `../../tsconfig.base.json` and declares `"noEmit": true` beside it; a
+//! reading anchored at the package directory cannot open that base, gives no
+//! verdict, and sends to review the same type check a single-package project
+//! runs contained. The repository root is the outer bound, so an `extends`
+//! reaching past it still gives no verdict.
 //!
 //! `noEmit` is not the whole question. `incremental`, `composite` and
 //! `tsBuildInfoFile` each make tsc write a build-info file next to the
@@ -41,6 +49,11 @@ const MAX_CONFIG_BYTES: u64 = 256 * 1024;
 /// longer than a base, a preset and a project override is one this reading
 /// does not settle.
 const MAX_EXTENDS_DEPTH: usize = 4;
+
+/// How far above the run directory the reading looks for the repository that
+/// holds a shared base config. A deeper tree is read as no repository at
+/// all rather than walked without bound in the shared resident.
+const MAX_ANCESTORS: usize = 64;
 
 /// Command-line options that make tsc write whatever the config says.
 /// `-b` runs a build, the three build-info options write a `.tsbuildinfo`
@@ -161,13 +174,28 @@ fn read_object(path: &Path) -> Option<Map<String, Value>> {
     }
 }
 
+/// The bound an `extends` chain is resolved inside: the nearest directory at
+/// or above the run directory that holds a `.git` entry, or the run
+/// directory itself when the run sits in no repository at all.
+///
+/// A linked worktree keeps a `.git` file rather than a directory, so the
+/// entry is looked up without following it and either kind answers.
+fn extends_root(directory: &Path) -> PathBuf {
+    directory
+        .ancestors()
+        .take(MAX_ANCESTORS)
+        .find(|ancestor| std::fs::symlink_metadata(ancestor.join(".git")).is_ok())
+        .unwrap_or(directory)
+        .to_path_buf()
+}
+
 /// The config an `extends` string names, resolved the way tsc resolves it:
 /// relative to the directory of the config that declares it.
 ///
 /// Only a relative path is followed. A bare module specifier
 /// (`@tsconfig/node20/tsconfig.json`) resolves through Node's lookup into a
 /// package this reading does not walk, so it gives no verdict. The resolved
-/// path must stay inside `root`, which is the directory the run starts in.
+/// path must stay inside `root`, which is the repository the run sits in.
 fn extends_path(from: &Path, specifier: &str, root: &Path) -> Option<PathBuf> {
     if !(specifier.starts_with("./") || specifier.starts_with("../")) {
         return None;
@@ -255,6 +283,6 @@ pub(crate) fn declares_no_emit(arguments: &[String], directory: Option<&Path>) -
     if emitting_argument(arguments) {
         return false;
     }
-    config_path(arguments, directory)
-        .is_some_and(|config| chain_declares_no_emit(&config, directory))
+    let root = extends_root(directory);
+    config_path(arguments, directory).is_some_and(|config| chain_declares_no_emit(&config, &root))
 }

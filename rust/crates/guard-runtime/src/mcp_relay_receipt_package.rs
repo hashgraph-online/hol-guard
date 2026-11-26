@@ -264,8 +264,8 @@ pub(super) fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option
     let row = review
         .zip(projected.as_ref())
         .filter(|_| REVIEWABLE.contains(&call.policy_action))
-        .and_then(|((redaction_level, center, _), projected)| {
-            silent_review(
+        .and_then(|((redaction_level, center, group), projected)| {
+            let mut args = silent_review(
                 &call,
                 &artifact,
                 text("artifact_hash")?,
@@ -281,7 +281,15 @@ pub(super) fn compose(guard_home: &str, record: &Value, stamp: &Stamp) -> Option
                     now: &stamp.now,
                     redaction_level,
                 },
-            )
+            )?;
+            if let Some(group) = group {
+                args["items"]
+                    .as_array_mut()?
+                    .first_mut()?
+                    .as_object_mut()?
+                    .insert("queue_group_id".to_owned(), json!(group));
+            }
+            Some(args)
         });
     let mut scanner_evidence = vec![firewall_evidence];
     scanner_evidence.extend(call_evidence);

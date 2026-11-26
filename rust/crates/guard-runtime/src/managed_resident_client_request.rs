@@ -138,6 +138,32 @@ fn try_home_states(
                 crate::resident_client::ExpectedRuntime::Digest(&state.runtime_sha256)
             },
         };
+        if !same_runtime && handoff::requires_own_runtime(payload) {
+            // Never let another runtime's resident judge this request: ask it
+            // to make way so this client starts a resident of its own.
+            if handoff::retire_foreign_resident_for_request(
+                &scope,
+                &state,
+                &runtime_digest,
+                payload,
+                deadline,
+            ) {
+                note("client_state_foreign_retired_for_request", 1);
+                handoff_record::record(
+                    state_base,
+                    &runtime_digest,
+                    &state.runtime_sha256,
+                    Retirement::Rejected,
+                );
+                continue;
+            }
+            // The foreign resident would not make way for a request only this
+            // runtime may answer, because its own clients still use it.
+            return Err(format!(
+                "native_resident_live_request_failed:{}",
+                handoff::SHUTDOWN_REFUSED_IN_USE
+            ));
+        }
         let timeout = deadline.saturating_duration_since(Instant::now());
         if timeout.is_zero() {
             return Ok(None);

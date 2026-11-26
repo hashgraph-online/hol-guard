@@ -135,16 +135,20 @@ fn segment_reads_data(segment: &CommandSegmentV1) -> bool {
 /// untouched, so dropping the body in front of one of those would project a
 /// command the shell never ran.
 ///
-/// The subcommand is the first word, so a global option such as `-C` or `-c`
-/// in front of it leaves the segment unrecognised and the projection closed.
-/// That is deliberate: those options choose the repository and the
-/// configuration the commit runs under, and this test answers only for what
-/// the bytes on standard input become.
+/// The subcommand must come first, after at most the `-c user.name=<v>` and
+/// `-c user.email=<v>` pairs that name the commit's author. Agents commit
+/// that way when the checkout has no identity configured, and those two
+/// settings change only the author recorded, not what the bytes on standard
+/// input become. Any other global option, such as `-C` or another `-c`,
+/// leaves the segment unrecognised and the projection closed: those choose
+/// the repository and the configuration the commit runs under. The projected
+/// command keeps the pairs, so the commit itself is still proved with them.
 fn records_a_commit_message(executable: &str, segment: &CommandSegmentV1) -> bool {
     if executable != "git" {
         return false;
     }
     let words: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
+    let words = crate::pretool::git_local_writes::forms::after_named_author(&words);
     matches!(
         words.split_first(),
         Some((&"commit", rest))
@@ -367,7 +371,10 @@ fn python_program_fits(body: &[&str]) -> bool {
             crate::pretool::script_content::Language::Python,
             &source,
         )
-        && !crate::pretool::script_content::host_reach::python_reaches_host(&source)
+        && !crate::pretool::script_content::host_reach::python_reaches_host(
+            &source,
+            &crate::pretool::script_content::host_reach::Graph::of(&[&source]),
+        )
 }
 
 /// A bare CR changes Python's physical source-line boundaries; CRLF is fine.

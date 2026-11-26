@@ -12,8 +12,10 @@ use serde_json::{json, Map, Value};
 use super::super::http::query_value;
 use super::{business, recommend, NativeReads, ReadConfig};
 use crate::daemon_handler_requests::requests_list;
+use crate::runtime_upgrade_advice;
 
 const MAX_STORE_CHUNKS: usize = 10_000;
+const RUNTIME_UPGRADE_KEY: &str = "runtime_upgrade";
 
 /// The answer, and whether the daemon would send it with
 /// `Cache-Control: no-store`.
@@ -259,10 +261,71 @@ pub(super) fn detail(
                 approval
             }
         };
-        return Some((200, Value::Object(approval), false));
+        return Some((
+            200,
+            Value::Object(with_runtime_upgrade(approval, config)),
+            false,
+        ));
     }
     approval.remove("extension_allow_hint");
     Some((200, Value::Object(approval), false))
+}
+
+/// A pending review held by a known-vulnerable Node.js carries the advice on
+/// moving to a patched release.
+fn with_runtime_upgrade(
+    mut approval: Map<String, Value>,
+    config: &ReadConfig,
+) -> Map<String, Value> {
+    if let Some(advice) = runtime_upgrade_advice::for_approval(&approval, config.guard_home()) {
+        approval.insert(RUNTIME_UPGRADE_KEY.to_owned(), advice.to_json());
+    }
+    approval
+}
+
+/// The request a `POST /v1/requests/{id}/runtime-upgrade` names.
+pub(super) fn runtime_upgrade_target(path: &str) -> Option<&str> {
+    let request_id = path
+        .strip_prefix("/v1/requests/")?
+        .strip_suffix("/runtime-upgrade")?;
+    (!request_id.is_empty() && !request_id.contains('/')).then_some(request_id)
+}
+
+/// `POST /v1/requests/{id}/runtime-upgrade`: switch nvm's default to the
+/// patched version the request's advice offers, recomputed here. The body
+/// names that version, so a stale card cannot switch to another one. The
+/// answer carries the advice as it now stands.
+pub(super) fn runtime_upgrade(
+    request_id: &str,
+    payload: &Map<String, Value>,
+    config: &ReadConfig,
+    reads: &NativeReads,
+) -> Option<(u16, Value)> {
+    let approval = reads.store_call(
+        config,
+        "get_approval_request",
+        json!({"request_id": request_id}),
+    )?;
+    let Value::Object(approval) = approval else {
+        return Some((404, json!({"error": "not_found"})));
+    };
+    let Some(version) = payload.get("version").and_then(Value::as_str) else {
+        return Some((400, json!({"error": "invalid_request_body"})));
+    };
+    let Some(advice) = runtime_upgrade_advice::for_approval(&approval, config.guard_home()) else {
+        return Some((409, json!({"error": "runtime_upgrade_unavailable"})));
+    };
+    if let Err(error) = advice.switch(version) {
+        return Some((409, json!({"error": error})));
+    }
+    let current = runtime_upgrade_advice::for_approval(&approval, config.guard_home());
+    Some((
+        200,
+        json!({
+            "ok": true,
+            RUNTIME_UPGRADE_KEY: current.map(|advice| advice.to_json()),
+        }),
+    ))
 }
 
 /// `_with_approval_hints` asks the resident about a filed browser intent, or

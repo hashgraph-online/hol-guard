@@ -77,26 +77,7 @@ def native_mint_for_store(guard_home: Path, secret_store: object) -> str | None:
     keyring_service = native_mint_keyring_service(guard_home, secret_store)
     if keyring_service is None and not _vault_backed(guard_home, secret_store):
         return None
-    feature = NATIVE_MINT_FEATURE if keyring_service is None else NATIVE_KEYRING_MINT_FEATURE
-    # A compatible runtime that advertises the mint but gives no answer may
-    # have dispatched a write that is still in flight. Keep the Python mint
-    # from replacing that unknown result with a second key.
-    if native_policy_integrity_key_mint is _NATIVE_MINT_IMPLEMENTATION and not _runtime_offers(feature):
-        return None
-    state = native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service)
-    if state is None and native_policy_integrity_key_mint is _NATIVE_MINT_IMPLEMENTATION:
-        # The resident advertised the command but did not answer. Its request
-        # may still be in flight, so do not let Python mint a competing key.
-        return "busy"
-    return state
-
-
-def _runtime_offers(feature: str) -> bool:
-    """Whether the resident advertises the feature before dispatch."""
-
-    from .mdm.runtime_request import runtime_offers
-
-    return runtime_offers(feature)
+    return native_policy_integrity_key_mint(guard_home, keyring_service=keyring_service)
 
 
 def _vault_backed(guard_home: Path, secret_store: object) -> bool:
@@ -149,9 +130,6 @@ def native_policy_integrity_key_mint(guard_home: Path, *, keyring_service: str |
         return None
     state = answer["state"]
     return state if isinstance(state, str) and state in _NATIVE_MINT_STATES else None
-
-
-_NATIVE_MINT_IMPLEMENTATION = native_policy_integrity_key_mint
 
 
 def mint_policy_integrity_key_once(

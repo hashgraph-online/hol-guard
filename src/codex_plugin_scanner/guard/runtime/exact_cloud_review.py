@@ -112,7 +112,7 @@ def _signing_key(store: GuardStore, envelope: object, *, create: bool = False) -
 
     if envelope is not _FOR_SIGNING and not create and not isinstance(envelope, dict):
         return {"key": None, "key_id": None}
-    from .command_capability import _signing_material_for_resident
+    from .command_capability_keys import _signing_material_for_resident
 
     key, key_id = _signing_material_for_resident(store, create=create)
     return {"key": key, "key_id": key_id}

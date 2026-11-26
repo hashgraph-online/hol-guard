@@ -1,0 +1,483 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/browser-driver.v1.schema.json",
+  "title": "HOL Guard browser driver profile",
+  "description": "Maps a browser driver's tools to Guard's closed browser verbs. Evidence only: a profile cannot clear a sensitive surface, approve, or grant. Cross-field rules (tool names are unique; publisher.verified is true only for publishers on the maintainer-owned verified list) must be enforced by the native compiler before a profile is admitted; this schema alone does not check them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "publisher",
+    "match",
+    "profileMode",
+    "tools"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "guard.browser-driver.v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^browser\\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?![\\s\\S])"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "verified"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "Contributor files set this to false. A true value is honored only when the compiler finds the publisher on the maintainer-owned verified list; the manifest's own value is never proof."
+        }
+      }
+    },
+    "referenceUrls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/httpsUrl"
+      },
+      "maxItems": 8,
+      "uniqueItems": true
+    },
+    "referenceVersion": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "match": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mcpServerNames",
+        "packages",
+        "toolNamespaces",
+        "harnessTools"
+      ],
+      "properties": {
+        "mcpServerNames": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(@[a-z0-9][a-z0-9._-]{0,63}/)?[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "toolNamespaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}__(?![\\s\\S])"
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "harnessTools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "mcpServerNames": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "packages": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "toolNamespaces": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "harnessTools": {
+              "minItems": 1
+            }
+          }
+        }
+      ]
+    },
+    "profileMode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default"
+      ],
+      "properties": {
+        "default": {
+          "enum": [
+            "isolated",
+            "dedicated",
+            "remote-debugging",
+            "shared",
+            "unknown"
+          ]
+        },
+        "flags": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "isolated": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}(?![\\s\\S])"
+              },
+              "maxItems": 8,
+              "uniqueItems": true
+            },
+            "dedicated": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}(?![\\s\\S])"
+              },
+              "maxItems": 8,
+              "uniqueItems": true
+            },
+            "shared": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}(?![\\s\\S])"
+              },
+              "maxItems": 8,
+              "uniqueItems": true
+            },
+            "remoteDebugging": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^--?[A-Za-z0-9][A-Za-z0-9-]{0,63}(?![\\s\\S])"
+              },
+              "maxItems": 8,
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    },
+    "volatileFields": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}(?![\\s\\S])"
+      },
+      "maxItems": 32,
+      "uniqueItems": true
+    },
+    "icon": {
+      "$ref": "#/$defs/icon"
+    }
+  },
+  "if": {
+    "properties": {
+      "publisher": {
+        "properties": {
+          "verified": {
+            "const": false
+          }
+        }
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "match": {
+        "properties": {
+          "mcpServerNames": {
+            "items": {
+              "not": {
+                "$ref": "#/$defs/reservedName"
+              }
+            }
+          },
+          "harnessTools": {
+            "items": {
+              "not": {
+                "$ref": "#/$defs/reservedName"
+              }
+            }
+          },
+          "toolNamespaces": {
+            "items": {
+              "not": {
+                "pattern": "^(mcp__)?(browser|browsers|chrome|chromium|playwright|puppeteer|firefox|webkit|safari|edge|devtools|chrome\\-devtools|mcp|bash|sh|zsh|fish|pwsh|powershell|cmd|node|deno|bun|python|python3|ruby|perl)__(?![\\s\\S])"
+              }
+            }
+          },
+          "packages": {
+            "items": {
+              "not": {
+                "pattern": "^(@(browser|browsers|chrome|chromium|playwright|puppeteer|firefox|webkit|safari|edge|devtools|chrome\\-devtools|mcp|bash|sh|zsh|fish|pwsh|powershell|cmd|node|deno|bun|python|python3|ruby|perl)/.*|(@[^/]+/)?(browser|browsers|chrome|chromium|playwright|puppeteer|firefox|webkit|safari|edge|devtools|chrome\\-devtools|mcp|bash|sh|zsh|fish|pwsh|powershell|cmd|node|deno|bun|python|python3|ruby|perl))(?![\\s\\S])"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "verb": {
+      "enum": [
+        "Navigate",
+        "Read",
+        "Click",
+        "Type",
+        "Key",
+        "Select",
+        "Scroll",
+        "Screenshot",
+        "Upload",
+        "Download",
+        "Evaluate",
+        "CookieRead",
+        "CookieWrite",
+        "StorageRead",
+        "StorageWrite",
+        "Intercept",
+        "Permission",
+        "TabControl",
+        "Attach",
+        "Other"
+      ]
+    },
+    "pointers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}(?![\\s\\S])"
+      },
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true
+    },
+    "httpsUrl": {
+      "type": "string",
+      "pattern": "^https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?(/[^\\s?#]*)?(?![\\s\\S])",
+      "maxLength": 256
+    },
+    "icon": {
+      "type": "string",
+      "pattern": "^(none|[A-Z][A-Za-z0-9]{1,63})(?![\\s\\S])"
+    },
+    "tool": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "verb"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
+            },
+            "verb": {
+              "$ref": "#/$defs/verb"
+            },
+            "url": {
+              "$ref": "#/$defs/pointers"
+            },
+            "element": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "$ref": "#/$defs/pointers"
+                }
+              }
+            },
+            "text": {
+              "$ref": "#/$defs/pointers"
+            },
+            "script": {
+              "$ref": "#/$defs/pointers"
+            },
+            "file": {
+              "$ref": "#/$defs/pointers"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "discriminator",
+            "cases"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
+            },
+            "discriminator": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}(?![\\s\\S])"
+            },
+            "cases": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 64,
+              "propertyNames": {
+                "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}(?![\\s\\S])"
+              },
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "verb"
+                ],
+                "properties": {
+                  "verb": {
+                    "$ref": "#/$defs/verb"
+                  },
+                  "url": {
+                    "$ref": "#/$defs/pointers"
+                  },
+                  "element": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "name"
+                    ],
+                    "properties": {
+                      "name": {
+                        "$ref": "#/$defs/pointers"
+                      }
+                    }
+                  },
+                  "text": {
+                    "$ref": "#/$defs/pointers"
+                  },
+                  "script": {
+                    "$ref": "#/$defs/pointers"
+                  },
+                  "file": {
+                    "$ref": "#/$defs/pointers"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "cdpPassthrough"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}(?![\\s\\S])"
+            },
+            "cdpPassthrough": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "method"
+              ],
+              "properties": {
+                "method": {
+                  "$ref": "#/$defs/pointers"
+                },
+                "params": {
+                  "$ref": "#/$defs/pointers"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "reservedName": {
+      "enum": [
+        "browser",
+        "browsers",
+        "chrome",
+        "chromium",
+        "playwright",
+        "puppeteer",
+        "firefox",
+        "webkit",
+        "safari",
+        "edge",
+        "devtools",
+        "chrome-devtools",
+        "mcp",
+        "bash",
+        "sh",
+        "zsh",
+        "fish",
+        "pwsh",
+        "powershell",
+        "cmd",
+        "node",
+        "deno",
+        "bun",
+        "python",
+        "python3",
+        "ruby",
+        "perl"
+      ]
+    }
+  }
+}

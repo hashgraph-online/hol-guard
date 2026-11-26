@@ -127,13 +127,7 @@ pub(super) fn queue(
     resolved: &Resolved,
     policy_action: String,
 ) -> Result<Routed, &'static str> {
-    queue_with_connector_setup(
-        request,
-        admitted,
-        resolved,
-        policy_action,
-        resolved.connector_setup.as_ref(),
-    )
+    queue_with_connector_setup(request, admitted, resolved, policy_action, None)
 }
 
 /// Write an approval row for a non-recognition MCP review. The connector

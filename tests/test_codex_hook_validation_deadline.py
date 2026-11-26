@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard import codex_hook_file_integrity as files
 from codex_plugin_scanner.guard import codex_hook_integrity as manifests
 from codex_plugin_scanner.guard import codex_hook_launch_runtime as launches
 from codex_plugin_scanner.guard import codex_hook_runtime_trust as trust
+from codex_plugin_scanner.guard import native_context
 
 
 def test_expired_validation_reads_no_authority_or_executable(monkeypatch):
@@ -132,6 +133,11 @@ def test_authenticated_children_keep_original_deadline_and_require_containment(t
 
 
 def test_expired_authenticated_context_cannot_start_a_child_with_fresh_budget(tmp_path, monkeypatch):
+    # The runtime's verdicts below read its status first. On a worker that
+    # has not probed the runtime yet, that probe starts the runtime through
+    # the same launcher; it is not the hook child this test forbids, so take
+    # it before the launcher is replaced.
+    native_context._native_runtime_status_memo()
     monkeypatch.setattr(trust.time, "monotonic", lambda: 5.0)
 
     def forbidden(*args, **kwargs):

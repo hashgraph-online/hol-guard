@@ -123,6 +123,19 @@ Evaluation order for a live `tools/call` is:
 
 v1 enables the whole contributed server entry. Per-tool catalog permissions are out of scope.
 
+### Per-tool choices in Claude Code
+
+Guard learns which tools Claude Code has attempted from hook history, including calls held for review.
+In **Extensions → Add custom extension**, refresh the list and select the server entry labeled
+**Claude Code · observed tools**. The configured stdio entry describes the server launch.
+The observed entry supplies the native hook's per-tool choices for that harness and tool namespace.
+
+For example, after Claude Code has seen both tools on a connection named `tracetrim`, you can set
+`lookup` to **Allow** and `delete_records` to **Block**. Choose **Save tool permissions**.
+Once the revision is acknowledged, the native policy contains `claude-code:mcp__tracetrim__lookup`
+and `claude-code:mcp__tracetrim__delete_records` in `effective_policy.mcp_tool_actions`.
+Tools still absent from the observed list keep their usual handling. Stronger policy requirements still apply.
+
 ## Review bar
 
 - New catalog ids must have a committed external/opt-in binding. The helper creates missing bindings conservatively; CI rejects absent bindings before preparation. Changes to existing reviewed trust classes still require review.
