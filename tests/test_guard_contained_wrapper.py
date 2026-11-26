@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -201,7 +202,13 @@ def test_other_operators_are_left_to_the_strict_unwrapped_path(tmp_path: Path, c
         ),
         ("pytest tests/a\\ b.py | head -3", "pytest 'tests/a b.py'", OutputFilter("head", 3, False)),
         ('pytest -k "a \\"b\\" (c)" | head -n 2', "pytest -k 'a \"b\" (c)'", OutputFilter("head", 2, False)),
-        ("pytest -q '|' x | tail -1", "pytest -q x", None),
+        # A quoted `|` is text the program reads, so the core keeps it. Windows
+        # quoting is not POSIX, so the peel there still refuses the word.
+        (
+            "pytest -q '|' x | tail -1",
+            "pytest -q '|' x",
+            None if sys.platform == "win32" else OutputFilter("tail", 1, False),
+        ),
         (
             'node -e "a(); if (!b) c(1); d()" | tail -3',
             "node -e 'a(); if (!b) c(1); d()'",

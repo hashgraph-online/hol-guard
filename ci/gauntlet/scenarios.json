@@ -3468,7 +3468,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Run this project's own Vitest, narrowed to two test titles at once: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
+      "prompt": "Run this project's own Vitest, narrowed by title to two checks at once: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
       "commands": [
         "npx vitest run -t \"loads the form|masks the secret field\""
       ],
