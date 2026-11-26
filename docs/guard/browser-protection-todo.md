@@ -136,7 +136,7 @@ place to put its cases.
   offers the covering grant as a suggestion. Tests: no URL, path or argument text in any row; no
   route exports the table off the device; the suggestion never creates a grant without the proof
   flow.
-- [ ] **BP-T172** Report path: card menu item "This should not have asked" and
+- [x] **BP-T172** Report path: card menu item "This should not have asked" and
   `hol-guard browser report-prompt <request-id>`, native. Output is the anonymized skeleton from PRD
   5.10. Test: every argument value is a placeholder and the origin is `site-a.example.test`.
 - [x] **BP-T173** R-QUIET-4: `observe` state for an external driver profile mapping. The decision is
@@ -173,6 +173,11 @@ place to put its cases.
   `contributions/`; only the literal fixture key is ever sent; a stored secret is never sent; the
   Integrations page marks the provider as a fixture. Stub in `ci/gauntlet/browser_fixtures.py` with
   per-case scripts and a request journal.
+  - Rust side landed in `guard-provider-integrations/src/fixture_origin.rs`: the loopback-only
+    origin parser, the `provider.fixture-` route that never reroutes another provider and has no
+    route without an origin, and a transport that always sends the literal fixture key (proven
+    against a loopback stub). Still open: the compiler refusal under `contributions/`, the
+    resident wiring, the Integrations page mark and the Gauntlet stub.
 - [ ] **BP-T180** Conformance kit: `conformance.rs` and `hol-guard integrations conformance
   <manifest>` (PRD 6.12), runnable from the released CLI. Five checks: compile and labels, recorded
   responses, share set, no added prompt, bounded prompt. CI runs it for every manifest under

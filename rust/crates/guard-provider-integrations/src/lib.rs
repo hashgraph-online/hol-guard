@@ -15,6 +15,8 @@
 //!   bar a new one must meet. Empty in this phase.
 //! - `noise`: the per-session caps that keep a provider from adding prompts (PRD 6.12).
 //! - `compose`: several providers on one subject, one deciding row and the card order.
+//! - `fixture_origin`: the loopback provider stub route for live runs on release builds, with the
+//!   fixture key only.
 //! - `testkit` (feature `testkit`): an in-memory provider for acceptance tests.
 //!
 //! Nothing here reads settings, stores a secret or decides an action. The resident worker is the
@@ -24,6 +26,7 @@ pub mod adapter;
 pub mod answer;
 pub mod client;
 pub mod compose;
+pub mod fixture_origin;
 pub mod noise;
 pub mod parse;
 pub mod render;
