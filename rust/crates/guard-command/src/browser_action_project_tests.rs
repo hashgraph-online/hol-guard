@@ -108,6 +108,20 @@ fn navigate_redacts_the_url_and_keeps_query_keys() {
 }
 
 #[test]
+fn a_url_keeps_the_trailing_characters_a_browser_keeps() {
+    let action = action(project(
+        "mcp__example-pilot__open_page",
+        json!({"url": " \t https://docs.example.org/pay\u{a0}\n"}),
+    ));
+    let target = &action.target;
+    assert_eq!(target.origin.as_deref(), Some("https://docs.example.org"));
+    assert_eq!(
+        target.url_redacted.as_deref(),
+        Some("https://docs.example.org/pay%C2%A0")
+    );
+}
+
+#[test]
 fn second_url_pointer_and_loopback_and_guard_origin() {
     let guard = ["http://127.0.0.1:4781"];
     let context = BrowserProjectionContext {

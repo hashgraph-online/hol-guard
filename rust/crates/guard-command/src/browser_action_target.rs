@@ -25,7 +25,9 @@ pub(crate) fn empty_target() -> BrowserTargetV2 {
 
 /// Facts about one URL. `guard_origins` are Guard's own origins (`scheme://host:port`, lowercase).
 pub(crate) fn browser_target(url: &str, guard_origins: &[&str]) -> BrowserTargetV2 {
-    let Some(parts) = split_http_url(url.trim()) else {
+    // The URL parser strips only what a browser strips (leading and trailing C0 controls and
+    // spaces, inner tabs and newlines); a wider trim would drop a trailing U+00A0 the browser keeps.
+    let Some(parts) = split_http_url(url) else {
         return empty_target();
     };
     let origin = match parts.port {
