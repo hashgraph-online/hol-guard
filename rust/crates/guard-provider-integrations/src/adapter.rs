@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     fn the_registry_is_empty_and_refuses_every_id() {
-        assert!(ProviderAdapterId::ALL.is_empty());
+        assert_eq!(ProviderAdapterId::ALL, &[] as &[ProviderAdapterId]);
         for id in ["exampleshield-signed-v1", "yanez-pulse", "", "*"] {
             assert_eq!(ProviderAdapterId::from_id(id), None, "{id}");
         }

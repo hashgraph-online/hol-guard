@@ -85,16 +85,26 @@ impl<'de> Visitor<'de> for StrictVisitor {
     fn visit_map<A: MapAccess<'de>>(self, mut access: A) -> Result<Value, A::Error> {
         let mut map = Map::new();
         while let Some(key) = access.next_key::<String>()? {
-            // The workspace builds serde_json with `arbitrary_precision`, which hands every number
-            // to `visit_map` under this token.
-            if map.is_empty() && key == ARBITRARY_PRECISION_TOKEN {
-                let text: String = access.next_value()?;
-                return serde_json::from_str::<Number>(&text)
-                    .map(Value::Number)
-                    .map_err(|_| de::Error::custom("invalid number"));
-            }
             if map.contains_key(&key) {
                 return Err(de::Error::custom("duplicate key"));
+            }
+            // The workspace builds serde_json with `arbitrary_precision`, which hands every number
+            // to `visit_map` as a one-entry map under this token, with the digits as an owned
+            // `String`. A body may spell the same key literally, but serde_json reads a string in
+            // the body as borrowed or copied text, never as an owned one, so only the owned case
+            // is a number. A literal member stays an ordinary member.
+            if map.is_empty() && key == ARBITRARY_PRECISION_TOKEN {
+                match access.next_value_seed(TokenValueSeed)? {
+                    TokenValue::Number(text) => {
+                        return serde_json::from_str::<Number>(&text)
+                            .map(Value::Number)
+                            .map_err(|_| de::Error::custom("invalid number"));
+                    }
+                    TokenValue::Literal(value) => {
+                        map.insert(key, value);
+                        continue;
+                    }
+                }
             }
             let value = access.next_value_seed(StrictSeed)?;
             map.insert(key, value);
@@ -108,6 +118,69 @@ impl<'de> Visitor<'de> for StrictVisitor {
             items.push(item);
         }
         Ok(Value::Array(items))
+    }
+}
+
+/// The value under the arbitrary-precision token: the internal number text, or a literal member.
+enum TokenValue {
+    Number(String),
+    Literal(Value),
+}
+
+struct TokenValueSeed;
+
+impl<'de> DeserializeSeed<'de> for TokenValueSeed {
+    type Value = TokenValue;
+
+    fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<TokenValue, D::Error> {
+        deserializer.deserialize_any(TokenValueVisitor)
+    }
+}
+
+struct TokenValueVisitor;
+
+impl<'de> Visitor<'de> for TokenValueVisitor {
+    type Value = TokenValue;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        StrictVisitor.expecting(formatter)
+    }
+
+    fn visit_bool<E: de::Error>(self, value: bool) -> Result<TokenValue, E> {
+        StrictVisitor.visit_bool(value).map(TokenValue::Literal)
+    }
+
+    fn visit_i64<E: de::Error>(self, value: i64) -> Result<TokenValue, E> {
+        StrictVisitor.visit_i64(value).map(TokenValue::Literal)
+    }
+
+    fn visit_u64<E: de::Error>(self, value: u64) -> Result<TokenValue, E> {
+        StrictVisitor.visit_u64(value).map(TokenValue::Literal)
+    }
+
+    fn visit_f64<E: de::Error>(self, value: f64) -> Result<TokenValue, E> {
+        StrictVisitor.visit_f64(value).map(TokenValue::Literal)
+    }
+
+    fn visit_str<E: de::Error>(self, value: &str) -> Result<TokenValue, E> {
+        Ok(TokenValue::Literal(Value::String(value.to_owned())))
+    }
+
+    /// Only serde_json's internal number map hands over an owned string.
+    fn visit_string<E: de::Error>(self, value: String) -> Result<TokenValue, E> {
+        Ok(TokenValue::Number(value))
+    }
+
+    fn visit_unit<E: de::Error>(self) -> Result<TokenValue, E> {
+        StrictVisitor.visit_unit().map(TokenValue::Literal)
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, access: A) -> Result<TokenValue, A::Error> {
+        StrictVisitor.visit_map(access).map(TokenValue::Literal)
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, access: A) -> Result<TokenValue, A::Error> {
+        StrictVisitor.visit_seq(access).map(TokenValue::Literal)
     }
 }
 

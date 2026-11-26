@@ -32,6 +32,46 @@ fn numbers_survive_arbitrary_precision() {
 }
 
 #[test]
+fn a_literal_member_named_like_the_number_token_stays_a_member() {
+    let token = ARBITRARY_PRECISION_TOKEN;
+    let mut lone = Map::new();
+    lone.insert(token.to_owned(), json!("1"));
+    let value = parse_strict(format!(r#"{{"result":{{"{token}":"1"}}}}"#).as_bytes()).unwrap();
+    assert_eq!(value["result"], Value::Object(lone));
+    assert!(!value["result"].is_number());
+
+    for body in [
+        format!(r#"{{"result":{{"{token}":"1","verdict":"clean"}}}}"#),
+        format!(r#"{{"result":{{"verdict":"clean","{token}":"1"}}}}"#),
+    ] {
+        let value = parse_strict(body.as_bytes()).unwrap();
+        assert_eq!(value["result"]["verdict"], json!("clean"), "{body}");
+        assert_eq!(value["result"][token], json!("1"), "{body}");
+    }
+
+    let escaped = r#"{"result":{"\u0024serde_json::private::Number":"7"}}"#;
+    let value = parse_strict(escaped.as_bytes()).unwrap();
+    assert_eq!(value["result"][token], json!("7"));
+
+    for odd in [
+        json!({"nested": 1}),
+        json!([1]),
+        json!(true),
+        json!(null),
+        json!(5),
+    ] {
+        let body = format!(r#"{{"result":{{"{token}":{odd}}}}}"#);
+        let value = parse_strict(body.as_bytes()).unwrap();
+        assert_eq!(value["result"][token], odd, "{body}");
+    }
+
+    let twice = format!(r#"{{"result":{{"{token}":"1","{token}":"2"}}}}"#);
+    assert!(parse_strict(twice.as_bytes()).is_none());
+    let big = parse_strict(br#"{"n":123456789012345678901234567890}"#).unwrap();
+    assert!(big["n"].is_number());
+}
+
+#[test]
 fn pointers_are_bounded() {
     assert!(is_bounded_pointer(""));
     assert!(is_bounded_pointer("/result/verdict"));
