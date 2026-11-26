@@ -361,6 +361,39 @@ def test_deferred_subdirectory_that_gains_an_overlay_queues_its_publish(
         publisher.close()
 
 
+def test_deferred_subdirectory_whose_probe_misses_its_budget_is_published(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A loaded resident can answer the second overlay probe past its budget.
+    # The hook then waits for this workspace's own ACK, so a publish must be
+    # queued for it; a deferred workspace otherwise waits out the hook budget.
+    publisher, _resident, existing = _published(tmp_path, monkeypatch)
+    monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
+    worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
+    nested = existing / "src"
+    nested.mkdir()
+    probe = readiness._workspace_overlay_readiness
+    calls: list[object] = []
+
+    def second_probe_misses(*args: object, **kwargs: object) -> object:
+        result = probe(*args, **kwargs) if not calls else None  # pyright: ignore[reportArgumentType]
+        calls.append(result)
+        return result
+
+    publisher.start()
+    try:
+        assert publisher.wait_until_ready(time.monotonic() + 5.0, workspace=existing)
+        monkeypatch.setattr(readiness, "_workspace_overlay_readiness", second_probe_misses)
+        started = time.monotonic()
+        snapshot = worker.prepare_workspace_policy(nested, deadline=time.monotonic() + 10.0)
+        assert calls[:2] == ["directory_and_ancestors", None]
+        assert snapshot is not None, "the hook must get the ACK that compiles its workspace"
+        assert time.monotonic() - started < 8.0, "the hook must not sit out its whole budget"
+        assert not publisher.workspace_policy_pending(nested)
+    finally:
+        publisher.close()
+
+
 @pytest.mark.parametrize("overlay", [".hol-guard.toml", ".ai-plugin-scanner-guard.toml"])
 def test_subdirectory_with_its_own_overlay_waits_for_its_ack(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, overlay: str
