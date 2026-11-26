@@ -64,7 +64,8 @@ pub(super) fn stand_in(body: &str) -> Option<&'static str> {
 }
 
 /// The word a bare `git rev-parse` lookup prints when it cannot resolve its
-/// operand: the operand itself. `None` for a lookup that prints a hash or
+/// operand: the operand itself, after the shell has removed the quotes
+/// around a peeled `'REV^{}'`. `None` for a lookup that prints a hash or
 /// nothing.
 pub(super) fn echoed(body: &str) -> Option<&str> {
     stand_in(body)?;
@@ -73,8 +74,96 @@ pub(super) fn echoed(body: &str) -> Option<&str> {
         .filter(|word| !word.is_empty())
         .collect::<Vec<_>>()[..]
     {
-        ["git", "rev-parse", operand] => Some(operand),
+        ["git", "rev-parse", operand] => Some(
+            ['\'', '"']
+                .into_iter()
+                .find_map(|quote| operand.strip_prefix(quote)?.strip_suffix(quote))
+                .unwrap_or(operand),
+        ),
         _ => None,
+    }
+}
+
+/// The printed word of [`echoed`] spelled for the place of `substitution`
+/// in `chars`, so the judged command reads that exact word. A lookup that is
+/// a whole double-quoted word takes it as written; an unquoted one takes it
+/// single-quoted when it holds a character the shell would read, such as the
+/// braces of a peel.
+pub(super) fn echoed_in(chars: &[char], substitution: &ShellCommandSubstitution) -> Option<String> {
+    let word = echoed(&substitution.body)?;
+    let quoted = substitution
+        .start
+        .checked_sub(1)
+        .is_some_and(|quote| chars[quote] == '"' && !inside_double_quotes(&chars[..quote]));
+    Some(if quoted || word.chars().all(body_character) {
+        word.to_owned()
+    } else {
+        format!("'{word}'")
+    })
+}
+
+/// A command's text around its Git lookups, with every word each lookup can
+/// print, so each combination of outcomes is judged and not only the uniform
+/// ones: one lookup can resolve while the next misses.
+#[derive(Default)]
+pub(super) struct Readings {
+    parts: Vec<Part>,
+}
+
+enum Part {
+    Text(String),
+    /// The printed words, the hash first.
+    Lookup(Vec<String>),
+}
+
+/// The most whole-command texts one projection judges: every outcome of two
+/// bare lookups, or of three that print a hash or nothing.
+const MAX_READINGS: usize = 9;
+
+impl Readings {
+    pub(super) fn text(&mut self, text: impl IntoIterator<Item = char>) {
+        if let Some(Part::Text(last)) = self.parts.last_mut() {
+            last.extend(text);
+        } else {
+            self.parts.push(Part::Text(text.into_iter().collect()));
+        }
+    }
+
+    pub(super) fn literal(&mut self, text: &str) {
+        self.text(text.chars());
+    }
+
+    pub(super) fn lookup(&mut self, printed: Vec<String>) {
+        self.parts.push(Part::Lookup(printed));
+    }
+
+    /// Every whole-command text except the one where each lookup prints its
+    /// hash, which the caller judges as the projection itself. `None` when
+    /// the combinations pass [`MAX_READINGS`].
+    pub(super) fn others(&self) -> Option<Vec<String>> {
+        let total = self
+            .parts
+            .iter()
+            .try_fold(1usize, |total, part| match part {
+                Part::Lookup(printed) => total.checked_mul(printed.len()),
+                Part::Text(_) => Some(total),
+            })?;
+        if total > MAX_READINGS {
+            return None;
+        }
+        let mut texts = vec![String::new()];
+        for part in &self.parts {
+            match part {
+                Part::Text(text) => texts.iter_mut().for_each(|done| done.push_str(text)),
+                Part::Lookup(printed) => {
+                    texts = texts
+                        .iter()
+                        .flat_map(|done| printed.iter().map(move |word| format!("{done}{word}")))
+                        .collect();
+                }
+            }
+        }
+        Some(texts.into_iter().skip(1).collect())
     }
 }
 

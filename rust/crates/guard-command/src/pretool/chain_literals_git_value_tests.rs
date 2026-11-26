@@ -1,4 +1,4 @@
-use super::{echoed, in_git_command, stand_in, standalone, COMMIT_VALUE};
+use super::{echoed, echoed_in, in_git_command, stand_in, standalone, COMMIT_VALUE};
 use crate::shell_structure::extract_command_substitution_spans;
 
 #[test]
@@ -162,8 +162,32 @@ fn a_bare_lookup_prints_back_the_operand_it_cannot_resolve() {
         ("git rev-parse --short HEAD", None),
         ("git merge-base HEAD origin/main", None),
         ("git rev-parse .env", None),
-        ("git rev-parse 'HEAD^{commit}'", Some("'HEAD^{commit}'")),
+        // The shell removes the peel's quotes before Git prints it back.
+        ("git rev-parse 'HEAD^{commit}'", Some("HEAD^{commit}")),
+        ("git rev-parse \"HEAD^{}\"", Some("HEAD^{}")),
     ] {
         assert_eq!(echoed(body), word, "{body}");
+    }
+}
+
+#[test]
+fn a_printed_back_peel_is_spelled_for_its_place() {
+    for (command, word) in [
+        // A whole double-quoted word reads the printed text as it is.
+        ("git diff \"$(git rev-parse 'HEAD^{}')\" --stat", "HEAD^{}"),
+        // An unquoted one is single-quoted so the braces stay literal.
+        ("git diff $(git rev-parse 'HEAD^{}') --stat", "'HEAD^{}'"),
+        (
+            "git diff $(git rev-parse origin/main) --stat",
+            "origin/main",
+        ),
+    ] {
+        let substitutions = extract_command_substitution_spans(command);
+        let chars: Vec<char> = command.chars().collect();
+        assert_eq!(
+            echoed_in(&chars, &substitutions[0]).as_deref(),
+            Some(word),
+            "{command}"
+        );
     }
 }
