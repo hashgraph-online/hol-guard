@@ -54,6 +54,8 @@ pub(super) const TEMPORARY_VALUE: &str = "/hol-guard-substituted/temporary-path"
 pub(super) const DATE_VALUE: &str = "hol-guard-substituted-date";
 
 const MAX_SUBSTITUTIONS: usize = 8;
+/// The most standalone assignments of a substitution read out of one chain.
+const MAX_ASSIGNMENTS: usize = 4;
 const MAX_BODY_CHARS: usize = 128;
 /// The longest heredoc a `cat` substitution may print. A commit message runs
 /// to a few paragraphs; anything longer is not the form this models.
@@ -68,6 +70,35 @@ const DATE_CONVERSIONS: &str = "FHMSTYdjmsuwy";
 /// refuses its text as a command of its own, or a temporary path could be
 /// steered (`TMPDIR`) or climbed out of (`..`).
 pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<String> {
+    project_with(command, &allowed, MAX_ASSIGNMENTS)
+}
+
+/// [`project`], reading up to `budget` standalone assignments of a
+/// substitution out of the chain when the chain does not project as written
+/// (see the `assigned` module).
+fn project_with(command: &str, allowed: &dyn Fn(&str) -> bool, budget: usize) -> Option<String> {
+    if let Some(projected) = project_direct(command, allowed) {
+        return Some(projected);
+    }
+    if budget == 0
+        || command.len() > MAX_COMMAND_CHARS
+        || command
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\t' | '\n'))
+    {
+        return None;
+    }
+    let inlined = assigned::inline_one(command)?;
+    if !allowed(&inlined.judged) {
+        return None;
+    }
+    match substitution_spans(&inlined.text) {
+        Some((spans, _)) if spans.is_empty() => Some(inlined.text),
+        _ => project_with(&inlined.text, allowed, budget - 1),
+    }
+}
+
+fn project_direct(command: &str, allowed: &dyn Fn(&str) -> bool) -> Option<String> {
     if command.len() > MAX_COMMAND_CHARS
         || command
             .chars()
@@ -601,6 +632,9 @@ fn date_arguments(arguments: &[&str]) -> bool {
     }
     true
 }
+
+#[path = "chain_literals_assigned.rs"]
+pub(crate) mod assigned;
 
 #[path = "chain_literals_commit_message.rs"]
 mod commit_message;

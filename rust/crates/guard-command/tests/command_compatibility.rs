@@ -289,6 +289,15 @@ fn a_list_item_that_only_sets_an_ordinary_variable_runs_no_program() {
     let push = compatibility_observations(&model("OUT=x; git push origin main"), None).unwrap();
     assert!(!push.rule_matches.is_empty());
     assert!(push.rule_matches.iter().all(|item| item.uncertainty));
+    // Git reads no plain capitalised name, but the hooks and helpers a push
+    // starts may; a read that starts neither is not steered.
+    let written =
+        compatibility_observations(&model("REF=HEAD; git push origin main"), None).unwrap();
+    assert!(!written.rule_matches.is_empty());
+    assert!(written.rule_matches.iter().all(|item| item.uncertainty));
+    let read = compatibility_observations(&model("REF=HEAD; git log -1 HEAD"), None).unwrap();
+    assert!(!read.rule_matches.is_empty());
+    assert!(read.rule_matches.iter().all(|item| !item.uncertainty));
     let inert = compatibility_observations(&model("CI=1; git push origin main"), None).unwrap();
     assert!(!inert.rule_matches.is_empty());
     assert!(inert.rule_matches.iter().all(|item| !item.uncertainty));
