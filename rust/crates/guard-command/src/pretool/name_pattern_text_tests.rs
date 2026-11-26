@@ -89,3 +89,36 @@ fn a_runner_filter_that_can_name_a_file_keeps_its_screen() {
         assert!(sensitive(command), "{command} lost a signal to the mask");
     }
 }
+
+/// Vitest and Jest read a test-name filter as a regular expression, so a
+/// title often carries `|` alternation. A pipe inside the word was quoted or
+/// escaped; it is text the runner matches, not a stage of the pipeline.
+#[test]
+fn a_runner_title_alternation_is_not_a_sensitive_target() {
+    for command in [
+        "npx vitest run -t \"never|keeps the secret\"",
+        "node ./node_modules/vitest/vitest.mjs run x --silent -t \"keeps the order|keeps the secret\"",
+        "npx vitest run --testNamePattern='password|token'",
+        "npx jest -t 'stores the token|drops the token'",
+        "npx vitest run -t secret\\|password",
+        "npx vitest run -t \"rejects|password\" | tail -20",
+    ] {
+        assert!(!sensitive(command), "{command} still reads as sensitive");
+    }
+}
+
+/// An alternation does not unlock anything else the filter could reach: a
+/// pipe the shell acts on still starts a stage, and a substitution or a
+/// credential operand beside the filter keeps the screen.
+#[test]
+fn a_runner_title_alternation_keeps_every_other_screen() {
+    for command in [
+        "npx vitest run -t a|cat .env",
+        "npx vitest run -t \"a|b $(cat .env)\"",
+        "npx vitest run -t \"a|password\" .env",
+        "npx vitest run -t \"a|secret\" | xargs cat",
+        "npx vitest run -t \"a|b\" -t .env",
+    ] {
+        assert!(sensitive(command), "{command} lost a signal to the mask");
+    }
+}
