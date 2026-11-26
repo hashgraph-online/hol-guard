@@ -59775,8 +59775,8 @@
       "contained_ok": true
     },
     {
-      "id": "neg-read-glob-in-missing-directory",
-      "fix_area": "negative",
+      "id": "read-glob-in-missing-directory",
+      "fix_area": "shell",
       "harnesses": [
         "codex",
         "zcode",
@@ -59789,8 +59789,7 @@
         "command": "wc -l nosuch-dir/*.ts"
       },
       "cwd": "worktree",
-      "expect": "not_allow",
-      "contained_ok": true
+      "expect": "allow"
     },
     {
       "id": "head-absolute-path-that-is-not-there",
