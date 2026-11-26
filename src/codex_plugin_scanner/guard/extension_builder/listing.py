@@ -24,6 +24,7 @@ MAX_LISTING_BYTES = 16_384
 MAX_TAGLINE_LENGTH = 140
 CATEGORY_LABELS = {
     "core-safety": "Core safety",
+    "browser-web": "Browser and web automation",
     "cloud-infrastructure": "Cloud and infrastructure",
     "data-resilience": "Data and resilience",
     "delivery-remote": "Delivery and remote operations",

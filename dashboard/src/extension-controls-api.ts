@@ -103,6 +103,9 @@ export type McpToolDefault = {
   state: McpToolDefaultState;
 };
 
+/** Protection surfaces a catalog entry covers, derived by the native catalog read model. */
+export type ExtensionCatalogSurface = "terminal" | "mcp" | "browser" | "package" | "cloud";
+
 export type ExtensionCatalogItem = {
   schema_version: number;
   extension_id: string;
@@ -133,6 +136,8 @@ export type ExtensionCatalogItem = {
   permissions: ExtensionPermission[];
   // "unsupported" marks a surface from a newer Guard that this dashboard cannot render.
   surface?: "mcp" | "unsupported";
+  // Unknown values from a newer Guard are dropped during normalization.
+  surfaces?: ExtensionCatalogSurface[];
   mcp_launch?: McpLaunch;
   mcp_tools?: McpToolDefault[];
 };
@@ -147,6 +152,7 @@ export type ExtensionCatalogSummary = Pick<
   | "extension_id" | "name" | "description" | "enabled" | "required" | "trust_class" | "activation"
   | "publisher" | "icon" | "source" | "version" | "aliases" | "ecosystem_ids" | "executables"
   | "action_classes" | "risk_classes" | "rule_count" | "permission_count" | "surface"
+  | "surfaces"
 > & {
   content_revision?: string;
 };

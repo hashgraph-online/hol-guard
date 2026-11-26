@@ -28,6 +28,7 @@
     "category": {
       "enum": [
         "core-safety",
+        "browser-web",
         "cloud-infrastructure",
         "data-resilience",
         "delivery-remote",

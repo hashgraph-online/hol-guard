@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CRKVu82y.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-dhHEpEoW.js","assets/chunks/home-protection-module-DFZ1vkRC.js","assets/chunks/supply-chain-protection-stats-BVtc2w17.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BCM0x-g-.js","assets/chunks/harness-version-label-JURowldM.js","assets/chunks/connect-guard-cloud-button-CzWHGND8.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-CL9k2vqu.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-BWBn1bK0.js","assets/chunks/app-detail-workspace-B0vkFxxc.js","assets/chunks/harness-action-errors-D4J9GNrk.js","assets/chunks/supply-chain-hub-workspace-DeG1cV3j.js","assets/chunks/policy-workspace-page-BKSgx2UE.js","assets/chunks/about-workspace-Bd0-K7Pl.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CRKVu82y.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-dhHEpEoW.js","assets/chunks/home-protection-module-DFZ1vkRC.js","assets/chunks/supply-chain-protection-stats-BVtc2w17.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BCM0x-g-.js","assets/chunks/harness-version-label-JURowldM.js","assets/chunks/connect-guard-cloud-button-CzWHGND8.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-CL9k2vqu.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-DCcl0cfA.js","assets/chunks/app-detail-workspace-B0vkFxxc.js","assets/chunks/harness-action-errors-D4J9GNrk.js","assets/chunks/supply-chain-hub-workspace-DeG1cV3j.js","assets/chunks/policy-workspace-page-BKSgx2UE.js","assets/chunks/about-workspace-Bd0-K7Pl.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -36369,6 +36369,13 @@ function mcpTool(value, label) {
     state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"])
   };
 }
+const CATALOG_SURFACES = ["terminal", "mcp", "browser", "package", "cloud"];
+function catalogSurfaces(value, label) {
+  if (value === void 0) return {};
+  const known = array(value, label, CATALOG_SURFACES.length * 2).map((entry, index) => string$1(entry, `${label}[${index}]`)).filter((entry) => CATALOG_SURFACES.includes(entry));
+  const surfaces = CATALOG_SURFACES.filter((surface) => known.includes(surface));
+  return surfaces.length > 0 ? { surfaces } : {};
+}
 function mcpCatalogFields(item, label) {
   if (item.surface === void 0) return {};
   if (typeof item.surface === "string" && item.surface !== "mcp") return { surface: "unsupported" };
@@ -36429,7 +36436,8 @@ function extension(value, label) {
     rules,
     permission_count: permissionCount,
     permissions,
-    ...mcpCatalogFields(item, label)
+    ...mcpCatalogFields(item, label),
+    ...catalogSurfaces(item.surfaces, `${label}.surfaces`)
   };
 }
 function normalizeExtensionCatalogItem(value, label = "extension") {
@@ -36462,6 +36470,7 @@ function normalizeExtensionCatalogSummary(value, label = "summary") {
     rule_count: integer$1(item.rule_count, `${label}.rule_count`),
     permission_count: integer$1(item.permission_count, `${label}.permission_count`),
     ...surface ? { surface } : {},
+    ...catalogSurfaces(item.surfaces, `${label}.surfaces`),
     content_revision: string$1(item.content_revision, `${label}.content_revision`)
   };
 }
@@ -43223,7 +43232,7 @@ const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() =
 const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CL9k2vqu.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-BWBn1bK0.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-DCcl0cfA.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
 const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-B0vkFxxc.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-CtJlE48x.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));

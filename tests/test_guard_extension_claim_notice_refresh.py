@@ -259,6 +259,17 @@ def test_v2_credit_never_becomes_claim_authority() -> None:
     assert MODULE.accepted_github_ids(v2, extension_id) == ("500",)
 
 
+def test_browser_web_category_is_v2_only() -> None:
+    extension_id = "command.browser-web-listing"
+    v1 = listing(extension_id, ["500"])
+    v1["category"] = "browser-web"
+    with pytest.raises(MODULE.ClaimNoticeError, match="listing category is invalid"):
+        MODULE.accepted_github_ids(v1, extension_id)
+    v2 = listing_v2(extension_id, ["500"])
+    v2["category"] = "browser-web"
+    assert MODULE.accepted_github_ids(v2, extension_id) == ("500",)
+
+
 def test_v2_credit_contract_fails_closed() -> None:
     v2 = listing_v2("command.invalid-v2-credit", ["500"])
     v2["contributors"] = [{"githubId": "900", "githubLogin": "credit-author", "roles": ["owner"]}]
@@ -269,13 +280,13 @@ def test_v2_credit_contract_fails_closed() -> None:
 def test_worker_authority_constants_match_public_schema() -> None:
     v1 = json.loads(SCHEMA_V1.read_text(encoding="utf-8"))
     v2 = json.loads(SCHEMA_V2.read_text(encoding="utf-8"))
-    categories = frozenset(v1["properties"]["category"]["enum"])
     github_id_pattern = v1["properties"]["maintainerGithubIds"]["items"]["pattern"]
     assert frozenset(v1["required"]) == MODULE.LISTING_REQUIRED_KEYS
     assert frozenset(v1["properties"]) == MODULE.LISTING_ALLOWED_KEYS
     assert frozenset(v2["required"]) == MODULE.LISTING_V2_REQUIRED_KEYS
     assert frozenset(v2["properties"]) == MODULE.LISTING_V2_ALLOWED_KEYS
-    assert categories == MODULE.LISTING_CATEGORIES
+    assert frozenset(v1["properties"]["category"]["enum"]) == MODULE.LISTING_CATEGORIES
+    assert frozenset(v2["properties"]["category"]["enum"]) == MODULE.LISTING_V2_CATEGORIES
     assert github_id_pattern == MODULE.GITHUB_ID_RE.pattern
 
 
