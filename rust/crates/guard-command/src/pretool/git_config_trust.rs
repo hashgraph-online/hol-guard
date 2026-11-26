@@ -129,6 +129,9 @@ pub(in crate::pretool) fn trusted_command(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Option<PathBuf> {
     let supplied = Path::new(executable);
+    if process_relative(supplied) {
+        return None;
+    }
     let path = if supplied.components().count() > 1 {
         fs::canonicalize(if supplied.is_absolute() {
             supplied.to_path_buf()
@@ -142,18 +145,29 @@ pub(in crate::pretool) fn trusted_command(
             .map(|context| std::ffi::OsString::from(&context.path))
             .or_else(|| std::env::var_os("PATH"))?;
         for directory in std::env::split_paths(&path) {
+            // A directory the kernel resolves per process names one place
+            // for the hook and another for a Git run from elsewhere.
+            if process_relative(&directory) {
+                return None;
+            }
             let directory = if directory.is_absolute() {
                 directory
             } else {
                 cwd.join(directory)
             };
-            let command_name = if cfg!(windows) && supplied.extension().is_none() {
-                format!("{executable}.exe")
+            // Git for Windows tries `name.exe` and then the bare `name`, a
+            // script, in each directory, so the first of either is the one
+            // it starts.
+            let names = if cfg!(windows) && supplied.extension().is_none() {
+                vec![format!("{executable}.exe"), executable.to_owned()]
             } else {
-                executable.to_owned()
+                vec![executable.to_owned()]
             };
-            let candidate = directory.join(command_name);
-            if candidate.is_file() {
+            if let Some(candidate) = names
+                .into_iter()
+                .map(|name| directory.join(name))
+                .find(|candidate| candidate.is_file())
+            {
                 found = Some(fs::canonicalize(candidate).ok()?);
                 break;
             }
@@ -165,4 +179,23 @@ pub(in crate::pretool) fn trusted_command(
         execution_environment,
     );
     (!shim && crate::pretool::trusted_location::trusted_location(&path, home, cwd)).then_some(path)
+}
+
+/// A path the kernel resolves against the process that opens it, such as
+/// `/proc/self/cwd/...` or `/dev/fd/...`, names one file for the hook and
+/// another for a Git that runs from a different directory, so what the hook
+/// canonicalizes proves nothing about what Git starts.
+pub(in crate::pretool) fn process_relative(path: &Path) -> bool {
+    let mut components = path.components();
+    if components.next() != Some(std::path::Component::RootDir) {
+        return false;
+    }
+    match components.next().and_then(|part| part.as_os_str().to_str()) {
+        Some("proc") => true,
+        Some("dev") => matches!(
+            components.next().and_then(|part| part.as_os_str().to_str()),
+            Some("fd" | "stdin" | "stdout" | "stderr")
+        ),
+        _ => false,
+    }
 }

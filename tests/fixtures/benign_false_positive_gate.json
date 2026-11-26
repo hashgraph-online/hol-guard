@@ -32919,6 +32919,86 @@
       "expect": "allow"
     },
     {
+      "id": "gauntlet-cd-git-merge-file-stdout-tmp-copy",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git merge-file -p src/report.ts ${SCRATCH}-report-main.ts src/report.ts | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-cd-git-merge-file-stdout-labels",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git merge-file -p --diff3 -L ours -L base -L theirs src/report.ts ${SCRATCH}-report-main.ts src/report.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-merge-file-stdout-worktree",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git merge-file -p src/report-window.ts src/one.ts src/report-window.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-merge-file-writes-first-file",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git merge-file src/report.ts ${SCRATCH}-report-main.ts src/report.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-merge-file-stdout-object-ids",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git merge-file -p --object-id HEAD:src/one.ts HEAD:src/one.ts HEAD:src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gauntlet-tail-follow-tmp-copy",
       "fix_area": "line-range",
       "harnesses": [
@@ -35753,6 +35833,70 @@
       "expect": "allow"
     },
     {
+      "id": "session-cd-codex-plans-sed-note",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && sed -n 1,5p acme-plan-todo.md"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-codex-plans-wc-then-list",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && wc -l acme-plan-findings.md && ls"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-claude-memory-sed-then-grep",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.claude/projects/p/memory && sed -n 1,20p note.md; grep -n Synthetic note.md"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-cd-claude-plans-head-note",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.claude/plans && head -20 acme-plan.md"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
       "id": "session-grep-roots-one-missing-tmp-sibling",
       "fix_area": "shell",
       "harnesses": [
@@ -36366,6 +36510,74 @@
       "expect": "not_allow"
     },
     {
+      "id": "git-log-signature-status-default-program",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log -1 --format='%h | %an <%ae> | %cn <%ce> | %G? | %s'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-log-show-signature-default-program",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log -1 --show-signature --format='%h | %G? | %GS'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-log-show-signature-command-line-program-reviews",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -c gpg.program=/tmp/other-signer log -1 --show-signature"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "git-log-signature-command-line-format-reviews",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -c gpg.format=ssh log -1 --format=%G?"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "session-ln-s-tmp-sibling-modules-already-installed",
       "fix_area": "queue",
       "harnesses": [
@@ -36551,6 +36763,150 @@
       },
       "cwd": "org_clone",
       "expect": "allow"
+    },
+    {
+      "id": "shell-variable-after-leading-cd-reads-its-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd . && f=src/one.ts; sed -n 1,5p $f; grep -n export $f | head -8"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-variable-after-cd-into-source-folder",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd src && f=one.ts; wc -l $f; sed -n 1,3p \"$f\""
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-home-plan-note-materialised",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wc -l ${HOME}/.codex/plans/acme-plan-todo.md"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-variable-holding-tilde-plan-path",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "f=~/.codex/plans/acme-plan-todo.md; sed -n 1,5p $f; sed -n 1,3p $f | cut -c1-600"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-home-plan-path-read-twice",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n 1,5p ${HOME}/.codex/plans/acme-plan-todo.md; sed -n 1,3p ${HOME}/.codex/plans/acme-plan-todo.md | cut -c1-600"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-tilde-plan-path-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -n 1,5p ~/.codex/plans/acme-plan-todo.md"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-variable-holding-home-plan-path",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "f=${HOME}/.codex/plans/acme-plan-todo.md; sed -n 1,5p $f; sed -n 1,3p $f | cut -c1-600"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-shell-variable-holding-tilde-key-path",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "f=~/.ssh/id_rsa; sed -n 1,5p $f"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-shell-variable-tilde-after-home-reassigned",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "HOME=/etc; f=~/passwd; sed -n 1,5p $f"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
     },
     {
       "id": "neg-ln-s-ssh-into-local-clone",
@@ -47290,6 +47646,86 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-cd-codex-plans-read-parent-auth",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && cat ../auth.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-plans-grep-parent",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && grep -rn tokens .."
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-home-read-auth",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex && cat auth.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-claude-memory-parent-list",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.claude/projects/p && ls -la"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-codex-plans-redirect-parent-hooks",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ~/.codex/plans && echo '{}' > ../hooks.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-cat-claude-credentials-merged-stderr",
       "fix_area": "negative",
       "harnesses": [
@@ -50723,6 +51159,74 @@
       "tool": "shell",
       "tool_input": {
         "command": "rg -l TODO | xargs wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "metadata-du-summary-glob-sibling-manifests",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/other-project/*.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "metadata-du-summary-glob-sibling-sorted",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/other-project/s* 2>/dev/null | sort -h"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-metadata-du-summary-glob-org-env-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${ORG}/*/.env"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-metadata-du-summary-glob-credential-store",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${HOME}/.aws/*"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -55316,6 +55820,28 @@
       "tool": "shell",
       "tool_input": {
         "command": "for f in *.md; do echo \"cat $f\" | sh; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "stat-missing-sibling-worktree-name",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "if [ -e ../weekly-report-wt ]; then stat -f '%N %HT' ../weekly-report-wt; else echo available; fi"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-stat-missing-name-credential-store",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "stat ${HOME}/.aws/credentials-backup"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -72417,6 +72943,18 @@
       "page": "docs-article"
     },
     {
+      "id": "browser-playwright-click-link-retry-pending",
+      "server": "playwright",
+      "tool": "browser_click",
+      "arguments": {
+        "element": "Configuration",
+        "ref": "e3"
+      },
+      "expect": "block",
+      "state": "pending-same-call",
+      "page": "docs-article"
+    },
+    {
       "id": "browser-playwright-hover",
       "server": "playwright",
       "tool": "browser_hover",
@@ -72459,7 +72997,7 @@
       "arguments": {
         "text": "Getting started"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72497,7 +73035,7 @@
       "arguments": {
         "action": "list"
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72509,7 +73047,7 @@
         "width": 1280,
         "height": 800
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },
@@ -72537,7 +73075,7 @@
       "arguments": {
         "accept": false
       },
-      "expect": "setup",
+      "expect": "block",
       "state": "none",
       "page": "docs-article"
     },

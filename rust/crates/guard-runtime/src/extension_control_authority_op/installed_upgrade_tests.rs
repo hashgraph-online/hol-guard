@@ -120,3 +120,85 @@ fn installed_upgrade_refuses_a_head_that_is_not_protected() {
     );
     assert_eq!(run(&request)["reason"], json!(MANAGED));
 }
+
+/// Refusals past the managed gate keep the prefix callers match on and name
+/// the binding that failed, so a refused first attempt says what moved.
+const REFUSED: &str = "installed command pack upgrade is not authorized";
+
+/// A migration whose controls and managed policy both hold, so the next
+/// verdict is the command-pack activation binding.
+fn past_controls(home: &Home, previous: Value) -> ExtensionControlAuthorityRequestV1 {
+    let anchor = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    published(home, 2);
+    home.db
+        .execute_batch(
+            "create table extension_command_pack_activation (
+                singleton integer primary key, revision integer not null, record_json text not null,
+                record_digest text not null, record_mac text not null, recorded_at text not null);",
+        )
+        .unwrap();
+    ExtensionControlAuthorityRequestV1 {
+        anchor_json: Some(anchor),
+        now: Some(AT.to_owned()),
+        catalog_migration: Some(ExtensionControlCatalogMigrationV1 {
+            previous_revision: 1,
+            previous_catalog_digest: catalog('a'),
+            layers: layers_to_values(&[local(&catalog('b'))]),
+            installed_upgrade: Some(json!({
+                "managed": {
+                    "revision": 2,
+                    "layers": managed_layer(&catalog('a'), ControlState::Enabled),
+                },
+                "previous": previous,
+            })),
+        }),
+        ..home.request("migrate_plan", &catalog('b'))
+    }
+}
+
+fn activate(home: &Home, record: &str, digest: &str, mac: &str) {
+    home.db
+        .execute(
+            "insert into extension_command_pack_activation values (1, 1, ?, ?, ?, ?)",
+            [record, digest, mac, AT],
+        )
+        .unwrap();
+}
+
+fn previous(record: &str) -> Value {
+    json!({"record": record, "digest": "d".repeat(64), "mac": "m".repeat(64)})
+}
+
+#[test]
+fn installed_upgrade_names_a_missing_activation() {
+    let home = Home::new();
+    let request = past_controls(&home, previous("{}"));
+    assert_eq!(
+        run(&request)["reason"],
+        json!(format!("{REFUSED}: command pack activation missing"))
+    );
+}
+
+#[test]
+fn installed_upgrade_names_an_activation_that_moved_after_preparation() {
+    let home = Home::new();
+    let request = past_controls(&home, previous("{\"revision\":1}"));
+    activate(&home, "{\"revision\":2}", &"d".repeat(64), &"m".repeat(64));
+    assert_eq!(
+        run(&request)["reason"],
+        json!(format!(
+            "{REFUSED}: command pack activation changed since preparation (record)"
+        ))
+    );
+}
+
+#[test]
+fn installed_upgrade_names_a_missing_verifier_key() {
+    let home = Home::new();
+    let request = past_controls(&home, previous("{}"));
+    activate(&home, "{}", &"d".repeat(64), &"m".repeat(64));
+    assert_eq!(
+        run(&request)["reason"],
+        json!(format!("{REFUSED}: policy verifier key unavailable"))
+    );
+}

@@ -10,6 +10,7 @@
   "referenceUrls": [
     "https://github.com/ChromeDevTools/chrome-devtools-mcp"
   ],
+  "referenceVersion": "1.14.0",
   "match": {
     "mcpServerNames": [
       "chrome-devtools"
@@ -57,6 +58,10 @@
       "verb": "Read"
     },
     {
+      "name": "analyze_heapsnapshot_contexts",
+      "verb": "Read"
+    },
+    {
       "name": "clear_storage",
       "verb": "StorageWrite"
     },
@@ -65,8 +70,24 @@
       "verb": "Click"
     },
     {
+      "name": "click_at",
+      "verb": "Click"
+    },
+    {
+      "name": "close_heapsnapshot",
+      "verb": "Read"
+    },
+    {
       "name": "close_page",
       "verb": "Navigate"
+    },
+    {
+      "name": "compare_heapsnapshots",
+      "verb": "Read"
+    },
+    {
+      "name": "configure_webauthn",
+      "verb": "Other"
     },
     {
       "name": "dismiss_dialog",
@@ -93,6 +114,17 @@
       "verb": "Evaluate",
       "script": [
         "function"
+      ]
+    },
+    {
+      "name": "execute_webmcp_tool",
+      "verb": "Evaluate"
+    },
+    {
+      "name": "fill",
+      "verb": "Type",
+      "text": [
+        "value"
       ]
     },
     {
@@ -127,7 +159,47 @@
       "verb": "CookieRead"
     },
     {
+      "name": "get_css_styles",
+      "verb": "Read"
+    },
+    {
       "name": "get_dom",
+      "verb": "Read"
+    },
+    {
+      "name": "get_heapsnapshot_class_nodes",
+      "verb": "Read"
+    },
+    {
+      "name": "get_heapsnapshot_details",
+      "verb": "Read"
+    },
+    {
+      "name": "get_heapsnapshot_dominators",
+      "verb": "Read"
+    },
+    {
+      "name": "get_heapsnapshot_duplicate_strings",
+      "verb": "Read"
+    },
+    {
+      "name": "get_heapsnapshot_edges",
+      "verb": "Read"
+    },
+    {
+      "name": "get_heapsnapshot_object_details",
+      "verb": "Read"
+    },
+    {
+      "name": "get_heapsnapshot_retainers",
+      "verb": "Read"
+    },
+    {
+      "name": "get_heapsnapshot_retaining_paths",
+      "verb": "Read"
+    },
+    {
+      "name": "get_heapsnapshot_summary",
       "verb": "Read"
     },
     {
@@ -141,6 +213,10 @@
     {
       "name": "get_network_request",
       "verb": "Other"
+    },
+    {
+      "name": "get_os_app_state",
+      "verb": "Read"
     },
     {
       "name": "get_performance",
@@ -171,11 +247,30 @@
       "verb": "Click"
     },
     {
+      "name": "install_extension",
+      "verb": "Other"
+    },
+    {
+      "name": "install_pwa",
+      "verb": "Other"
+    },
+    {
+      "name": "launch_pwa",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
       "name": "lighthouse_audit",
       "verb": "Read"
     },
     {
       "name": "list_console_messages",
+      "verb": "Read"
+    },
+    {
+      "name": "list_extensions",
       "verb": "Read"
     },
     {
@@ -188,6 +283,10 @@
     },
     {
       "name": "list_resources",
+      "verb": "Read"
+    },
+    {
+      "name": "list_webmcp_tools",
       "verb": "Read"
     },
     {
@@ -248,6 +347,10 @@
       ]
     },
     {
+      "name": "query_heapsnapshot_objects",
+      "verb": "Read"
+    },
+    {
       "name": "raw_cdp",
       "verb": "Attach"
     },
@@ -272,8 +375,16 @@
       "verb": "StorageRead"
     },
     {
+      "name": "reload_extension",
+      "verb": "Other"
+    },
+    {
       "name": "reload_page",
       "verb": "Navigate"
+    },
+    {
+      "name": "remove_network_mock",
+      "verb": "Intercept"
     },
     {
       "name": "resize_page",
@@ -282,6 +393,14 @@
     {
       "name": "save_file",
       "verb": "Download"
+    },
+    {
+      "name": "screencast_start",
+      "verb": "Screenshot"
+    },
+    {
+      "name": "screencast_stop",
+      "verb": "Screenshot"
     },
     {
       "name": "scroll",
@@ -300,6 +419,10 @@
       "verb": "CookieWrite"
     },
     {
+      "name": "set_logpoints",
+      "verb": "Evaluate"
+    },
+    {
       "name": "set_network_intercept",
       "verb": "Intercept"
     },
@@ -312,6 +435,10 @@
       "verb": "Click"
     },
     {
+      "name": "take_heapsnapshot",
+      "verb": "Other"
+    },
+    {
       "name": "take_screenshot",
       "verb": "Screenshot"
     },
@@ -320,11 +447,23 @@
       "verb": "Read"
     },
     {
+      "name": "trigger_extension_action",
+      "verb": "Other"
+    },
+    {
       "name": "type_text",
       "verb": "Type",
       "text": [
         "text"
       ]
+    },
+    {
+      "name": "uninstall_extension",
+      "verb": "Other"
+    },
+    {
+      "name": "uninstall_pwa",
+      "verb": "Other"
     },
     {
       "name": "upload_file",

@@ -7,8 +7,9 @@ Nothing opens a browser or a socket.
 
 Browser rows add two optional fields, each a closed list (PRD 8.2):
 
-- ``state`` seeds the Guard home before the call. Only ``none`` (nothing seeded) is wired so far;
-  every other preset names the feature that wires it and fails the row until it lands.
+- ``state`` seeds the Guard home before the call. ``none`` seeds nothing; ``pending-same-call``
+  makes the same call once first and leaves its review unanswered. Every other preset names the
+  feature that wires it and fails the row until it lands.
 - ``page`` names the scripted page the driver starts on. It reaches the driver through a
   ``start-page`` file next to the call journal, not through argv, so every row relays the same
   connector identity the harness config declares.
@@ -34,7 +35,9 @@ BROWSER_SERVERS = (REFERENCE_DRIVER, UNPROFILED_DRIVER)
 
 # PRD 8.2 state presets, shared with the Gauntlet's ``browser_fixture`` field.
 BROWSER_STATES = BROWSER_FIXTURES
-WIRED_STATES = frozenset({"none"})
+# R-QUIET-1: the gate makes the same call once before the measured call and leaves it unanswered.
+PENDING_SAME_CALL = "pending-same-call"
+WIRED_STATES = frozenset({"none", PENDING_SAME_CALL})
 
 
 def validate_browser_fields(case_id: str, server: str, state: str, page: str | None) -> None:

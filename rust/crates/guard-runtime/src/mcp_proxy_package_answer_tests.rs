@@ -378,3 +378,23 @@ fn the_check_reaches_the_resident_op_by_name() {
         Err(PACKAGE_ANSWER_INVALID)
     );
 }
+
+#[test]
+fn guard_origin_block_tells_the_agent_what_to_do_instead() {
+    use guard_command::mcp_tool_signals::{GUARD_ORIGIN_SIGNAL, GUARD_ORIGIN_SUMMARY};
+    let signals = vec![
+        "browser MCP navigation".to_owned(),
+        GUARD_ORIGIN_SIGNAL.to_owned(),
+    ];
+    let message = terminal_tool_message("browser_navigate", "playwright", "block", &signals);
+    assert!(message.starts_with("HOL Guard blocked tool call browser_navigate from playwright."));
+    assert!(message.ends_with(GUARD_ORIGIN_SUMMARY));
+    for leak in ["://", "localhost", "127.0.0.1", "[::1]", "/approve"] {
+        assert!(!message.contains(leak), "{message}");
+    }
+    // Any other block keeps the plain message.
+    assert_eq!(
+        terminal_tool_message("browser_navigate", "playwright", "block", &signals[..1]),
+        "HOL Guard blocked tool call browser_navigate from playwright."
+    );
+}

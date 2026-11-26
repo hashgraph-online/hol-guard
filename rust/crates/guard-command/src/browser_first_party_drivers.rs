@@ -1,9 +1,9 @@
 //! First-party browser driver profiles shipped with Guard.
 //!
-//! The Chrome DevTools MCP and Playwright MCP tool lists live in
-//! `contributions/browser-drivers/` as ordinary driver profiles. They compile once, with the same
-//! compiler and limits as a contributed profile, and replace the hand-kept operation tables that
-//! used to sit in `browser_mcp_patterns.rs`. Server-name detection and the generic operation-name
+//! The Chrome DevTools MCP, Playwright MCP, Puppeteer MCP, Browser MCP, computer-use, Browserbase
+//! (Stagehand) and browser-use tool lists live in `contributions/browser-drivers/` as ordinary
+//! driver profiles. They compile once, with the same compiler and limits as a contributed profile,
+//! and replace the hand-kept operation tables that used to sit in `browser_mcp_patterns.rs`. Server-name detection and the generic operation-name
 //! fallback for other browser servers stay native.
 
 use std::sync::OnceLock;
@@ -16,11 +16,26 @@ use crate::browser_driver_compile::{
 
 pub const CHROME_DEVTOOLS_DRIVER_ID: &str = "browser.chrome-devtools-mcp";
 pub const PLAYWRIGHT_DRIVER_ID: &str = "browser.playwright-mcp";
+pub const PUPPETEER_DRIVER_ID: &str = "browser.puppeteer-mcp";
+pub const BROWSERMCP_DRIVER_ID: &str = "browser.browsermcp";
+pub const COMPUTER_USE_DRIVER_ID: &str = "browser.computer-use";
+pub const BROWSERBASE_DRIVER_ID: &str = "browser.browserbase";
+pub const BROWSER_USE_DRIVER_ID: &str = "browser.browser-use";
 
 const CHROME_DEVTOOLS: &str =
     include_str!("../../../../contributions/browser-drivers/browser.chrome-devtools-mcp.json");
 const PLAYWRIGHT: &str =
     include_str!("../../../../contributions/browser-drivers/browser.playwright-mcp.json");
+const PUPPETEER: &str =
+    include_str!("../../../../contributions/browser-drivers/browser.puppeteer-mcp.json");
+const BROWSERMCP: &str =
+    include_str!("../../../../contributions/browser-drivers/browser.browsermcp.json");
+const COMPUTER_USE: &str =
+    include_str!("../../../../contributions/browser-drivers/browser.computer-use.json");
+const BROWSERBASE: &str =
+    include_str!("../../../../contributions/browser-drivers/browser.browserbase.json");
+const BROWSER_USE: &str =
+    include_str!("../../../../contributions/browser-drivers/browser.browser-use.json");
 
 /// The publisher first-party profiles name. Only first-party profiles are compiled against it.
 const FIRST_PARTY_PUBLISHERS: &[&str] = &["HOL Guard"];
@@ -37,6 +52,11 @@ pub(crate) fn compile_first_party() -> Result<Vec<CompiledBrowserDriverV1>, Stri
     let sources = [
         (CHROME_DEVTOOLS.as_bytes(), BrowserDriverOrigin::FirstParty),
         (PLAYWRIGHT.as_bytes(), BrowserDriverOrigin::FirstParty),
+        (PUPPETEER.as_bytes(), BrowserDriverOrigin::FirstParty),
+        (BROWSERMCP.as_bytes(), BrowserDriverOrigin::FirstParty),
+        (COMPUTER_USE.as_bytes(), BrowserDriverOrigin::FirstParty),
+        (BROWSERBASE.as_bytes(), BrowserDriverOrigin::FirstParty),
+        (BROWSER_USE.as_bytes(), BrowserDriverOrigin::FirstParty),
     ];
     compile_browser_driver_set(&sources, FIRST_PARTY_PUBLISHERS)
         .map_err(|error| error.code().to_owned())

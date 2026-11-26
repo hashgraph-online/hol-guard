@@ -65,17 +65,41 @@ fn a_reflog_walk_answers_for_the_signature_configuration_a_log_walk_does() {
     let session = session("history-signatures");
     // The reflog walk is `git log` reading a different ref, so a `%G`
     // placeholder asks it for a signature and runs the verification program.
-    let result = session.evaluate_at("git reflog --format=%G?", &session.primary);
-    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
-    let result = session.evaluate_at("git reflog", &session.primary);
-    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
+    // While that program is the user's own, the walk is a read.
+    for command in ["git reflog", "git reflog --format=%G?"] {
+        let result = session.evaluate_at(command, &session.primary);
+        assert_eq!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
     git(
         &session.home,
         &session.primary,
         &["config", "log.showSignature", "true"],
     );
     let result = session.evaluate_at("git reflog", &session.primary);
+    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
+    // A program the repository names is one the user never chose, so a
+    // walk the setting makes check signatures keeps its review.
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "gpg.program", "./synthetic-never-execute"],
+    );
+    let result = session.evaluate_at("git reflog", &session.primary);
     assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+    // Without the setting, only the `%G` placeholder asks for a signature.
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "--unset", "log.showSignature"],
+    );
+    let result = session.evaluate_at("git reflog --format=%G?", &session.primary);
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+    let result = session.evaluate_at("git reflog", &session.primary);
+    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
 }
 
 #[test]

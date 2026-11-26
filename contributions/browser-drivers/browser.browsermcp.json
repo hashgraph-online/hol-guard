@@ -1,0 +1,125 @@
+{
+  "schemaVersion": "guard.browser-driver.v1",
+  "id": "browser.browsermcp",
+  "name": "Browser MCP",
+  "publisher": {
+    "name": "HOL Guard",
+    "url": "https://github.com/hashgraph-online/hol-guard",
+    "verified": true
+  },
+  "referenceUrls": [
+    "https://github.com/BrowserMCP/mcp"
+  ],
+  "referenceVersion": "2.5.0",
+  "match": {
+    "mcpServerNames": [
+      "browsermcp"
+    ],
+    "packages": [
+      "@browsermcp/mcp"
+    ],
+    "toolNamespaces": [
+      "mcp__browsermcp__"
+    ],
+    "harnessTools": []
+  },
+  "profileMode": {
+    "default": "shared"
+  },
+  "tools": [
+    {
+      "name": "browser",
+      "verb": "Other",
+      "script": [
+        "commands"
+      ]
+    },
+    {
+      "name": "browser_click",
+      "verb": "Click",
+      "element": {
+        "name": [
+          "element"
+        ]
+      }
+    },
+    {
+      "name": "browser_drag",
+      "verb": "Click",
+      "element": {
+        "name": [
+          "startElement",
+          "endElement"
+        ]
+      }
+    },
+    {
+      "name": "browser_get_console_logs",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_go_back",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_go_forward",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_hover",
+      "verb": "Click",
+      "element": {
+        "name": [
+          "element"
+        ]
+      }
+    },
+    {
+      "name": "browser_navigate",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "browser_press_key",
+      "verb": "Key",
+      "text": [
+        "key"
+      ]
+    },
+    {
+      "name": "browser_screenshot",
+      "verb": "Screenshot"
+    },
+    {
+      "name": "browser_select_option",
+      "verb": "Select",
+      "element": {
+        "name": [
+          "element"
+        ]
+      }
+    },
+    {
+      "name": "browser_snapshot",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_type",
+      "verb": "Type",
+      "element": {
+        "name": [
+          "element"
+        ]
+      },
+      "text": [
+        "text"
+      ]
+    },
+    {
+      "name": "browser_wait",
+      "verb": "Read"
+    }
+  ]
+}
