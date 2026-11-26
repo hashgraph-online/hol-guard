@@ -136,6 +136,9 @@ WORKSPACE_VITEST_LINE_COUNT_CASE = "omp-native-workspace-runner-line-count"
 # so the run is the same contained single pass. The runner prints its line
 # only when the title arrives intact behind `-t`.
 WORKSPACE_VITEST_TITLE_FILTER_CASE = "omp-native-workspace-vitest-title-filter"
+# Two titles joined by the alternation Vitest reads `-t` as. The `|` is
+# quoted, so it reaches the runner as part of the title rather than a pipe.
+WORKSPACE_VITEST_TITLE_ALTERNATION_CASE = "omp-native-workspace-vitest-title-alternation"
 # A bare run through the link npm writes, its tail followed by the word that
 # says how it went. Only the installed runner prints the line the case checks.
 WORKSPACE_VITEST_OUTCOME_REPORT_CASE = "omp-native-workspace-runner-outcome-report"
@@ -198,6 +201,7 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_VITEST_SUMMARY_CASE,
         WORKSPACE_VITEST_LINE_COUNT_CASE,
         WORKSPACE_VITEST_TITLE_FILTER_CASE,
+        WORKSPACE_VITEST_TITLE_ALTERNATION_CASE,
         WORKSPACE_VITEST_OUTCOME_REPORT_CASE,
         WORKSPACE_VITEST_BIN_LINK_CASE,
         WORKSPACE_VITEST_BUN_ENTRY_CASE,
@@ -762,6 +766,21 @@ _VITEST_TITLE_FILES = {
     ),
 }
 
+# The alternation the case filters by, and the line the runner prints only when
+# the whole pattern arrives behind `-t` as one word.
+VITEST_TITLE_ALTERNATION = "loads the form|masks the secret field"
+VITEST_TITLE_ALTERNATION_MARKER = f"vitest {_VITEST_VERSION} ran the alternated titles once"
+_VITEST_TITLE_ALTERNATION_FILES = {
+    **_VITEST_RUN_FILES,
+    "node_modules/vitest/vitest.mjs": (
+        "#!/usr/bin/env node\n"
+        "const argv = process.argv.slice(2);\n"
+        "const at = argv.indexOf('-t');\n"
+        f"const once = argv[0] === 'run' && at > 0 && argv[at + 1] === '{VITEST_TITLE_ALTERNATION}';\n"
+        f"console.log(once ? '{VITEST_TITLE_ALTERNATION_MARKER}' : 'vitest: the alternated run was not forwarded');\n"
+    ),
+}
+
 
 _LINT_STAGED_VERSION = "16.1.2"
 # The one line the workspace's own commit hook prints.
@@ -983,6 +1002,12 @@ _INSTALLS = {
         "vitest",
         _VITEST_TITLE_FILES,
         VITEST_TITLE_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_TITLE_ALTERNATION_CASE: _Install(
+        "vitest",
+        _VITEST_TITLE_ALTERNATION_FILES,
+        VITEST_TITLE_ALTERNATION_MARKER,
         entry="vitest.mjs",
     ),
     WORKSPACE_VITEST_OUTCOME_REPORT_CASE: _Install(

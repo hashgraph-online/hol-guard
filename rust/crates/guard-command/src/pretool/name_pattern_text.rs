@@ -32,7 +32,12 @@ const FIND_NAME_TESTS: &[&str] = &[
 
 /// Shell text that makes a word do more than carry its pattern: a redirect
 /// opens a file and a substitution brings in text no screen has seen.
-const UNSAFE: [char; 7] = ['<', '>', '$', '`', ';', '&', '|'];
+///
+/// A `|` is not among them. The parser ends a word at a pipe the shell would
+/// act on, so a `|` still inside a word was quoted or escaped and reaches the
+/// program as text: the alternation in `vitest run -t "loads|saves"` or
+/// `find . -name 'a|b'`.
+const UNSAFE: [char; 6] = ['<', '>', '$', '`', ';', '&'];
 
 /// The segment's text with its name patterns left out, or `None` when the
 /// segment is not a `find` listing or `pytest` run whose patterns may be set
