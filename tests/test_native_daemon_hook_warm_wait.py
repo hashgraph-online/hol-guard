@@ -7,12 +7,15 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from ci.native_daemon_harness import NativeGuardDaemon
+import pytest
+
+from ci.native_daemon_harness import HookWorkerWarmTimeoutError, NativeGuardDaemon
 
 
 class _Process:
-    def __init__(self, returncode: int | None = None) -> None:
+    def __init__(self, returncode: int | None = None, pid: int = 4242) -> None:
         self.returncode = returncode
+        self.pid = pid
 
     def poll(self) -> int | None:
         return self.returncode
@@ -53,8 +56,26 @@ def test_ignores_another_daemons_record(tmp_path: Path) -> None:
     _record(tmp_path, 1111, "hook_worker_warmed", "ok")
     started = time.monotonic()
 
-    assert _daemon(tmp_path, 4242, _Process()).wait_for_hook_worker(timeout_seconds=0.3) is False
+    with pytest.raises(HookWorkerWarmTimeoutError):
+        _daemon(tmp_path, 4242, _Process()).wait_for_hook_worker(timeout_seconds=0.3)
     assert time.monotonic() - started >= 0.3
+
+
+def test_finds_the_record_under_the_daemon_process_id_when_it_announced_its_launcher(tmp_path: Path) -> None:
+    # On Windows the daemon announces its launcher's pid, but its lifecycle
+    # records carry its own.
+    _record(tmp_path, 5151, "hook_worker_warmed", "ok")
+    started = time.monotonic()
+
+    assert _daemon(tmp_path, 4242, _Process(pid=5151)).wait_for_hook_worker(timeout_seconds=30.0) is True
+    assert time.monotonic() - started < 5.0
+
+
+def test_a_warm_up_that_never_ends_is_an_error_not_an_unavailable_worker(tmp_path: Path) -> None:
+    _record(tmp_path, 4242, "hook_worker_warming")
+
+    with pytest.raises(HookWorkerWarmTimeoutError):
+        _daemon(tmp_path, 4242, _Process()).wait_for_hook_worker(timeout_seconds=0.3)
 
 
 def test_stops_waiting_when_the_daemon_exited(tmp_path: Path) -> None:

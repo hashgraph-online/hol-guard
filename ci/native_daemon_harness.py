@@ -49,6 +49,10 @@ def _stop_with_parent() -> None:
     ctypes.CDLL(None, use_errno=True).prctl(pr_set_pdeathsig, signal.SIGTERM)
 
 
+class HookWorkerWarmTimeoutError(RuntimeError):
+    """The daemon recorded no end to its hook warm-up before the wait ran out."""
+
+
 class NativeGuardDaemon:
     """Starts and stops ``daemon-serve`` for one Guard home on a free port."""
 
@@ -154,22 +158,38 @@ class NativeGuardDaemon:
         client that keeps its own short deadline gives up on it. An installed
         daemon has long finished warming when an agent starts, so a launcher
         that starts an agent right away waits here first.
+
+        Returns False when the warm-up recorded that it could not build the
+        worker, or when the daemon exited. Raises ``HookWorkerWarmTimeoutError``
+        when no end of the warm-up was recorded before the wait ran out.
         """
 
+        process = self._process
+        # Lifecycle records carry the daemon's own process ID. On Windows the
+        # daemon announces its launcher's ID instead, so match either.
+        pids = {self.pid}
+        native_pid = getattr(process, "pid", None)
+        if isinstance(native_pid, int):
+            pids.add(native_pid)
         directory = Path(self.store.guard_home) / "daemon-lifecycle"
-        pattern = f"*-{self.pid:010d}-*.json"
         deadline = time.monotonic() + timeout_seconds
         while True:
-            for path in sorted(directory.glob(pattern)):
-                try:
-                    record = json.loads(path.read_text(encoding="utf-8"))
-                except (OSError, ValueError):
-                    continue
-                if isinstance(record, dict) and record.get("event") == "hook_worker_warmed":
-                    return record.get("reason") == "ok"
-            process = self._process
-            if process is None or process.poll() is not None or time.monotonic() >= deadline:
+            for pid in sorted(pids):
+                for path in sorted(directory.glob(f"*-{pid:010d}-*.json")):
+                    try:
+                        record = json.loads(path.read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        continue
+                    if isinstance(record, dict) and record.get("event") == "hook_worker_warmed":
+                        return record.get("reason") == "ok"
+            if process is None or process.poll() is not None:
                 return False
+            if time.monotonic() >= deadline:
+                # No record means the warm-up may still be running; starting
+                # the agent now would put its first hook behind it.
+                raise HookWorkerWarmTimeoutError(
+                    f"The native daemon's hook worker did not finish warming within {timeout_seconds:g} s."
+                )
             time.sleep(0.05)
 
     def stop(self) -> None:
