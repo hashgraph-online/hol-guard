@@ -21,7 +21,7 @@
   "launch": {
     "kind": "package-launcher",
     "command": "uvx",
-    "package": "halflife-mcp"
+    "package": "halflife-mcp@0.1.4"
   },
   "riskClasses": [
     "local-data-access",
