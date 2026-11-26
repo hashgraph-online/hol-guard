@@ -303,6 +303,7 @@ mod protection_health_facts_containment_tests;
 mod protection_health_facts_tests;
 #[cfg(test)]
 mod protection_health_tests;
+pub mod provider_integration_compile;
 pub mod provider_origin_share;
 pub mod pytest_argv;
 #[cfg(test)]

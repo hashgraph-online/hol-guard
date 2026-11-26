@@ -30,7 +30,7 @@ const COUNTRY_SECOND_LEVEL: [&str; 9] = ["co", "com", "org", "net", "ac", "gov",
 
 /// Hosting domains that hand each customer their own subdomain. Two of
 /// their subdomains belong to different owners, so each is its own site.
-const SHARED_HOSTING: [&str; 21] = [
+pub(crate) const SHARED_HOSTING: [&str; 21] = [
     "github.io",
     "gitlab.io",
     "vercel.app",
