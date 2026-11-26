@@ -37,6 +37,14 @@ from .approval_retry_relay import (
     write_relay_config,
 )
 from .approval_rows import approval_rows
+from .browser_fixtures import read_journal
+from .browser_runner import (
+    GUARD_PORT_PLACEHOLDER,
+    browser_evidence,
+    browser_section,
+    is_browser_case,
+    stage_browser_case,
+)
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import add_credential_redactions, fixture_system_context
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
@@ -207,32 +215,40 @@ def run_harness_case(
     stage_approval_persistent(fixture.workspace, scenario.id, case, fixture.protected)
     daemon = None
     connector = None
+    browser = None
     seed: CredentialSeed | None = None
     started = time.monotonic()
     replacements = _fixture_replacements(fixture)
     try:
         with LoopbackCollector() as collector:
             replacements[collector.url] = "{{collector_url}}"
-            rendered = scenario.render(
-                {
-                    "home": str(fixture.home),
-                    "workspace": str(fixture.workspace),
-                    "root": str(fixture.root),
-                    "scratch": str(scratch_checkout(fixture.root)),
-                    "stage": str(stage_directory(fixture.root)),
-                    "collector_url": collector.url,
-                }
-            )
-            prompt, context = route_task(
-                scenario,
-                _scenario_prompt(rendered),
-                fixture_authorization(fixture, collector.url, rendered) + "\n" + fixture_system_context(scenario),
-            )
-            case["task_route"] = "instructions" if prompt == NEUTRAL_PROMPT else "prompt"
-            # Public, redacted targets the judge binds hook requests to.
-            case["expected_commands"] = redact_value(list(rendered.commands), replacements)
-            case["expected_path"] = rendered.path
-            case["prompt_sha256"] = sha256_bytes(prompt.encode())
+            values = {
+                "home": str(fixture.home),
+                "workspace": str(fixture.workspace),
+                "root": str(fixture.root),
+                "scratch": str(scratch_checkout(fixture.root)),
+                "stage": str(stage_directory(fixture.root)),
+                "collector_url": collector.url,
+            }
+
+            def render_task() -> tuple[Scenario, str, str]:
+                rendered = scenario.render(values)
+                prompt, context = route_task(
+                    scenario,
+                    _scenario_prompt(rendered),
+                    fixture_authorization(fixture, collector.url, rendered) + "\n" + fixture_system_context(scenario),
+                )
+                case["task_route"] = "instructions" if prompt == NEUTRAL_PROMPT else "prompt"
+                # Public, redacted targets the judge binds hook requests to.
+                case["expected_commands"] = redact_value(list(rendered.commands), replacements)
+                case["expected_path"] = rendered.path
+                case["prompt_sha256"] = sha256_bytes(prompt.encode())
+                return rendered, prompt, context
+
+            # A prompt that names Guard's own port renders once the daemon has one.
+            needs_guard_port = GUARD_PORT_PLACEHOLDER in scenario.prompt
+            if not needs_guard_port:
+                rendered, prompt, context = render_task()
             if scenario.oracle == "watch-command":
                 if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
                     raise ValueError("Watch fixture contract changed")
@@ -257,6 +273,8 @@ def run_harness_case(
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
                 connector_state = state_digest(connector.state_dir)
+            if is_browser_case(scenario):
+                browser = stage_browser_case(scenario, fixture.home, private / "browser", harness)
             daemon = probe._start_installed_daemon(
                 guard_home=guard_home,
                 home=fixture.home,
@@ -264,6 +282,9 @@ def run_harness_case(
                 identity=identity,
                 register_workspace_policy=not realistic,
             )
+            if needs_guard_port:
+                values["guard_port"] = str(daemon.port)
+                rendered, prompt, context = render_task()
             if scenario.oracle == RELAY_ORACLE:
                 record_daemon_origin(daemon)
             if scenario.oracle == "blocked-extension":
@@ -321,6 +342,8 @@ def run_harness_case(
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             if connector is not None:
                 environment["PATH"] = connector.path_prefix + environment["PATH"]
+            if browser is not None:
+                environment["PATH"] = browser.path_prefix + os.pathsep + environment["PATH"]
             keep_login_shell_path(fixture.home, environment["PATH"])
             spec.prepare_context(fixture.workspace, context)
             command = spec.command(
@@ -330,7 +353,13 @@ def run_harness_case(
                 context=context,
                 workspace=fixture.workspace,
                 model=model,
-                mcp_config=connector.mcp_configs[0] if connector is not None else None,
+                mcp_config=(
+                    connector.mcp_configs[0]
+                    if connector is not None
+                    else browser.mcp_configs[0]
+                    if browser is not None
+                    else None
+                ),
             )
             # The approve-then-retry lane needs a second phase: an operator granting the
             # review row while the agent is still running, so the agent issues its own retry.
@@ -381,6 +410,9 @@ def run_harness_case(
             case["contained_request_proofs"] = codex_request_proofs(tap_rows) if harness == "codex" else []
             case["guard_rows"] = redact_value(tap_rows, replacements)
             case["guard_decisions"] = guard_decisions(case["guard_rows"])
+            if browser is not None:
+                case["browser_journal"] = redact_value(read_journal(browser.call_journal), replacements)
+                case["browser"] = browser_section(scenario, browser_evidence(case, case["guard_decisions"]))
             if scenario.oracle == BASH_LIFECYCLE_ORACLE:
                 case["bash_lifecycle"] = bash_lifecycle_evidence(
                     fixture.home, fixture.workspace, scenario.id, worker.store

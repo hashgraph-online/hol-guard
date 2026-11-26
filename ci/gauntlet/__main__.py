@@ -520,10 +520,10 @@ def _run_harness(args: argparse.Namespace) -> int:
         raise ValueError(
             "--fail-fast, --case-retries, --host-slots and --max-load are only supported by the omp harness"
         )
-    if args.profile == "browser":
-        raise ValueError("the browser lane's case runner is not wired yet; `list --catalog browser` shows its cases")
-    if args.profile not in {"core", "full-tasks", "approval-retry", "connector-setup"}:
-        raise ValueError("--harness supports only the core, full-tasks, approval-retry and connector-setup profiles")
+    if args.profile not in {"core", "full-tasks", "approval-retry", "connector-setup", "browser"}:
+        raise ValueError(
+            "--harness supports only the core, full-tasks, approval-retry, connector-setup and browser profiles"
+        )
     if args.profile != "full-tasks" and args.full_task_mode != "enforce":
         raise ValueError("--full-task-mode requires --profile full-tasks")
     if not 30 <= args.timeout <= 1800:
@@ -537,11 +537,11 @@ def _run_harness(args: argparse.Namespace) -> int:
         from .full_task_cli import run_harness_profile
 
         report = run_harness_profile(args)
-    elif args.profile in {"approval-retry", "connector-setup"}:
+    elif args.profile in {"approval-retry", "connector-setup", "browser"}:
         from .approval_retry_suite import run_approval_retry_suite
 
         report = run_approval_retry_suite(
-            catalog_path=CONNECTOR_CATALOG if args.profile == "connector-setup" else None,
+            catalog_path={"connector-setup": CONNECTOR_CATALOG, "browser": BROWSER_CATALOG}.get(args.profile),
             harness=args.harness,
             expected_source_sha=args.expected_source_sha,
             output=args.output,

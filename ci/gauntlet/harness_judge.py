@@ -25,16 +25,19 @@ from .approval_retry_marker import assessment as marker_assessment
 from .approval_retry_persistent import assessment as persistent_assessment
 from .approval_retry_relay import RELAY_ORACLE
 from .approval_retry_relay import assessment as relay_assessment
+from .browser_cases import BROWSER_ORACLES
+from .browser_judge import browser_outcome
+from .browser_runner import browser_evidence
 from .catalog import Scenario
 from .codex_contained import routed_calls, shell_script
 from .connector_judge import connector_setup_outcome, connector_tool_outcome, reason_text, ungranted_stop
 from .file_write_cases import FILE_WRITE_CHECK, FILE_WRITE_ORACLE
-from .interruptions import case_interruptions, describe
+from .interruptions import PRE_TOOL_EVENTS, case_interruptions, describe
 from .mixed_reads import PUBLIC_READS
 from .proofs import BLOCK_REASONS, block_reasons, required_checks
 from .safety_guide_reads import is_guide_read
 
-_PRE_EVENTS = frozenset({"PreToolUse", "preToolUse", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"})
+_PRE_EVENTS = PRE_TOOL_EVENTS
 _PROMPT_EVENTS = frozenset({"UserPromptSubmit", "beforeSubmitPrompt"})
 # Lifecycle callbacks Guard only observes (its _LIFECYCLE_OBSERVE_EVENTS, plus
 # Cursor's lowercase stop). The resident worker answers them with no receipt and
@@ -138,6 +141,18 @@ def _patch_tool(payload: dict[str, Any]) -> str | None:
     return target[0] if target else None
 
 
+def _risk_categories(*sources: dict[str, Any]) -> list[str]:
+    """Risk categories a hook response or receipt reports, at the top level or under ``risk``."""
+    found: list[str] = []
+    for source in sources:
+        nested = source.get("risk")
+        for holder in (source, nested if isinstance(nested, dict) else {}):
+            categories = holder.get("risk_categories")
+            if isinstance(categories, list):
+                found.extend(str(category) for category in categories if str(category) not in found)
+    return found
+
+
 def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EVENTS) -> list[dict[str, Any]]:
     """Decisions for the selected hook events, one per reviewed hook request."""
     decisions = []
@@ -162,6 +177,11 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
                 "call_id": payload.get("tool_use_id") or payload.get("tool_call_id"),
                 "policy_action": response.get("policy_action") or receipt.get("policy_action"),
                 "reason_code": response.get("reason_code") or receipt.get("reason_code"),
+                "risk_categories": _risk_categories(response, receipt),
+                # Cursor names an MCP call by its bare tool and identifies the server by its launch
+                # command (stdio) or URL; keep both so a judge can tell servers apart.
+                "mcp_server_command": payload.get("command") if event == "beforeMCPExecution" else None,
+                "mcp_server_url": payload.get("url") if event == "beforeMCPExecution" else None,
                 "receipt_decision": receipt.get("decision"),
                 "receipt_harness": receipt.get("harness"),
                 "observe_mode": receipt.get("observe_mode"),
@@ -286,6 +306,9 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
     if routed_error:
         return routed_error
     stops = [d for d in decisions if d["decision"] != "allow" and d.get("call_id") not in routed]
+    if scenario.oracle in BROWSER_ORACLES:
+        # The driver's call journal, not the transcript, says which browser call actually ran.
+        return browser_outcome(scenario, browser_evidence(case, decisions))
     if scenario.expectation == "setup":
         return connector_setup_outcome(scenario, case, decisions, calls)
     if (unexercised := ungranted_stop(scenario, decisions)) is not None:
