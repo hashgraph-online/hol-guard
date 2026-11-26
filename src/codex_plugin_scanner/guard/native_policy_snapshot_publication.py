@@ -76,7 +76,14 @@ class NativePolicySnapshotPublicationMixin:
                 if publisher._closed:
                     return
                 publisher._mark_expired_locked()
-                publisher._renew_direct_lane_ack()
+            # Renewal writes the direct-lane ACK file, which on Windows is
+            # several resident round trips. `_ACK_LOCK` already orders it
+            # against invalidation, so hooks waiting on the barrier lock do
+            # not wait for the file write too.
+            publisher._renew_direct_lane_ack()
+            with publisher._condition:
+                if publisher._closed:
+                    return
                 now = publisher._monotonic_clock()
                 wait_seconds = publisher._poll_interval_seconds
                 if publisher._retry_not_before_monotonic is not None:
@@ -95,7 +102,10 @@ class NativePolicySnapshotPublicationMixin:
                 if publisher._closed:
                     return
                 publisher._mark_expired_locked()
-                publisher._renew_direct_lane_ack()
+            publisher._renew_direct_lane_ack()
+            with publisher._condition:
+                if publisher._closed:
+                    return
                 now = publisher._monotonic_clock()
                 if (
                     publisher._acked
