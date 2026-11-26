@@ -161,7 +161,10 @@ class NativeGuardDaemon:
 
         Returns False when the warm-up recorded that it could not build the
         worker, or when the daemon exited. Raises ``HookWorkerWarmTimeoutError``
-        when no end of the warm-up was recorded before the wait ran out.
+        when no end of the warm-up was recorded before the wait ran out, or
+        when the warm-up recorded that its call timed out: that call may still
+        be running in the resident, so the worker is neither built nor known
+        to be missing.
         """
 
         process = self._process
@@ -181,6 +184,10 @@ class NativeGuardDaemon:
                     except (OSError, ValueError):
                         continue
                     if isinstance(record, dict) and record.get("event") == "hook_worker_warmed":
+                        if record.get("reason") == "timeout":
+                            raise HookWorkerWarmTimeoutError(
+                                "The native daemon's hook worker warm-up timed out and may still be running."
+                            )
                         return record.get("reason") == "ok"
             if process is None or process.poll() is not None:
                 return False

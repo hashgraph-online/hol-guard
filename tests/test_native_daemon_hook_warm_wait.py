@@ -83,3 +83,12 @@ def test_stops_waiting_when_the_daemon_exited(tmp_path: Path) -> None:
 
     assert _daemon(tmp_path, 4242, _Process(returncode=1)).wait_for_hook_worker(timeout_seconds=30.0) is False
     assert time.monotonic() - started < 5.0
+
+
+def test_a_timed_out_warm_up_is_an_error_not_an_unavailable_worker(tmp_path: Path) -> None:
+    # The call may still be running in the resident, so the agent's first
+    # hook would queue behind it.
+    _record(tmp_path, 4242, "hook_worker_warmed", "timeout")
+
+    with pytest.raises(HookWorkerWarmTimeoutError):
+        _daemon(tmp_path, 4242, _Process()).wait_for_hook_worker(timeout_seconds=1.0)

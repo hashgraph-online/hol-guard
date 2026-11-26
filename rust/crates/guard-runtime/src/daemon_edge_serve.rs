@@ -394,14 +394,17 @@ fn idle_timeout(seconds: Option<f64>) -> Option<std::time::Duration> {
 /// Builds the resident's hook worker in the background, so the first hook
 /// does not pay for the library's start inside its own deadline.
 ///
-/// Records `hook_worker_warmed` when the warm-up ends, with `ok` or
-/// `unavailable`, so a launcher can wait for the worker before it starts an
-/// agent whose hooks keep their own short deadline.
+/// Records `hook_worker_warmed` when the warm-up ends, so a launcher can
+/// wait for the worker before it starts an agent whose hooks keep their own
+/// short deadline: `ok` when it built the worker, `unavailable` when it
+/// could not, and `timeout` when the call got no answer in time and may
+/// still be running in the resident.
 fn warm_hook_worker(reads: &Arc<NativeReads>, port: u16, pid: u32, home: &Path) {
     let Some(config) = reads.config() else {
         return;
     };
     let home = home.to_path_buf();
+    let failure_home = home.clone();
     super::reads::set_hook_worker_warming(true);
     let spawned = std::thread::Builder::new()
         .name("hook-warm".to_owned())
@@ -418,11 +421,22 @@ fn warm_hook_worker(reads: &Arc<NativeReads>, port: u16, pid: u32, home: &Path) 
                 std::time::Duration::from_secs(60),
             );
             super::reads::set_hook_worker_warming(false);
-            let outcome = if warmed.is_ok() { "ok" } else { "unavailable" };
+            let outcome = match warmed {
+                Ok(_) => "ok",
+                Err(super::library::CallError::NoAnswer) => "timeout",
+                Err(_) => "unavailable",
+            };
             super::lifecycle::record(&home, "hook_worker_warmed", Some(outcome), None, None);
         });
     if spawned.is_err() {
         super::reads::set_hook_worker_warming(false);
+        super::lifecycle::record(
+            &failure_home,
+            "hook_worker_warmed",
+            Some("unavailable"),
+            None,
+            None,
+        );
     }
 }
 
