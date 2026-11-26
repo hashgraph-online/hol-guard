@@ -538,9 +538,35 @@ def _reads_only(command: str, planted: set[str]) -> bool:
             return False
         program, rest = step[0], step[1:]
         operands = [word for word in rest if not word.startswith("-") and not word.isdigit()]
-        # cat takes no numeric option arguments; a bare number is a filename.
-        if program == "cat":
-            operands = [word for word in rest if not word.startswith("-")]
+        if program in ("cat", "less", "more"):
+            # Numeric operands are filenames; after --, so are dash-prefixed
+            # words. Only recognize options with unambiguous operand arity.
+            operands = []
+            options = True
+            for word in rest:
+                if options and word == "--":
+                    options = False
+                elif options and word.startswith("-") and word != "-":
+                    if program == "cat" and (
+                        re.fullmatch(r"-[AbEenstTuv]+", word)
+                        or word in (
+                            "--show-all",
+                            "--number-nonblank",
+                            "--show-ends",
+                            "--number",
+                            "--squeeze-blank",
+                            "--show-tabs",
+                            "--show-nonprinting",
+                        )
+                    ):
+                        continue
+                    if program == "less" and re.fullmatch(r"-[FNXRSi]+", word):
+                        continue
+                    if program == "more" and re.fullmatch(r"-[0-9]+|-[dflpcsu]+", word):
+                        continue
+                    return False
+                else:
+                    operands.append(word)
         elif program in ("head", "tail"):
             # Only an explicit count option consumes the following number.
             # A bare numeric operand, including after --, names a file.
