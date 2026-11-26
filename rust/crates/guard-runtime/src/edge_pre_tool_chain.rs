@@ -73,6 +73,7 @@ pub(super) fn evaluate_pre_tool_chain(
     let evaluated =
         crate::native_exact_action_op::require_bash_owner(envelope, policy_snapshot, evaluated);
     let evaluated = crate::network_protection::apply_to_envelope(envelope, evaluated);
+    let evaluated = crate::browser_debug_ports::apply_to_envelope(envelope, harness, evaluated);
     let evaluated = rule_reviews_then_runtime(
         envelope,
         policy_snapshot,
