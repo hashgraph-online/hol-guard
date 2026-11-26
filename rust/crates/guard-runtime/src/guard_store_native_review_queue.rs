@@ -160,6 +160,7 @@ struct SilentAsk {
 struct Respond {
     ask: RespondAsk,
     harness: String,
+    approval_center_url: String,
     result: Map<String, Value>,
     /// The connector's setup text in place of the review's.
     setup_reason: Option<String>,
@@ -344,6 +345,7 @@ pub(crate) fn delegate(
         }),
         ask,
         harness: query.envelope.harness.clone(),
+        approval_center_url: query.approval_center_url.clone(),
         result: paused.clone(),
         retry_reuses_approval: bound,
         exact_action_allowable: exact,
@@ -439,10 +441,17 @@ impl Delegated {
                     verdict.insert("reason".to_owned(), Value::String(reason.clone()));
                 }
                 // The renderer reads only the link and the request id.
-                let approval = [("approval_url", approval_url), ("request_id", request_id)]
-                    .into_iter()
-                    .filter_map(|(key, value)| Some((key.to_owned(), Value::String(value?))))
-                    .collect();
+                let approval = [
+                    ("approval_url", approval_url),
+                    ("request_id", request_id),
+                    (
+                        "approval_center_url",
+                        Some(respond.approval_center_url.clone()),
+                    ),
+                ]
+                .into_iter()
+                .filter_map(|(key, value)| Some((key.to_owned(), Value::String(value?))))
+                .collect();
                 paused_review(&PausedReviewInputsV1 {
                     harness: respond.harness.clone(),
                     verdict,

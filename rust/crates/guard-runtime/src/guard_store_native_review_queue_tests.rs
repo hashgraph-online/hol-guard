@@ -371,6 +371,10 @@ fn a_paused_review_is_rendered_with_its_stored_row() {
         .with_response(stored_reply(), NO_TOKEN_HOME);
     assert_eq!(reply["row"], stored_reply()["row"]);
     assert!(reply["response"].to_string().contains("Deletes files."));
+    assert_eq!(
+        reply["response"]["approval_center_url"],
+        "http://127.0.0.1:4781/approvals"
+    );
     assert!(reply.get("connector_setup").is_none());
 }
 
