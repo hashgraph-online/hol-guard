@@ -207,7 +207,6 @@ def pause_native_pre_tool_for_approval(
             guard_home=guard_home,
             deadline=deadline,
         )
-    response["prompted"] = response.get("prompted", True)
     return response
 
 
