@@ -334,41 +334,6 @@ fn keep_handed_back(
     });
 }
 
-/// Keep the plain records the writer handed back, each in the form it came
-/// back in. A remembered record whose allow was saved returns without its
-/// flag, and its queued copy loses the flag too, so a later drain retries
-/// only the receipt and never saves the allow a second time. A record the
-/// writer finished leaves the queue now: a later record on the same page may
-/// still fail the page, and the retry must not save its allow or write its
-/// receipt again.
-fn keep_handed_back(
-    queue: &DirectEvidenceQueue,
-    paged: &mut Vec<Paged>,
-    unwritten: &[(u64, Value)],
-) {
-    let mut state = queue.state.lock().ok();
-    paged.retain_mut(|item| {
-        if !mcp_relay_receipt::is_plain(&item.record) {
-            return true;
-        }
-        let Some(record) =
-            mcp_relay_receipt::remember::handed_back_with_sequence(item.seq, unwritten)
-        else {
-            if let Some(state) = state.as_mut() {
-                state.forget(item.seq);
-            }
-            return false;
-        };
-        if record != item.record {
-            if let Some(state) = state.as_mut() {
-                state.replace(item.seq, record.clone());
-            }
-            item.record = record;
-        }
-        true
-    });
-}
-
 fn has_unfinished_records(paged: &[Paged], home: &str) -> bool {
     paged
         .iter()
