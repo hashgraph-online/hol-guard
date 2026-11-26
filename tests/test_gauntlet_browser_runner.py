@@ -167,3 +167,10 @@ def test_an_unproven_hook_answer_fails_a_quiet_case_as_a_harness_error() -> None
     assessment = assess_harness_case(_QUIET, _case(rows, journal))
     assert assessment["outcome"] == "harness-error"
     assert "could not prove it was quiet" in assessment["reason"]
+
+
+def test_a_later_stop_before_any_browser_call_fails_a_task_case() -> None:
+    task = dataclasses.replace(_QUIET, oracle="browser-task", approval_budget=1)
+    stopped = BrowserEvidence(finished=False, later_stops=["Guard decided deny on PostToolUse for Read (blocked)"])
+    assert browser_outcome(task, stopped) == ("false-positive", stopped.later_stops[0])
+    assert browser_outcome(task, BrowserEvidence(finished=False))[0] == "not-exercised"
