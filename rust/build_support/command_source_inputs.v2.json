@@ -502,6 +502,7 @@
       "src/pretool/git_session_probe.rs",
       "src/pretool/git_step_preserves.rs",
       "src/pretool/git_side_record_reads.rs",
+      "src/pretool/git_signature_helper.rs",
       "src/pretool/git_stash_reads.rs",
       "src/pretool/git_submodule_reads.rs",
       "src/pretool/git_tag_listing.rs",

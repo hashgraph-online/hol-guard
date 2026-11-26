@@ -67,12 +67,9 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             clean.decision, "allow",
             "{harness}: clean log must be admitted"
         );
-        for option in [
-            "--format=%G?",
-            "--pretty=%GG",
-            "--remerge-diff",
-            "--submodule=diff",
-        ] {
+        // With no verification program configured anywhere, a signature
+        // request starts only the default program from a trusted location.
+        for option in ["--format=%G?", "--pretty=%GG"] {
             let command = format!("git log --no-ext-diff --no-textconv {option} -1");
             let formatted = evaluate_pre_tool_envelope_with_context(
                 harness,
@@ -83,11 +80,23 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
                 home.to_str(),
                 repository.to_str(),
             );
-            // A signature request is never admitted quietly. Where the
-            // configuration probe answers it is held for approval, and
+            assert_eq!(formatted.decision, "allow", "{harness}: {command}");
+        }
+        for option in ["--remerge-diff", "--submodule=diff"] {
+            let command = format!("git log --no-ext-diff --no-textconv {option} -1");
+            let formatted = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&enabled),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            // A remerge or submodule diff is never admitted quietly. Where
+            // the configuration probe answers it is held for approval, and
             // where the read is unproven without it the run is routed into
-            // containment instead; neither reaches the configured
-            // verification program unreviewed.
+            // containment instead.
             assert!(
                 matches!(
                     formatted.minimum_action.as_str(),
@@ -107,14 +116,7 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             home.to_str(),
             repository.to_str(),
         );
-        assert!(
-            matches!(
-                alias.minimum_action.as_str(),
-                "require-reapproval" | "sandbox-required"
-            ),
-            "{}",
-            alias.minimum_action
-        );
+        assert_eq!(alias.decision, "allow", "{harness}: user pretty alias");
         // A configured verification program alone cannot run for a read that
         // requests no signature, so it must not block ordinary history reads.
         std::fs::write(

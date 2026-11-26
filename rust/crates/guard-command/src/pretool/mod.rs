@@ -167,6 +167,7 @@ mod git_ref_listings;
 mod git_rev_list;
 mod git_search_text;
 pub(crate) mod git_side_record_reads;
+mod git_signature_helper;
 pub(crate) mod git_stash_reads;
 pub(crate) mod git_submodule_reads;
 pub(crate) mod git_tag_listing;
