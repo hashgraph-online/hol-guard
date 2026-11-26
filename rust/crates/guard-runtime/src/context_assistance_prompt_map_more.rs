@@ -25,7 +25,7 @@ const MAX_OUTLINE: usize = 8;
 /// The most lines of a definition shown whole.
 const MAX_SHOWN_LINES: usize = 80;
 /// The most characters of code one map shows whole for their tests.
-const MAX_SHOWN_CHARS: usize = 1_600;
+const MAX_SHOWN_CHARS: usize = 3_200;
 /// The most characters of named definitions one map shows whole. The agent
 /// opens a named definition before editing it, and that read costs a whole
 /// request, so even a long one is cheaper to show.
@@ -221,11 +221,13 @@ pub(super) fn tests(
     } else {
         MAX_SHOWN_CHARS
     };
+    let top = found.first().map_or(0.0, |(best, ..)| *best);
     let mut listed = Vec::new();
     for (_, _, line, near) in found.into_iter().take(MAX_TEST_FILES) {
         let mut entry = Entry::plain(line);
-        for (file, at, _) in near.into_iter().take(MAX_SHOWN_TESTS) {
-            let Some((span, code)) = whole(file, at) else {
+        for (file, at, score) in near.into_iter().take(MAX_SHOWN_TESTS) {
+            // Room left goes to other files' tests that match nearly as well.
+            let Some((span, code)) = whole(file, at).filter(|_| score * 2.0 >= top) else {
                 continue;
             };
             if code.len() <= room && !earlier.contains(&span) {
@@ -242,8 +244,6 @@ pub(super) fn tests(
                 entry.shown.push(span);
             }
         }
-        // Only the best file's tests are shown.
-        room = 0;
         listed.push(entry);
     }
     listed

@@ -482,6 +482,9 @@ mod docstring_tests;
 #[path = "context_assistance_prompt_map_imports_tests.rs"]
 mod imports_tests;
 #[cfg(test)]
+#[path = "context_assistance_prompt_map_more_tests.rs"]
+mod more_tests;
+#[cfg(test)]
 #[path = "context_assistance_prompt_map_nested_tests.rs"]
 mod nested_tests;
 #[cfg(test)]

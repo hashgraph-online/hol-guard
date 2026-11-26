@@ -21,7 +21,7 @@ use edge_identity::{
     MAX_HARNESS_BYTES, MAX_PATH_BYTES,
 };
 pub(crate) use edge_identity::{
-    policy_generation_matches, review_anchor_digest, stable_policy_identity,
+    policy_generation_matches, review_anchor_digest, session_identity_keys, stable_policy_identity,
     REQUEST_BINDING_FEATURE,
 };
 #[path = "edge_containment.rs"]

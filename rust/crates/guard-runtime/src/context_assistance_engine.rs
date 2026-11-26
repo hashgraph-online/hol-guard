@@ -38,7 +38,7 @@ mod prompt;
 use policy::{allowed, current_sources, effective, policy_current, policy_document, revision};
 pub(crate) use prompt::{
     definition, opened, project_context_on, prose, quick_excerpts, screened_texts, withheld_texts,
-    PickedExcerpt,
+    written_name, PickedExcerpt,
 };
 #[cfg(target_os = "macos")]
 #[path = "context_assistance_engine_execution.rs"]

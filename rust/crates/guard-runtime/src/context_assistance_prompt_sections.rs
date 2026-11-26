@@ -150,42 +150,7 @@ fn defined_name(line: &str) -> Option<String> {
 
 /// The name a definition line gives, as the code writes it.
 pub(super) fn written_name(line: &str) -> Option<String> {
-    let mut words = line.split_whitespace().skip_while(|word| {
-        matches!(
-            *word,
-            "export"
-                | "default"
-                | "pub"
-                | "pub(crate)"
-                | "pub(super)"
-                | "async"
-                | "static"
-                | "public"
-                | "private"
-                | "protected"
-                | "abstract"
-        )
-    });
-    let definer = words.next()?;
-    let mut word = words.next()?;
-    // A Go method's name follows its receiver: `func (r *Route) Name()`.
-    if definer == "func" && word.starts_with('(') {
-        while !word.contains(')') {
-            word = words.next()?;
-        }
-        word = word
-            .split_once(')')
-            .map(|(_, after)| after)
-            .unwrap_or_default();
-        if word.is_empty() {
-            word = words.next()?;
-        }
-    }
-    let name: String = word
-        .chars()
-        .take_while(|c| c.is_alphanumeric() || *c == '_')
-        .collect();
-    (!name.is_empty()).then_some(name)
+    crate::context_assistance_engine::written_name(line)
 }
 
 /// The test function a line calls, as `it` in `it("adds", () => {` or
