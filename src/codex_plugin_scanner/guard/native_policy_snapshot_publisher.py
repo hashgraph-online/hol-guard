@@ -164,6 +164,8 @@ class NativePolicySnapshotPublisher(
         # Pending workspaces the current ACK already covers. They compile with
         # the next publish but never queue one of their own.
         self._deferred_workspace_paths: set[Path] = set()
+        # The overlay answer that deferred each of them, for a probe that gets none.
+        self._deferred_workspace_readiness: dict[Path, object] = {}
         self._command_control_runtime = None
         self._reconcile_due_monotonic = self._monotonic_clock() + 1.0
         self._input_fingerprint: (
