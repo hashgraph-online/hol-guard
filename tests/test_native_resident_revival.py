@@ -443,6 +443,36 @@ def test_unavailable_native_keeps_specific_reason_overrides_on_fallback(
     assert response["hookSpecificOutput"]["permissionDecisionReason"] == "Policy update is still being applied."
 
 
+def test_unavailable_native_passes_derived_failure_reason_to_rust(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_worker_native_evidence as evidence
+
+    seen: dict[str, object] = {}
+
+    def native(*_args: object, **kwargs: object) -> dict[str, object]:
+        seen.update(kwargs)
+        return {"response": {"decision": "deny"}}
+
+    monkeypatch.setattr(evidence, "native_unavailable_event_response", native)
+    from codex_plugin_scanner.guard.native_resident_client import record_native_resident_client_failure_code
+
+    record_native_resident_client_failure_code("native_resident_restart_circuit_open")
+    try:
+        host = SimpleNamespace(metrics=SimpleNamespace(record_route=lambda _route: None), activity_writer=None)
+        evidence._record_unavailable_native(
+            cast(Any, host),
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash"},
+            harness="codex",
+            event_name="PreToolUse",
+            reason_code="native_pre_tool_unavailable",
+            guard_home=tmp_path,
+        )
+    finally:
+        record_native_resident_client_failure_code(None)
+    assert "hol-guard repair" in str(seen["reason"])
+
+
 def test_prompt_denial_names_repair_when_the_runtime_will_not_restart(tmp_path: Path) -> None:
     refused = _unavailable_denial(tmp_path, "native_resident_restart_circuit_open", "UserPromptSubmit")
     assert "hol-guard repair" in refused

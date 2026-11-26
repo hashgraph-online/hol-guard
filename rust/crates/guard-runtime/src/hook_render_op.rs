@@ -178,6 +178,7 @@ fn render(
             .get("reason")
             .and_then(Value::as_str)
             .unwrap_or("HOL Guard could not identify this hook event safely.");
+        let prompt_reason = params.get("prompt_reason").and_then(Value::as_str);
         let permission = availability
             .get("permission_request")
             .and_then(Value::as_bool)
@@ -210,7 +211,7 @@ fn render(
                 event,
                 reason,
                 reason_code,
-                None,
+                prompt_reason,
             )
             .map(Value::Object)
             .map_err(|_| "native_hook_render_invalid")?

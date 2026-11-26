@@ -62,6 +62,10 @@ def _record_unavailable_native(
     deadline: float | None = None,
     reason: str | None = None,
 ) -> dict[str, object]:
+    failure_code = native_resident_client_failure_code()
+    default_reason = "HOL Guard could not identify this hook event safely."
+    resolved_reason = reason or native_unavailable_reason(failure_code, default_reason)
+    prompt_reason = resolved_reason if resolved_reason != default_reason else None
     native = native_unavailable_event_response(
         payload,
         harness,
@@ -69,19 +73,16 @@ def _record_unavailable_native(
         deadline=deadline,
         record_post_tool_activity=False,
         reason_code=reason_code,
-        reason=reason,
+        reason=resolved_reason,
+        prompt_reason=prompt_reason,
     )
     native_response = native.get("response") if isinstance(native, dict) else None
     response = dict(native_response) if isinstance(native_response, Mapping) else availability_harness_response(
         harness=harness,
         event_name=event_name,
         reason_code=reason_code,
-        reason=reason
-        or native_unavailable_reason(
-            native_resident_client_failure_code(),
-            "HOL Guard could not identify this hook event safely.",
-        ),
-        prompt_reason=reason or native_unavailable_reason(native_resident_client_failure_code(), "") or None,
+        reason=resolved_reason,
+        prompt_reason=reason or native_unavailable_reason(failure_code, "") or None,
         guard_home=guard_home,
         deadline=deadline,
     )

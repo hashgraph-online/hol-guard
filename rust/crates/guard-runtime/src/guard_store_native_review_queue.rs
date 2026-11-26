@@ -215,7 +215,7 @@ pub(crate) fn delegate(
     let respond: Option<RespondAsk> = take_ask(&mut delegated, "respond")?;
     let lookup: Option<LookupAsk> = take_ask(&mut delegated, "connector_lookup")?;
     let mut silent = take_flag(&mut delegated, "silent")?;
-    let claude_notice = take_flag(&mut delegated, "claude_notice")?;
+    let mut claude_notice = take_flag(&mut delegated, "claude_notice")?;
     let respond = match respond {
         Some(RespondAsk::NativeReview(NativeAsk {})) => {
             let ask = owner
@@ -223,12 +223,16 @@ pub(crate) fn delegate(
                 .ok_or(INVALID)?
                 .as_str()
                 == ASK_MODE;
-            if ask {
+            let unbound = query.review_binding.is_none() && query.exact_token.is_none();
+            if ask && !unbound {
                 Some(RespondAsk::PausedReview(PausedAsk {}))
             } else {
                 silent = true;
+                claude_notice = false;
+                delegated.remove("integrity_key_b64");
+                delegated.remove("integrity_key_id");
                 Some(RespondAsk::SilentReviewBlock(SilentAsk {
-                    ask: false,
+                    ask,
                     home_dir: query.envelope.home_dir.clone().unwrap_or_default(),
                 }))
             }

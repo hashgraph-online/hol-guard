@@ -113,6 +113,7 @@ def native_unavailable_event_response(
     record_post_tool_activity: bool = False,
     reason_code: str | None = None,
     reason: str | None = None,
+    prompt_reason: str | None = None,
 ) -> dict[str, object] | None:
     """Ask Rust for the canonical event and its outage response.
 
@@ -128,6 +129,8 @@ def native_unavailable_event_response(
         params["reason_code"] = reason_code
     if reason is not None:
         params["reason"] = reason
+    if prompt_reason is not None:
+        params["prompt_reason"] = prompt_reason
     rendered = native_render_cli(
         "unavailable_event",
         harness,
