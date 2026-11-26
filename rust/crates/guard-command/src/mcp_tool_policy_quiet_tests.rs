@@ -108,3 +108,55 @@ fn loopback_dev_pages_are_quiet_under_a_stricter_default() {
         ("review", "configuration_stricter")
     );
 }
+
+/// The relay sends no `args`; its launch reaches the policy only as `server_fingerprint.command`.
+fn relay_request(tool: &str, arguments: Value, command: &[&str]) -> McpToolPolicyRequestV1 {
+    let metadata = serde_json::json!({"server_name": "playwright",
+        "mcp_tool_identity": {"tool_name": tool},
+        "mcp_server_identity": {"args_hash": "0".repeat(64)},
+        "server_fingerprint": {"command": command, "transport": "stdio"}});
+    serde_json::from_value(serde_json::json!({
+        "artifact": {"name": format!("playwright:{tool}"), "command": tool, "metadata": metadata},
+        "arguments": arguments,
+        "config": {"mode": "prompt", "default_action": "block"},
+        "harness": "codex", "artifact_id": format!("playwright:{tool}"), "publisher": null,
+    }))
+    .unwrap()
+}
+
+#[test]
+fn a_relayed_isolated_launch_is_read_from_the_server_fingerprint() {
+    use crate::browser_guard_origin::tests::{guard_home, with_guard_home};
+    let home = guard_home("policy-quiet-relay", Some(51235));
+    let decide = |request: McpToolPolicyRequestV1| {
+        with_guard_home(&home.0, || evaluate_tool_policy(&request).unwrap())
+    };
+    let navigate = serde_json::json!({"url": "http://127.0.0.1:4173/"});
+    let isolated = decide(relay_request(
+        "browser_navigate",
+        navigate.clone(),
+        &["npx", "@playwright/mcp@latest", "--isolated"],
+    ));
+    assert_eq!(
+        (isolated.action.as_str(), isolated.source.as_str()),
+        ("allow", "browser-loopback-quiet")
+    );
+    // The executable is not an argument, and an unflagged launch stays unknown.
+    let unflagged = decide(relay_request(
+        "browser_navigate",
+        navigate.clone(),
+        &["--isolated"],
+    ));
+    assert_eq!(unflagged.action, "block");
+    let debugging = decide(relay_request(
+        "browser_navigate",
+        serde_json::json!({"url": "http://127.0.0.1:3000/"}),
+        &[
+            "npx",
+            "@playwright/mcp@latest",
+            "--isolated",
+            "--cdp-endpoint=http://127.0.0.1:3000",
+        ],
+    ));
+    assert_eq!(debugging.action, "block");
+}

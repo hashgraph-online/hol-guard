@@ -413,10 +413,25 @@ fn launch_args<'a>(metadata: &'a Map<String, Value>) -> impl Iterator<Item = &'a
         .get("mcp_server_identity")
         .and_then(Value::as_object)
         .and_then(|identity| identity.get("args"))
-        .and_then(Value::as_array);
-    let direct_args = metadata.get("args").and_then(Value::as_array);
-    let server_args = metadata.get("server_args").and_then(Value::as_array);
-    [identity_args, direct_args, server_args]
+        .and_then(Value::as_array)
+        .map(Vec::as_slice);
+    let direct_args = metadata
+        .get("args")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice);
+    let server_args = metadata
+        .get("server_args")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice);
+    // The relay records the server's launch only as `server_fingerprint.command`: the
+    // executable, then its arguments. The identity above carries just a hash of them.
+    let relay_args = metadata
+        .get("server_fingerprint")
+        .and_then(Value::as_object)
+        .and_then(|fingerprint| fingerprint.get("command"))
+        .and_then(Value::as_array)
+        .and_then(|command| command.get(1..));
+    [identity_args, direct_args, server_args, relay_args]
         .into_iter()
         .flatten()
         .flatten()
