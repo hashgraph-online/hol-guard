@@ -39,6 +39,7 @@ from tests.gauntlet_replay import (
     expand,
     failure_reasons,
     judge,
+    mcp_tool,
     payload_input,
     source_ref_payload,
     write_global_gitconfig,
@@ -214,6 +215,19 @@ def test_every_harness_and_attack_class_is_covered() -> None:
         "zcode-read-git-ref-main",
         "pytest-contained",
     } <= {c.base_id for c in _CASES}
+
+
+def test_browser_mcp_calls_cover_every_harness_and_class() -> None:
+    browser = [case for case in _CASES if mcp_tool(case.tool) is not None]
+    for harness in ("claude-code", "codex", "cursor", "zcode", "omp", "pi"):
+        classes = {case.expect for case in browser if case.harness == harness}
+        assert {"quiet", "always", "block"} <= classes, f"{harness} browser classes: {sorted(classes)}"
+    # Cursor sends the bare tool name on beforeMCPExecution; every other harness qualifies it.
+    for case in browser:
+        if case.harness == "cursor":
+            assert "__" not in case.tool_name
+        else:
+            assert case.tool_name.startswith("mcp__playwright__")
 
 
 def test_known_gaps_name_real_cases() -> None:

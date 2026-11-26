@@ -32,6 +32,11 @@ REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text
 # Keep focused regressions separate from the pre-existing legacy corpus.
 OMP_BROWSER_REPLAY = json.loads((FIXTURES / "gauntlet_replay_omp_browser.json").read_text(encoding="utf-8"))
 REPLAY_DOCUMENT["cases"].extend(OMP_BROWSER_REPLAY["cases"])
+# Browser MCP calls as each harness's hook sends them (tool family ``mcp:<server>:<tool>``).
+BROWSER_MCP_REPLAY = json.loads((FIXTURES / "gauntlet_replay_browser_mcp.json").read_text(encoding="utf-8"))
+REPLAY_DOCUMENT["cases"].extend(BROWSER_MCP_REPLAY["cases"])
+# The stdio launch command Cursor reports beside a bare MCP tool name, by server.
+MCP_LAUNCH = {"playwright": "npx -y @playwright/mcp@latest"}
 GATE_DOCUMENT = json.loads((FIXTURES / "benign_false_positive_gate.json").read_text(encoding="utf-8"))
 
 # Tool names each harness really sends, by the case's abstract tool family. Pi names its built-ins
@@ -128,8 +133,20 @@ class ReplayCase:
 
     @property
     def tool_name(self) -> str:
+        mcp = mcp_tool(self.tool)
+        if mcp is not None:
+            server, name = mcp
+            # Cursor names an MCP call by its bare tool; the launch command names the server.
+            return name if self.harness == "cursor" else f"mcp__{server}__{name}"
         table = FAMILIES.get(self.tool)
         return table[self.harness] if table else FIXED[self.tool]
+
+
+def mcp_tool(tool: str) -> tuple[str, str] | None:
+    """The server and tool of an ``mcp:<server>:<tool>`` case, or None for any other tool family."""
+    prefix, _, rest = tool.partition(":")
+    server, _, name = rest.partition(":")
+    return (server, name) if prefix == "mcp" and server and name else None
 
 
 def _entry(entry: dict[str, Any], harness: str, expect: str) -> ReplayCase:
@@ -233,6 +250,10 @@ def cursor_hook_fields(tool: str, payload: dict[str, object]) -> dict[str, objec
         "user_email": "person@example.test",
         "workspace_roots": [str(payload["cwd"])],
     }
+    mcp = mcp_tool(tool)
+    if mcp is not None:
+        # Cursor's beforeMCPExecution names the server only by how it is launched (stdio) or reached.
+        return {**identity, "hook_event_name": "beforeMCPExecution", "command": MCP_LAUNCH[mcp[0]]}
     if tool in {"write", "grep"}:
         return identity
     if tool == "read":
