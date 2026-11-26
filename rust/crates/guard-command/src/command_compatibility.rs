@@ -556,6 +556,12 @@ pub(crate) fn compatibility_observations_in(
     Ok(result)
 }
 
+/// Whether `git ARGUMENTS` is a read that starts no hook or helper, which
+/// read whatever environment names they like.
+pub(crate) fn git_read_starts_no_user_program(arguments: &[String]) -> bool {
+    git::starts_no_user_program(arguments)
+}
+
 /// A lowercase shell variable such as `dir` or `out_dir` is not one Git, or
 /// a program Git starts, reads from its environment. Git's own settings are
 /// uppercase (`GIT_DIR`, `PAGER`, `EDITOR`), and

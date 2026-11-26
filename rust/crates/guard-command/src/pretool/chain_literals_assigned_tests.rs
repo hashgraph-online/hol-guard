@@ -126,7 +126,7 @@ fn a_value_any_other_slot_reads_is_written_as_the_substitution() {
     // The pipe hands the real value to `sh`, so it is not the printed
     // stand-in; the substitution stays for the projection to refuse.
     assert_eq!(
-        inlined("P=$(ls); echo $P | sh").map(|(text, _)| text),
+        inlined("p=$(ls); echo $p | sh").map(|(text, _)| text),
         Some("ls; echo $(ls) | sh".to_owned())
     );
     assert_eq!(
@@ -185,6 +185,18 @@ fn an_assignment_this_scan_cannot_follow_keeps_the_chain_opaque() {
         "P=$(ls); cd /tmp; cat $P",
         "P=$(ls); alias cat=rm; cat $P",
         "P=$(ls); GIT_DIR=/tmp/other; git log $P",
+        // A steering word the shell runs once its quotes are read.
+        "P=$(ls); \"cd\" /tmp; cat $P",
+        "P=$(ls); 'cd' /tmp; cat $P",
+        "P=$(ls); \\cd /tmp; cat $P",
+        // A body that changes its own shell, which the parent does not share.
+        "p=$(cd ./public) && cat config.txt",
+        "p=$(export A=1); echo $p",
+        "p=$(x=1); echo $p",
+        // A capitalised name, possibly exported, reaches a program that
+        // starts hooks or other programs.
+        "REF=$(git rev-parse HEAD); git push origin main",
+        "REF=$(git rev-parse HEAD); git log -1 \"$REF\"; npm test",
         // A use outside the `&&` list that ran the assignment.
         "true && P=$(ls); echo $P",
         "cd src && P=$(ls); cat $P",
@@ -262,4 +274,21 @@ fn a_value_the_projection_already_reads_keeps_its_stand_in() {
     // `date` and `mktemp` values stay where the projection reads them.
     assert_eq!(inlined("D=$(date +%F); echo $D"), None);
     assert_eq!(inlined("T=$(mktemp -d); cd $T"), None);
+}
+
+#[test]
+fn a_capitalised_name_before_commands_that_ignore_it_is_still_read() {
+    assert!(inlined("REF=$(git rev-parse HEAD); git log -1 \"$REF\"").is_some());
+    assert!(inlined("ref=$(git rev-parse HEAD); git log -1 \"$ref\"; npm test").is_some());
+}
+
+#[test]
+fn a_quoted_tilde_keeps_its_quotes_after_any_separator() {
+    for text in ["ls\t\"~\"", "ls;\"~\"", "ls <\"~\"", "ls \"~\""] {
+        assert_eq!(super::scan::plain_quotes_dropped(text), text, "{text}");
+    }
+    assert_eq!(
+        super::scan::plain_quotes_dropped("git log \"HEAD\""),
+        "git log HEAD"
+    );
 }

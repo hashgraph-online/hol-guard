@@ -49,9 +49,9 @@ use super::{display, line_number, ShellCommandSubstitution};
 #[path = "chain_literals_assigned_scan.rs"]
 mod scan;
 use scan::{
-    command_begins, commented_or_dollar_quoted, echoed, expands, expansion, list_end, occurrences,
-    one_pipeline, operator_after, operator_before, plain_ahead, plain_quotes_dropped,
-    single_quoted, steers,
+    assignment_name, command_begins, commented_or_dollar_quoted, echoed, expands, expansion,
+    list_end, listed, occurrences, one_pipeline, operator_after, operator_before, plain_ahead,
+    plain_quotes_dropped, single_quoted, steers, words,
 };
 
 /// Parts of a name a program reads from its environment to choose another
@@ -161,6 +161,17 @@ fn inline_span(
     if steers(masked, spans, assignment.value_end, last_inlined) {
         return None;
     }
+    // A capitalised name may already be exported, and then the assignment
+    // reaches every program the rest of the chain starts. The rewrite drops
+    // it, so it holds only when none of them could read it.
+    if assignment
+        .name
+        .bytes()
+        .any(|byte| byte.is_ascii_uppercase())
+        && !exported_name_unread(masked, spans, assignment.value_end)
+    {
+        return None;
+    }
     let judged = if steers(masked, spans, 0, assignment.name_start) {
         if spans
             .iter()
@@ -227,7 +238,7 @@ fn assignment(
         raw.to_owned()
     };
     let body = body.as_str();
-    if body.len() > MAX_BODY_CHARS || !one_pipeline(body) {
+    if body.len() > MAX_BODY_CHARS || !one_pipeline(body) || changes_shell(body) {
         return None;
     }
     // A temporary path or a date already has a stand-in the chain reads.
@@ -280,6 +291,104 @@ fn resolved(prefix: &str, body: &str) -> Option<String> {
     let joined = super::super::substitute(&format!("{prefix} {body}"))?;
     let value = joined.strip_prefix(written)?.strip_prefix(' ')?;
     (!expands(value)).then(|| plain_quotes_dropped(value))
+}
+
+/// Whether a substitution's body, run in the parent shell where it is
+/// written in place of its assignment, could change that shell: a stage
+/// that starts with a steering word such as `cd` or `export`, a group, or an
+/// assignment. Inside `$(...)` each stays in the substitution's own subshell.
+fn changes_shell(body: &str) -> bool {
+    let chars: Vec<char> = body.chars().collect();
+    let begins = command_begins(&chars, &[]);
+    let mut starts = begins.clone();
+    starts.dedup();
+    starts.iter().any(|&start| {
+        let end = begins
+            .iter()
+            .rposition(|&begin| begin == start)
+            .map_or(start, |at| at + 1);
+        words(&chars, &[], start, end).is_none_or(|words| {
+            words.first().is_some_and(|word| {
+                let word = word.replace(['"', '\'', '\\'], "");
+                listed(scan::STEERING_WORDS, &word)
+                    || matches!(word.as_str(), "(" | ")" | "{" | "}")
+                    || word
+                        .split_once('=')
+                        .is_some_and(|(name, _)| assignment_name(name))
+            })
+        })
+    })
+}
+
+/// Programs that start no other program, so a name an earlier step of the
+/// chain exported cannot reach code they run.
+const ENVIRONMENT_BLIND: &str = "[ cat echo head ls printf tail test true wc";
+
+/// Whether every command from `start` to the end of the text ignores an
+/// exported capitalised name: one of [`ENVIRONMENT_BLIND`], or a Git read
+/// that starts no hook or helper. Removing such an assignment from the chain
+/// then changes nothing a later program reads.
+fn exported_name_unread(masked: &[char], spans: &[ShellCommandSubstitution], start: usize) -> bool {
+    if start >= masked.len() {
+        return true;
+    }
+    // `${NAME}` is no group, so braces do not end a command here; a group
+    // opened with `{` is its own first word and refused below.
+    let begins = list_begins(masked, spans);
+    let mut starts: Vec<usize> = begins[start..].to_vec();
+    starts.dedup();
+    starts.iter().all(|&begin| {
+        let end = begins
+            .iter()
+            .rposition(|&other| other == begin)
+            .map_or(begin, |at| at + 1);
+        let Some(words) = words(masked, spans, begin.max(start), end) else {
+            return false;
+        };
+        let words: Vec<String> = words
+            .iter()
+            .map(|word| word.replace(['"', '\'', '\\'], ""))
+            .skip_while(|word| {
+                word.split_once('=')
+                    .is_some_and(|(name, _)| assignment_name(name))
+            })
+            .collect();
+        match words.split_first() {
+            None => true,
+            Some((program, arguments)) if program == "git" => {
+                crate::command_compatibility::git_read_starts_no_user_program(arguments)
+            }
+            Some((program, _)) => listed(ENVIRONMENT_BLIND, program),
+        }
+    })
+}
+
+/// [`command_begins`] without braces: where each command starts, split only
+/// at list, pipeline and subshell operators.
+fn list_begins(masked: &[char], spans: &[ShellCommandSubstitution]) -> Vec<usize> {
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut begin = 0;
+    let mut begins = Vec::with_capacity(masked.len());
+    for (at, &character) in masked.iter().enumerate() {
+        begins.push(begin);
+        if spans.iter().any(|span| span.start <= at && at < span.end) {
+            continue;
+        }
+        if escaped {
+            escaped = false;
+        } else if single {
+            single = character != '\'';
+        } else {
+            match character {
+                '\\' => escaped = true,
+                '\'' if !double => single = true,
+                '"' => double = !double,
+                ';' | '&' | '|' | '\n' | '(' | ')' if !double => begin = at + 1,
+                _ => {}
+            }
+        }
+    }
+    begins
 }
 
 #[cfg(test)]

@@ -9,7 +9,8 @@ const COMPOUND_WORDS: &str = "! [[ case coproc do done elif else esac fi for for
 
 /// Words that run their arguments or change, for the rest of the chain, the
 /// directory or the meaning of a command name.
-const STEERING_WORDS: &str = ". alias builtin cd chdir command declare enable eval exec export \
+pub(super) const STEERING_WORDS: &str =
+    ". alias builtin cd chdir command declare enable eval exec export \
     function getopts hash let local mapfile popd pushd read readarray readonly set setopt shopt \
     source trap typeset unalias unset";
 /// Whether `body` expands anything: a `$` or backtick outside single quotes.
@@ -104,8 +105,10 @@ pub(super) fn plain_quotes_dropped(value: &str) -> String {
                     })
                     && !run.contains("=~")
                     && !run.contains(":~")
-                    && !(run.starts_with('~')
-                        && (at == 0 || matches!(chars[at - 1], ' ' | '=' | ':')));
+                    // A bare `~` expands after a blank, an operator or a
+                    // redirect too, so a run that starts with one keeps its
+                    // quotes wherever it stands.
+                    && !run.starts_with('~');
                 if bare {
                     text.push_str(&run);
                     at += length + 2;
@@ -357,7 +360,8 @@ pub(super) fn steers(
         return true;
     };
     words.iter().any(|word| {
-        listed(STEERING_WORDS, word)
+        // `"cd"`, `'cd'` and `\cd` all run `cd`.
+        listed(STEERING_WORDS, &word.replace(['"', '\'', '\\'], ""))
             || matches!(word.as_str(), "(" | ")" | "{" | "}")
             || word
                 .split_once('=')
