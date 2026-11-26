@@ -2275,10 +2275,32 @@
      "name": "fill"
     },
     "launch_target": "fill {\"uid\":\"1_2\",\"value\":\"hunter2\"} [arguments-sha256:ac652a24889d0f32876be89e1755c6756915e599dcf3e50c36e6397162d2f656]",
-    "browser": null,
+    "browser": {
+     "intent": {
+      "intent": "browser.interact",
+      "mcp_schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "mcp_server_identity_hash": "6c4d5ea9decbe221339aaea4b2dc093b8abba6bfe31e929736f653ee3b7eb938",
+      "mcp_server_name": "chrome-devtools",
+      "mcp_tool_identity_hash": "120e79bab78074ae39110610896721753abea5a693bb17691a9a849a3420a6ae",
+      "mcp_tool_name": "fill",
+      "method": "interact",
+      "operation": "fill",
+      "profile_mode": "unknown",
+      "sensitive_surface_flags": [],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": []
+     },
+     "launch_target": "chrome-devtools fill unknown"
+    },
     "risk": {
-     "risk_categories": [],
-     "summary": "No high-risk signal was detected in this tool call."
+     "risk_categories": [
+      "browser_interaction"
+     ],
+     "summary": "Browser interaction on page element."
     }
    }
   },

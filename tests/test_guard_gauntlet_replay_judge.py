@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
-from ci.gauntlet.approval_rows import REDACTED_GROUP, _opaque_group
+from ci.gauntlet.approval_rows import REDACTED_GROUP, _browser_intent, _opaque_group
 from ci.gauntlet.catalog import Scenario, load_catalog, retain_trusted_cases
 from ci.gauntlet.interruptions import (
     case_interruptions,
@@ -320,3 +321,45 @@ def test_approval_rows_keep_only_opaque_connector_groups() -> None:
     assert _opaque_group(None) == ""
     assert _opaque_group("connector:/home/dev/project") == REDACTED_GROUP
     assert _opaque_group(f"{group}/extra") == REDACTED_GROUP
+
+
+def _browser_case(expect: str) -> ReplayCase:
+    return ReplayCase("b@claude-code", "b", "claude-code", "mcp:playwright:browser_click", {}, "worktree", expect)
+
+
+_BROWSER_INTENT = {"intent": "browser.interact", "operation": "browser_click"}
+_OFFERED = {
+    "tool_name": "mcp__playwright__browser_click",
+    "always_available": True,
+    "exact_action_persistence_eligible": True,
+    "exact_context_token_present": True,
+}
+
+
+def test_a_browser_block_case_passes_with_a_browser_review_row() -> None:
+    asked = {"hookSpecificOutput": {"permissionDecision": "ask"}}
+    assert judge(_browser_case("block"), asked, [{**_OFFERED, "browser_intent": _BROWSER_INTENT}]) is None
+    assert "without a browser review" in str(judge(_browser_case("block"), asked, [_OFFERED]))
+
+
+def test_a_browser_always_case_needs_the_browser_review_too() -> None:
+    asked = {"hookSpecificOutput": {"permissionDecision": "ask"}}
+    assert judge(_browser_case("always"), asked, [{**_OFFERED, "browser_intent": _BROWSER_INTENT}]) is None
+    assert "without a browser review" in str(judge(_browser_case("always"), asked, [_OFFERED]))
+
+
+@pytest.mark.parametrize(
+    ("row", "expected"),
+    [
+        (
+            {"browser_intent_json": json.dumps({**_BROWSER_INTENT, "target_origin": "https://shop.example.test"})},
+            _BROWSER_INTENT,
+        ),
+        ({"browser_intent": {**_BROWSER_INTENT, "target_domain": "shop.example.test"}}, _BROWSER_INTENT),
+        ({"browser_intent_json": "not json"}, None),
+        ({"browser_intent_json": json.dumps({"operation": "browser_click"})}, None),
+        ({}, None),
+    ],
+)
+def test_the_row_projection_keeps_only_the_browser_intent_class(row: dict, expected: dict | None) -> None:
+    assert _browser_intent(row) == expected

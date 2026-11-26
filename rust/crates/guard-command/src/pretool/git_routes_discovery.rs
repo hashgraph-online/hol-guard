@@ -90,14 +90,14 @@ pub(crate) fn git_route_without_repository(
 /// Whether the subcommand after a `-C` route can still read a file when Git
 /// finds no repository: `diff` given any operand (two paths fall back to a
 /// file comparison), `grep` (which falls back under `grep.fallbackToNoIndex`),
-/// and `apply` and `hash-object`, which read their operands with or without a
-/// repository. Only option-only `diff` spellings stay on the error path.
+/// and `apply`, `hash-object` and `merge-file`, which read their operands with
+/// or without a repository. Only option-only `diff` spellings stay on the error path.
 pub(crate) fn reads_without_repository(rest: &[String]) -> bool {
     match rest.first().map(String::as_str) {
         Some("diff") => rest[1..].iter().any(|argument| {
             !argument.starts_with('-') || argument == "--" || argument == "--no-index"
         }),
-        Some("grep" | "apply" | "hash-object") => true,
+        Some("grep" | "apply" | "hash-object" | "merge-file") => true,
         _ => false,
     }
 }
