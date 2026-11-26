@@ -426,6 +426,33 @@ def test_deferred_subdirectory_that_gains_an_overlay_after_a_missed_probe_waits_
     publisher.close()
 
 
+def test_deferred_subdirectory_that_gains_an_overlay_while_probes_miss_triggers_a_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Every probe after the first misses its budget, so the hook keeps the
+    # last proven answer. The overlay file written meanwhile is still an
+    # input change: it withdraws the ACK and queues the publish that
+    # compiles it, so the stricter policy is not bypassed.
+    publisher, _resident, existing = _published(tmp_path, monkeypatch)
+    nested = existing / "src"
+    nested.mkdir()
+    answers = iter(["directory_and_ancestors"])
+    monkeypatch.setattr(readiness, "_workspace_overlay_readiness", lambda *_a, **_k: next(answers, None))
+    try:
+        assert publisher.register_workspace(nested)
+        with publisher._condition:
+            assert nested in publisher._deferred_workspace_paths
+        assert publisher.workspace_admissible_without_overlay(nested, deadline=time.monotonic() + 1.0)
+
+        overlay = nested / ".hol-guard.toml"
+        overlay.write_text('sandbox_analysis = "strict"\n', encoding="utf-8")
+        assert publisher._policy_input_changed({str(overlay)})
+        with publisher._condition:
+            assert not publisher._acked
+    finally:
+        publisher.close()
+
+
 @pytest.mark.parametrize("overlay", [".hol-guard.toml", ".ai-plugin-scanner-guard.toml"])
 def test_subdirectory_with_its_own_overlay_waits_for_its_ack(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, overlay: str

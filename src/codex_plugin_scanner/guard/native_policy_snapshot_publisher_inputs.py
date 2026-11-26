@@ -268,7 +268,11 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
 
     def _pending_workspace_policy_paths(self) -> set[str]:
         with self._condition:
-            return {str(path) for path in self._overlay_paths(tuple(self._pending_workspace_paths))}
+            # A deferred workspace queues no publish of its own, so its
+            # overlay files stay effective inputs: one written there must
+            # trigger the publish that compiles it.
+            undeferred = self._pending_workspace_paths - self._deferred_workspace_paths
+            return {str(path) for path in self._overlay_paths(tuple(undeferred))}
 
     def _compiled_effective_policy(
         self, *, settled_only: bool = False, workspaces: frozenset[Path] | None = None
