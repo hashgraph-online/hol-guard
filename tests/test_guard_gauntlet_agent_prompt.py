@@ -32,6 +32,7 @@ def test_rendered_command_arguments_survive_prompt_serialization(tmp_path, scena
             "scratch": str(scratch_checkout(fixture.root)),
             "stage": str(stage_directory(fixture.root)),
             "collector_url": "http://127.0.0.1:12345/",
+            "page_url": "http://127.0.0.1:12346/",
         }
     )
     prompt = scenario_prompt(rendered)

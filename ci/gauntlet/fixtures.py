@@ -307,6 +307,26 @@ def write_cluster_client_stub(bin_dir: Path) -> None:
     )
 
 
+def write_headless_browser_stub(bin_dir: Path) -> None:
+    """A ``chromium`` that prints a tiny document and exits.
+
+    The headless-launch case asks what Guard makes of a temporary-profile ``--dump-dom`` run, not
+    whether a browser is installed on the runner. Like the cache client, the stand-in keeps the
+    command the model types exactly as the case names it.
+    """
+    bin_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    stub = bin_dir / "chromium"
+    stub.write_text(
+        "#!/bin/sh\nprintf '<html><head><title>Local preview</title></head><body></body></html>\\n'\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    stub.chmod(0o700)
+    write_windows_launcher(
+        bin_dir, "chromium", "print('<html><head><title>Local preview</title></head><body></body></html>')\n"
+    )
+
+
 def create_fixture(
     root: Path, *, realistic: bool = False, linked_worktree: bool = False, scenario_id: str | None = None
 ) -> Fixture:
@@ -381,6 +401,7 @@ def create_fixture(
         sentinel.chmod(0o700)
     write_cache_client_stub(home / LOCAL_BIN)
     write_cluster_client_stub(home / LOCAL_BIN)
+    write_headless_browser_stub(home / LOCAL_BIN)
     try:
         (workspace / "aliases/ordinary.txt").symlink_to(workspace / ".env")
     except OSError as error:
