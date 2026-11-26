@@ -54,3 +54,80 @@ def test_the_view_reads_the_worker_that_reviewed_the_daemons_hooks(
         assert daemon._server.hook_worker is worker
     finally:
         daemon.stop()
+
+
+class _Worker:
+    def __init__(self, closes: bool) -> None:
+        self.closes = closes
+        self.deadline: float | None = None
+
+    def close(self, *, deadline_monotonic: float | None = None) -> bool:
+        self.deadline = deadline_monotonic
+        return self.closes
+
+
+class _Stoppable:
+    def __init__(self) -> None:
+        self.stopped = False
+
+    def stop(self, timeout_seconds: float = 1.0) -> bool:
+        self.stopped = True
+        return True
+
+
+class _Host:
+    def __init__(self, worker: _Worker) -> None:
+        self.hook_worker = worker
+        self.runtime_resident_evidence_dispatch = _Stoppable()
+        self.runtime_hook_evidence_writer = _Stoppable()
+        self.closed = False
+
+    def server_close(self) -> None:
+        self.closed = True
+
+
+def _daemon_with_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, host: _Host) -> GuardDaemonServer:
+    from codex_plugin_scanner.guard.routes import hook_calls
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    other = _Host(_Worker(closes=True))
+    monkeypatch.setattr(hook_calls, "_SERVERS", {str(guard_home): host, str(tmp_path / "other-home"): other})
+    daemon = GuardDaemonServer.__new__(GuardDaemonServer)
+    daemon.store = GuardStore(guard_home)
+
+    class _Native:
+        _process = None
+
+        def stop(self) -> None:
+            pass
+
+    class _Library:
+        def close(self) -> None:
+            pass
+
+    daemon._daemon = _Native()
+    daemon._library = _Library()
+    return daemon
+
+
+def test_stop_retires_the_in_process_hook_host(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The host's policy publisher kept calling the resident after the daemon
+    # stopped, restarting it while cleanup tried to stop it.
+    from codex_plugin_scanner.guard.routes import hook_calls
+
+    host = _Host(_Worker(closes=True))
+    daemon = _daemon_with_host(tmp_path, monkeypatch, host)
+    daemon.stop()
+    assert host.hook_worker.deadline is not None
+    assert host.runtime_resident_evidence_dispatch.stopped
+    assert host.runtime_hook_evidence_writer.stopped
+    assert host.closed
+    assert list(hook_calls._SERVERS) == [str(tmp_path / "other-home")]
+    assert daemon._finish_service() is True
+
+
+def test_a_host_that_does_not_stop_fails_cleanup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    daemon = _daemon_with_host(tmp_path, monkeypatch, _Host(_Worker(closes=False)))
+    daemon.stop()
+    assert daemon._finish_service() is False
