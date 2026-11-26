@@ -12774,6 +12774,9 @@ function HiMiniWrench(props) {
 function HiMiniWrenchScrewdriver(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M14.5 10a4.5 4.5 0 0 0 4.284-5.882c-.105-.324-.51-.391-.752-.15L15.34 6.66a.454.454 0 0 1-.493.11 3.01 3.01 0 0 1-1.618-1.616.455.455 0 0 1 .11-.494l2.694-2.692c.24-.241.174-.647-.15-.752a4.5 4.5 0 0 0-5.873 4.575c.055.873-.128 1.808-.8 2.368l-7.23 6.024a2.724 2.724 0 1 0 3.837 3.837l6.024-7.23c.56-.672 1.495-.855 2.368-.8.096.007.193.01.291.01ZM5 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M14.5 11.5c.173 0 .345-.007.514-.022l3.754 3.754a2.5 2.5 0 0 1-3.536 3.536l-4.41-4.41 2.172-2.607c.052-.063.147-.138.342-.196.202-.06.469-.087.777-.067.128.008.257.012.387.012ZM6 4.586l2.33 2.33a.452.452 0 0 1-.08.09L6.8 8.214 4.586 6H3.309a.5.5 0 0 1-.447-.276l-1.7-3.402a.5.5 0 0 1 .093-.577l.49-.49a.5.5 0 0 1 .577-.094l3.402 1.7A.5.5 0 0 1 6 3.31v1.277Z" }, "child": [] }] })(props);
 }
+function HiMiniWindow(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 2A2.25 2.25 0 0 0 2 4.25v11.5A2.25 2.25 0 0 0 4.25 18h11.5A2.25 2.25 0 0 0 18 15.75V4.25A2.25 2.25 0 0 0 15.75 2H4.25ZM3.5 8v7.75c0 .414.336.75.75.75h11.5a.75.75 0 0 0 .75-.75V8h-13ZM5 4.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V5a.75.75 0 0 0-.75-.75H5ZM7.25 5A.75.75 0 0 1 8 4.25h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H8a.75.75 0 0 1-.75-.75V5ZM11 4.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V5a.75.75 0 0 0-.75-.75H11Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniUsers(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 0 1 7 18a9.953 9.953 0 0 1-5.385-1.572ZM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 0 0-1.588-3.755 4.502 4.502 0 0 1 5.874 2.636.818.818 0 0 1-.36.98A7.465 7.465 0 0 1 14.5 16Z" }, "child": [] }] })(props);
 }
@@ -14634,7 +14637,7 @@ function parseBrowserCard(value) {
   const site = isRecord$d(value.site) ? value.site : {};
   const detail = isRecord$d(value.detail) ? value.detail : {};
   const inputKind = detail.input_kind;
-  const chips = Array.isArray(value.risk_chips) ? value.risk_chips.filter((chip) => typeof chip === "string" && chip in SURFACES) : [];
+  const chips = Array.isArray(value.risk_chips) ? value.risk_chips.filter((chip) => typeof chip === "string" && Object.hasOwn(SURFACES, chip)) : [];
   return {
     headline: value.headline.trim(),
     verb,
@@ -14656,7 +14659,13 @@ function parseBrowserCard(value) {
     steps: []
   };
 }
-function inputValue(card) {
+function browserSurfaceLabel(surface) {
+  return SURFACES[surface];
+}
+function browserProfileLabel(profile) {
+  return PROFILES[profile];
+}
+function browserInputSummary(card) {
   const { input_kind: kind, input_length: length, input_masked: masked } = card.detail;
   if (kind === null) return null;
   const size = length === null ? null : `${length} ${length === 1 ? "character" : "characters"}`;
@@ -14666,7 +14675,7 @@ function inputValue(card) {
 function fact$1(label, value, key, kind = "text") {
   return value !== null && value.length > 0 ? [{ label, value, key, kind }] : [];
 }
-function siteLabel(origin) {
+function browserSiteLabel(origin) {
   if (origin === null) return null;
   const host = origin.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
   return host.length > 0 ? host : null;
@@ -14677,14 +14686,14 @@ function explainBrowserCard(card, context) {
   const facts = [
     ...fact$1("Web page", card.site.origin, "browser_site", "url"),
     ...fact$1("On", card.detail.element_preview, "browser_element"),
-    ...fact$1(card.detail.input_kind === "script" ? "Code" : "What it types", inputValue(card), "browser_input"),
+    ...fact$1(card.detail.input_kind === "script" ? "Code" : "What it types", browserInputSummary(card), "browser_input"),
     ...fact$1("Browser", PROFILES[card.profile_line], "browser_profile"),
     ...fact$1("Touches", card.risk_chips.map((chip) => SURFACES[chip]).join(", "), "browser_surfaces")
   ];
-  const codeKey = card.verb === "evaluate" && input !== null ? CODE_KEYS.find((key) => typeof input[key] === "string" && input[key].trim().length > 0) ?? null : null;
+  const codeKey = card.verb === "evaluate" && input !== null && card.detail.input_masked !== true ? CODE_KEYS.find((key) => typeof input[key] === "string" && input[key].trim().length > 0) ?? null : null;
   const code = codeKey !== null ? codeOf(input?.[codeKey]) : null;
   const thought = textOf(input?.thought, 300);
-  const site = siteLabel(card.site.origin);
+  const site = browserSiteLabel(card.site.origin);
   const rowTitle = card.verb === "navigate" && site !== null ? `Open ${site}` : title;
   return {
     headline: card.headline,
@@ -35637,6 +35646,10 @@ function scopeNote(item, connector) {
   }
   return "Allow once and Always allow both cover only these exact inputs. If the inputs change, Guard asks again.";
 }
+function mcpCallReason(item, explanation) {
+  const coreReason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  return coreReason !== null && !GENERIC_REASON.test(coreReason) ? coreReason : explanation.whyAsked;
+}
 function CodePanel({ requestId, code }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     LoggedActionPanel,
@@ -35651,8 +35664,7 @@ function CodePanel({ requestId, code }) {
 function McpCallCard({ item, explanation }) {
   const watchOnly = isWatchOnlyObservation(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
-  const coreReason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
-  const reason = coreReason !== null && !GENERIC_REASON.test(coreReason) ? coreReason : explanation.whyAsked;
+  const reason = mcpCallReason(item, explanation);
   const app = actingApp(explanation);
   const facts = [
     ...explanation.facts,
@@ -35705,9 +35717,19 @@ function McpCallCard({ item, explanation }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(McpCallFooter, { item, explanation, reason })
+  ] });
+}
+function McpCallFooter({
+  item,
+  explanation,
+  reason,
+  withheldInput
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the exact input" }),
-      explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      withheldInput !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: withheldInput }) : explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         LoggedActionPanel,
         {
           label: "Input",
@@ -35732,6 +35754,119 @@ function McpCallCard({ item, explanation }) {
     ] }),
     item.browser_card ? /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserReportPrompt, { requestId: item.request_id }) : null
   ] });
+}
+function CardRow(props) {
+  const Icon = props.icon;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_minmax(4.5rem,auto)_minmax(0,1fr)] items-start gap-x-2.5 py-1.5 text-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-dark/50", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pt-px text-brand-dark/60", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex min-w-0 flex-col items-start", children: props.children })
+  ] });
+}
+const FLAG_TONES = {
+  note: "border-slate-200 bg-slate-50 text-brand-dark/80",
+  attention: "border-brand-attention/30 bg-brand-attention/[0.08] text-brand-dark"
+};
+function Flag({ tone, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${FLAG_TONES[tone]}`, children });
+}
+const INPUT_LABELS = { text: "Types", key: "Presses", file: "Sends", script: "Runs" };
+function BrowserInputPreview({ card }) {
+  const { element_preview: element, input_kind: kind, input_masked: masked } = card.detail;
+  const summary = browserInputSummary(card);
+  if (element === null && summary === null) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    element !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CardRow, { icon: HiMiniCursorArrowRays, label: "On", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-words text-brand-dark", children: element }) }),
+    kind !== null && summary !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs(CardRow, { icon: masked ? HiMiniLockClosed : HiMiniPencilSquare, label: INPUT_LABELS[kind], children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-dark", children: summary }),
+      masked && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 text-xs text-muted-foreground", children: "Guard does not show what it types here." })
+    ] })
+  ] });
+}
+const REACH = {
+  shared: "Your signed-in sites and saved data are reachable.",
+  "remote-debugging": "Anything attached to this browser can drive it.",
+  unknown: "Guard treats it as your own profile.",
+  dedicated: null,
+  isolated: null
+};
+function BrowserProfileLine({ profile }) {
+  const reach = REACH[profile];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(CardRow, { icon: HiMiniWindow, label: "Browser", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-dark", children: browserProfileLabel(profile) }),
+    reach !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Flag, { tone: "attention", children: reach }) })
+  ] });
+}
+function BrowserRiskChips({ chips }) {
+  const labelId = reactExports.useId();
+  const unique2 = [...new Set(chips)];
+  if (unique2.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: labelId, className: "text-xs font-medium text-brand-dark/60", children: "Can reach" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { "aria-labelledby": labelId, className: "mt-1.5 flex flex-wrap gap-1.5", children: unique2.map((chip) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "li",
+      {
+        "data-browser-surface": chip,
+        className: "inline-flex max-w-full items-center break-words rounded-full border border-brand-attention/30 bg-brand-attention/[0.08] px-2.5 py-0.5 text-xs font-medium text-brand-dark",
+        children: browserSurfaceLabel(chip)
+      },
+      chip
+    )) })
+  ] });
+}
+function BrowserSiteLine({ site }) {
+  const label = browserSiteLabel(site.origin);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(CardRow, { icon: HiMiniGlobeAlt, label: "Site", children: [
+    label !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-all font-mono text-[13px] text-brand-dark", title: site.origin ?? void 0, children: label }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-dark/80", children: "Guard could not tell which site" }),
+    (site.first_visit_in_task || site.left_granted_site) && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-1.5 flex flex-wrap gap-1.5", children: [
+      site.first_visit_in_task && /* @__PURE__ */ jsxRuntimeExports.jsx(Flag, { tone: "note", children: "First visit in this task" }),
+      site.left_granted_site && /* @__PURE__ */ jsxRuntimeExports.jsx(Flag, { tone: "attention", children: "Outside the site you allowed" })
+    ] })
+  ] });
+}
+const MASKED_INPUT_NOTE = "This step types into a hidden field, so Guard does not show its input.";
+function BrowserCallCard(props) {
+  const { item, card, explanation } = props;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      "aria-label": "What the agent is asking to do",
+      "data-browser-card": card.verb,
+      className: "mt-5 rounded-2xl border border-slate-200 bg-white",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:p-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(McpAppMark, { name: mcpMarkName(explanation), size: "md" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "break-words text-base font-semibold leading-snug text-brand-dark", children: explanation.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-words text-sm text-brand-dark/70", children: subtitleOf(explanation, actingApp(explanation)) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "col-start-2 row-start-2 sm:col-start-3 sm:row-start-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EffectPill, { effect: explanation.effect }) })
+        ] }),
+        isWatchOnlyObservation(item) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-4 mb-3 text-sm font-medium text-brand-dark sm:mx-5", children: "Watch let this call through. Guard would have stopped it." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ConsequenceNote, { explanation }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-4 py-2.5 sm:px-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserSiteLine, { site: card.site }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserProfileLine, { profile: card.profile_line }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserInputPreview, { card }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRiskChips, { chips: card.risk_chips })
+        ] }),
+        explanation.code !== null && explanation.code.collapsed !== true && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) }),
+        explanation.code !== null && explanation.code.collapsed === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the code it runs" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          McpCallFooter,
+          {
+            item,
+            explanation,
+            reason: mcpCallReason(item, explanation),
+            withheldInput: card.detail.input_masked ? MASKED_INPUT_NOTE : void 0
+          }
+        )
+      ]
+    }
+  );
 }
 const PROTECTION_APPEARANCE = {
   protected: {
@@ -35841,6 +35976,10 @@ function ReviewEmptyState({ runtime: runtime2, resolutionMessage, codexResume, o
 }
 function PrimaryActionCard({ item }) {
   const mcpCall = explainMcpCall(item);
+  const browserCard = parseBrowserCard(item.browser_card);
+  if (mcpCall !== null && browserCard !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserCallCard, { item, card: browserCard, explanation: mcpCall });
+  }
   if (mcpCall !== null) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(McpCallCard, { item, explanation: mcpCall });
   }
