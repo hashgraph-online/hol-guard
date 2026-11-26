@@ -171,6 +171,10 @@ fn capability_settings_default_to_tighten_and_need_a_connection() {
         put_capability_setting(&connection, SHIELD, Cap::OriginReputation, setting),
         Err(ProviderStoreError::Invalid("not_connected"))
     ));
+    assert!(matches!(
+        put_capability_setting(&connection, "Shield", Cap::OriginReputation, setting),
+        Err(ProviderStoreError::Invalid("provider_id"))
+    ));
     put_connection(&connection, &connected(SHIELD)).unwrap();
     let defaults = capability_settings(&connection, SHIELD).unwrap();
     assert_eq!(defaults.len(), Cap::ALL.len());
@@ -200,20 +204,18 @@ fn revision_moves_only_when_the_answer_changes() {
     let connection = store();
     let first = signal(SHIELD, 1, V::Caution, &["new_domain", "phishing"]);
     let one = stored(&connection, &first);
-    let refreshed = ProviderSignalV1 {
-        observed_at_ms: 15 * MINUTE,
-        expires_at_ms: 25 * MINUTE,
-        ..first.clone()
-    };
-    assert_eq!(stored(&connection, &refreshed), one);
+    assert_eq!(stored(&connection, &at(first.clone(), 15)), one);
     assert_eq!(
         stored(
             &connection,
-            &signal(
-                SHIELD,
-                1,
-                V::Caution,
-                &["phishing", "new_domain", "phishing"]
+            &at(
+                signal(
+                    SHIELD,
+                    1,
+                    V::Caution,
+                    &["phishing", "new_domain", "phishing"]
+                ),
+                16
             )
         ),
         one,
@@ -221,15 +223,24 @@ fn revision_moves_only_when_the_answer_changes() {
     );
     let two = stored(
         &connection,
-        &signal(SHIELD, 1, V::Caution, &["lookalike_domain"]),
+        &at(signal(SHIELD, 1, V::Caution, &["lookalike_domain"]), 17),
     );
     assert!(two > one);
     let three = stored(
         &connection,
-        &signal(SHIELD, 1, V::Danger, &["lookalike_domain"]),
+        &at(signal(SHIELD, 1, V::Danger, &["lookalike_domain"]), 18),
     );
     assert!(three > two);
     assert!(stored(&connection, &signal(SHIELD, 2, V::Danger, &[])) > three);
+}
+
+/// The same signal, observed at `minute` and valid for ten minutes after it.
+fn at(signal: ProviderSignalV1, minute: u64) -> ProviderSignalV1 {
+    ProviderSignalV1 {
+        observed_at_ms: minute * MINUTE,
+        expires_at_ms: (minute + 10) * MINUTE,
+        ..signal
+    }
 }
 
 #[test]
@@ -266,6 +277,49 @@ fn an_observation_older_than_a_full_cache_is_not_retained() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn a_late_stale_observation_never_replaces_a_newer_answer() {
+    let connection = store();
+    let danger = signal(SHIELD, 1, V::Danger, &["phishing"]);
+    let revision = stored(&connection, &danger);
+    let mut stale = signal(SHIELD, 1, V::Ok, &[]);
+    stale.observed_at_ms = danger.observed_at_ms - 1;
+    assert_eq!(
+        put_signal(&connection, &stale).unwrap(),
+        PutSignalOutcome::NotRetained
+    );
+    let found = signals_for_subject(&connection, Cap::OriginReputation, &digest(1)).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].signal.verdict, V::Danger);
+    assert_eq!(found[0].revision, revision);
+    let mut changed = signal(SHIELD, 2, V::Caution, &["new_domain"]);
+    changed.observed_at_ms = danger.observed_at_ms;
+    assert_eq!(stored(&connection, &changed), revision + 1);
+}
+
+#[test]
+fn a_dropped_observation_leaves_the_cache_and_counter_alone() {
+    let connection = store();
+    let mut last = 0;
+    for subject in 0..MAX_SIGNALS_PER_PROVIDER as u64 {
+        let mut row = signal(SHIELD, subject, V::Ok, &[]);
+        row.observed_at_ms = 1_000 + subject;
+        row.expires_at_ms = 1_000 + subject + MINUTE;
+        last = stored(&connection, &row);
+    }
+    let mut old = signal(SHIELD, 999_999, V::Danger, &["phishing"]);
+    old.observed_at_ms = 1;
+    old.expires_at_ms = MINUTE;
+    assert_eq!(
+        put_signal(&connection, &old).unwrap(),
+        PutSignalOutcome::NotRetained
+    );
+    let mut next = signal(SHIELD, 0, V::Danger, &["phishing"]);
+    next.observed_at_ms = 1_000_000;
+    next.expires_at_ms = 1_000_000 + MINUTE;
+    assert_eq!(stored(&connection, &next), last + 1);
 }
 
 #[test]

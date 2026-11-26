@@ -401,6 +401,9 @@ pub fn put_capability_setting(
     capability: ProviderCapabilityV1,
     setting: CapabilitySetting,
 ) -> ProviderStoreResult<()> {
+    if !provider_id_is_valid(provider_id) {
+        return Err(ProviderStoreError::Invalid("provider_id"));
+    }
     // One statement checks the connection and writes the setting, so a disconnect on another
     // connection cannot slip in between and leave a setting with no connection row.
     let written = connection.execute(
@@ -481,8 +484,10 @@ fn next_revision(connection: &Connection) -> ProviderStoreResult<i64> {
 pub enum PutSignalOutcome {
     /// The signal is cached under this revision.
     Stored(u64),
-    /// The provider already holds [`MAX_SIGNALS_PER_PROVIDER`] newer observations, so this older
-    /// one was dropped at once and nothing is cached for it.
+    /// The signal was older than what the cache keeps, so nothing was written: either the cached
+    /// signal for the same subject was observed later, or the provider already holds
+    /// [`MAX_SIGNALS_PER_PROVIDER`] newer observations. The cache and the revision counter are
+    /// left exactly as they were.
     NotRetained,
 }
 
@@ -494,23 +499,47 @@ pub fn put_signal(
     signal: &ProviderSignalV1,
 ) -> ProviderStoreResult<PutSignalOutcome> {
     check_signal(signal)?;
+    let observed_at_ms = ms_to_sql(signal.observed_at_ms)?;
     in_savepoint(connection, WRITE_SAVEPOINT, || {
-        let previous: Option<(i64, String, String)> = connection
+        let previous: Option<(i64, String, String, i64)> = connection
             .query_row(
-                "select revision, verdict, reason_codes from provider_signals \
+                "select revision, verdict, reason_codes, observed_at_ms from provider_signals \
                  where provider_id = ?1 and capability = ?2 and subject_digest = ?3",
                 params![
                     signal.provider_id,
                     signal.capability.as_str(),
                     signal.subject.digest
                 ],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()?;
+        // Decide before writing anything: a late, stale observation must never replace a newer
+        // answer for the same subject, and one the cap would evict at once must not take a
+        // revision or overwrite the row it would replace.
+        if previous
+            .as_ref()
+            .is_some_and(|(_, _, _, previous_at)| *previous_at > observed_at_ms)
+        {
+            return Ok(PutSignalOutcome::NotRetained);
+        }
+        let newer: i64 = connection.query_row(
+            "select count(*) from provider_signals where provider_id = ?1 \
+             and observed_at_ms > ?2 and not (capability = ?3 and subject_digest = ?4)",
+            params![
+                signal.provider_id,
+                observed_at_ms,
+                signal.capability.as_str(),
+                signal.subject.digest
+            ],
+            |row| row.get(0),
+        )?;
+        if newer >= MAX_SIGNALS_PER_PROVIDER {
+            return Ok(PutSignalOutcome::NotRetained);
+        }
         let verdict = enum_text(&signal.verdict);
         let codes = join_codes(&signal.reason_codes);
         let revision = match previous {
-            Some((revision, old_verdict, old_codes))
+            Some((revision, old_verdict, old_codes, _))
                 if old_verdict == verdict && old_codes == codes =>
             {
                 revision
@@ -531,7 +560,7 @@ pub fn put_signal(
                 codes,
                 enum_text(&signal.inventory),
                 enum_text(&signal.state),
-                ms_to_sql(signal.observed_at_ms)?,
+                observed_at_ms,
                 ms_to_sql(signal.expires_at_ms)?,
             ],
         )?;
@@ -541,22 +570,6 @@ pub fn put_signal(
               order by observed_at_ms desc, rowid desc limit ?2)",
             params![signal.provider_id, MAX_SIGNALS_PER_PROVIDER],
         )?;
-        let retained = connection
-            .query_row(
-                "select 1 from provider_signals \
-                 where provider_id = ?1 and capability = ?2 and subject_digest = ?3",
-                params![
-                    signal.provider_id,
-                    signal.capability.as_str(),
-                    signal.subject.digest
-                ],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some();
-        if !retained {
-            return Ok(PutSignalOutcome::NotRetained);
-        }
         u64::try_from(revision)
             .map(PutSignalOutcome::Stored)
             .map_err(|_| ProviderStoreError::Schema("row:revision".to_owned()))
