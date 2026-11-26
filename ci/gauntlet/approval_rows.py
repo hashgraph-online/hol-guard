@@ -65,7 +65,9 @@ def _action_key(row: dict[str, Any]) -> str:
     return hashlib.sha256(f"{row.get('artifact_id') or ''}\0{artifact}".encode()).hexdigest()[:16]
 
 
-def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
+def approval_rows(
+    store: Any, known_ids: set[str], *, changed_from: dict[str, int] | None = None
+) -> list[dict[str, Any]]:
     """Return redacted-by-construction facts for rows added during the run.
 
     Only the tool, reason, queue group, browser intent class and whether an Always option is offered
@@ -78,7 +80,13 @@ def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
     rows = []
     observations = _observations(store)
     for row in store.list_approval_requests(status=None, limit=200):
-        if not isinstance(row, dict) or str(row.get("request_id") or "") in known_ids:
+        if not isinstance(row, dict):
+            continue
+        request_id = str(row.get("request_id") or "")
+        dedupe_count = int(row.get("dedupe_count") or 1)
+        if request_id in known_ids and (
+            changed_from is None or dedupe_count <= changed_from.get(request_id, 0)
+        ):
             continue
         # The native contract also binds a token carried in the artifact hash, not only the envelope's.
         ((contract, token),) = _native_scopes([row])
@@ -101,7 +109,7 @@ def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
                 "queue_group_id": _opaque_group(row.get("queue_group_id")),
                 "always_available": contract.exact_action_persistence_eligible is True
                 or any(scope in PERSISTENT_SCOPES for scope in scopes),
-                "dedupe_count": int(row.get("dedupe_count") or 1),
+                "dedupe_count": dedupe_count,
                 "action_key": _action_key(row),
                 "browser_intent": _browser_intent(row),
             }
@@ -238,14 +246,20 @@ def connector_coverage(cases: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def await_rows(
-    store: Any, known: set[str], *, waiting: bool, retried: bool = False, seconds: float = 10.0
+    store: Any,
+    known: set[str],
+    *,
+    waiting: bool,
+    retried: bool = False,
+    changed_from: dict[str, int] | None = None,
+    seconds: float = 10.0,
 ) -> list[dict[str, Any]]:
     """The rows a stopped call queued, once the resident's evidence drain has written them.
 
     The drain runs after the relay has answered, so a stopped call (``waiting``) polls for its row.
     A retry waits until its pending row records the second call.
     """
-    rows = approval_rows(store, known)
+    rows = approval_rows(store, known, changed_from=changed_from)
     deadline = time.monotonic() + seconds
 
     def settled() -> bool:
@@ -255,5 +269,5 @@ def await_rows(
 
     while waiting and not settled() and time.monotonic() < deadline:
         time.sleep(0.1)
-        rows = approval_rows(store, known)
+        rows = approval_rows(store, known, changed_from=changed_from)
     return rows

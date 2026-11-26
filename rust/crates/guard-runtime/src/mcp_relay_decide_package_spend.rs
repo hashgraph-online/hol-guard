@@ -125,6 +125,9 @@ pub(super) fn spend_package(
     let evidence = integrity_evidence(&rows, &verification, key)?;
     // `claim_evidence_binding(connection, bundle=False)`.
     let binding = ClaimEvidenceBindingV1::default();
+    // A claim that commits may still queue an approval row, which needs room
+    // for the block's receipt; refuse before anything is claimed.
+    room_for_row(policy_store)?;
     let connection = open_for_claim(&request.guard_home)?;
     let now = store::utc_now().ok_or(PACKAGE_CLAIM_STORE)?;
     let decisions: Vec<Value> = rows
@@ -290,6 +293,7 @@ fn after_claim(
                 ToolLeg::Queue { policy_action } => {
                     let mode = context.admitted.blocked_request_mode();
                     if mode == Some(ASK_MODE) {
+                        room_for_row(policy_store)?;
                         let prepared = ask::prepare(
                             &context.request,
                             &context.admitted,

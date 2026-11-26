@@ -125,7 +125,8 @@ fn spend(
     if !unchanged(
         (&held.workspace, &held.snapshot, &held.binding),
         (&admitted.workspace, &admitted.snapshot, &admitted.binding),
-    ) {
+    ) || held.session != admitted.session
+    {
         return Err(CLAIM_AUTHORITY_CHANGED);
     }
     let (state, key) = store::lookup_integrity(&admitted.binding)?;
