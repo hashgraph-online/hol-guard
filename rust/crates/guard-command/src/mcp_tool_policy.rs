@@ -1,4 +1,5 @@
 //! Current recommendation precedence over raw config, independent of saved approvals.
+use crate::browser_loopback_quiet::{loopback_dev_quiet, LoopbackQuietFacts};
 use crate::local_supply_chain::{default_risk_action, DEFAULT_SECURITY_LEVEL};
 use crate::mcp_tool_risk::evaluate_tool_risk;
 use guard_contracts::{
@@ -165,6 +166,21 @@ pub fn write_tool_policy_context(
     Ok(())
 }
 
+/// Whether this call is a routine browser action on a loopback development origin (D10).
+fn loopback_dev_quiet_call(request: &McpToolPolicyRequestV1, categories: &[String]) -> bool {
+    let Some(facts) =
+        crate::browser_mcp_intent::browser_risk_facts(&request.artifact, &request.arguments)
+    else {
+        return false;
+    };
+    loopback_dev_quiet(&LoopbackQuietFacts {
+        categories,
+        target: facts.target.as_deref(),
+        profile: facts.profile,
+        debugging_ports: &facts.debugging_ports,
+    })
+}
+
 /// R-SELF: a browser action on Guard's own approval center is blocked. No configured action,
 /// grant, saved approval or contributed default changes that.
 const GUARD_ORIGIN: &str = "browser_guard_origin";
@@ -188,6 +204,29 @@ pub fn evaluate_tool_policy(
             action: "block".to_owned(),
             source: "browser-guard-origin".to_owned(),
             summary_code: "guard_origin".to_owned(),
+            risk_categories: categories,
+        });
+    }
+    if explicit.is_none() && loopback_dev_quiet_call(request, &categories) {
+        // D10: quiet with no grant. Only an action the user configured for this artifact,
+        // publisher or harness can make it stricter; the global default does not apply.
+        let configured = configured_override(
+            config,
+            &request.harness,
+            &request.artifact_id,
+            request.publisher.as_deref(),
+        )
+        .and_then(Value::as_str);
+        let action = configured.map_or(GuardAction::Allow, |value| normalize(Some(value)));
+        let (source, summary_code) = if action == GuardAction::Allow {
+            ("browser-loopback-quiet", "loopback_dev")
+        } else {
+            ("policy", "configuration_stricter")
+        };
+        return Ok(McpToolPolicyResultV1 {
+            action: action.as_str().to_owned(),
+            source: source.to_owned(),
+            summary_code: summary_code.to_owned(),
             risk_categories: categories,
         });
     }
@@ -234,6 +273,10 @@ pub fn evaluate_tool_policy(
         risk_categories: categories,
     })
 }
+
+#[cfg(test)]
+#[path = "mcp_tool_policy_quiet_tests.rs"]
+mod quiet_tests;
 
 #[cfg(test)]
 mod tests {

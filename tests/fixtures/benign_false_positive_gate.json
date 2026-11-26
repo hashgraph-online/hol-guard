@@ -72810,6 +72810,28 @@
       "page": "local-dev"
     },
     {
+      "id": "browser-playwright-navigate-local-dev",
+      "server": "playwright",
+      "tool": "browser_navigate",
+      "arguments": {
+        "url": "http://127.0.0.1:4173/"
+      },
+      "expect": "allow",
+      "state": "none",
+      "page": "local-dev"
+    },
+    {
+      "id": "browser-playwright-navigate-local-admin-port",
+      "server": "playwright",
+      "tool": "browser_navigate",
+      "arguments": {
+        "url": "http://127.0.0.1:8001/"
+      },
+      "expect": "block",
+      "state": "none",
+      "page": "local-dev"
+    },
+    {
       "id": "browser-playwright-tabs-list",
       "server": "playwright",
       "tool": "browser_tabs",

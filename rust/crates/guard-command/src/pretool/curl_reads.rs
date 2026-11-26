@@ -51,7 +51,7 @@ const RESERVED_SUFFIXES: [&str; 4] = [".test", ".invalid", ".example", ".localho
 /// binds is already unreachable here without being named. It is written out
 /// whole, the kubelet block included, so the list keeps saying what it means
 /// if the dev-server ranges ever widen onto one of these.
-const LOCAL_ADMIN_PORTS: [u16; 23] = [
+pub(crate) const LOCAL_ADMIN_PORTS: [u16; 23] = [
     2019, 2375, 2376, 2379, 2380, 4243, 4646, 6443, 8001, 8200, 8500, 9222, 9229, 10248, 10249,
     10250, 10251, 10252, 10253, 10254, 10255, 10256, 15000,
 ];

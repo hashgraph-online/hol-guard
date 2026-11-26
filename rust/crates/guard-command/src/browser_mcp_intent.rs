@@ -407,7 +407,8 @@ fn redacted_url(parts: &UrlSplit) -> String {
     )
 }
 
-fn profile_mode(metadata: &Map<String, Value>) -> BrowserProfileModeV1 {
+/// The server's launch arguments, from every place the metadata may carry them.
+fn launch_args<'a>(metadata: &'a Map<String, Value>) -> impl Iterator<Item = &'a str> + Clone + 'a {
     let identity_args = metadata
         .get("mcp_server_identity")
         .and_then(Value::as_object)
@@ -415,13 +416,15 @@ fn profile_mode(metadata: &Map<String, Value>) -> BrowserProfileModeV1 {
         .and_then(Value::as_array);
     let direct_args = metadata.get("args").and_then(Value::as_array);
     let server_args = metadata.get("server_args").and_then(Value::as_array);
-    first_party_profile_mode(
-        [identity_args, direct_args, server_args]
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(Value::as_str),
-    )
+    [identity_args, direct_args, server_args]
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(Value::as_str)
+}
+
+fn profile_mode(metadata: &Map<String, Value>) -> BrowserProfileModeV1 {
+    first_party_profile_mode(launch_args(metadata))
 }
 
 /// The native sensitive-surface screens for one browser call. Driver profile projection unions
@@ -765,6 +768,11 @@ pub(crate) struct BrowserRiskFacts {
     pub sensitive_surface: bool,
     /// The action targets Guard's own approval center (R-SELF).
     pub guard_origin: bool,
+    /// The URL the action targets: its own URL argument, else the page the driver reports.
+    pub target: Option<String>,
+    pub profile: BrowserProfileModeV1,
+    /// Ports the server's launch arguments name for remote debugging.
+    pub debugging_ports: Vec<u16>,
 }
 
 pub(crate) fn browser_risk_facts(
@@ -810,14 +818,20 @@ pub(crate) fn browser_risk_facts(
     visit_sensitive_surfaces(operation, &values, &artifact.metadata, |_| {
         sensitive_surface = true
     });
+    let profile = profile_mode(&artifact.metadata);
     Some(BrowserRiskFacts {
         intent,
         external_domain,
         shared_profile: matches!(
-            profile_mode(&artifact.metadata),
+            profile,
             BrowserProfileModeV1::Shared | BrowserProfileModeV1::RemoteDebugging
         ),
         sensitive_surface,
         guard_origin,
+        target: target.map(str::to_owned),
+        profile,
+        debugging_ports: crate::browser_loopback_quiet::debugging_ports(launch_args(
+            &artifact.metadata,
+        )),
     })
 }

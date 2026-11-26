@@ -98,7 +98,7 @@ fn process_guard_home() -> Option<PathBuf> {
         .map(|home| PathBuf::from(home).join(".hol-guard"))
 }
 
-fn loopback_port(target: &str) -> Option<(bool, u16)> {
+pub(crate) fn loopback_port(target: &str) -> Option<(bool, u16)> {
     let url = Url::parse(target.trim()).ok()?;
     if !matches!(url.scheme(), "http" | "https" | "ws" | "wss") {
         return None;

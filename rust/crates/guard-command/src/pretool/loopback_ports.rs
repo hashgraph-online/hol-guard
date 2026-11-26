@@ -41,6 +41,14 @@ const DEV_SERVER_PORTS: [(u16, u16); 17] = [
     (8787, 8787),
 ];
 
+/// Whether `port` is one a framework or static server binds by default. Callers still subtract
+/// their admin list and Guard's own ports.
+pub(crate) fn conventional_dev_port(port: u16) -> bool {
+    DEV_SERVER_PORTS
+        .iter()
+        .any(|(low, high)| (*low..=*high).contains(&port))
+}
+
 /// Loopback ports a request must never reach: container and cluster control
 /// planes, service meshes, debuggers, Guard's own approval center, message
 /// brokers, data stores that accept local clients without credentials, local
@@ -85,11 +93,7 @@ pub(in crate::pretool) fn dev_server_port(
     admin: &[u16],
     home_dir: Option<&str>,
 ) -> bool {
-    DEV_SERVER_PORTS
-        .iter()
-        .any(|(low, high)| (*low..=*high).contains(&port))
-        && !admin.contains(&port)
-        && !daemon_may_listen(port, home_dir)
+    conventional_dev_port(port) && !admin.contains(&port) && !daemon_may_listen(port, home_dir)
 }
 
 /// Whether a server the agent started on a port of its own choosing, such as
