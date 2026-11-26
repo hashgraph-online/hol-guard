@@ -316,6 +316,18 @@ pub(super) fn safe_git_arguments(
                 })
             });
     }
+    if subcommand == "merge-file" {
+        // `-p` prints the three-way merge of three files and writes none of
+        // them, but `pager.merge-file` can still name a program, so the
+        // configuration probe clears that first. Each of the three goes
+        // through the ordinary read screen, as a printed merge quotes them.
+        return allow_helper_context
+            && super::git_merge_file_read::read_targets(&arguments[1..]).is_some_and(|files| {
+                files.iter().all(|file| {
+                    super::read_paths::bounded_file_read_target(file, context.home_dir, context.cwd)
+                })
+            });
+    }
     if matches!(subcommand, "name-rev" | "show-branch" | "check-ref-format") {
         // None of the three starts a pager of its own, runs a configured
         // driver or opens a working-tree file, but an explicit `pager.<verb>`

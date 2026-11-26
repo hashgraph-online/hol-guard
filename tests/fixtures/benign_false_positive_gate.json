@@ -32904,6 +32904,86 @@
       "expect": "allow"
     },
     {
+      "id": "gauntlet-cd-git-merge-file-stdout-tmp-copy",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git merge-file -p src/report.ts ${SCRATCH}-report-main.ts src/report.ts | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gauntlet-cd-git-merge-file-stdout-labels",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git merge-file -p --diff3 -L ours -L base -L theirs src/report.ts ${SCRATCH}-report-main.ts src/report.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-merge-file-stdout-worktree",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git merge-file -p src/report-window.ts src/one.ts src/report-window.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-merge-file-writes-first-file",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && git merge-file src/report.ts ${SCRATCH}-report-main.ts src/report.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-merge-file-stdout-object-ids",
+      "fix_area": "git-merge-file",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git merge-file -p --object-id HEAD:src/one.ts HEAD:src/one.ts HEAD:src/one.ts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gauntlet-tail-follow-tmp-copy",
       "fix_area": "line-range",
       "harnesses": [

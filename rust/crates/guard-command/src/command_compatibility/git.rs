@@ -102,6 +102,8 @@ fn bounded_inspection(arguments: &[String]) -> bool {
     // read and workspace proofs remain the responsibility of the ordinary
     // command decision, not this classifier.
     (command == "apply" && crate::pretool::git_apply_check::is_check_only(rest))
+        // A printing three-way merge writes none of the files it reads.
+        || (command == "merge-file" && crate::pretool::git_merge_file_read::is_read_only(rest))
         // A stash listing and a `show` of one entry print; every other
         // stash spelling moves work and keeps its workspace attribution.
         || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
@@ -371,6 +373,9 @@ pub(super) fn inspection_arguments<'a>(
         Some("tag") => crate::pretool::git_tag_listing::is_listing(&remaining[1..]),
         Some("clean") => crate::pretool::git_clean_preview::is_dry_run(&remaining[1..]),
         Some("apply") => crate::pretool::git_apply_check::is_check_only(&remaining[1..]),
+        // Without `-p` a three-way merge writes over its first file, so only
+        // the printing spelling is admitted.
+        Some("merge-file") => crate::pretool::git_merge_file_read::is_read_only(&remaining[1..]),
         // `stash` reaches the worktree in every spelling but the two that
         // print: a listing and a `show` of one entry.
         Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),

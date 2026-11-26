@@ -167,6 +167,7 @@ pub mod pretool_git_init_chain;
 pub mod pretool_git_inline_config_reads;
 pub mod pretool_git_large_listing;
 pub mod pretool_git_listing_reads;
+pub mod pretool_git_merge_file_reads;
 pub mod pretool_git_merge_integration;
 pub mod pretool_git_mkdir_chain;
 pub mod pretool_git_nested_cd_split;

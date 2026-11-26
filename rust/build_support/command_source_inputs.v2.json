@@ -464,6 +464,7 @@
       "src/pretool/git_init_target.rs",
       "src/pretool/git_listing_reads.rs",
       "src/pretool/git_listing_reads/index_listings.rs",
+      "src/pretool/git_merge_file_read.rs",
       "src/pretool/git_message_text.rs",
       "src/pretool/git_shortlog_reads.rs",
       "src/pretool/git_ls_remote.rs",
