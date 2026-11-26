@@ -76,11 +76,21 @@ const USER_PROGRAM_FREE_READS: &[&str] = &[
 ];
 
 /// Whether `git ARGUMENTS` is a read that starts no hook or helper, which
-/// read whatever environment names they like.
+/// read whatever environment names they like. `branch --show-current` only
+/// prints the name HEAD points at; any other `branch` form can move a ref,
+/// which the reference-transaction hook sees.
 pub(super) fn starts_no_user_program(arguments: &[String]) -> bool {
-    command_index(arguments)
-        .and_then(|index| arguments.get(index))
-        .is_some_and(|word| USER_PROGRAM_FREE_READS.contains(&canonical_subcommand(word)))
+    let Some(index) = command_index(arguments) else {
+        return false;
+    };
+    let Some(word) = arguments.get(index).map(|word| canonical_subcommand(word)) else {
+        return false;
+    };
+    USER_PROGRAM_FREE_READS.contains(&word)
+        || (word == "branch"
+            && arguments
+                .get(index + 1..)
+                .is_some_and(|rest| rest == ["--show-current"]))
 }
 
 pub(crate) fn command_index(arguments: &[String]) -> Option<usize> {

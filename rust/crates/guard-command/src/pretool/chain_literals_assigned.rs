@@ -329,8 +329,34 @@ const ENVIRONMENT_BLIND: &str = "[ cat echo head ls printf tail test true wc";
 /// that starts no hook or helper. Removing such an assignment from the chain
 /// then changes nothing a later program reads.
 fn exported_name_unread(masked: &[char], spans: &[ShellCommandSubstitution], start: usize) -> bool {
+    body_unread(masked, spans, start, 0)
+}
+
+/// The most substitutions inside substitutions [`body_unread`] follows.
+const MAX_NESTING: usize = 4;
+
+fn body_unread(
+    masked: &[char],
+    spans: &[ShellCommandSubstitution],
+    start: usize,
+    depth: usize,
+) -> bool {
     if start >= masked.len() {
         return true;
+    }
+    // A later substitution runs its program in a subshell that inherits the
+    // exported name, wherever it sits: a word, an argument or a redirect, so
+    // its own commands answer to the same test.
+    let later_bodies_unread = spans.iter().filter(|span| span.start >= start).all(|span| {
+        let Some(body) = masked.get(span.body_start..span.body_end) else {
+            return false;
+        };
+        let text: String = body.iter().collect();
+        let inner = crate::shell_structure::extract_command_substitution_spans(&text);
+        depth < MAX_NESTING && body_unread(body, &inner, 0, depth + 1)
+    });
+    if !later_bodies_unread {
+        return false;
     }
     // `${NAME}` is no group, so braces do not end a command here; a group
     // opened with `{` is its own first word and refused below.

@@ -197,6 +197,12 @@ fn an_assignment_this_scan_cannot_follow_keeps_the_chain_opaque() {
         // starts hooks or other programs.
         "REF=$(git rev-parse HEAD); git push origin main",
         "REF=$(git rev-parse HEAD); git log -1 \"$REF\"; npm test",
+        "REF=$(git rev-parse HEAD); echo $(npm test)",
+        "REF=$(git rev-parse HEAD); cat $(make)",
+        "REF=$(git rev-parse HEAD); ls > $(npm run x)",
+        "REF=$(git rev-parse HEAD); echo $(echo $(npm test))",
+        "REF=$(git rev-parse HEAD); echo $(git branch -m old new)",
+        "REF=$(git rev-parse HEAD); echo $(git branch --show-current --list)",
         // A use outside the `&&` list that ran the assignment.
         "true && P=$(ls); echo $P",
         "cd src && P=$(ls); cat $P",
