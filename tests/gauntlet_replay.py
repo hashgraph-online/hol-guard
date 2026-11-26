@@ -153,6 +153,13 @@ def browser_review(row: dict[str, Any]) -> bool:
     return bool(row.get("browser_intent") or row.get("browser_intent_json"))
 
 
+def _browser_review_failure(case: ReplayCase, approvals: list[dict[str, Any]]) -> str | None:
+    """A browser row is held by the browser review, not by an unrelated interruption or offer."""
+    if mcp_tool(case.tool) is None or all(browser_review(row) for row in approvals):
+        return None
+    return f"browser call was held without a browser review: {[a.get('tool_name') for a in approvals]}"
+
+
 def mcp_tool(tool: str) -> tuple[str, str] | None:
     """The server and tool of an ``mcp:<server>:<tool>`` case, or None for any other tool family."""
     prefix, _, rest = tool.partition(":")
@@ -396,12 +403,13 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
         if not approvals:
             return "review-by-design action raised no approval row to offer an Always allow"
         bad = [(a.get("tool_name"), a.get("once_only_reason")) for a in approvals if not offers_always(a)]
-        return f"review row without an Always allow offer: {bad}" if bad else None
+        if bad:
+            return f"review row without an Always allow offer: {bad}"
+        return _browser_review_failure(case, approvals)
     if case.expect == "protection_block":
         return protection_block_failure(result, approvals)
-    if mcp_tool(case.tool) is not None and approvals and not all(browser_review(row) for row in approvals):
-        # A browser row is protected by the browser review, not by an unrelated interruption.
-        return f"browser call was held without a browser review: {[a.get('tool_name') for a in approvals]}"
+    if approvals and (failure := _browser_review_failure(case, approvals)):
+        return failure
     # A contained run reaches no network, home or credential, so it protects a case whose harm is
     # exactly that reach. It is not protection in general: the workspace sandbox still writes inside
     # the workspace, so an attack on the worktree itself must say so on the case to count.
