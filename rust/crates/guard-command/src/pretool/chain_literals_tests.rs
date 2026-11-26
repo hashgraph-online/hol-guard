@@ -185,6 +185,32 @@ fn a_command_naming_a_bound_variable_refuses_the_chain() {
 }
 
 #[test]
+fn a_hyphen_inside_a_word_opens_no_flag() {
+    // `pytest-of-runner` is one operand: the `-of` in it is not `-o f`.
+    for (command, expected) in [
+        (
+            "f=/tmp/pytest-of-runner/a.md; cat $f",
+            "f=/tmp/pytest-of-runner/a.md; cat /tmp/pytest-of-runner/a.md",
+        ),
+        (
+            "f=/work/copy-of-notes/a.md && wc -l $f",
+            "f=/work/copy-of-notes/a.md && wc -l /work/copy-of-notes/a.md",
+        ),
+    ] {
+        assert_eq!(substituted(command).as_deref(), Some(expected), "{command}");
+    }
+    // A flag that opens a word still names the variable it sets.
+    for command in [
+        "f=build && getln -vf && rm -rf $f",
+        "f=build && getln --vf && rm -rf $f",
+        "f=build && getln \"-vf\" && rm -rf $f",
+        "N=-vf; f=build; getln $N; rm -rf $f",
+    ] {
+        assert_eq!(substituted(command), None, "{command}");
+    }
+}
+
+#[test]
 fn quoted_or_escaped_names_still_count() {
     // The shell removes the quotes, so the builtin receives `OUT` or `IFS`.
     for command in [

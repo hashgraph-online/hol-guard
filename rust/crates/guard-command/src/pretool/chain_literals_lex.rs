@@ -143,16 +143,23 @@ pub(super) fn identifier(name: &str) -> bool {
 /// operand of an attached flag such as `-vNAME`, the forms in which a builtin
 /// takes a variable to set. `$NAME` and `${NAME}` are uses, not targets.
 /// Quotes and escapes are removed first, as the shell removes them before
-/// the builtin sees `O"UT"`, `'O'UT` or `O\UT` as `OUT`.
+/// the builtin sees `O"UT"`, `'O'UT` or `O\UT` as `OUT`. A hyphen inside a
+/// word, as in `/tmp/pytest-of-runner`, joins two parts of one operand and
+/// never opens a flag, so `-of` there is not `-o f`.
 pub(super) fn names_variable(text: &str, target: impl Fn(&str) -> bool) -> bool {
+    let mut before = ' ';
     let mut previous = ' ';
     let mut opener = ' ';
     let mut token = String::new();
     let dequoted = text.chars().filter(|c| !matches!(c, '\'' | '"' | '\\'));
+    let word_char = |c: char| c == '_' || c.is_ascii_alphanumeric();
     for c in dequoted.chain(std::iter::once(' ')) {
-        if c == '_' || c.is_ascii_alphanumeric() {
+        if word_char(c) {
             if token.is_empty() {
-                opener = previous;
+                opener = match previous {
+                    '-' if word_char(before) => ' ',
+                    other => other,
+                };
             }
             token.push(c);
         } else if !token.is_empty() {
@@ -169,6 +176,7 @@ pub(super) fn names_variable(text: &str, target: impl Fn(&str) -> bool) -> bool 
             }
             token.clear();
         }
+        before = previous;
         previous = c;
     }
     false

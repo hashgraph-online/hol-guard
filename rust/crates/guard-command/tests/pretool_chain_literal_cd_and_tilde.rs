@@ -39,12 +39,16 @@ fn write(path: PathBuf, text: &str) {
 }
 
 /// Built under the target directory: the macOS temporary directory sits below
-/// `/private/var`, where every read is held for reasons of its own.
+/// `/private/var`, where every read is held for reasons of its own. The
+/// directory name carries a hyphen before a letter run that ends in a bound
+/// variable's name (`-of` for `f`), as a pytest temporary root such as
+/// `/tmp/pytest-of-runner` does, so the path is read as one operand rather
+/// than as the flag `-o f`.
 fn fixture() -> Fixture {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/pretool-chain-literal-cd-and-tilde")
         .join(format!(
-            "home-{}-{}",
+            "copy-of-home-{}-{}",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::Relaxed)
         ));
@@ -143,6 +147,20 @@ fn a_variable_holding_a_home_path_reads_as_its_file() {
                 "{harness}: {command}"
             );
         }
+    }
+    // The same note named by its absolute path, which passes through the
+    // hyphenated fixture directory.
+    let plan = f.home.join(".codex/plans/plan-todo.md");
+    let command = format!(
+        "f={}; sed -n 1,5p $f; sed -n 1,3p $f | cut -c1-600",
+        plan.display()
+    );
+    for harness in HARNESSES {
+        assert_eq!(
+            action(&f, harness, &command),
+            "allow",
+            "{harness}: {command}"
+        );
     }
 }
 
