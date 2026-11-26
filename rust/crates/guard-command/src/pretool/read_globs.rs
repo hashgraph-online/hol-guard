@@ -104,12 +104,18 @@ fn glob_words(value: &str, context: super::super::PathContext<'_>) -> Option<Vec
         || directory.contains(['*', '?', '[', ']', '{', '}', '\\'])
         || !literal_pattern(pattern)
         || !super::verified_path_context(context.home_dir, context.cwd)
-        || !super::bounded_read_target(directory, context.home_dir, context.cwd, true)
     {
         return None;
     }
+    // A pattern below a directory that is not there matches nothing, as
+    // `cat docs/NOTE* 2>/dev/null` in a checkout with no `docs`.
+    if !super::bounded_read_target(directory, context.home_dir, context.cwd, true) {
+        return absent_directory(directory, context).then(Vec::new);
+    }
     let base = directory_path(directory, context)?;
-    let entries = std::fs::read_dir(&base).ok()?;
+    let Ok(entries) = std::fs::read_dir(&base) else {
+        return absent_directory(directory, context).then(Vec::new);
+    };
     let mut matches = Vec::new();
     for (inspected, entry) in entries.enumerate() {
         if inspected >= MAX_ENTRIES {
@@ -137,6 +143,15 @@ fn glob_words(value: &str, context: super::super::PathContext<'_>) -> Option<Vec
         matches.push(word);
     }
     Some(matches)
+}
+
+/// The literal read of a missing name is admitted on the listing rule, so a
+/// pattern's missing directory has to clear that rule too: every missing
+/// component visible and the nearest existing ancestor a directory this
+/// context may name, which keeps a credential store refused. The pattern
+/// itself has nothing to match, and one led by `.` never reaches here.
+fn absent_directory(directory: &str, context: super::super::PathContext<'_>) -> bool {
+    super::super::listing_reads::absent_listing_operand(directory, context)
 }
 
 /// A last component holding `*` or `?` and otherwise only plain filename
