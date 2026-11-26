@@ -137,7 +137,19 @@ fn a_bare_lookup_is_also_judged_with_the_operand_it_prints_back() {
     );
     assert_eq!(
         *seen.borrow(),
-        ["git rev-parse origin/main", "git diff origin/main --stat"]
+        [
+            "git rev-parse origin/main",
+            "git diff  --stat",
+            "git diff origin/main --stat"
+        ]
+    );
+    // Outside a repository the lookup prints nothing, and that reading
+    // must pass as well.
+    assert_eq!(
+        project("git log -1 $(git rev-parse release/x)", |body| {
+            body != "git log -1 "
+        }),
+        None
     );
     // The reading with the operand in place must pass as well.
     assert_eq!(

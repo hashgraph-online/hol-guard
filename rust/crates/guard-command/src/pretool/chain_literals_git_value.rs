@@ -8,8 +8,9 @@
 //!
 //! - `git rev-parse` with `--verify` or `--short`, which print one hash or
 //!   fail, or a bare `git rev-parse` of one revision. A bare `rev-parse`
-//!   prints back an operand it cannot resolve, so it prints a hash or that
-//!   word, never nothing (see [`echoed`]). Without `--verify` the operand
+//!   prints back an operand it cannot resolve, so inside a repository it
+//!   prints a hash or that word (see [`echoed`]); outside one it prints
+//!   nothing. Without `--verify` the operand
 //!   must be `HEAD` or `@`, or spelled as a ref name (`origin/main`,
 //!   `FETCH_HEAD`, `v1.2~1`), with any `~` / `^` steps: a ref name has no
 //!   component that starts with `.`, so `git rev-parse .env` stays opaque.
@@ -28,7 +29,7 @@
 //! of a range: text glued to it could turn into an option or a file name.
 //! A bare `rev-parse` that cannot resolve its operand prints the operand
 //! instead, so the command is also judged with that word in the lookup's
-//! place.
+//! place, as well as with nothing there.
 
 use crate::shell_structure::ShellCommandSubstitution;
 

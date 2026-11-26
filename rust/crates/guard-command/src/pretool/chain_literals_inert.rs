@@ -117,9 +117,13 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         }
     }
     let mut out = String::with_capacity(command.len());
-    // The command as it runs when every Git lookup prints nothing, or
-    // the operand a bare `rev-parse` prints back.
+    // The command as it runs when every Git lookup prints nothing, as it
+    // does outside a repository.
     let mut unfound = String::with_capacity(command.len());
+    // The command as it runs when each bare `rev-parse` misses and prints
+    // its operand back.
+    let mut echoed = String::with_capacity(command.len());
+    let mut echoes = false;
     let mut looked_up = false;
     // The projection's shell text, heredoc bodies still blanked.
     let mut shell = String::with_capacity(command.len());
@@ -209,22 +213,29 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         looked_up |= value == git_value::COMMIT_VALUE;
         out.extend(&chars[cursor..substitution.start]);
         unfound.extend(&chars[cursor..substitution.start]);
+        echoed.extend(&chars[cursor..substitution.start]);
         out.push_str(&value);
         if value != git_value::COMMIT_VALUE {
             unfound.push_str(&value);
+            echoed.push_str(&value);
         } else if let Some(word) = git_value::echoed(&substitution.body) {
-            unfound.push_str(word);
+            echoed.push_str(word);
+            echoes = true;
         }
         shell.extend(&masked[cursor..substitution.start]);
         cursor = substitution.end;
     }
     out.extend(&chars[cursor..]);
     unfound.extend(&chars[cursor..]);
+    echoed.extend(&chars[cursor..]);
     shell.extend(&masked[cursor..]);
-    // An empty lookup shifts the words after it, and a bare `rev-parse` that
-    // misses prints its operand, so that command must pass too.
+    // An empty lookup shifts the words after it, so that command must pass
+    // too; so must the one a bare `rev-parse` that misses prints into.
     if looked_up {
         judged.push(unfound);
+    }
+    if echoes {
+        judged.push(echoed);
     }
     // A substitution the scan did not delimit is still in the text.
     if shell.contains("$(") || shell.contains('`') {
