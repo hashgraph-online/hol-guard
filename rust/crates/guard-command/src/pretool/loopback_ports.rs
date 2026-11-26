@@ -111,10 +111,14 @@ pub(in crate::pretool) fn chosen_server_port(
             .is_some_and(|recorded| recorded != port)
 }
 
-/// The port Guard's daemon answers on, when `GUARD_DAEMON_PORT` or the daemon's state file names
-/// one.
-pub(crate) fn known_daemon_port(home_dir: Option<&str>) -> Option<u16> {
-    fixed_port().or_else(|| guard_home(home_dir).and_then(|home| state_port(&home)))
+/// The port `GUARD_DAEMON_PORT` names, if any.
+pub(crate) fn daemon_env_port() -> Option<u16> {
+    fixed_port()
+}
+
+/// The port the daemon state file under `guard_home` records, if any.
+pub(crate) fn daemon_state_port(guard_home: &Path) -> Option<u16> {
+    state_port(guard_home)
 }
 
 /// The approval center's first choice when nothing records another port.

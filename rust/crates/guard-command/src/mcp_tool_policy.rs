@@ -255,24 +255,24 @@ mod tests {
 
     #[test]
     fn guard_origin_blocks_over_every_configured_action() {
-        let target = "http://localhost:4781/approvals";
-        if !crate::browser_guard_origin::is_guard_origin(target, None) {
-            return;
-        }
+        use crate::browser_guard_origin::tests::{guard_home, with_guard_home};
+        let home = guard_home("policy", Some(51234));
+        let target = "http://localhost:51234/approvals";
         for config in [
             serde_json::json!({"mode": "prompt", "default_action": "allow"}),
             serde_json::json!({"mode": "block", "security_level": "balanced", "default_action": "allow",
-                "risk_actions": {"codex": "allow"}}),
+                "risk_actions": {"mcp_dangerous_tool": "allow"}}),
         ] {
             let request: McpToolPolicyRequestV1 = serde_json::from_value(serde_json::json!({
                 "artifact": {"name": "playwright:browser_navigate", "command": "browser_navigate",
-                    "metadata": {"server_name": "playwright"}},
+                    "metadata": {"server_name": "playwright",
+                        "mcp_tool_identity": {"tool_name": "browser_navigate"}}},
                 "arguments": {"url": target},
                 "config": config,
                 "harness": "codex", "artifact_id": "guard-origin", "publisher": null,
             }))
             .unwrap();
-            let result = evaluate_tool_policy(&request).unwrap();
+            let result = with_guard_home(&home.0, || evaluate_tool_policy(&request).unwrap());
             assert_eq!(result.action, "block");
             assert_eq!(result.summary_code, "guard_origin");
             assert!(result

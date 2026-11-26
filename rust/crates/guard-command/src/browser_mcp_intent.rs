@@ -829,7 +829,7 @@ pub(crate) fn browser_risk_facts(
     ]
     .into_iter()
     .flatten()
-    .any(|url| crate::browser_guard_origin::is_guard_origin(url, None));
+    .any(crate::browser_guard_origin::is_guard_origin);
     let mut sensitive_surface = false;
     visit_sensitive_surfaces(operation, &values, &artifact.metadata, |_| {
         sensitive_surface = true

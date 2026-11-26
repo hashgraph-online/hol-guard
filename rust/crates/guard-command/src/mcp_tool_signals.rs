@@ -153,6 +153,10 @@ pub fn evaluate_risk_evidence(input: &McpToolRiskInputV1) -> Result<Value, &'sta
     let summary = match input.summary_code.as_deref() {
         None | Some("risk") => risk_summary(&signals),
         Some("no_risk") => "Guard did not detect a high-risk signal in this tool call.".to_owned(),
+        Some("guard_origin") => {
+            "Guard blocked this browser action because it reaches Guard's own approval center."
+                .to_owned()
+        }
         Some("configuration_stricter") => {
             "Local Guard's current configuration is stricter than the tool-call-specific recommendation."
                 .to_owned()
