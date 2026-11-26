@@ -1,4 +1,4 @@
-use super::{in_git_command, stand_in, standalone, COMMIT_VALUE};
+use super::{echoed, in_git_command, stand_in, standalone, COMMIT_VALUE};
 use crate::shell_structure::extract_command_substitution_spans;
 
 #[test]
@@ -10,6 +10,13 @@ fn hash_lookups_print_a_commit() {
         "git rev-parse --short HEAD",
         "git rev-parse --short=8 origin/main",
         "git rev-parse --verify -q feature/x",
+        "git rev-parse origin/main",
+        "git rev-parse FETCH_HEAD",
+        "git rev-parse origin/feature/x~2",
+        "git rev-parse v1.2^",
+        "git rev-parse 'HEAD^{commit}'",
+        "git rev-parse \"origin/main^{commit}\"",
+        "git rev-parse 'v1.2^{}'",
         "git log -1 --format=%h -- README.md",
         "git log -1 --pretty=format:%H main -- docs/PRD.md",
         "git log -n1 --format=%h --first-parent",
@@ -22,9 +29,23 @@ fn hash_lookups_print_a_commit() {
 #[test]
 fn lookups_that_can_print_other_text_stay_opaque() {
     for body in [
-        // A bare rev-parse echoes an operand it cannot resolve.
+        // A bare rev-parse echoes an operand it cannot resolve, so only a
+        // word spelled as a ref name is read.
         "git rev-parse .env",
-        "git rev-parse origin/main",
+        "git rev-parse config/.env",
+        "git rev-parse ~/.ssh/id_rsa",
+        "git rev-parse HEAD:.env",
+        "git rev-parse main:config",
+        "git rev-parse origin//main",
+        "git rev-parse refs/heads/x.lock",
+        "git rev-parse -q origin/main",
+        "git rev-parse origin/main~x",
+        "git rev-parse HEAD^{commit}",
+        "git rev-parse 'HEAD^{tree}'",
+        "git rev-parse '.env^{commit}'",
+        "git rev-parse 'HEAD:.env^{}'",
+        "git rev-parse \"$REF^{commit}\"",
+        "git rev-parse 'HEAD^{commit}' HEAD",
         "git rev-parse --abbrev-ref HEAD",
         "git rev-parse --show-toplevel",
         "git rev-parse --output=x HEAD",
@@ -110,7 +131,7 @@ fn the_value_stands_in_only_for_a_whole_word_or_a_range_end() {
 
 #[test]
 fn the_command_with_an_empty_lookup_is_judged_too() {
-    let command = "git show --stat $(git rev-parse HEAD)";
+    let command = "git show --stat $(git rev-parse --verify HEAD)";
     let projected = super::super::project(command, |_| true);
     assert_eq!(projected, Some(format!("git show --stat {COMMIT_VALUE}")));
     // Refusing what runs when the lookup prints nothing refuses the stand-in.
@@ -118,4 +139,31 @@ fn the_command_with_an_empty_lookup_is_judged_too() {
         super::super::project(command, |text| text != "git show --stat "),
         None
     );
+    // A bare lookup that misses prints its operand instead of nothing.
+    let command = "git show --stat $(git rev-parse HEAD)";
+    assert_eq!(
+        super::super::project(command, |_| true),
+        Some(format!("git show --stat {COMMIT_VALUE}"))
+    );
+    assert_eq!(
+        super::super::project(command, |text| text != "git show --stat HEAD"),
+        None
+    );
+}
+
+#[test]
+fn a_bare_lookup_prints_back_the_operand_it_cannot_resolve() {
+    for (body, word) in [
+        ("git rev-parse origin/main", Some("origin/main")),
+        ("git rev-parse HEAD~1", Some("HEAD~1")),
+        ("git rev-parse  FETCH_HEAD", Some("FETCH_HEAD")),
+        // `--verify` and `--short` print a hash or nothing.
+        ("git rev-parse --verify origin/main", None),
+        ("git rev-parse --short HEAD", None),
+        ("git merge-base HEAD origin/main", None),
+        ("git rev-parse .env", None),
+        ("git rev-parse 'HEAD^{commit}'", Some("'HEAD^{commit}'")),
+    ] {
+        assert_eq!(echoed(body), word, "{body}");
+    }
 }

@@ -125,6 +125,40 @@ fn each_value_producer_is_judged_once_as_its_own_command() {
 }
 
 #[test]
+fn a_bare_lookup_is_also_judged_with_the_operand_it_prints_back() {
+    let seen = RefCell::new(Vec::new());
+    let opened = project("git diff $(git rev-parse origin/main) --stat", |body| {
+        seen.borrow_mut().push(body.to_owned());
+        true
+    });
+    assert_eq!(
+        opened.as_deref(),
+        Some("git diff 0123456789abcdef0123456789abcdef01234567 --stat")
+    );
+    assert_eq!(
+        *seen.borrow(),
+        ["git rev-parse origin/main", "git diff origin/main --stat"]
+    );
+    // The reading with the operand in place must pass as well.
+    assert_eq!(
+        project("git log -1 $(git rev-parse release/x)", |body| {
+            body != "git log -1 release/x"
+        }),
+        None
+    );
+    // A lookup that prints a hash or nothing still drops the word.
+    let seen = RefCell::new(Vec::new());
+    project("git log -1 $(git rev-parse --verify origin/main)", |body| {
+        seen.borrow_mut().push(body.to_owned());
+        true
+    });
+    assert_eq!(
+        *seen.borrow(),
+        ["git rev-parse --verify origin/main", "git log -1 "]
+    );
+}
+
+#[test]
 fn a_substitution_beside_a_pattern_character_stays_opaque() {
     for command in [
         // The shell globs `2026*`; the projection would glob the stand-in's

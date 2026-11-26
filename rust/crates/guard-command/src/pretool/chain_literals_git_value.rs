@@ -7,9 +7,13 @@
 //! Only lookups whose output is a hash are recognised:
 //!
 //! - `git rev-parse` with `--verify` or `--short`, which print one hash or
-//!   fail, or a bare `git rev-parse HEAD~N`. A bare `rev-parse` echoes an
-//!   operand it cannot resolve, so `git rev-parse .env` prints `.env`; only
-//!   `HEAD` and `@` with `~` / `^` steps are taken without `--verify`.
+//!   fail, or a bare `git rev-parse` of one revision. A bare `rev-parse`
+//!   prints back an operand it cannot resolve, so it prints a hash or that
+//!   word, never nothing (see [`echoed`]). Without `--verify` the operand
+//!   must be `HEAD` or `@`, or spelled as a ref name (`origin/main`,
+//!   `FETCH_HEAD`, `v1.2~1`), with any `~` / `^` steps: a ref name has no
+//!   component that starts with `.`, so `git rev-parse .env` stays opaque.
+//!   A quoted `'REV^{commit}'` or `'REV^{}'` peels the same revision.
 //! - `git log -1` with `--format` or `--pretty` set to `%h` or `%H`. The
 //!   inner command is judged on its own first, and that refuses a
 //!   configuration that adds text, such as `log.showSignature`.
@@ -22,6 +26,9 @@
 //! same kind of read or write, so the stand-in is used only inside a command
 //! that runs `git`, and only where the lookup is a word of its own or one end
 //! of a range: text glued to it could turn into an option or a file name.
+//! A bare `rev-parse` that cannot resolve its operand prints the operand
+//! instead, so the command is also judged with that word in the lookup's
+//! place.
 
 use crate::shell_structure::ShellCommandSubstitution;
 
@@ -32,10 +39,20 @@ const MAX_BODY_CHARS: usize = 160;
 
 /// The stand-in for `body` when it is a Git lookup that prints only a hash.
 pub(super) fn stand_in(body: &str) -> Option<&'static str> {
-    if body.len() > MAX_BODY_CHARS || !body.chars().all(body_character) {
+    if body.len() > MAX_BODY_CHARS {
         return None;
     }
     let words: Vec<&str> = body.split(' ').filter(|word| !word.is_empty()).collect();
+    if let ["git", "rev-parse", operand] = words.as_slice() {
+        if let Some(revision) = peeled(operand) {
+            return (revision.chars().all(body_character)
+                && (head_relative(revision) || named(revision)))
+            .then_some(COMMIT_VALUE);
+        }
+    }
+    if !body.chars().all(body_character) {
+        return None;
+    }
     let printed = match words.as_slice() {
         ["git", "rev-parse", arguments @ ..] => rev_parse(arguments),
         ["git", "log", arguments @ ..] => log(arguments),
@@ -43,6 +60,21 @@ pub(super) fn stand_in(body: &str) -> Option<&'static str> {
         _ => false,
     };
     printed.then_some(COMMIT_VALUE)
+}
+
+/// The word a bare `git rev-parse` lookup prints when it cannot resolve its
+/// operand: the operand itself. `None` for a lookup that prints a hash or
+/// nothing.
+pub(super) fn echoed(body: &str) -> Option<&str> {
+    stand_in(body)?;
+    match body
+        .split(' ')
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()[..]
+    {
+        ["git", "rev-parse", operand] => Some(operand),
+        _ => None,
+    }
 }
 
 /// Whether the substitution at `start` is an argument of a command that
@@ -145,6 +177,7 @@ fn rev_parse(arguments: &[&str]) -> bool {
     }
     match operands.as_slice() {
         [operand] if single => revision(operand),
+        [operand] if arguments.len() == 1 => head_relative(operand) || named(operand),
         [operand] => head_relative(operand),
         _ => false,
     }
@@ -200,9 +233,40 @@ fn revision(word: &str) -> bool {
 
 /// `HEAD` or `@`, then any `~N` / `^N` steps.
 fn head_relative(word: &str) -> bool {
-    let Some(mut rest) = word.strip_prefix("HEAD").or_else(|| word.strip_prefix('@')) else {
+    let Some(rest) = word.strip_prefix("HEAD").or_else(|| word.strip_prefix('@')) else {
         return false;
     };
+    steps(rest)
+}
+
+/// A branch, tag or remote-tracking ref (`origin/main`, `FETCH_HEAD`,
+/// `v1.2`), then any `~N` / `^N` steps. Git refuses a ref name with a
+/// component that is empty, starts with `.` or ends in `.lock`, so the word
+/// names no dotfile, home path or absolute path.
+fn named(word: &str) -> bool {
+    let (name, rest) = word.split_at(word.find(['~', '^']).unwrap_or(word.len()));
+    steps(rest)
+        && revision(name)
+        && !name.contains([':', '@'])
+        && name
+            .split('/')
+            .all(|part| !part.is_empty() && !part.starts_with('.') && !part.ends_with(".lock"))
+}
+
+/// The revision a quoted `'REV^{commit}'` or `'REV^{}'` peels to a commit.
+/// The quotes keep the braces from the shell; the word printed back when the
+/// lookup misses is the same text without them.
+fn peeled(word: &str) -> Option<&str> {
+    let quoted = ['\'', '"']
+        .into_iter()
+        .find_map(|quote| word.strip_prefix(quote)?.strip_suffix(quote))?;
+    quoted
+        .strip_suffix("^{commit}")
+        .or_else(|| quoted.strip_suffix("^{}"))
+}
+
+/// Nothing but `~N` / `^N` steps.
+fn steps(mut rest: &str) -> bool {
     while let Some(after) = rest.strip_prefix(['~', '^']) {
         rest = after.trim_start_matches(|c: char| c.is_ascii_digit());
     }
