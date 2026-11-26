@@ -107,6 +107,7 @@ pub(super) const RESERVED: &[&str] = &[
     "module",
     "new",
     "null",
+    "print",
     "process",
     "require",
     "return",

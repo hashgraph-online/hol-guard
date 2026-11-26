@@ -9293,6 +9293,36 @@
       "expect": "allow"
     },
     {
+      "id": "omp-eval-browser-print-observe",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const tab = browser.tab('game-smoke'); const observed = await tab.observe(); print(observed); print(await tab.screenshot({selector: '.game-card'}));",
+        "language": "js",
+        "title": "Check the game page"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-eval-browser-print-evaluate",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const tab = browser.tab('game-smoke'); await tab.click('button'); await tab.waitForSelector('.overlay.hidden'); print(await tab.evaluate(() => ({overlayHidden: document.querySelector('#overlay').classList.contains('hidden'), status: document.querySelector('#status-label').textContent, canvas: [document.querySelector('#game').width, document.querySelector('#game').height]})));",
+        "language": "js",
+        "title": "Start the game"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "omp-eval-commit-draft",
       "fix_area": "omp",
       "harnesses": [
@@ -55258,6 +55288,39 @@
       "tool": "shell",
       "tool_input": {
         "command": "mkdir notes && ln -s ${HOME}/.ssh/id_ed25519 notes/NOTE; cat notes/NOTE*"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "test-symlink-predicate-shared-node-modules",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short && test -L dashboard/node_modules && echo linked"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "test-symlink-predicate-bracket-h",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "[ -h dashboard/node_modules ] || echo plain"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-test-symlink-predicate-credential-store",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "test -L ${HOME}/.ssh/id_ed25519 && echo linked"
       },
       "cwd": "worktree",
       "expect": "not_allow"

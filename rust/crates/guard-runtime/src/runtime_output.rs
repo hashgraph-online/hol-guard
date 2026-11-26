@@ -178,6 +178,7 @@ pub(crate) fn safe_label(value: &str) -> String {
 pub(crate) const KNOWN_SUBCOMMANDS: &[&str] = &[
     "archive-inspect",
     "bounded-hook-bridge",
+    "browser-explain",
     "capabilities",
     "claude-hook-bridge",
     "cline-hook-worker",
