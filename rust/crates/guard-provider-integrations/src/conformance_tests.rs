@@ -183,7 +183,7 @@ fn a_recording_that_reads_differently_fails() {
         verdict: V::Caution,
         reason_codes: Vec::new(),
     };
-    set[6].status = 503;
+    set[4].status = 503;
     let report = run_conformance(&bytes(&manifest()), &set, &corpus());
     let found = problems(&report, "recordings");
     assert!(
@@ -191,7 +191,7 @@ fn a_recording_that_reads_differently_fails() {
         "{found:?}"
     );
     assert!(
-        found.contains(&"oversize: recorded as oversize, reads as status".to_owned()),
+        found.contains(&"unauthorized: recorded as unauthorized, reads as status".to_owned()),
         "{found:?}"
     );
     assert!(!found.contains(&"browser.origin-reputation: no recording answers caution".to_owned()));
@@ -225,6 +225,10 @@ fn the_failure_order_matches_the_resident() {
     );
     assert_eq!(
         recorded_outcome(capability, 64, 500, OVERSIZE),
+        Err(RecordedFailure::Oversize)
+    );
+    assert_eq!(
+        recorded_outcome(capability, 64, 500, b"{}"),
         Err(RecordedFailure::Status)
     );
     assert_eq!(

@@ -137,8 +137,8 @@ fn a_fixture_request_with_a_bad_path_is_refused_before_any_connection() {
     }
 }
 
-#[test]
-fn the_stub_receives_the_fixture_key_and_never_the_stored_secret() {
+/// A loopback stub that answers one request with `body` and returns what it read.
+fn stub(body: &'static str) -> (u16, std::thread::JoinHandle<String>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     let port = listener.local_addr().unwrap().port();
     let stub = std::thread::spawn(move || {
@@ -154,7 +154,6 @@ fn the_stub_receives_the_fixture_key_and_never_the_stored_secret() {
                 Ok(read) => seen.extend_from_slice(&buffer[..read]),
             }
         }
-        let body = r#"{"verdict":"clean"}"#;
         let _ = socket.write_all(
             format!(
                 "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
@@ -164,6 +163,12 @@ fn the_stub_receives_the_fixture_key_and_never_the_stored_secret() {
         );
         String::from_utf8_lossy(&seen).into_owned()
     });
+    (port, stub)
+}
+
+#[test]
+fn the_stub_receives_the_fixture_key_and_never_the_stored_secret() {
+    let (port, stub) = stub(r#"{"verdict":"clean"}"#);
     let origin = FixtureOrigin::parse(&format!("http://127.0.0.1:{port}")).unwrap();
     let transport = FixtureProviderTransport::new(FIXTURE, origin, &DirectPolicy).unwrap();
     let response = transport.send(&request("/v1/check"), LIMITS).unwrap();
@@ -176,4 +181,46 @@ fn the_stub_receives_the_fixture_key_and_never_the_stored_secret() {
         "{seen}"
     );
     assert!(!seen.contains(&STORED.to_ascii_lowercase()), "{seen}");
+}
+
+/// A policy that sends every exchange through a proxy that is not listening.
+struct ProxiedPolicy;
+
+impl EgressPolicy for ProxiedPolicy {
+    fn validate(&self, _url: &str) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn proxy(&self, _url: &str) -> EgressProxy {
+        EgressProxy::Url {
+            url: "http://127.0.0.1:9".to_owned(),
+            credentials: None,
+        }
+    }
+}
+
+#[test]
+fn a_fixture_request_never_goes_through_the_callers_proxy() {
+    let (port, stub) = stub(r#"{"verdict":"clean"}"#);
+    let origin = FixtureOrigin::parse(&format!("http://127.0.0.1:{port}")).unwrap();
+    let transport = FixtureProviderTransport::new(FIXTURE, origin, &ProxiedPolicy).unwrap();
+    let response = transport.send(&request("/v1/check"), LIMITS).unwrap();
+    assert_eq!(response.status, 200);
+    assert!(stub.join().unwrap().starts_with("POST /v1/check"));
+}
+
+#[test]
+fn a_fixture_response_keeps_its_failure_class() {
+    let (port, stub) = stub(r#"{"verdict":"clean","padding":"0123456789abcdef"}"#);
+    let origin = FixtureOrigin::parse(&format!("http://127.0.0.1:{port}")).unwrap();
+    let transport = FixtureProviderTransport::new(FIXTURE, origin, &DirectPolicy).unwrap();
+    let small = ProviderLimits {
+        max_response_bytes: 16,
+        ..LIMITS
+    };
+    assert_eq!(
+        transport.send(&request("/v1/check"), small),
+        Err(ProviderClientError::ResponseTooLarge)
+    );
+    let _ = stub.join();
 }

@@ -12,6 +12,9 @@
 //! - The only key ever sent to the fixture origin is the literal [`FIXTURE_KEY`]. The transport
 //!   replaces whatever key the caller loaded, so a stored secret cannot leave the resident through
 //!   it ([`FixtureProviderTransport`]).
+//! - A fixture request always connects straight to the loopback origin. The caller's policy still
+//!   screens the destination, but its proxy choice is replaced, so an environment or managed proxy
+//!   never sees the fixture key or the request body ([`LoopbackDirect`]).
 //! - The Integrations page marks the provider as a fixture ([`is_fixture_provider`]).
 //!
 //! The manifest compiler refuses the prefix for anything under `contributions/`, so no shipped
@@ -19,11 +22,11 @@
 
 use std::collections::BTreeMap;
 
-use guard_command::egress_caller::{policy_send, EgressPolicy};
+use guard_command::egress_caller::{policy_send, EgressPolicy, EgressProxy, EgressTrust};
 use guard_contracts::PROVIDER_FIXTURE_ID_PREFIX;
 
 use crate::client::{
-    is_request_path, ProviderLimits, ProviderRequest, ProviderResponse, ProviderTransport,
+    is_request_path, refused, ProviderLimits, ProviderRequest, ProviderResponse, ProviderTransport,
 };
 use crate::ProviderClientError;
 
@@ -124,6 +127,24 @@ pub(crate) fn fixture_headers(request: &ProviderRequest) -> BTreeMap<String, Str
     headers
 }
 
+/// The caller's policy with its proxy choice replaced by a direct connection: the fixture origin is
+/// loopback, and a proxy in between would carry the request off the machine.
+struct LoopbackDirect<'a>(&'a dyn EgressPolicy);
+
+impl EgressPolicy for LoopbackDirect<'_> {
+    fn validate(&self, url: &str) -> Result<(), String> {
+        self.0.validate(url)
+    }
+
+    fn proxy(&self, _url: &str) -> EgressProxy {
+        EgressProxy::Direct
+    }
+
+    fn trust(&self) -> EgressTrust {
+        self.0.trust()
+    }
+}
+
 impl ProviderTransport for FixtureProviderTransport<'_> {
     fn send(
         &self,
@@ -142,9 +163,9 @@ impl ProviderTransport for FixtureProviderTransport<'_> {
             seconds,
             0,
             limits.max_response_bytes,
-            self.policy,
+            &LoopbackDirect(self.policy),
         )
-        .map_err(|_| ProviderClientError::Transport)?;
+        .map_err(|outcome| refused(&outcome))?;
         if (300..400).contains(&status) {
             return Err(ProviderClientError::Transport);
         }

@@ -141,17 +141,25 @@ impl NoiseLedger {
     pub fn admit_subject(&mut self, signals: &[NoiseSignal<'_>]) -> NoiseOutcome {
         // A review already raised for one of these answers covers the subject: another provider's
         // `caution` about the same subject does not ask again.
+        // Only a fresh answer covers it: a stale answer has no effect, so once the reviewed answer
+        // expires another provider's fresh `caution` may ask.
         let subject_reviewed = signals.iter().any(|signal| {
-            signal.verdict == ProviderVerdictV1::Caution && self.reviews_for(signal) > 0
+            signal.fresh
+                && signal.verdict == ProviderVerdictV1::Caution
+                && self.reviews_for(signal) > 0
         });
-        let effect = |ledger: &Self, signal: &NoiseSignal<'_>| match ledger.preview(signal) {
-            // `danger` is never capped: only a `caution` review is covered by an earlier one.
-            ProviderEffect::Review
-                if subject_reviewed && signal.verdict == ProviderVerdictV1::Caution =>
-            {
+        // `danger` is never capped: only a `caution` review is covered by an earlier one.
+        let covered = |ledger: &Self, signal: &NoiseSignal<'_>| {
+            subject_reviewed
+                && signal.verdict == ProviderVerdictV1::Caution
+                && ledger.preview(signal) == ProviderEffect::Review
+        };
+        let effect = |ledger: &Self, signal: &NoiseSignal<'_>| {
+            if covered(ledger, signal) {
                 ProviderEffect::Finding
+            } else {
+                ledger.preview(signal)
             }
-            effect => effect,
         };
         let winner = signals
             .iter()
@@ -164,9 +172,10 @@ impl NoiseLedger {
             })
             .map(|(_, signal)| *signal);
         match winner {
-            Some(signal) if effect(self, &signal) == ProviderEffect::Finding => {
-                NoiseOutcome::of(ProviderEffect::Finding)
-            }
+            // Covered by the earlier review: record nothing, so the cover never asks again.
+            Some(signal) if covered(self, &signal) => NoiseOutcome::of(ProviderEffect::Finding),
+            // Everything else goes through `admit`, which records a review and emits the quiet
+            // session-cap notice the first time a provider hits its cap.
             Some(signal) => self.admit(&signal),
             None => NoiseOutcome::of(ProviderEffect::None),
         }

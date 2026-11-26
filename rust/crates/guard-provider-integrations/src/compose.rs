@@ -8,7 +8,8 @@
 //! answers arrived in never moves a row.
 //!
 //! [`Composition::deciding`] names the row a card leads with. Which row's effect applies is the
-//! noise ledger's call: pass every row, in card order, to
+//! noise ledger's call: pass [`Composition::ordered`], every row in card order including the ones
+//! folded into "N more", to
 //! [`NoiseLedger::admit_subject`](crate::noise::NoiseLedger::admit_subject), which weighs each
 //! against the verification and session caps and records only the strongest.
 
@@ -44,6 +45,9 @@ pub struct Composition<'a> {
     pub deciding: Option<ProviderRow<'a>>,
     /// Up to [`PROVIDER_CARD_MAX_ROWS`] rows, in card order.
     pub shown: Vec<ProviderRow<'a>>,
+    /// Every row in card order, including the ones folded into "N more". This, not `shown`, is
+    /// what the noise ledger weighs: a hidden row still has its effect.
+    pub ordered: Vec<ProviderRow<'a>>,
     /// How many rows the "N more" line stands for.
     pub more: usize,
 }
@@ -65,10 +69,15 @@ pub fn compose<'a>(rows: &[ProviderRow<'a>]) -> Composition<'a> {
         .copied()
         .filter(|row| row.strength() > ProviderVerdictV1::Unknown.strength());
     let more = ordered.len().saturating_sub(PROVIDER_CARD_MAX_ROWS);
-    ordered.truncate(PROVIDER_CARD_MAX_ROWS);
+    let shown = ordered
+        .iter()
+        .take(PROVIDER_CARD_MAX_ROWS)
+        .copied()
+        .collect();
     Composition {
         deciding,
-        shown: ordered,
+        shown,
+        ordered,
         more,
     }
 }

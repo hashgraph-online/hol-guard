@@ -188,14 +188,15 @@ pub fn recorded_outcome(
     status: u16,
     body: &[u8],
 ) -> Result<MappedAnswer, RecordedFailure> {
+    // The transport refuses an oversized body before it reports any status.
+    if body.len() as u64 > max_response_bytes {
+        return Err(RecordedFailure::Oversize);
+    }
     match status {
         401 | 403 => return Err(RecordedFailure::Unauthorized),
         429 => return Err(RecordedFailure::RateLimited),
         200..=299 => {}
         _ => return Err(RecordedFailure::Status),
-    }
-    if body.len() as u64 > max_response_bytes {
-        return Err(RecordedFailure::Oversize);
     }
     map_answer(body, &answer_mapping(capability)).map_err(|_| RecordedFailure::Malformed)
 }

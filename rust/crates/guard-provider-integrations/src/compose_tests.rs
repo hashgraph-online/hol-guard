@@ -125,7 +125,7 @@ fn one_subject_raises_at_most_one_provider_review_whatever_the_count() {
     .collect();
     let mut reviews = 0;
     for _ in 0..5 {
-        let signals: Vec<_> = compose(&rows).shown.iter().map(signal).collect();
+        let signals: Vec<_> = compose(&rows).ordered.iter().map(signal).collect();
         if ledger.admit_subject(&signals).effect == ProviderEffect::Review {
             reviews += 1;
         }
@@ -142,7 +142,7 @@ fn a_verified_caution_leads_an_unverified_one() {
         let composition = compose(&rows);
         assert_eq!(composition.deciding, Some(verified));
         assert_eq!(composition.shown, [verified, unverified]);
-        let signals: Vec<_> = composition.shown.iter().map(signal).collect();
+        let signals: Vec<_> = composition.ordered.iter().map(signal).collect();
         assert_eq!(
             NoiseLedger::new().admit_subject(&signals).effect,
             ProviderEffect::Review
@@ -163,7 +163,7 @@ fn a_provider_at_its_session_cap_does_not_hide_another_with_reviews_left() {
         assert_eq!(ledger.admit(&filler).effect, ProviderEffect::Review);
     }
     let rows = [capped, row("provider.bravo", V::Caution)];
-    let signals: Vec<_> = compose(&rows).shown.iter().map(signal).collect();
+    let signals: Vec<_> = compose(&rows).ordered.iter().map(signal).collect();
     assert_eq!(
         ledger.admit_subject(&signals).effect,
         ProviderEffect::Review
@@ -185,7 +185,7 @@ fn a_danger_is_reviewed_after_another_providers_caution_was() {
         ProviderEffect::Review
     );
     let rows = [caution, row("provider.bravo", V::Danger)];
-    let signals: Vec<_> = compose(&rows).shown.iter().map(signal).collect();
+    let signals: Vec<_> = compose(&rows).ordered.iter().map(signal).collect();
     assert_eq!(
         ledger.admit_subject(&signals).effect,
         ProviderEffect::Review
@@ -193,5 +193,40 @@ fn a_danger_is_reviewed_after_another_providers_caution_was() {
     assert_eq!(
         ledger.admit_subject(&signals).effect,
         ProviderEffect::Review
+    );
+}
+
+#[test]
+fn a_hidden_row_still_has_its_effect() {
+    let ids = [
+        "provider.alpha",
+        "provider.bravo",
+        "provider.charlie",
+        "provider.delta",
+        "provider.echo",
+        "provider.foxtrot",
+        "provider.golf",
+        "provider.hotel",
+    ];
+    assert!(ids.len() > PROVIDER_CARD_MAX_ROWS);
+    let rows: Vec<ProviderRow<'static>> = ids.iter().map(|id| row(id, V::Danger)).collect();
+    let composition = compose(&rows);
+    let hidden = *composition.ordered.last().unwrap();
+    assert!(!composition.shown.contains(&hidden));
+    let signals: Vec<_> = composition
+        .ordered
+        .iter()
+        .map(|row| NoiseSignal {
+            effect: if *row == hidden {
+                ProviderEffectLevelV1::Enforce
+            } else {
+                ProviderEffectLevelV1::Observe
+            },
+            ..signal(row)
+        })
+        .collect();
+    assert_eq!(
+        NoiseLedger::new().admit_subject(&signals).effect,
+        ProviderEffect::Block
     );
 }

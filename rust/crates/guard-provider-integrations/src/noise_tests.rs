@@ -260,3 +260,60 @@ fn no_signal_sequence_exceeds_the_caps_or_loosens_a_decision() {
         }
     }
 }
+
+const OTHER: &str = "provider.otherwatch";
+
+#[test]
+fn a_stale_reviewed_answer_does_not_cover_another_providers_fresh_caution() {
+    let mut ledger = NoiseLedger::new();
+    let first = signal("s", V::Caution);
+    assert_eq!(
+        ledger.admit_subject(&[first]).effect,
+        ProviderEffect::Review
+    );
+    let other = NoiseSignal {
+        provider_id: OTHER,
+        ..signal("s", V::Caution)
+    };
+    assert_eq!(
+        ledger.admit_subject(&[first, other]).effect,
+        ProviderEffect::Finding,
+        "a fresh reviewed answer covers the subject"
+    );
+    let expired = NoiseSignal {
+        fresh: false,
+        ..first
+    };
+    assert_eq!(
+        ledger.admit_subject(&[expired, other]).effect,
+        ProviderEffect::Review
+    );
+}
+
+#[test]
+fn subject_admission_keeps_the_session_cap_notice() {
+    let mut ledger = NoiseLedger::new();
+    let subjects = ["c0", "c1", "c2", "c3", "c4", "c5", "c6", "c7"];
+    let cap = PROVIDER_CAUTION_REVIEWS_PER_SESSION as usize;
+    assert!(subjects.len() > cap + 1);
+    for subject in &subjects[..cap] {
+        assert_eq!(
+            ledger.admit_subject(&[signal(subject, V::Caution)]).effect,
+            ProviderEffect::Review
+        );
+    }
+    assert_eq!(
+        ledger.admit_subject(&[signal(subjects[cap], V::Caution)]),
+        NoiseOutcome {
+            effect: ProviderEffect::Finding,
+            quiet_cap_notice: true
+        }
+    );
+    assert_eq!(
+        ledger.admit_subject(&[signal(subjects[cap + 1], V::Caution)]),
+        NoiseOutcome {
+            effect: ProviderEffect::Finding,
+            quiet_cap_notice: false
+        }
+    );
+}
