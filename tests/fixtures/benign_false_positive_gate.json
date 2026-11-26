@@ -42922,6 +42922,72 @@
       "requires_sandbox": true
     },
     {
+      "id": "projection-plain-unicode-beside-rev-parse",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo \"$(git rev-parse --short HEAD) — release notes\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "projection-plain-unicode-after-date-value",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "D=$(date +%F); echo \"Report ✅ $D\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "projection-plain-unicode-beside-branch-name",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo \"Café build: $(git rev-parse --abbrev-ref HEAD)\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-projection-plain-unicode-then-key-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo \"Café $(git rev-parse --short HEAD)\"; cat ~/.ssh/id_ed25519"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "package-test-dashdash-reporter-tail",
       "fix_area": "shell",
       "harnesses": [
