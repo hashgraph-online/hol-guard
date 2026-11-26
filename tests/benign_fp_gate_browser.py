@@ -21,6 +21,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from ci.gauntlet.browser_cases import BROWSER_FIXTURES
 from ci.gauntlet.browser_driver_server import START_PAGE_FILE
 from ci.gauntlet.browser_fixtures import (
     PAGE_NAMES,
@@ -31,25 +32,8 @@ from ci.gauntlet.browser_fixtures import (
 
 BROWSER_SERVERS = (REFERENCE_DRIVER, UNPROFILED_DRIVER)
 
-# PRD 8.2 state presets, in the order the PRD lists them.
-BROWSER_STATES = (
-    "none",
-    "site-grant",
-    "session-site-grant",
-    "saved-exact",
-    "saved-verb-site",
-    "site-blocked",
-    "pending-same-call",
-    "shared-profile",
-    "provider-ok",
-    "provider-unknown",
-    "provider-down",
-    "provider-caution",
-    "provider-caution-verified",
-    "provider-danger",
-    "provider-danger-enforced",
-    "two-providers",
-)
+# PRD 8.2 state presets, shared with the Gauntlet's ``browser_fixture`` field.
+BROWSER_STATES = BROWSER_FIXTURES
 WIRED_STATES = frozenset({"none"})
 
 
