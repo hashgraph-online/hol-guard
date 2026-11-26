@@ -161,7 +161,7 @@ fn validate_predecessor_with_limits(
         last = id;
         let reference = lookup_pack(&index, count, id, &mut |digest| metadata.fetch(digest))
             .map_err(|_| refused("legacy predecessor index unreadable"))?
-            .ok_or_else(|| refused("legacy predecessor pack missing from index"))?;
+            .ok_or_else(|| refused("legacy predecessor pack is not in the index"))?;
         let manifest = metadata.json(&json!(reference))?;
         if manifest["schema"] != "guard.command-policy-pack.v1"
             || manifest["extension_id"] != id
