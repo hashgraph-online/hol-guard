@@ -124,3 +124,71 @@ fn inherited_handle_is_not_leaked() {
     env::remove_var(SENTINEL_ENV);
     drop(open_handles);
 }
+
+const SUSPENDED_PROBE_ENV: &str = "HOL_GUARD_TEST_SUSPENDED_CHILD_PID_FILE";
+
+/// Probe body: create a managed child suspended, publish its process ID, then
+/// wait to be terminated before resuming it.
+#[test]
+fn suspended_child_probe() {
+    let Ok(pid_file) = env::var(SUSPENDED_PROBE_ENV) else {
+        return;
+    };
+    let executable = env::current_exe().unwrap();
+    let suspended = create_suspended_managed_child(&executable, &[OsStr::new("--list")]).unwrap();
+    std::fs::write(format!("{pid_file}.tmp"), suspended.id().to_string()).unwrap();
+    std::fs::rename(format!("{pid_file}.tmp"), &pid_file).unwrap();
+    std::thread::sleep(std::time::Duration::from_secs(60));
+    std::mem::forget(suspended);
+}
+
+/// A parent terminated between creating the managed child and resuming it
+/// (a hook timeout or case cleanup killing it mid-spawn) must not leave the
+/// child suspended forever. Such a child never runs, so it never sees its
+/// closed stdin and never exits.
+#[test]
+fn child_dies_with_parent_killed_before_resume() {
+    if env::var(SUSPENDED_PROBE_ENV).is_ok() {
+        return;
+    }
+    let directory = env::temp_dir().join(format!(
+        "guard-suspended-child-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let pid_file = directory.join("child.pid");
+    let mut parent = std::process::Command::new(env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "windows::tests::suspended_child_probe",
+            "--nocapture",
+        ])
+        .env(SUSPENDED_PROBE_ENV, &pid_file)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    let child_pid = loop {
+        if let Ok(text) = std::fs::read_to_string(&pid_file) {
+            break text.trim().parse::<u32>().unwrap();
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "probe never published its suspended child"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    // Hard termination: no destructor in the parent runs.
+    parent.kill().unwrap();
+    parent.wait().unwrap();
+    let exited =
+        process_lifecycle::wait_for_process_exit(child_pid, std::time::Duration::from_secs(10))
+            .unwrap();
+    if !exited {
+        let _ = terminate_process(child_pid);
+    }
+    let _ = std::fs::remove_dir_all(&directory);
+    assert!(exited, "suspended managed child outlived its killed parent");
+}

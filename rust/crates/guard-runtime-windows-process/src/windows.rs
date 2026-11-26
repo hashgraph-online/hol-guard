@@ -92,8 +92,10 @@ pub use process_lifecycle::{
 // SAFETY: This module is the sole Win32 FFI boundary; borrowed handles remain valid
 // for each call, and newly owned handles are wrapped exactly once before returning.
 
-// PROC_THREAD_ATTRIBUTE_HANDLE_LIST is missing from winapi 0.3.9's constants.
+// PROC_THREAD_ATTRIBUTE_HANDLE_LIST and PROC_THREAD_ATTRIBUTE_JOB_LIST are
+// missing from winapi 0.3.9's constants.
 const PROC_THREAD_ATTRIBUTE_HANDLE_LIST: usize = 0x0002_0002;
+const PROC_THREAD_ATTRIBUTE_JOB_LIST: usize = 0x0002_000D;
 
 fn open_process(process_id: u32, access: DWORD) -> io::Result<OwnedHandle> {
     if process_id == 0 {
@@ -202,9 +204,78 @@ impl ManagedChild {
 
 /// Spawn a child with only its three standard handles in the inherited list.
 pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<ManagedChild> {
+    create_suspended_managed_child(executable, args)?.resume()
+}
+
+/// A managed child that has been created suspended and not yet resumed.
+///
+/// The child sits in a kill-on-close job from the moment it exists. If this
+/// process dies before `resume` (a hook timeout or case cleanup terminating
+/// it mid-spawn), closing the last job handle kills the child. Without that,
+/// the child would stay suspended forever: it never runs, so it never reads
+/// its closed stdin and never exits. Dropping it unresumed kills it too.
+pub(crate) struct SuspendedManagedChild {
+    process: Option<OwnedHandle>,
+    thread: Option<OwnedHandle>,
+    job: Option<OwnedHandle>,
+    stdin: Option<std::fs::File>,
+}
+
+impl SuspendedManagedChild {
+    #[cfg(test)]
+    pub(crate) fn id(&self) -> u32 {
+        self.process.as_ref().map_or(0, |process| {
+            // SAFETY: `process` owns a valid process handle until this call returns.
+            unsafe {
+                winapi::um::processthreadsapi::GetProcessId(process.as_raw_handle() as HANDLE)
+            }
+        })
+    }
+
+    /// Let the child run. Kill-on-close is cleared only once it is running,
+    /// so the resumed child can outlive this process as before.
+    pub(crate) fn resume(mut self) -> io::Result<ManagedChild> {
+        let thread = self
+            .thread
+            .take()
+            .expect("suspended child keeps its thread");
+        process_lifecycle::resume_thread(&thread)?;
+        drop(thread);
+        if let Some(job) = &self.job {
+            process_lifecycle::set_kill_on_close(job, false)?;
+        }
+        Ok(ManagedChild {
+            process: self
+                .process
+                .take()
+                .expect("suspended child keeps its process"),
+            job: self.job.take(),
+            stdin: self.stdin.take(),
+        })
+    }
+}
+
+impl Drop for SuspendedManagedChild {
+    fn drop(&mut self) {
+        // Reached only when the child was never handed out running: a failed
+        // resume, a failed kill-on-close clear, or an abandoned spawn.
+        if let Some(job) = &self.job {
+            let _ = process_lifecycle::terminate_job(job);
+        }
+        if let Some(process) = &self.process {
+            // SAFETY: The process handle is owned; the child must not survive.
+            let _ = unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, 1) };
+        }
+    }
+}
+
+/// Create the child suspended, inside a kill-on-close job when one can be made.
+pub(crate) fn create_suspended_managed_child(
+    executable: &Path,
+    args: &[&OsStr],
+) -> io::Result<SuspendedManagedChild> {
     let executable_w = wide_path(executable)?;
-    let command_line = command_line(executable.as_os_str(), args)?;
-    let mut command_line_w = command_line;
+    let mut command_line_w = command_line(executable.as_os_str(), args)?;
 
     let mut security = SECURITY_ATTRIBUTES {
         nLength: size_of::<SECURITY_ATTRIBUTES>() as DWORD,
@@ -220,8 +291,63 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
         child_stdout.as_raw_handle() as HANDLE,
         child_stderr.as_raw_handle() as HANDLE,
     ];
-    let mut attributes = AttributeList::new(1)?;
-    attributes.set_handle_list(&handles)?;
+    // The job exists before the child does, so no instant of the child's life
+    // is outside it.
+    let job = process_lifecycle::create_process_job()
+        .and_then(|job| {
+            process_lifecycle::set_kill_on_close(&job, true)?;
+            Ok(job)
+        })
+        .ok();
+    let job_list = job.as_ref().map(|job| [job.as_raw_handle() as HANDLE]);
+    let mut created = create_suspended_process(
+        &executable_w,
+        &mut command_line_w,
+        &handles,
+        job_list.as_ref().map(|list| &list[..]),
+    );
+    let mut in_job = job_list.is_some();
+    if created.is_err() && in_job {
+        // Older Windows releases refuse the job-list attribute; fall back to
+        // assigning the job right after creation.
+        created = create_suspended_process(&executable_w, &mut command_line_w, &handles, None);
+        in_job = false;
+    }
+    let (process, thread) = created?;
+    let mut suspended = SuspendedManagedChild {
+        process: Some(process),
+        thread: Some(thread),
+        job,
+        stdin: None,
+    };
+    if !in_job {
+        let assigned = match (&suspended.job, &suspended.process) {
+            (Some(job), Some(process)) => {
+                process_lifecycle::assign_process_to_job(job, process).is_ok()
+            }
+            _ => false,
+        };
+        if !assigned {
+            suspended.job = None;
+        }
+    }
+    // SAFETY: `parent_stdin` is transferred exactly once into the File owner.
+    suspended.stdin =
+        Some(unsafe { std::fs::File::from_raw_handle(parent_stdin.into_raw_handle()) });
+    Ok(suspended)
+}
+
+fn create_suspended_process(
+    executable_w: &[u16],
+    command_line_w: &mut [u16],
+    handles: &[HANDLE; 3],
+    job_list: Option<&[HANDLE]>,
+) -> io::Result<(OwnedHandle, OwnedHandle)> {
+    let mut attributes = AttributeList::new(if job_list.is_some() { 2 } else { 1 })?;
+    attributes.set_handle_list(handles)?;
+    if let Some(job_list) = job_list {
+        attributes.set_job_list(job_list)?;
+    }
 
     // SAFETY: STARTUPINFOEXW is a plain C struct where an all-zero value is valid.
     let mut startup = unsafe { zeroed::<STARTUPINFOEXW>() };
@@ -235,7 +361,8 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
     // SAFETY: PROCESS_INFORMATION is a plain C struct where an all-zero value is valid.
     let mut process_info = unsafe { zeroed::<PROCESS_INFORMATION>() };
     // SAFETY: All pointers reference live, nul-terminated or initialized storage;
-    // the attribute list names only the three inheritable standard handles above.
+    // the attribute list names only the three inheritable standard handles above
+    // and, when given, the job the child starts in. Both arrays outlive the call.
     let created = unsafe {
         CreateProcessW(
             executable_w.as_ptr(),
@@ -253,33 +380,11 @@ pub fn spawn_managed_child(executable: &Path, args: &[&OsStr]) -> io::Result<Man
     if created == FALSE {
         return Err(io::Error::last_os_error());
     }
-
     // SAFETY: CreateProcessW returned each handle exactly once on success.
     let process = unsafe { OwnedHandle::from_raw_handle(process_info.hProcess as RawHandle) };
     // SAFETY: CreateProcessW returned the thread handle exactly once on success.
     let thread = unsafe { OwnedHandle::from_raw_handle(process_info.hThread as RawHandle) };
-    let job = process_lifecycle::create_process_job()
-        .and_then(|job| {
-            process_lifecycle::assign_process_to_job(&job, &process)?;
-            Ok(job)
-        })
-        .ok();
-    if let Err(error) = process_lifecycle::resume_thread(&thread) {
-        if let Some(job) = &job {
-            let _ = process_lifecycle::terminate_job(job);
-        }
-        // SAFETY: The process is still suspended; terminate the abandoned child.
-        let _ = unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, 1) };
-        return Err(error);
-    }
-    drop(thread);
-    // SAFETY: `parent_stdin` is transferred exactly once into the File owner.
-    let stdin = unsafe { std::fs::File::from_raw_handle(parent_stdin.into_raw_handle()) };
-    Ok(ManagedChild {
-        process,
-        job,
-        stdin: Some(stdin),
-    })
+    Ok((process, thread))
 }
 
 fn create_stdin_pipe(security: &mut SECURITY_ATTRIBUTES) -> io::Result<(OwnedHandle, OwnedHandle)> {
@@ -461,12 +566,22 @@ impl AttributeList {
     }
 
     fn set_handle_list(&mut self, handles: &[HANDLE]) -> io::Result<()> {
+        self.set_handle_array(PROC_THREAD_ATTRIBUTE_HANDLE_LIST, handles)
+    }
+
+    fn set_job_list(&mut self, jobs: &[HANDLE]) -> io::Result<()> {
+        self.set_handle_array(PROC_THREAD_ATTRIBUTE_JOB_LIST, jobs)
+    }
+
+    /// The list stores the pointer, not a copy: `handles` must outlive every
+    /// CreateProcessW call that uses this list.
+    fn set_handle_array(&mut self, attribute: usize, handles: &[HANDLE]) -> io::Result<()> {
         // SAFETY: The initialized list and handle slice remain valid for this call.
         if unsafe {
             UpdateProcThreadAttribute(
                 self.list,
                 0,
-                PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                attribute,
                 handles.as_ptr() as *mut _,
                 std::mem::size_of_val(handles) as SIZE_T,
                 null_mut(),
