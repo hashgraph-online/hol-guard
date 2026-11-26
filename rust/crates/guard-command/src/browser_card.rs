@@ -18,11 +18,27 @@ use guard_contracts::{
 const AGENT_MAX_CHARS: usize = 48;
 const FALLBACK_AGENT: &str = "The agent";
 
+/// Control characters, and the Unicode format characters that reorder or hide
+/// text (bidi overrides and isolates, zero-width marks, the byte-order mark).
+fn is_unsafe_display_char(character: char) -> bool {
+    character.is_control()
+        || matches!(
+            character,
+            '\u{00AD}'
+                | '\u{061C}'
+                | '\u{180E}'
+                | '\u{200B}'..='\u{200F}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{2060}'..='\u{2069}'
+                | '\u{FEFF}'
+        )
+}
+
 fn agent_name(raw: &str) -> String {
     let cleaned: String = raw
         .chars()
         .map(|character| {
-            if character.is_control() {
+            if is_unsafe_display_char(character) {
                 ' '
             } else {
                 character
@@ -38,11 +54,38 @@ fn agent_name(raw: &str) -> String {
     }
 }
 
-/// The host and port of an origin, as the headline names the site.
+/// The origin the card shows: any userinfo (`user:password@`) is dropped, and an
+/// origin with whitespace or unsafe display characters is not shown at all.
+fn display_origin(origin: &str) -> Option<String> {
+    if origin
+        .chars()
+        .any(|character| character.is_whitespace() || is_unsafe_display_char(character))
+    {
+        return None;
+    }
+    let (scheme, rest) = match origin.split_once("://") {
+        Some((scheme, rest)) => (Some(scheme), rest),
+        None => (None, origin),
+    };
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(authority_end);
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    if host.is_empty() {
+        return None;
+    }
+    Some(match scheme {
+        Some(scheme) => format!("{scheme}://{host}{tail}"),
+        None => format!("{host}{tail}"),
+    })
+}
+
+/// The host and port of a display origin, as the headline names the site.
 fn site_label(origin: &str) -> Option<String> {
     let host = origin.split_once("://").map_or(origin, |(_, rest)| rest);
     let host = host.trim_end_matches('/');
-    (!host.is_empty() && !host.contains(char::is_whitespace)).then(|| host.to_owned())
+    (!host.is_empty()).then(|| host.to_owned())
 }
 
 /// The headline verb phrase. Navigation names the site as its object; every
@@ -107,7 +150,8 @@ pub fn browser_card(request: &BrowserCardRequestV1) -> Result<BrowserCardV1, &'s
     let action = &request.action;
     action.validate_shape().map_err(|error| error.code())?;
     let agent = agent_name(&request.agent);
-    let site = action.target.origin.as_deref().and_then(site_label);
+    let origin = action.target.origin.as_deref().and_then(display_origin);
+    let site = origin.as_deref().and_then(site_label);
     let mut risk_chips = Vec::with_capacity(action.sensitive_surface_flags.len());
     for flag in &action.sensitive_surface_flags {
         if !risk_chips.contains(flag) {
@@ -118,7 +162,7 @@ pub fn browser_card(request: &BrowserCardRequestV1) -> Result<BrowserCardV1, &'s
         headline: headline(&agent, action.verb, site.as_deref()),
         verb: action.verb,
         site: BrowserCardSiteV1 {
-            origin: action.target.origin.clone(),
+            origin,
             first_visit_in_task: request.first_visit_in_task,
             left_granted_site: request.left_granted_site,
         },

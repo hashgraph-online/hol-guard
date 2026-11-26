@@ -95,6 +95,72 @@ fn the_agent_name_is_cleaned_and_bounded() {
 }
 
 #[test]
+fn the_agent_name_drops_bidi_and_zero_width_characters() {
+    let mut request = first_valid_request();
+    request.agent = "Agent\u{202E}\u{2066}x\u{200B}y\u{FEFF}".to_owned();
+    let card = browser_card(&request).expect("card");
+    assert!(
+        card.headline.starts_with("Agent x y wants to"),
+        "{}",
+        card.headline
+    );
+    assert!(!card
+        .headline
+        .contains(['\u{202E}', '\u{2066}', '\u{200B}', '\u{FEFF}']));
+}
+
+#[test]
+fn the_card_never_shows_origin_userinfo() {
+    let mut card_request = first_valid_request();
+    card_request.action.target.origin = Some("https://someone:x@shop.example.test:8443".to_owned());
+    let card = browser_card(&card_request).expect("card");
+    assert_eq!(
+        card.site.origin.as_deref(),
+        Some("https://shop.example.test:8443")
+    );
+    let rendered = serde_json::to_string(&card).expect("card serializes");
+    assert!(!rendered.contains("someone"), "{rendered}");
+    assert!(
+        card.headline.contains("shop.example.test:8443"),
+        "{}",
+        card.headline
+    );
+
+    let display = BrowserMcpRequestV1::Display {
+        intent: BrowserMcpDisplayIntentV1 {
+            intent: BrowserIntentV1::Interact,
+            operation: "browser_type".to_owned(),
+            target_domain: Some("shop.example.test".to_owned()),
+            target_origin: Some("https://shop.example.test:8443".to_owned()),
+        },
+        arguments: BrowserMcpArgumentsV1::Other,
+        card: Some(Box::new(card_request)),
+    };
+    let wire = serde_json::to_value(&display).expect("display serializes");
+    let decoded: BrowserMcpRequestV1 = serde_json::from_value(wire).expect("display parses");
+    match evaluate_browser_mcp(&decoded).expect("display") {
+        BrowserMcpResultV1::Display { card, .. } => {
+            let card = card.expect("card");
+            assert_eq!(
+                card.site.origin.as_deref(),
+                Some("https://shop.example.test:8443")
+            );
+            assert!(!card.headline.contains("someone"));
+        }
+        other => panic!("unexpected result {other:?}"),
+    }
+}
+
+#[test]
+fn an_origin_with_hidden_characters_is_not_shown() {
+    let mut request = first_valid_request();
+    request.action.target.origin = Some("https://shop\u{202E}.example.test".to_owned());
+    let card = browser_card(&request).expect("card");
+    assert_eq!(card.site.origin, None);
+    assert!(!card.headline.contains('\u{202E}'));
+}
+
+#[test]
 fn a_display_request_returns_the_card_beside_its_target() {
     let card_request = first_valid_request();
     let expected = browser_card(&card_request).expect("card");
