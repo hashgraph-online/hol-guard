@@ -41,6 +41,7 @@ use crate::codex_hook_bridge_direct::{
 };
 use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use crate::hook_direct::contained::{native_sink, unprojected_sink_command, NativeSink};
+use crate::hook_env_stamp::with_remaining_hint;
 use crate::hook_watch_posture::harness_in_watch;
 
 pub(crate) const BRIDGE_COMMAND: &str = "pi-hook-bridge";
@@ -135,7 +136,13 @@ pub(crate) fn reply(
         return watch_monitor_fallback(config, data);
     };
     let path = format!("/v1/hooks/{}?{}", config.harness.name, config.query);
-    let Some((status, body)) = target.post_status(&path, data, deadline, miss) else {
+    // The extension stamped its whole budget, but the resident attempt has
+    // used part of it. The daemon times the hook from its own arrival, so
+    // tell it how long this bridge will still wait; it must answer before
+    // then.
+    let hinted = with_remaining_hint(data, remaining(deadline).as_millis())
+        .unwrap_or_else(|_| data.to_owned());
+    let Some((status, body)) = target.post_status(&path, &hinted, deadline, miss) else {
         return watch_monitor_fallback(config, data);
     };
     // `fetch` decodes the body as UTF-8, replacing malformed bytes, and
