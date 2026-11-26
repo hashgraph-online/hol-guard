@@ -55,6 +55,21 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-loop-group-cd-climbs-every-pass",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for i in 1 2 3; do { cd ..; }; ls -a; done"
+      },
+      "cwd": "signed_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-chained-cds-config-write-before-cd",
       "fix_area": "shell",
       "harnesses": [

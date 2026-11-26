@@ -110,6 +110,13 @@ fn a_labelled_or_grouped_loop_keeps_the_review_of_what_it_does() {
             "for f in docs/*.md; do { cat \"bak-$f\"; }; done",
             // `cd` inside the group moves the rest of the loop.
             "for f in docs/*.md; do { cd ~/.ssh; cat id_ed25519; }; done",
+            // A body that never reads the loop variable is proved as one
+            // pass, but a `cd` inside a group runs on every pass: two passes
+            // climb from the checkout to the home folder, whose hidden
+            // entries `ls -a` then lists, as `cd ..; cd ..; ls -a` would.
+            "for i in 1 2; do { cd ..; }; ls -a; done",
+            "for i in 1 2; do { cd ..; ls; }; done; ls -a",
+            "ls && for i in 1 2; do { cd ..; }; done && ls -a",
         ] {
             assert_ne!(
                 action(harness, command, &home, &app),
@@ -119,3 +126,4 @@ fn a_labelled_or_grouped_loop_keeps_the_review_of_what_it_does() {
         }
     }
 }
+
