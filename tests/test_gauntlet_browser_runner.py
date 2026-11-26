@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from ci.gauntlet.browser_cases import BROWSER_CATALOG
+from ci.gauntlet.browser_judge import BrowserEvidence, browser_outcome
 from ci.gauntlet.browser_runner import (
     browser_evidence,
     browser_section,
@@ -96,6 +97,15 @@ def test_a_quiet_case_with_an_approval_row_is_a_false_positive() -> None:
     section = browser_section(_QUIET, browser_evidence(case, []))
     assert section["interruptions"] == 1
     assert section["completed"] is False
+
+
+@pytest.mark.parametrize("scenario", [_QUIET, dataclasses.replace(_QUIET, oracle="browser-task", approval_budget=1)])
+def test_a_journaled_call_with_no_guard_decision_is_a_harness_error(scenario: Any) -> None:
+    journal = [{"server": "playwright", "tool": tool.split("__", 2)[2]} for tool in scenario.required_tools]
+    evidence = BrowserEvidence(finished=True, journal=journal)
+    outcome, reason = browser_outcome(scenario, evidence)
+    assert outcome == "harness-error"
+    assert "with no Guard decision" in reason
 
 
 def test_an_execution_error_stays_a_harness_error() -> None:
