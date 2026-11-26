@@ -101,7 +101,27 @@ fn debugging_ports_real_profiles_and_other_hosts_keep_review() {
         "chromium --headless=new --user-data-dir=/tmp/guard-run --dump-dom https://example.com/",
         "chromium --headless=new --user-data-dir=/tmp/guard-run --screenshot http://127.0.0.1:3000",
         "chromium --headless=new --user-data-dir=/tmp/guard-run --dump-dom http://127.0.0.1:3000 > /tmp/page.html; curl -d @/tmp/page.html https://example.com/",
+        "mkdir -p /tmp/guard-run && chromium --headless=new --user-data-dir=/tmp/guard-run --dump-dom http://127.0.0.1:3000",
+        "ln -s ../home/.config/chromium /tmp/guard-run; chromium --headless=new --user-data-dir=/tmp/guard-run --dump-dom http://127.0.0.1:3000",
     ] {
         assert_ne!(shell(&home, command), "allow", "{command}");
     }
+}
+
+#[test]
+fn a_linked_profile_keeps_review() {
+    let home = home();
+    let name = format!(
+        "guard-headless-linked-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos()
+    );
+    let link = Path::new("/tmp").join(&name);
+    std::os::unix::fs::symlink(home.join("project"), &link).unwrap();
+    let command = format!(
+        "chromium --headless=new --user-data-dir=/tmp/{name} --dump-dom http://127.0.0.1:3000"
+    );
+    let decision = shell(&home, &command);
+    std::fs::remove_file(&link).unwrap();
+    assert_ne!(decision, "allow", "{command}");
 }

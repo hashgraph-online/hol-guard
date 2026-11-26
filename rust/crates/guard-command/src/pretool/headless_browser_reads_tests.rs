@@ -78,3 +78,64 @@ fn only_chromium_family_browsers_are_read() {
         assert!(!safe_headless_browser_read(browser, &text), "{browser}");
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn an_existing_profile_must_be_a_private_directory_of_this_user() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+
+    let name = format!(
+        "guard-headless-profile-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let root = std::path::Path::new("/tmp").join(&name);
+    std::fs::create_dir(&root).unwrap();
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let launch = |profile: &str| {
+        arguments(&format!(
+            "--headless --user-data-dir={profile} --dump-dom http://127.0.0.1:3000"
+        ))
+    };
+
+    let owned = root.join("owned");
+    std::fs::create_dir(&owned).unwrap();
+    assert!(safe_headless_browser_read(
+        "chromium",
+        &launch(&format!("/tmp/{name}/owned"))
+    ));
+    assert!(safe_headless_browser_read(
+        "chromium",
+        &launch(&format!("/tmp/{name}/missing/profile"))
+    ));
+
+    let linked = root.join("linked");
+    symlink(&owned, &linked).unwrap();
+    assert!(!safe_headless_browser_read(
+        "chromium",
+        &launch(&format!("/tmp/{name}/linked"))
+    ));
+    assert!(!safe_headless_browser_read(
+        "chromium",
+        &launch(&format!("/tmp/{name}/linked/inner"))
+    ));
+
+    let shared = root.join("shared");
+    std::fs::create_dir(&shared).unwrap();
+    std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o777)).unwrap();
+    assert!(!safe_headless_browser_read(
+        "chromium",
+        &launch(&format!("/tmp/{name}/shared"))
+    ));
+
+    std::fs::write(root.join("file"), "synthetic\n").unwrap();
+    assert!(!safe_headless_browser_read(
+        "chromium",
+        &launch(&format!("/tmp/{name}/file"))
+    ));
+
+    std::fs::remove_dir_all(&root).unwrap();
+}

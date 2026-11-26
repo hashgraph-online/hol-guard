@@ -12,7 +12,12 @@
 //!
 //! - The profile has to be a named directory under `/tmp`. A browser's own
 //!   profile, which holds the user's signed-in sessions, saved passwords and
-//!   cookies, never lives there, so the page loads with no session.
+//!   cookies, never lives there, so the page loads with no session. The
+//!   shared temporary directory is writable by everyone, so the name is also
+//!   read on disk: every part of it that already exists has to be a real
+//!   directory, not a link, owned by this user and writable by no one else.
+//!   A missing part is created by the browser itself, and the caller admits
+//!   the line only when no other step of it could create one first.
 //! - Every word has to be on a short list. A remote debugging port or pipe,
 //!   `--profile-directory`, an extension, a proxy, `--no-sandbox` or any
 //!   other switch refuses the whole line. Chromium also reads a switch spelled
@@ -103,6 +108,11 @@ fn temporary_profile(directory: &str) -> bool {
         return false;
     };
     let rest = rest.strip_suffix('/').unwrap_or(rest);
+    let root = if directory.starts_with("/tmp/") {
+        "/tmp"
+    } else {
+        "/private/tmp"
+    };
     !rest.is_empty()
         && rest.split('/').all(|component| {
             !component.is_empty()
@@ -112,6 +122,39 @@ fn temporary_profile(directory: &str) -> bool {
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
         })
+        && private_or_missing(root, rest)
+}
+
+/// Whether every existing part of `root/rest` is a directory this user owns
+/// that no one else can write, read without following a link. The first
+/// missing part ends the walk: the browser creates it and everything below.
+fn private_or_missing(root: &str, rest: &str) -> bool {
+    let mut path = std::path::PathBuf::from(root);
+    for component in rest.split('/') {
+        path.push(component);
+        match std::fs::symlink_metadata(&path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return true,
+            Err(_) => return false,
+            Ok(metadata) if !private_directory(&metadata) => return false,
+            Ok(_) => {}
+        }
+    }
+    true
+}
+
+#[cfg(unix)]
+fn private_directory(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    metadata.is_dir()
+        && metadata.uid() == nix::unistd::getuid().as_raw()
+        && metadata.mode() & 0o022 == 0
+}
+
+/// No platform without Unix ownership can prove who made an existing
+/// directory, so only a missing profile is admitted there.
+#[cfg(not(unix))]
+fn private_directory(_metadata: &std::fs::Metadata) -> bool {
+    false
 }
 
 /// `WIDTH,HEIGHT` in pixels.
