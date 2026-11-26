@@ -30,6 +30,7 @@ mod aibom_vectors_tests;
 #[path = "adapters/detection/antigravity_detect.rs"]
 mod antigravity_detect;
 mod approval;
+mod approval_browser_card;
 mod approval_bulk_eligibility_op;
 mod approval_copy;
 mod approval_extension_coverage;
@@ -99,7 +100,6 @@ mod bounded_hook_bridge_grok_script;
 mod bounded_hook_bridge_hermes;
 mod bounded_hook_bridge_remediation;
 mod bounded_hook_bridge_render;
-mod approval_browser_card;
 mod browser_explain_command;
 mod browser_open;
 pub mod browser_session_store;
