@@ -436,7 +436,7 @@ transcript in the pull request (after BP-T052).
   `guard.provider-integration.v1` per PRD 6.2, including exact-host rules, single credential header,
   fact-only request bodies, pointer-only response mapping, `shares` equality, limit caps, safe-text
   labels for reason codes. Unit test per rejection.
-- [ ] **BP-T101** Closed capability list and closed fact list in `guard-contracts` (6.3, 6.4), with
+- [x] **BP-T101** Closed capability list and closed fact list in `guard-contracts` (6.3, 6.4), with
   the never-shareable set asserted by a test that enumerates `BrowserActionV2` fields and fails when a
   new field is not classified as shareable or not.
 - [ ] **BP-T102** Origin exclusion: loopback, private ranges, link-local, `.local`, `.internal`,
