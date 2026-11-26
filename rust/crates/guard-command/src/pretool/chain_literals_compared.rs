@@ -69,13 +69,26 @@ pub(in super::super) fn compared(
     };
     // The test's own words are read below, and its `[` and `=` are not an
     // assignment, so only the chain ahead of the test is read for steering.
-    if steered(chars, spans, begins) {
+    // An earlier string test is not one either, so it is blanked first.
+    if steered(&earlier_tests_blanked(chars, spans, begins), spans, begins) {
         return false;
     }
     let Some(words) = words(chars, spans, begins, ends) else {
         return false;
     };
-    let mut words = words.as_slice();
+    let at = spans
+        .iter()
+        .position(|span| span.start == substitution.start && span.end == substitution.end);
+    string_test(
+        &words,
+        |word| matches!(word, Word::Value(index) if Some(*index) == at),
+    )
+}
+
+/// Whether `words` is a `[` or `test` that only compares strings, with an
+/// operand `holds` accepts in a slot a value can fill.
+fn string_test(words: &[Word], holds: impl Fn(&Word) -> bool) -> bool {
+    let mut words = words;
     while let Some((Word::Literal(first), rest)) = words.split_first() {
         if matches!(first.as_str(), "if" | "elif" | "then" | "else" | "do" | "!") {
             words = rest;
@@ -91,10 +104,6 @@ pub(in super::super) fn compared(
         Some((Word::Literal(program), rest)) if program == "test" => rest,
         _ => return false,
     };
-    let at = spans
-        .iter()
-        .position(|span| span.start == substitution.start && span.end == substitution.end);
-    let holds = |word: &Word| matches!(word, Word::Value(index) if Some(*index) == at);
     let literal = |word: &Word, wanted: &[&str]| matches!(word, Word::Literal(text) if wanted.contains(&text.as_str()));
     match operands {
         [only] => holds(only),
@@ -108,12 +117,56 @@ pub(in super::super) fn compared(
     }
 }
 
+/// `chars` with each command before `end` that is itself a string test
+/// blanked outside its substitutions, so the steering scan does not read its
+/// `[` and `=` as an assignment. Its substitutions are judged by the caller
+/// as commands of their own.
+fn earlier_tests_blanked(
+    chars: &[char],
+    spans: &[ShellCommandSubstitution],
+    end: usize,
+) -> Vec<char> {
+    let mut blanked = chars.to_vec();
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut begins = 0usize;
+    for at in 0..end.min(chars.len()) {
+        if spans.iter().any(|span| span.start <= at && at < span.end) {
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match chars[at] {
+            '\\' if !single => escaped = true,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            ';' | '&' | '|' | '\n' if !single && !double => {
+                let any = |word: &Word| matches!(word, Word::Value(_)) || operand(word);
+                if words(chars, spans, begins, at).is_some_and(|words| string_test(&words, any)) {
+                    for index in begins..at {
+                        if !spans
+                            .iter()
+                            .any(|span| span.start <= index && index < span.end)
+                        {
+                            blanked[index] = ' ';
+                        }
+                    }
+                }
+                begins = at + 1;
+            }
+            _ => {}
+        }
+    }
+    blanked
+}
+
 /// Whether `word` is read as one string: a substitution, or a literal that
 /// spells no operator the test would read in its place.
 fn operand(word: &Word) -> bool {
     match word {
         Word::Value(_) => true,
-        Word::Literal(text) => !text.is_empty() && !text.starts_with(['-', '!', '(', ')', '=']),
+        Word::Literal(text) => !text.starts_with(['-', '!', '(', ')', '=']),
     }
 }
 
@@ -173,7 +226,7 @@ fn words(
                     && !spans
                         .iter()
                         .any(|span| span.start <= index && index < span.end)
-                    && !inside_quotes(chars, at, index)
+                    && !inside_quotes(chars, spans, at, index)
             })
             .unwrap_or(ends);
         words.push(word(chars, spans, at, end)?);
@@ -182,10 +235,20 @@ fn words(
     Some(words)
 }
 
-/// Whether `index` falls inside a quote opened at or after `from`.
-fn inside_quotes(chars: &[char], from: usize, index: usize) -> bool {
+/// Whether `index` falls inside a quote opened at or after `from`. A
+/// substitution's own text is skipped: its quotes belong to the inner
+/// command, not to the word around it.
+fn inside_quotes(
+    chars: &[char],
+    spans: &[ShellCommandSubstitution],
+    from: usize,
+    index: usize,
+) -> bool {
     let (mut single, mut double) = (false, false);
-    for &character in &chars[from..index] {
+    for (at, &character) in chars.iter().enumerate().take(index).skip(from) {
+        if spans.iter().any(|span| span.start <= at && at < span.end) {
+            continue;
+        }
         match character {
             '\'' if !double => single = !single,
             '"' if !single => double = !double,

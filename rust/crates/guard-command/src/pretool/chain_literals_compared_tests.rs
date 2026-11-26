@@ -50,6 +50,22 @@ fn a_value_compared_as_a_string_takes_the_display_stand_in() {
             "! [ -z \"$(git status --short)\" ] && echo dirty",
             format!("! [ -z \"{v}\" ] && echo dirty"),
         ),
+        (
+            "[ \"$(git branch --show-current)\" = main ] && [ -n \"$(git status --porcelain)\" ] && echo dirty-main",
+            format!("[ \"{v}\" = main ] && [ -n \"{v}\" ] && echo dirty-main"),
+        ),
+        (
+            "[ \"$(git status --porcelain)\" = \"\" ] && echo clean",
+            format!("[ \"{v}\" = \"\" ] && echo clean"),
+        ),
+        (
+            "[ \"\" = \"$(git status --porcelain)\" ] && echo clean",
+            format!("[ \"\" = \"{v}\" ] && echo clean"),
+        ),
+        (
+            "[ -n \"$(git log -1 --format='\"')\" ] && echo quoted",
+            format!("[ -n \"{v}\" ] && echo quoted"),
+        ),
     ] {
         assert_eq!(projected(command), Some(expected), "{command}");
     }
