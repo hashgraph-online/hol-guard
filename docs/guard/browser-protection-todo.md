@@ -150,11 +150,14 @@ place to put its cases.
 - [ ] **BP-T175** Effect level per provider and capability (`observe`, `tighten`, `enforce`) as a
   protected setting through the settings route (preview plus proof) and managed policy. Default
   `tighten`. `enforce` is the existing "Enforce provider blocks". Extends BP-T125.
-- [ ] **BP-T176** `rust/crates/guard-provider-integrations/src/noise.rs`: unverified `caution` is a
+- [x] **BP-T176** `rust/crates/guard-provider-integrations/src/noise.rs`: unverified `caution` is a
   finding only; one provider-caused review per subject per signal version; three per session per
   provider, then findings plus one Browser-area notice; `danger` uncapped; a review Guard raises
   anyway is not counted. Property test: for any signal sequence the number of provider-caused reviews
   never exceeds the caps, and no sequence produces an allow Guard would not have given.
+  - `NoiseLedger::admit` and `noise::apply` are pure; the resident wires them in with BP-T120. The
+    property runs 2000 seeded sequences of 60 signals over three providers without a new
+    dependency.
 - [ ] **BP-T177** Override accounting: after three allow-throughs of the same provider and reason code
   in seven days the card offers "Stop asking for this reason from <provider>". Accepting sets that
   reason code to `observe`. Integrations page lists each with undo. Tests: never automatic, never
@@ -162,6 +165,8 @@ place to put its cases.
 - [ ] **BP-T178** Multi-provider composition: strongest fresh verdict per subject, one review per
   subject, rows sorted by verdict then provider id, three rows plus "N more", placement never orders.
   Vectors and a Playwright spec for the card with four providers.
+  - `compose.rs` holds the vectors (order, "N more", arrival order, stale rows, one review per
+    subject). The Playwright spec waits for the provider rows on the card (BP-T047).
 - [ ] **BP-T179** `fixture_origin.rs` and the loopback provider stub (PRD 8.3).
   `HOL_GUARD_PROVIDER_FIXTURE_ORIGIN`, modeled on `HOL_GUARD_DISCOVERY_FIXTURE_ORIGIN`. One Rust test
   per restriction: loopback only; `provider.fixture-` ids only; the compiler rejects that prefix under

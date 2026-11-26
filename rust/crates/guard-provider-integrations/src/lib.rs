@@ -13,6 +13,8 @@
 //!   lifetime. Anything the manifest does not declare reads `unknown` or is dropped.
 //! - `adapter`: the closed list of reviewed adapters for protocols data cannot express, and the
 //!   bar a new one must meet. Empty in this phase.
+//! - `noise`: the per-session caps that keep a provider from adding prompts (PRD 6.12).
+//! - `compose`: several providers on one subject, one deciding row and the card order.
 //! - `testkit` (feature `testkit`): an in-memory provider for acceptance tests.
 //!
 //! Nothing here reads settings, stores a secret or decides an action. The resident worker is the
@@ -21,6 +23,8 @@
 pub mod adapter;
 pub mod answer;
 pub mod client;
+pub mod compose;
+pub mod noise;
 pub mod parse;
 pub mod render;
 #[cfg(any(test, feature = "testkit"))]
