@@ -320,9 +320,17 @@ def _required_rust(worktree: Path) -> tuple[str, tuple[int, ...]] | None:
     return (declared, version) if version else None
 
 
-def _rustc_version(env: dict[str, str], runner) -> tuple[int, ...] | None:
-    result = runner(["rustc", "--version"], env=env, capture_output=True, text=True, timeout=60, check=False)
-    words = result.stdout.split() if result.returncode == 0 else []
+def _probe(runner, argv: list[str], cwd: Path, env: dict[str, str]) -> str:
+    """Run a toolchain probe where the build runs; rustup resolves overrides per directory."""
+    try:
+        result = runner(argv, cwd=cwd, env=env, capture_output=True, text=True, timeout=60, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return result.stdout if result.returncode == 0 else ""
+
+
+def _rustc_version(env: dict[str, str], runner, cwd: Path) -> tuple[int, ...] | None:
+    words = _probe(runner, ["rustc", "--version"], cwd, env).split()
     return _version_tuple(words[1].split("-")[0]) if len(words) >= 2 else None
 
 
@@ -337,19 +345,18 @@ def _pin_rust_toolchain(worktree: Path, env: dict[str, str], *, runner=subproces
     if required is None:
         return
     declared, minimum = required
-    current = _rustc_version(env, runner)
+    current = _rustc_version(env, runner, worktree)
     if current is not None and current >= minimum:
         return
-    listed = runner(["rustup", "toolchain", "list"], env=env, capture_output=True, text=True, timeout=60, check=False)
     choices = []
-    for line in listed.stdout.splitlines() if listed.returncode == 0 else []:
+    for line in _probe(runner, ["rustup", "toolchain", "list"], worktree, env).splitlines():
         name = line.split()[0] if line.split() else ""
         version = _version_tuple(name.split("-")[0])
         if version is not None and len(name.split("-")[0].split(".")) == 3 and version >= minimum:
             choices.append((version, name))
     for _version, name in sorted(choices):
         pinned = {**env, "RUSTUP_TOOLCHAIN": name}
-        found = _rustc_version(pinned, runner)
+        found = _rustc_version(pinned, runner, worktree)
         if found is not None and found >= minimum:
             env["RUSTUP_TOOLCHAIN"] = name
             return

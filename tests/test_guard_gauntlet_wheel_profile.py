@@ -172,8 +172,10 @@ _TOOLCHAINS = (
 )
 
 
-def _fake_rustup(default: str, toolchains: str = _TOOLCHAINS):
-    def runner(argv: list[str], *, env: dict[str, str], **_kw: Any) -> subprocess.CompletedProcess[str]:
+def _fake_rustup(default: str, toolchains: str = _TOOLCHAINS, *, cwds: list[Path] | None = None):
+    def runner(argv: list[str], *, env: dict[str, str], cwd: Path, **_kw: Any) -> subprocess.CompletedProcess[str]:
+        if cwds is not None:
+            cwds.append(cwd)
         if argv == ["rustup", "toolchain", "list"]:
             return subprocess.CompletedProcess(argv, 0, stdout=toolchains, stderr="")
         assert argv == ["rustc", "--version"]
@@ -193,8 +195,11 @@ def test_an_old_default_rustc_builds_with_the_oldest_installed_toolchain_that_sa
     tmp_path: Path,
 ) -> None:
     env: dict[str, str] = {}
-    qualify_setup._pin_rust_toolchain(_rust_workspace(tmp_path), env, runner=_fake_rustup("1.88.0"))
+    cwds: list[Path] = []
+    qualify_setup._pin_rust_toolchain(_rust_workspace(tmp_path), env, runner=_fake_rustup("1.88.0", cwds=cwds))
     assert env["RUSTUP_TOOLCHAIN"] == "1.89.0-aarch64-apple-darwin"
+    # rustup resolves directory overrides, so every probe runs where the build runs.
+    assert cwds and set(cwds) == {tmp_path}
 
 
 def test_a_default_rustc_new_enough_is_left_alone(tmp_path: Path) -> None:
@@ -224,3 +229,12 @@ def test_the_wheel_build_runs_under_the_pinned_toolchain(tmp_path: Path, monkeyp
     qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run", release_profile=True)
     build_index = next(i for i, argv in enumerate(calls) if argv[:3] == ["nice", "-n", "10"])
     assert envs[build_index]["RUSTUP_TOOLCHAIN"] == "1.89.0-aarch64-apple-darwin"
+
+
+@pytest.mark.parametrize("failure", [FileNotFoundError("rustup"), subprocess.TimeoutExpired("rustc", 60)])
+def test_a_missing_or_hung_rust_tool_reaches_the_install_hint(tmp_path: Path, failure: Exception) -> None:
+    def runner(argv: list[str], **_kw: Any) -> subprocess.CompletedProcess[str]:
+        raise failure
+
+    with pytest.raises(RuntimeError, match=r"requires Rust 1\.89 .* would use no working rustc"):
+        qualify_setup._pin_rust_toolchain(_rust_workspace(tmp_path), {}, runner=runner)
