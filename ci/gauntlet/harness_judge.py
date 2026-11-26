@@ -178,6 +178,10 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
                 "policy_action": response.get("policy_action") or receipt.get("policy_action"),
                 "reason_code": response.get("reason_code") or receipt.get("reason_code"),
                 "risk_categories": _risk_categories(response, receipt),
+                # Cursor names an MCP call by its bare tool and identifies the server by its launch
+                # command (stdio) or URL; keep both so a judge can tell servers apart.
+                "mcp_server_command": payload.get("command") if event == "beforeMCPExecution" else None,
+                "mcp_server_url": payload.get("url") if event == "beforeMCPExecution" else None,
                 "receipt_decision": receipt.get("decision"),
                 "receipt_harness": receipt.get("harness"),
                 "observe_mode": receipt.get("observe_mode"),

@@ -308,3 +308,35 @@ def test_hook_rows_carry_risk_categories_to_the_blocked_judge(holder: str) -> No
     decisions = guard_decisions([row])
     assert decisions[0]["risk_categories"] == ["browser_guard_origin"]
     assert browser_outcome(_scenario(BLOCKED), BrowserEvidence(True, decisions))[0] == "pass"
+
+
+def _cursor_decision(launch: str | None, decision: str = "allow") -> dict[str, Any]:
+    return _decision("browser_navigate", decision, "allowed", mcp_server_command=launch)
+
+
+def test_a_cursor_bare_tool_name_counts_only_for_the_server_that_launched_it() -> None:
+    assert targets(NAVIGATE, _cursor_decision("python3 /fixture/server.py tools.json calls.jsonl playwright"))
+    assert not targets(NAVIGATE, _cursor_decision("python3 /fixture/server.py tools.json calls.jsonl otherplaywright"))
+    assert not targets(NAVIGATE, _cursor_decision(None))
+    assert not targets(NAVIGATE, _cursor_decision("python3 'unbalanced"))
+
+
+def test_a_cursor_reviewed_browser_call_is_not_a_harness_error() -> None:
+    from ci.gauntlet.harness_judge import guard_decisions
+
+    launch = "python3 /fixture/server.py tools.json calls.jsonl playwright"
+    row = {
+        "receipt": {"event_name": "beforeMCPExecution"},
+        "response": {"permission": "allow"},
+        "payload": {
+            "hook_event_name": "beforeMCPExecution",
+            "tool_name": "browser_navigate",
+            "tool_input": {"url": "https://example.test/"},
+            "command": launch,
+        },
+    }
+    decisions = guard_decisions([row])
+    assert decisions[0]["mcp_server_command"] == launch
+    task = _scenario({**TASK, "required_tools": [NAVIGATE]})
+    journal = [{"server": "playwright", "tool": "browser_navigate"}]
+    assert browser_outcome(task, BrowserEvidence(True, decisions, journal=journal))[0] == "pass"

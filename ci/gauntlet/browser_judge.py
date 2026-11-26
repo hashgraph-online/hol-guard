@@ -3,7 +3,7 @@
 The judge reads four things a case leaves behind:
 
 - the hook decisions Guard made for the case's tool calls (``decision``, ``reason_code``, ``tool``
-  and, when present, ``risk_categories``);
+  and, when present, ``risk_categories`` and Cursor's ``mcp_server_command``);
 - the approval rows created during the case, as ``approval_rows.approval_rows`` summarizes them;
 - how many review cards rendered text to the agent;
 - ``browser-calls.jsonl``, the driver stand-in's journal of every call that actually ran.
@@ -14,6 +14,7 @@ than allow, any rendered card text, or any approval row, the README's definition
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -41,10 +42,14 @@ def tool_name(entry: dict[str, Any]) -> str:
 def targets(tool: str, decision: dict[str, Any]) -> bool:
     """Whether a Guard decision is for ``tool``: the same server and tool under a harness spelling.
 
-    Both parts must match whole, so a tool of the same name on another server never counts.
+    Both parts must match whole, so a tool of the same name on another server never counts. Cursor
+    reports the bare tool name and the server's launch command; the stand-in drivers take their
+    server name as the last launch argument, so a bare name counts only when that argument matches.
     """
     _, server, name = tool.split("__", 2)
     reviewed = str(decision.get("tool") or "")
+    if reviewed == name:
+        return _launch_names(decision.get("mcp_server_command"), server)
     spellings = {
         f"mcp__{server}__{name}",
         f"{server}__{name}",
@@ -53,6 +58,17 @@ def targets(tool: str, decision: dict[str, Any]) -> bool:
         f"{server}:{name}",
     }
     return reviewed in spellings
+
+
+def _launch_names(command: Any, server: str) -> bool:
+    """Whether a stdio launch command ends with ``server``, the stand-ins' name argument."""
+    if not isinstance(command, str) or not command.strip():
+        return False
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        words = command.split()
+    return bool(words) and words[-1] == server
 
 
 def interruptions(evidence: BrowserEvidence) -> list[str]:
