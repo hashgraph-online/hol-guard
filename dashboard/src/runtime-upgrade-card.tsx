@@ -65,14 +65,14 @@ export function RuntimeUpgradeCard(props: {
 
   return (
     <section
-      className="mt-5 rounded-xl border border-amber-200 bg-amber-50/60 p-4"
+      className="mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.04] p-4"
       aria-labelledby="runtime-upgrade-title"
       data-testid="runtime-upgrade"
     >
       <div className="flex items-start gap-3">
-        <HiMiniShieldExclamation className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+        <HiMiniShieldExclamation className="mt-0.5 h-5 w-5 shrink-0 text-brand-attention" aria-hidden="true" />
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Why this is paused</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-dark/75">Why this is paused</p>
           <h3 id="runtime-upgrade-title" className="mt-1 text-sm font-semibold text-brand-dark">
             Update Node.js to stop these reviews
           </h3>

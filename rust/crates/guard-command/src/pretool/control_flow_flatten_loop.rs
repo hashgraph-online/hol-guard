@@ -103,14 +103,51 @@ pub(super) fn flatten_wait(rest: &str) -> Option<String> {
     // neither, so a wait written with a redirection keeps its review. A
     // command list written after the loop is not that shape: it runs once,
     // after the wait, and the flat list carries it.
-    let after = trailing_list(tail)?;
+    let (after, following) = match trailing_list(tail) {
+        Some(after) => (after, None),
+        None => (Vec::new(), Some(following_construct(tail)?)),
+    };
     let mut parts: Vec<(String, &'static str)> = Vec::new();
     collect(&mut parts, test, "")?;
     collect(&mut parts, body, "")?;
     if !after.is_empty() {
         collect(&mut parts, after, "")?;
     }
-    assemble(&parts, "")
+    let flat = assemble(&parts, "")?;
+    let Some(following) = following else {
+        return Some(flat);
+    };
+    let out = format!("{flat}; {following}");
+    (out.len() <= super::MAX_FLATTENED_BYTES).then_some(out)
+}
+
+/// The flat list of a construct written after `done`, as in
+/// `until test -e ready; do sleep 5; done; until ! test -e lock; do sleep 5; done`.
+///
+/// A developer waits for one condition and then for the next. The second
+/// construct starts after the first wait is over and runs exactly what it
+/// would run on its own, so its own flat list, written after this one, keeps
+/// every command in the order the shell runs it. Anything the second reading
+/// does not take keeps the whole command's review.
+fn following_construct(tail: &str) -> Option<String> {
+    let list = after_done(tail)?.trim_start_matches([' ', '\t', '\n']);
+    super::flatten(list)
+}
+
+/// The text after the `;` or newline that ends the loop.
+///
+/// A `&&` or `||` reads the loop's own outcome, a single `&` puts the wait
+/// in the background and a single `|` feeds it to a pipe, so none of them is
+/// taken, and a join followed by another join is not a list.
+fn after_done(tail: &str) -> Option<&str> {
+    let trimmed = tail.trim_start_matches([' ', '\t']);
+    let list = trimmed
+        .strip_prefix(';')
+        .or_else(|| trimmed.strip_prefix('\n'))?;
+    (!list
+        .trim_start_matches([' ', '\t', '\n'])
+        .starts_with([';', '&', '|']))
+    .then_some(list)
 }
 
 /// Whether every pass of the loop's test asks the same thing.
@@ -237,9 +274,8 @@ fn trailing_inert_redirect(chars: &[char]) -> Option<usize> {
 /// list keeps every command the shell runs in front of the ordinary proofs,
 /// in the order it runs them.
 ///
-/// Only a plain `;` or newline join is read. A `&&` or `||` reads the loop's
-/// own outcome, a redirection belongs to the loop itself, and `&` puts the
-/// wait in the background, so each keeps its review. The parse ends on a
+/// Only a plain `;` or newline join is read, as [`after_done`] describes. A
+/// redirection belongs to the loop itself, so it keeps its review. The parse ends on a
 /// terminator of this reading's own, which a list that spells `done` itself
 /// would reach early, leaving text behind and keeping its review too.
 fn trailing_list(tail: &str) -> Option<Vec<(String, &'static str)>> {
@@ -247,15 +283,7 @@ fn trailing_list(tail: &str) -> Option<Vec<(String, &'static str)>> {
     if trimmed.trim().is_empty() {
         return Some(Vec::new());
     }
-    let list = trimmed
-        .strip_prefix(';')
-        .or_else(|| trimmed.strip_prefix('\n'))?;
-    if list
-        .trim_start_matches([' ', '\t', '\n'])
-        .starts_with([';', '&', '|'])
-    {
-        return None;
-    }
+    let list = after_done(trimmed)?;
     let text = format!("{list}\ndone");
     let (items, _, after) = body_items(&text, "", &["done"])?;
     (after.is_empty() && !items.is_empty()).then_some(items)

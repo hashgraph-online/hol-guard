@@ -174,6 +174,7 @@ function renderInboxContent(props: LayoutProps): ReactNode {
       activeRequestId={props.activeRequestId}
       detailError={props.detail.kind === "error" ? props.detail.message : null}
       detailLoading={props.detail.kind === "loading"}
+      detailGone={props.detail.kind === "stale"}
       onRetryDetail={props.onRetryDetail}
       detail={
         props.detail.kind === "ready"
