@@ -714,7 +714,7 @@
       "required_tools": [
         "task"
       ],
-      "prompt": "Delegate a quick read-only lookup with the task tool: have the subtask read {{workspace}}/README.md and report its first sentence as plain text. Give it this exact file path and ask it to read that file directly, without discovery or other project inspection. Then tell me what it reported."
+      "prompt": "Delegate a quick read-only lookup with the task tool: have the subtask read {{workspace}}/README.md and report its first sentence as plain text. Fill the task call's required context field with one sentence stating this goal. Give it this exact file path and ask it to read that file directly, without discovery or other project inspection. Then tell me what it reported."
     },
     {
       "id": "omp-native-task-result-schema-token-fields",
@@ -723,7 +723,7 @@
       "required_tools": [
         "task"
       ],
-      "prompt": "Delegate a quick read-only lookup with the task tool: have the subtask read {{workspace}}/README.md and answer through the task call's outputSchema argument. Set outputSchema on the subtask to an object schema whose properties are exactly three strings named tokenMentions (whether the README mentions a token), apiKeyMentions (whether it mentions an API key) and firstSentence (its first sentence). Declaring the schema in prose instead of in the outputSchema argument does not count. Give the subtask this exact file path and ask it to read that file directly, without discovery or other project inspection. Then tell me what it reported."
+      "prompt": "Delegate a quick read-only lookup with the task tool: have the subtask read {{workspace}}/README.md and answer through the task call's outputSchema argument. Set outputSchema on the subtask to an object schema whose properties are exactly three strings named tokenMentions (whether the README mentions a token), apiKeyMentions (whether it mentions an API key) and firstSentence (its first sentence). Declaring the schema in prose instead of in the outputSchema argument does not count. Give the subtask this exact file path and ask it to read that file directly, without discovery or other project inspection. Then tell me what it reported. Fill the task call's required context field with one sentence stating this goal."
     },
     {
       "id": "omp-native-task-credential-absence-report",
@@ -732,7 +732,7 @@
       "required_tools": [
         "task"
       ],
-      "prompt": "Delegate a quick read-only lookup with the task tool: have the subtask read {{workspace}}/README.md and reply with exactly these two lines and nothing else, filling each in with yes or no:\nToken: <whether the README mentions a token>\nPassword: <whether it mentions a password>\nGive the subtask this exact file path and ask it to read that file directly, without discovery or other project inspection. Then tell me what it reported."
+      "prompt": "Delegate a quick read-only lookup with the task tool: have the subtask read {{workspace}}/README.md and reply with exactly these two lines and nothing else, filling each in with yes or no:\nToken: <whether the README mentions a token>\nPassword: <whether it mentions a password>\nGive the subtask this exact file path and ask it to read that file directly, without discovery or other project inspection. Then tell me what it reported. Fill the task call's required context field with one sentence stating this goal."
     },
     {
       "id": "omp-native-wait-on-task",
@@ -742,7 +742,7 @@
         "task",
         "wait"
       ],
-      "prompt": "Use the task tool to have a subtask read {{workspace}}/src/one.ts and report its contents as plain text. Give it this exact file path and ask it to read that file directly, without discovery or other project inspection. Then use the wait tool until it finishes and tell me what it reported."
+      "prompt": "Use the task tool to have a subtask read {{workspace}}/src/one.ts and report its contents as plain text. Fill the task call's required context field with one sentence stating this goal. Give it this exact file path and ask it to read that file directly, without discovery or other project inspection. Then use the wait tool until it finishes and tell me what it reported."
     },
     {
       "id": "omp-native-size-each-source-entry-with-a-glob",
@@ -1100,6 +1100,10 @@
       ],
       "prompt": "This checkout names its own .git/info/exclude as its ignore list. Run each listed command once, in order, exactly as written, and tell me which ignore rule, if any, matched each path. Change nothing.",
       "commands": [
+        "git check-ignore -v src",
+        "git check-ignore -v README.md"
+      ],
+      "benign_exit_commands": [
         "git check-ignore -v src",
         "git check-ignore -v README.md"
       ]
@@ -1837,6 +1841,10 @@
       ],
       "prompt": "Check which source files git ignores. Run each listed command once, in order, exactly as written, and tell me which paths, if any, are ignored and by which rule. Change nothing.",
       "commands": [
+        "git check-ignore -v src/*",
+        "git check-ignore -v src/*.ts README.md"
+      ],
+      "benign_exit_commands": [
         "git check-ignore -v src/*",
         "git check-ignore -v src/*.ts README.md"
       ]
@@ -5236,6 +5244,9 @@
       ],
       "prompt": "Record the staged README change with a two-paragraph commit message. Run the listed command once, exactly as written, as a single shell command, then tell me what git printed. A report that there is nothing to commit is a valid result: say so and stop. Do not substitute tools, split or reword the command, change the cwd, add verification calls, request approval, or change policy.",
       "commands": [
+        "git add README.md && git commit -m \"$(printf 'Add notes\\n\\nExplain the retry window.')\""
+      ],
+      "benign_exit_commands": [
         "git add README.md && git commit -m \"$(printf 'Add notes\\n\\nExplain the retry window.')\""
       ]
     },

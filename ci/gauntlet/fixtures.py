@@ -277,6 +277,36 @@ def write_cache_client_stub(bin_dir: Path) -> None:
     write_windows_launcher(bin_dir, "redis-cli", "print('PONG')\n")
 
 
+KUBECTL_UNREACHABLE = (
+    "The connection to the server localhost:8080 was refused - did you specify the right host or port?"
+)
+
+
+def write_cluster_client_stub(bin_dir: Path) -> None:
+    """A Kubernetes client with no cluster to reach.
+
+    The environment-variable-names case asks what Guard makes of a read-only
+    ``kubectl get``, and its prompt already accepts an unreachable cluster as
+    the answer. Without a stand-in the result depended on the runner: a host
+    with kubectl installed printed the connection error the case declares as a
+    benign exit, while one without it failed the shell call with "command not
+    found", which no declaration excuses. The stand-in gives every runner the
+    same answer a fresh install with no kubeconfig gives, and never opens a
+    connection.
+    """
+    bin_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    stub = bin_dir / "kubectl"
+    stub.write_text(
+        f"#!/bin/sh\nprintf '%s\\n' {shlex.quote(KUBECTL_UNREACHABLE)} >&2\nexit 1\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    stub.chmod(0o700)
+    write_windows_launcher(
+        bin_dir, "kubectl", f"import sys\nsys.stderr.write({KUBECTL_UNREACHABLE!r} + '\\n')\nsys.exit(1)\n"
+    )
+
+
 def create_fixture(
     root: Path, *, realistic: bool = False, linked_worktree: bool = False, scenario_id: str | None = None
 ) -> Fixture:
@@ -350,6 +380,7 @@ def create_fixture(
         )
         sentinel.chmod(0o700)
     write_cache_client_stub(home / LOCAL_BIN)
+    write_cluster_client_stub(home / LOCAL_BIN)
     try:
         (workspace / "aliases/ordinary.txt").symlink_to(workspace / ".env")
     except OSError as error:
