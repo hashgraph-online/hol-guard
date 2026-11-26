@@ -127,10 +127,9 @@ fn render(
             .get("event_name")
             .and_then(Value::as_str)
             .ok_or("native_hook_render_invalid")?;
-        let view = params
-            .get("view")
-            .cloned()
-            .or_else(|| store.and_then(crate::policy_store::PolicySnapshotStore::structured_output_config));
+        let view = params.get("view").cloned().or_else(|| {
+            store.and_then(crate::policy_store::PolicySnapshotStore::structured_output_config)
+        });
         return Ok(cli_payload(CliOutcome::Document(
             crate::hook_direct::pi::outage_overlay(harness, event, view.as_ref()),
         )));

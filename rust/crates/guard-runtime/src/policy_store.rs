@@ -239,10 +239,11 @@ pub(crate) struct PolicySnapshotStore {
 
 impl PolicySnapshotStore {
     pub(crate) fn structured_output_config(&self) -> Option<serde_json::Value> {
-        self.direct_lane
-            .lock()
-            .ok()
-            .and_then(|binding| binding.as_ref().and_then(|binding| binding.structured_output_config.clone()))
+        self.direct_lane.lock().ok().and_then(|binding| {
+            binding
+                .as_ref()
+                .and_then(|binding| binding.structured_output_config.clone())
+        })
     }
     /// The bound blocked-request mode for daemon review rendering.
     pub(crate) fn blocked_request_mode(&self) -> Option<String> {

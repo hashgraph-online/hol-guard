@@ -83,8 +83,14 @@ fn structured_outage_without_python_view_stays_fail_closed() {
     req.cli = Some(json!({"event_name": "PostToolUse"}));
     let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
     let response = &result.payload.expect("payload")["response"];
-    assert_eq!(response["action"], "withhold");
-    assert_eq!(response["reason_code"], "structured_managed_authority_unavailable");
+    assert_eq!(
+        response["structured_content_mediation"]["action"],
+        "withhold"
+    );
+    assert_eq!(
+        response["structured_content_mediation"]["reason_code"],
+        "structured_native_edge_unavailable"
+    );
 }
 
 #[test]
