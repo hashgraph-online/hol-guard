@@ -125,11 +125,22 @@ pub(super) fn safe_du_arguments(arguments: &[String], context: super::PathContex
             // the recursive one. A pattern that matches nothing stays
             // reviewed, because the shell may hand over its literal spelling.
             // Before a `--`, a match named like an option would be read as
-            // one, so such a match keeps the review.
+            // one, so such a match keeps the review. A summary that walks
+            // nothing below its operands prints the names `ls -d` of the same
+            // pattern prints, so a pattern in a directory outside the working
+            // directory, such as `du -sh /srv/builds/run-*`, takes the leaf
+            // glob proof of that listing: each match is screened as `ls`
+            // screens it, and it must match a name now: under `nullglob` an
+            // empty pattern vanishes and `du` sizes the working directory.
+            // `-H` keeps the review, because it follows a matched link to
+            // whatever it names.
             if operand.contains(['*', '?', '[']) {
                 return (index >= options_end
                     || !search::glob_matches_option_word(operand, context))
-                    && search::safe_glob_operand(operand, context, walks_tree)
+                    && (search::safe_glob_operand(operand, context, walks_tree)
+                        || (!walks_tree
+                            && !dereference_arguments
+                            && super::listing_reads::matched_leaf_glob_operand(operand, context)))
                     && search::listable_spelling(operand, context, walks_tree, false);
             }
             let present = if walks_tree {
@@ -420,6 +431,10 @@ pub(super) fn safe_stat_arguments(arguments: &[String], context: super::PathCont
                         context.home_dir,
                         context.cwd,
                     )
+                    // `stat ../next-worktree` before adding a worktree there
+                    // prints only an error, as `ls -ld` of the same name
+                    // does, so a missing name takes the listing rule.
+                    || super::listing_reads::absent_listing_operand(operand, context)
             })
 }
 

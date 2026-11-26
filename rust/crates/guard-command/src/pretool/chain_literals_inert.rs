@@ -54,6 +54,8 @@ pub(super) const TEMPORARY_VALUE: &str = "/hol-guard-substituted/temporary-path"
 pub(super) const DATE_VALUE: &str = "hol-guard-substituted-date";
 
 const MAX_SUBSTITUTIONS: usize = 8;
+/// The most standalone assignments of a substitution read out of one chain.
+const MAX_ASSIGNMENTS: usize = 4;
 const MAX_BODY_CHARS: usize = 128;
 /// The longest heredoc a `cat` substitution may print. A commit message runs
 /// to a few paragraphs; anything longer is not the form this models.
@@ -68,6 +70,35 @@ const DATE_CONVERSIONS: &str = "FHMSTYdjmsuwy";
 /// refuses its text as a command of its own, or a temporary path could be
 /// steered (`TMPDIR`) or climbed out of (`..`).
 pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<String> {
+    project_with(command, &allowed, MAX_ASSIGNMENTS)
+}
+
+/// [`project`], reading up to `budget` standalone assignments of a
+/// substitution out of the chain when the chain does not project as written
+/// (see the `assigned` module).
+fn project_with(command: &str, allowed: &dyn Fn(&str) -> bool, budget: usize) -> Option<String> {
+    if let Some(projected) = project_direct(command, allowed) {
+        return Some(projected);
+    }
+    if budget == 0
+        || command.len() > MAX_COMMAND_CHARS
+        || command
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\t' | '\n'))
+    {
+        return None;
+    }
+    let inlined = assigned::inline_one(command)?;
+    if !allowed(&inlined.judged) {
+        return None;
+    }
+    match substitution_spans(&inlined.text) {
+        Some((spans, _)) if spans.is_empty() => Some(inlined.text),
+        _ => project_with(&inlined.text, allowed, budget - 1),
+    }
+}
+
+fn project_direct(command: &str, allowed: &dyn Fn(&str) -> bool) -> Option<String> {
     if command.len() > MAX_COMMAND_CHARS
         || command
             .chars()
@@ -117,9 +148,10 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         }
     }
     let mut out = String::with_capacity(command.len());
-    // The command as it runs when every Git lookup prints nothing.
-    let mut unfound = String::with_capacity(command.len());
-    let mut looked_up = false;
+    // The command with every word each Git lookup can print: its hash,
+    // nothing (outside a repository), or for a bare `rev-parse` that misses,
+    // its operand.
+    let mut readings = git_value::Readings::default();
     // The projection's shell text, heredoc bodies still blanked.
     let mut shell = String::with_capacity(command.len());
     let mut cursor = 0usize;
@@ -176,7 +208,15 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                             }
                             // A value that is only printed needs no stand-in of its
                             // own shape (`display`).
-                            _ if display::display_slot(&masked, &substitutions, substitution) => {
+                            // So does a value that is only compared as a string
+                            // (`display::compared`).
+                            _ if display::display_slot(&masked, &substitutions, substitution)
+                                || display::compared::compared(
+                                    &masked,
+                                    &substitutions,
+                                    substitution,
+                                ) =>
+                            {
                                 display::DISPLAY_VALUE
                             }
                             _ => return None,
@@ -205,23 +245,26 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
             judged.push(judged_text);
         }
         temporary |= value == TEMPORARY_VALUE;
-        looked_up |= value == git_value::COMMIT_VALUE;
         out.extend(&chars[cursor..substitution.start]);
-        unfound.extend(&chars[cursor..substitution.start]);
+        readings.text(chars[cursor..substitution.start].iter().copied());
         out.push_str(&value);
-        if value != git_value::COMMIT_VALUE {
-            unfound.push_str(&value);
+        if value == git_value::COMMIT_VALUE {
+            let mut printed = vec![value.clone(), String::new()];
+            printed.extend(git_value::echoed_in(&masked, substitution));
+            readings.lookup(printed);
+        } else {
+            readings.literal(&value);
         }
         shell.extend(&masked[cursor..substitution.start]);
         cursor = substitution.end;
     }
     out.extend(&chars[cursor..]);
-    unfound.extend(&chars[cursor..]);
+    readings.text(chars[cursor..].iter().copied());
     shell.extend(&masked[cursor..]);
-    // An empty lookup shifts the words after it, so that command must pass too.
-    if looked_up {
-        judged.push(unfound);
-    }
+    // An empty lookup shifts the words after it, so that command must pass
+    // too; so must the one a bare `rev-parse` that misses prints into, in
+    // every combination with the other lookups.
+    judged.extend(readings.others()?);
     // A substitution the scan did not delimit is still in the text.
     if shell.contains("$(") || shell.contains('`') {
         return None;
@@ -589,6 +632,9 @@ fn date_arguments(arguments: &[&str]) -> bool {
     }
     true
 }
+
+#[path = "chain_literals_assigned.rs"]
+pub(crate) mod assigned;
 
 #[path = "chain_literals_commit_message.rs"]
 mod commit_message;

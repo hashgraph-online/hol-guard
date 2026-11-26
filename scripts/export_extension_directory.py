@@ -249,11 +249,37 @@ def export_directory(root: Path = ROOT) -> dict[str, object]:
     return _export_directory(sources, listing_sources)
 
 
+def _browser_driver_servers(root: Path) -> frozenset[str]:
+    """MCP server names a first-party browser driver profile claims."""
+    parent = checked_path(root / "contributions/browser-drivers")
+    names: set[str] = set()
+    for path in sorted(parent.glob("browser.*.json")):
+        profile = object_value(parse_json(read_bytes(path, limit=MAX_SOURCE_BYTES)))
+        match = object_value(profile.get("match", {}))
+        names.update(str(name) for name in match.get("mcpServerNames", []))
+    return frozenset(names)
+
+
+def _surfaces(entry: dict[str, object], browser_servers: frozenset[str]) -> list[str]:
+    """Mirror the native read model: MCP (plus browser for a driver's server), else terminal."""
+    surfaces: list[str] = []
+    if entry["kind"] == "mcp":
+        surfaces.append("mcp")
+        if str(entry["id"]).removeprefix("mcp.") in browser_servers:
+            surfaces.append("browser")
+    else:
+        surfaces.append("terminal")
+    if entry["protectionModel"] == "package-firewall":
+        surfaces.append("package")
+    return surfaces
+
+
 def _export_directory_v2(
     v1: dict[str, object],
     sources: dict[str, tuple[str, dict[str, object], str]],
     listings: dict[str, tuple[str, dict[str, object], str]],
     command_sources: dict[str, bytes],
+    browser_servers: frozenset[str],
 ) -> dict[str, object]:
     """Project v2 public metadata without changing the v1 claim source binding."""
 
@@ -267,6 +293,7 @@ def _export_directory_v2(
         entry.update(
             {
                 "summary": _summary_for(listing, entry),
+                "surfaces": _surfaces(entry, browser_servers),
                 "contributors": listing.get("contributors", []),
                 "originalContributions": listing.get("originalContributions", []),
                 "upstream": listing.get("upstream", None),
@@ -289,7 +316,13 @@ def _export_directory_v2(
 
 def export_directory_v2(root: Path = ROOT) -> dict[str, object]:
     sources, listing_sources, command_sources = _snapshot(root)
-    return _export_directory_v2(_export_directory(sources, listing_sources), sources, listing_sources, command_sources)
+    return _export_directory_v2(
+        _export_directory(sources, listing_sources),
+        sources,
+        listing_sources,
+        command_sources,
+        _browser_driver_servers(root),
+    )
 
 
 def _render(payload: dict[str, object]) -> str:
@@ -304,7 +337,7 @@ def render_directories(root: Path = ROOT, *, extensions=None) -> dict[Path, str]
 
     sources, listing_sources, command_sources = _snapshot(root)
     v1 = _export_directory(sources, listing_sources, extensions=extensions)
-    v2 = _export_directory_v2(v1, sources, listing_sources, command_sources)
+    v2 = _export_directory_v2(v1, sources, listing_sources, command_sources, _browser_driver_servers(root))
     return {OUTPUT_V1: _render(v1), OUTPUT_V2: _render(v2)}
 
 

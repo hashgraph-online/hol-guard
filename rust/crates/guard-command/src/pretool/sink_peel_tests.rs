@@ -273,3 +273,34 @@ fn an_echo_option_word_is_not_a_report() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// A `|` inside a quoted word is text the program reads, such as a test-title
+/// alternation, so the peel keeps the word and quotes it back whole. A list or
+/// redirect character inside a word still refuses the peel.
+#[cfg(unix)]
+#[test]
+fn a_quoted_alternation_survives_the_peel() {
+    let root = fixture("alternation");
+    let web = root.join("web");
+    let cd = format!("cd {}", web.display());
+    for (title, core) in [
+        ("\"loads|saves\"", "bunx vitest run -t 'loads|saves'"),
+        (
+            "'stores the form|masks the field'",
+            "bunx vitest run -t 'stores the form|masks the field'",
+        ),
+        ("loads\\|saves", "bunx vitest run -t 'loads|saves'"),
+    ] {
+        let command = format!("{cd} && bunx vitest run -t {title}");
+        let (peeled_core, directory, _, _) = peeled(&command, &root).expect(&command);
+        assert_eq!(peeled_core, core, "{command}");
+        assert_eq!(directory, web, "{command}");
+    }
+    for title in ["\"a;b\"", "\"a&b\"", "\"a>b\"", "\"a<b\""] {
+        let command = format!("{cd} && bunx vitest run -t {title}");
+        assert!(
+            peel(&command, root.to_str().unwrap(), None, None, false).is_err(),
+            "{command}"
+        );
+    }
+}

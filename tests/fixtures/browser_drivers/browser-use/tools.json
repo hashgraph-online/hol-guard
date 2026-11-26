@@ -1,0 +1,314 @@
+{
+  "schemaVersion": "guard.browser-driver-tools.v1",
+  "driver": "browser-use",
+  "note": "Tool names and input shapes of the browser-use MCP server 1.x and its 0.x predecessor, written by hand for Gauntlet fixtures. Descriptions are shortened.",
+  "tools": [
+    {
+      "name": "browser_click",
+      "description": "Click an element by index or at coordinates",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "description": "Element index"
+          },
+          "coordinate_x": {
+            "type": "integer",
+            "description": "X coordinate"
+          },
+          "coordinate_y": {
+            "type": "integer",
+            "description": "Y coordinate"
+          },
+          "new_tab": {
+            "type": "boolean",
+            "description": "Open a link in a new tab"
+          }
+        }
+      }
+    },
+    {
+      "name": "browser_close_all",
+      "description": "Close every browser session",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "browser_close_session",
+      "description": "Close one browser session",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "Session to close"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      }
+    },
+    {
+      "name": "browser_close_tab",
+      "description": "Close a tab",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tab_id": {
+            "type": "string",
+            "description": "Tab to close"
+          }
+        },
+        "required": [
+          "tab_id"
+        ]
+      }
+    },
+    {
+      "name": "browser_exec",
+      "description": "Execute Python in the browser session with page and CDP helpers",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Python code to execute"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "browser_extract_content",
+      "description": "Extract content from the page with a natural-language query",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "What to extract"
+          },
+          "extract_links": {
+            "type": "boolean",
+            "description": "Include links"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "browser_feedback",
+      "description": "Send one feedback message to the browser-use team",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Feedback text"
+          },
+          "category": {
+            "type": "string",
+            "description": "Feedback category"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    },
+    {
+      "name": "browser_get_html",
+      "description": "Return the page HTML or a selected part",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string",
+            "description": "CSS selector"
+          }
+        }
+      }
+    },
+    {
+      "name": "browser_get_state",
+      "description": "Return the page state and interactive elements",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "include_screenshot": {
+            "type": "boolean",
+            "description": "Include a screenshot"
+          }
+        }
+      }
+    },
+    {
+      "name": "browser_go_back",
+      "description": "Go back in history",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "browser_list_sessions",
+      "description": "List browser sessions",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "browser_list_tabs",
+      "description": "List open tabs",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "browser_login",
+      "description": "Sign in to the vendor cloud for hosted browsers",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "type": "boolean",
+            "description": "Sign in again"
+          }
+        }
+      }
+    },
+    {
+      "name": "browser_navigate",
+      "description": "Navigate to a URL",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to navigate to"
+          },
+          "new_tab": {
+            "type": "boolean",
+            "description": "Open in a new tab"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "browser_screenshot",
+      "description": "Capture the current page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "full": {
+            "type": "boolean",
+            "description": "Capture the full page"
+          },
+          "full_page": {
+            "type": "boolean",
+            "description": "Capture the full page"
+          },
+          "max_dim": {
+            "type": "integer",
+            "description": "Largest side in pixels"
+          }
+        }
+      }
+    },
+    {
+      "name": "browser_scroll",
+      "description": "Scroll the page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "type": "string",
+            "description": "up or down"
+          }
+        }
+      }
+    },
+    {
+      "name": "browser_switch_tab",
+      "description": "Switch to a tab",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tab_id": {
+            "type": "string",
+            "description": "Tab to switch to"
+          }
+        },
+        "required": [
+          "tab_id"
+        ]
+      }
+    },
+    {
+      "name": "browser_type",
+      "description": "Type text into an element",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "description": "Element index"
+          },
+          "text": {
+            "type": "string",
+            "description": "Text to type"
+          }
+        },
+        "required": [
+          "index",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "retry_with_browser_use_agent",
+      "description": "Run the autonomous browser-use agent on a task",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "Task for the agent"
+          },
+          "max_steps": {
+            "type": "integer",
+            "description": "Step limit"
+          },
+          "model": {
+            "type": "string",
+            "description": "Model"
+          },
+          "allowed_domains": {
+            "type": "array",
+            "description": "Domains the agent may visit"
+          },
+          "use_vision": {
+            "type": "boolean",
+            "description": "Use vision"
+          }
+        },
+        "required": [
+          "task"
+        ]
+      }
+    }
+  ]
+}

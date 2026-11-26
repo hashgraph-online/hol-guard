@@ -337,6 +337,20 @@ pub enum BrowserCardChoiceV1 {
     BlockOnSite,
 }
 
+/// What the native card projection needs beyond the action itself. Typed text is never part of
+/// it: the card shows only the input kind, its length and whether it is masked.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserCardRequestV1 {
+    pub action: BrowserActionV2,
+    /// Display name of the agent that asked, such as "Claude Code".
+    pub agent: String,
+    #[serde(default)]
+    pub first_visit_in_task: bool,
+    #[serde(default)]
+    pub left_granted_site: bool,
+}
+
 /// Native card projection every approval surface renders.
 ///
 /// `choices` always contains `AllowOnce`, `AlwaysAllow` and `Deny` (approval invariant).

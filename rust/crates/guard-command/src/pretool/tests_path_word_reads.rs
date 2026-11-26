@@ -94,7 +94,9 @@ fn an_unproven_path_word_still_takes_review() {
 }
 
 /// A checkout beside the session with one dependency installed through a
-/// content store, the way pnpm and Bun install one.
+/// content store, the way pnpm and Bun install one. The links are Unix
+/// symlinks, so the tests that use it build only there.
+#[cfg(unix)]
 fn package_tree_checkout() -> tempfile::TempDir {
     // Not the private temporary directory: a path below it has its own
     // screens, and the directory it hands out is itself hidden.
@@ -130,6 +132,7 @@ fn package_tree_checkout() -> tempfile::TempDir {
     home
 }
 
+#[cfg(unix)]
 fn allowed_in(home: &std::path::Path, command: &str) -> bool {
     let home = home.canonicalize().expect("home");
     let workspace = home.join("session-workspace");
@@ -138,6 +141,7 @@ fn allowed_in(home: &std::path::Path, command: &str) -> bool {
         .is_ok_and(|decision| decision.minimum_action == "allow")
 }
 
+#[cfg(unix)]
 #[test]
 fn resolving_a_package_manager_shim_needs_no_review() {
     let home = package_tree_checkout();
@@ -157,6 +161,7 @@ fn resolving_a_package_manager_shim_needs_no_review() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn another_hidden_directory_beside_the_package_tree_keeps_its_review() {
     let home = package_tree_checkout();

@@ -30,6 +30,7 @@ mod aibom_vectors_tests;
 #[path = "adapters/detection/antigravity_detect.rs"]
 mod antigravity_detect;
 mod approval;
+mod approval_browser_card;
 mod approval_bulk_eligibility_op;
 mod approval_copy;
 mod approval_extension_coverage;
@@ -99,7 +100,11 @@ mod bounded_hook_bridge_grok_script;
 mod bounded_hook_bridge_hermes;
 mod bounded_hook_bridge_remediation;
 mod bounded_hook_bridge_render;
+mod browser_driver_builder_command;
+mod browser_explain_command;
 mod browser_open;
+mod browser_report_prompt_command;
+pub mod browser_session_store;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
@@ -1487,6 +1492,10 @@ pub fn launch() {
     // Neither the hook nor the error path may panic on a closed stderr: a
     // panic inside the panic hook aborts the process and loses the code.
     std::panic::set_hook(Box::new(runtime_output::panic_hook));
+    // Browser decisions check Guard's own approval center against this home's daemon state.
+    if let Some(guard_home) = runtime_output::failure_guard_home(&arguments) {
+        guard_command::browser_guard_origin::set_process_guard_home(guard_home);
+    }
     if let Err(code) = run() {
         runtime_output::report_launch_failure(&code);
         std::process::exit(2);

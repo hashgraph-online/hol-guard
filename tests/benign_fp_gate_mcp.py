@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ci.gauntlet.approval_rows import CONNECTOR_GROUP_ID, approval_rows
+from ci.gauntlet.approval_rows import CONNECTOR_GROUP_ID, await_rows
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE
 from codex_plugin_scanner.guard.cli.commands_mcp_relay_launch import RELAY_COMMAND, relay_argv
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
@@ -40,6 +40,15 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.benign_fp_gate_browser import (
+    BROWSER_SERVERS,
+    PENDING_SAME_CALL,
+    browser_server_command,
+    start_page,
+    unwired_state,
+    validate_browser_fields,
+    write_browser_servers,
+)
 
 if TYPE_CHECKING:
     from codex_plugin_scanner.guard.hook_review.hook_worker import HookWorker
@@ -50,7 +59,6 @@ READY_SERVER = "echo-ready"
 READY_TOOL = "lookup"
 _SESSION_SECONDS = 30.0
 _WARM_SECONDS = 30.0
-_ROW_SECONDS = 10.0
 _DRAIN_SECONDS = 30.0
 _GATE_DAEMON_SESSION = "benign-gate-relay"
 # The answer to a call the relay could not decide yet (`mcp_relay_authority::NO_DECISION`).
@@ -73,6 +81,8 @@ import sys
 TOOLS = {_TOOLS!r}
 for line in sys.stdin:
     message = json.loads(line)
+    if "id" not in message:
+        continue
     method = message.get("method")
     if method == "initialize":
         result = {{"protocolVersion": "2025-06-18", "capabilities": {{"tools": {{}}}},
@@ -94,14 +104,26 @@ class McpCase:
     tool: str
     arguments: dict[str, object]
     expect: str
+    state: str = "none"
+    page: str | None = None
 
 
 def mcp_cases(document: dict[str, Any]) -> list[McpCase]:
-    """The ``mcp_cases`` of the gate's case document."""
-    return [
-        McpCase(entry["id"], entry["server"], entry["tool"], entry["arguments"], entry["expect"])
-        for entry in document["mcp_cases"]
-    ]
+    """The ``mcp_cases`` of the gate's case document; a browser row's ``state`` and ``page`` must be known."""
+    cases = []
+    for entry in document["mcp_cases"]:
+        case = McpCase(
+            entry["id"],
+            entry["server"],
+            entry["tool"],
+            entry["arguments"],
+            entry["expect"],
+            entry.get("state", "none"),
+            entry.get("page"),
+        )
+        validate_browser_fields(case.case_id, case.server, case.state, case.page)
+        cases.append(case)
+    return cases
 
 
 def server_script(home: Path) -> Path:
@@ -110,13 +132,15 @@ def server_script(home: Path) -> Path:
 
 def server_command(home: Path, server: str) -> list[str]:
     """The command a harness config launches for ``server``; the name in argv keeps each server's identity apart."""
+    if server in BROWSER_SERVERS:
+        return browser_server_command(home, server)
     return [sys.executable, "-u", str(server_script(home)), server]
 
 
 def mcp_config(home: Path, remote_url: str) -> str:
     """Codex ``config.toml`` naming both stdio servers and a remote one."""
     sections = []
-    for server in SERVERS:
+    for server in (*SERVERS, *BROWSER_SERVERS):
         command, *args = server_command(home, server)
         sections.append(f"[mcp_servers.{server}]\ncommand = {json.dumps(command)}\nargs = {json.dumps(args)}\n")
     sections.append(f'[mcp_servers.remote-example]\nurl = "{remote_url}"\n')
@@ -127,6 +151,7 @@ def write_server(home: Path) -> None:
     script = server_script(home)
     script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text(_SERVER, encoding="utf-8")
+    write_browser_servers(home)
 
 
 def _identity(case: McpCase, fixture: BenignFixture) -> McpServerIdentity:
@@ -207,7 +232,17 @@ def allow_ready_server(store: GuardStore, identity: McpServerIdentity) -> None:
 def _messages(case: McpCase) -> list[dict[str, Any]]:
     call = {"name": case.tool, "arguments": case.arguments}
     return [
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"capabilities": {}}},
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "hol-guard-benign-gate", "version": "1.0.0"},
+            },
+        },
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
         {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": call},
     ]
@@ -224,7 +259,7 @@ def _session(
     so a relay that holds stdout open without answering fails the case instead
     of hanging the gate.
     """
-    wanted = {int(message["id"]) for message in messages}
+    wanted = {int(message["id"]) for message in messages if "id" in message}
     responses: dict[int, Any] = {}
     expired = threading.Event()
     with (
@@ -250,6 +285,8 @@ def _session(
             for message in messages:
                 session.stdin.write(json.dumps(message) + "\n")
                 session.stdin.flush()
+                if "id" not in message:
+                    continue
                 for line in session.stdout:
                     answer = json.loads(line)
                     if isinstance(answer.get("id"), int):
@@ -259,7 +296,7 @@ def _session(
                 if message["id"] not in responses:
                     break
             session.stdin.close()
-            session.wait(timeout=_SESSION_SECONDS)
+            exit_status = session.wait(timeout=_SESSION_SECONDS)
         except BaseException:
             session.kill()
             raise
@@ -269,6 +306,8 @@ def _session(
         defers = [line.removeprefix(_DEFER_PREFIX).strip() for line in stderr if line.startswith(_DEFER_PREFIX)]
     if expired.is_set():
         raise TimeoutError(f"the MCP relay session did not finish within {_SESSION_SECONDS:.0f}s")
+    if exit_status != 0:
+        raise RuntimeError(f"the MCP relay exited with status {exit_status}")
     return {key: value for key, value in responses.items() if key in wanted}, defers
 
 
@@ -359,10 +398,7 @@ def drain_report(worker: HookWorker) -> dict[str, object]:
     return {
         "drain": None
         if drain is None
-        else {
-            name: getattr(drain, name, None)
-            for name in ("pages", "records", "failures", "last_failure")
-        },
+        else {name: getattr(drain, name, None) for name in ("pages", "records", "failures", "last_failure")},
         "transport": callable(transport) and transport() is not None,
         "bound": getattr(publisher, "_direct_lane_evidence_bound", None),
         # Which receipts the drain wrote, so a missing review row names its step.
@@ -377,48 +413,88 @@ def replay(
     case: McpCase, fixture: BenignFixture, store: GuardStore
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
     """Run one call through the relay: its answer, the approval rows it queued and the server's identity hash."""
+    unwired = unwired_state(case.state)
+    if unwired is not None:
+        return {"unwired_state": unwired}, [], ""
     provision_native_verifier_key_for_store(store)
     identity = _identity(case, fixture)
     if case.server == READY_SERVER:
         allow_ready_server(store, identity)
     command = _relay_command(case, fixture)
-    known = {str(row.get("request_id")) for row in store.list_approval_requests(status=None, limit=500)}
-    # The first session reports the server's catalog; a call refused while the
-    # resident still records it is sent again in a later session.
+    before = {
+        str(row.get("request_id")): int(row.get("dedupe_count") or 1)
+        for row in store.list_approval_requests(status=None, limit=500)
+        if isinstance(row, dict) and row.get("request_id")
+    }
+    known = set(before)
+    with start_page(fixture.home, case.page):
+        if case.state == PENDING_SAME_CALL:
+            # The same call is made once first and left unanswered, so the measured call is a retry.
+            seed = _decide(command, fixture, case)
+            if "relay_defer" in seed:
+                return seed, [], identity.identity_hash
+            await_rows(store, known, waiting="error" in seed, changed_from=before)
+        response = _decide(command, fixture, case)
+    rows = await_rows(
+        store,
+        known,
+        waiting="error" in response,
+        retried=case.state == PENDING_SAME_CALL,
+        changed_from=before,
+    )
+    return response, rows, identity.identity_hash
+
+
+def _decide(command: list[str], fixture: BenignFixture, case: McpCase) -> dict[str, Any]:
+    """One decided answer to the case's call.
+
+    The first session reports the server's catalog; a call refused while the resident still records
+    it is sent again in a later session.
+    """
     deadline = time.monotonic() + _WARM_SECONDS
     while True:
         responses, defers = _session(command, fixture, _messages(case))
-        response = responses.get(3, {})
+        if 3 not in responses:
+            raise RuntimeError("the MCP relay did not answer tools/call")
+        response = responses[3]
         if not _warming(response) or time.monotonic() > deadline:
             break
         time.sleep(0.25)
     if _warming(response):
         # Name why the relay never decided, so a failing case says more than the refusal.
-        response = {**response, "relay_defer": defers}
-    rows = approval_rows(store, known)
-    # The resident writes a stopped call's review row from its evidence drain,
-    # after the relay has answered, so a refusal waits for that row to land.
-    rows_deadline = time.monotonic() + _ROW_SECONDS
-    while not rows and "error" in response and not _warming(response) and time.monotonic() < rows_deadline:
-        time.sleep(0.1)
-        rows = approval_rows(store, known)
-    return response, rows, identity.identity_hash
+        return {**response, "relay_defer": defers}
+    return response
 
 
 def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, Any]], identity: str) -> str | None:
     """Why a replayed call is not what its case expects, or None when it is."""
     error = response.get("error")
     data = error.get("data", {}) if isinstance(error, dict) else {}
+    if "unwired_state" in response:
+        return str(response["unwired_state"])
     if "relay_defer" in response:
         return f"the relay never decided the call: {response['relay_defer']}"
     if case.expect == "allow":
         if "result" not in response or rows:
             return f"an allowed server was held: {response}"
         return None
+    if case.state == PENDING_SAME_CALL and (len(rows) != 1 or rows[0]["dedupe_count"] < 2):
+        # R-QUIET-1: the retry attaches to the pending row of the first call; it never adds a card.
+        return f"a retried call must attach to its pending row, got {rows}"
     if not isinstance(error, dict):
         return f"the call must not reach the server: {response}"
     is_setup = data.get("guardReasonCode") == RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED
     groups = [CONNECTOR_GROUP_ID.fullmatch(str(row["queue_group_id"])) for row in rows]
+    if case.expect == "block":
+        # A baseline row for a call main answers with a policy block: never forwarded, not held as
+        # setup, and the agent is told not to retry while one per-call review row is still queued.
+        if is_setup or any(groups):
+            return f"expected a policy block, got connector setup: {error} {rows}"
+        if data.get("transportOutcome") != "not-forwarded" or data.get("guardPolicyAction") != "block":
+            return f"expected a Guard policy block, got {error}"
+        if len(rows) != 1 or not rows[0].get("allow_scopes"):
+            return f"expected the block to queue one per-call review row, got {rows}"
+        return None
     if case.expect != "setup":
         if is_setup or any(groups):
             return "a server with an admin decision must not be held as setup"

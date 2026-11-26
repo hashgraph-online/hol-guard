@@ -110,6 +110,9 @@ mod http_reads;
 mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
+pub(crate) use loopback_ports::{
+    conventional_dev_port, daemon_env_port, daemon_state_port, GUARD_DAEMON_DEFAULT_PORT,
+};
 mod omp_tool_commands;
 pub(crate) mod port_probes;
 pub(crate) mod rsync_local;
@@ -158,6 +161,7 @@ pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
 mod git_init_chain;
 pub(crate) mod git_init_target;
+pub(crate) mod git_merge_file_read;
 mod git_message_text;
 pub(crate) mod git_object_reads;
 mod git_read_floor;
@@ -166,6 +170,7 @@ mod git_ref_listings;
 mod git_rev_list;
 mod git_search_text;
 pub(crate) mod git_side_record_reads;
+mod git_signature_helper;
 pub(crate) mod git_stash_reads;
 pub(crate) mod git_submodule_reads;
 pub(crate) mod git_tag_listing;

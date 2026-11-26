@@ -29,9 +29,24 @@ pub(crate) const PACKAGE_ANSWER_INVALID: &str = "native_mcp_proxy_package_answer
 const BLOCK_SOURCE: &str = "policy-block";
 
 /// The `terminal_tool` message: a blocked call, or one whose sandbox this
-/// runtime cannot provide.
-pub(crate) fn terminal_tool_message(tool: &str, server: &str, policy_action: &str) -> String {
+/// runtime cannot provide. An R-SELF block also tells the agent what to do
+/// instead, without naming the approval center's address.
+pub(crate) fn terminal_tool_message(
+    tool: &str,
+    server: &str,
+    policy_action: &str,
+    signals: &[String],
+) -> String {
     if policy_action == "block" {
+        let guard_origin = signals
+            .iter()
+            .any(|signal| signal == guard_command::mcp_tool_signals::GUARD_ORIGIN_SIGNAL);
+        if guard_origin {
+            return format!(
+                "HOL Guard blocked tool call {tool} from {server}. {}",
+                guard_command::mcp_tool_signals::GUARD_ORIGIN_SUMMARY
+            );
+        }
         format!("HOL Guard blocked tool call {tool} from {server}.")
     } else {
         format!(
@@ -285,7 +300,7 @@ pub(crate) fn package_answer(query: &McpPackageAnswerQueryV1) -> Result<Value, &
         McpPackageAnswerKindV1::TerminalTool => {
             let action = terminal_action(query)?;
             Ok(block(
-                terminal_tool_message(tool, server, action),
+                terminal_tool_message(tool, server, action, &query.signals),
                 json!({"approvalRequests": [], "guardPolicyAction": action}),
                 format!("terminal-{action}"),
                 action,

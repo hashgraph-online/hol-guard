@@ -20,7 +20,7 @@
           "tags", "limitations", "documentationUrl", "protectionModel", "trustClass", "claimPolicy",
           "maintainerGithubIds", "sourcePath", "contributionDigest", "executables", "actionClasses", "ruleCount",
           "permissionCount", "toolStates", "summary", "contributors", "originalContributions", "upstream",
-          "listing", "authoringSource"
+          "listing", "authoringSource", "surfaces"
         ],
         "properties": {
           "id": {
@@ -36,8 +36,19 @@
           "kind": {
             "enum": [
               "command",
-              "mcp"
+              "mcp",
+              "browser",
+              "provider"
             ]
+          },
+          "surfaces": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "uniqueItems": true,
+            "items": {
+              "enum": ["terminal", "mcp", "browser", "package", "cloud"]
+            }
           },
           "version": {
             "type": "string",
@@ -59,7 +70,7 @@
             "minLength": 1,
             "maxLength": 140
           },
-          "category": {"enum": ["core-safety", "cloud-infrastructure", "data-resilience", "delivery-remote", "managed-services", "package-supply-chain", "specialized-tools", "other"]},
+          "category": {"enum": ["core-safety", "browser-web", "cloud-infrastructure", "data-resilience", "delivery-remote", "managed-services", "package-supply-chain", "specialized-tools", "other"]},
           "tags": {
             "type": "array",
             "maxItems": 8,

@@ -14,6 +14,10 @@ use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
 
+use crate::browser_first_party_drivers::{
+    first_party_operation_intent, first_party_profile_mode, BROWSERMCP_DRIVER_ID,
+    CHROME_DEVTOOLS_DRIVER_ID, PLAYWRIGHT_DRIVER_ID, PUPPETEER_DRIVER_ID,
+};
 use crate::cloud_audit_sync::{urlparse_path_end, urlsplit, urlunsplit, UrlSplit};
 use crate::local_supply_chain::{unquote_plus, urlencode};
 use crate::target_identities::py_str;
@@ -25,6 +29,8 @@ struct Patterns {
     package: RegexSet,
     chrome: Regex,
     playwright: Regex,
+    puppeteer: Regex,
+    browsermcp: Regex,
     other_browser: Regex,
     navigation: RegexSet,
     inspect: RegexSet,
@@ -53,6 +59,8 @@ fn patterns() -> &'static Patterns {
             package: set(BROWSER_PACKAGE_PATTERNS),
             chrome: regex(r"chrome[\-_\s\x{001c}-\x{001f}]?devtools"),
             playwright: regex(r"@playwright/mcp|playwright"),
+            puppeteer: regex(r"puppeteer"),
+            browsermcp: regex(r"browsermcp"),
             other_browser: regex(r"browser[\-_\s\x{001c}-\x{001f}]?(tools|mcp)|puppeteer"),
             navigation: set(NAVIGATION_PATTERNS),
             inspect: set(INSPECT_PATTERNS),
@@ -156,40 +164,21 @@ pub fn classify_operation(operation: &str, server_name: &str) -> Option<BrowserI
     let matchers = patterns();
     let chrome = matchers.chrome.is_match(&server);
     let playwright = matchers.playwright.is_match(&server);
-    let categories = [Navigation, Inspect, Interact, Transfer, Privileged];
-    if chrome {
-        for (table, intent) in [
-            CHROME_DEVTOOLS_NAVIGATION,
-            CHROME_DEVTOOLS_INSPECT,
-            CHROME_DEVTOOLS_INTERACT,
-            CHROME_DEVTOOLS_TRANSFER,
-            CHROME_DEVTOOLS_PRIVILEGED,
-        ]
-        .into_iter()
-        .zip(categories)
-        {
-            if table.binary_search(&operation.as_str()).is_ok() {
+    let puppeteer = matchers.puppeteer.is_match(&server);
+    let browsermcp = matchers.browsermcp.is_match(&server);
+    for (claimed, driver_id) in [
+        (chrome, CHROME_DEVTOOLS_DRIVER_ID),
+        (playwright, PLAYWRIGHT_DRIVER_ID),
+        (puppeteer, PUPPETEER_DRIVER_ID),
+        (browsermcp, BROWSERMCP_DRIVER_ID),
+    ] {
+        if claimed {
+            if let Some(intent) = first_party_operation_intent(driver_id, &operation) {
                 return Some(intent);
             }
         }
     }
-    if playwright {
-        for (table, intent) in [
-            PLAYWRIGHT_NAVIGATION,
-            PLAYWRIGHT_INSPECT,
-            PLAYWRIGHT_INTERACT,
-            PLAYWRIGHT_TRANSFER,
-            PLAYWRIGHT_PRIVILEGED,
-        ]
-        .into_iter()
-        .zip(categories)
-        {
-            if table.binary_search(&operation.as_str()).is_ok() {
-                return Some(intent);
-            }
-        }
-    }
-    if chrome || playwright || matchers.other_browser.is_match(&server) {
+    if chrome || playwright || puppeteer || browsermcp || matchers.other_browser.is_match(&server) {
         let operation = regex_text(&operation);
         for (expressions, intent) in [
             (&matchers.navigation, Navigation),
@@ -427,35 +416,17 @@ fn redacted_url(parts: &UrlSplit) -> String {
 }
 
 fn profile_mode(metadata: &Map<String, Value>) -> BrowserProfileModeV1 {
-    use BrowserProfileModeV1::*;
-    let identity_args = metadata
-        .get("mcp_server_identity")
-        .and_then(Value::as_object)
-        .and_then(|identity| identity.get("args"))
-        .and_then(Value::as_array);
-    let direct_args = metadata.get("args").and_then(Value::as_array);
-    let server_args = metadata.get("server_args").and_then(Value::as_array);
-    let flags = |prefixes: &[&str]| {
-        [identity_args, direct_args, server_args]
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter_map(Value::as_str)
-            .any(|arg| prefixes.iter().any(|prefix| arg.starts_with(prefix)))
-    };
-    if flags(ISOLATED_FLAGS) {
-        return Isolated;
-    }
-    if flags(REMOTE_DEBUG_FLAGS) {
-        return RemoteDebugging;
-    }
-    if flags(PROFILE_DIR_FLAGS) {
-        return Dedicated;
-    }
-    if flags(&["--shared", "--no-isolated"]) {
-        return Shared;
-    }
-    Unknown
+    first_party_profile_mode(crate::browser_launch_args::launch_args(metadata))
+}
+
+/// The native sensitive-surface screens for one browser call. Driver profile projection unions
+/// these flags into every action, so a profile can never hide a surface the screens see.
+pub fn browser_sensitive_surfaces(
+    operation: &str,
+    arguments: &Map<String, Value>,
+    metadata: &Map<String, Value>,
+) -> Vec<BrowserSensitiveSurfaceV1> {
+    sensitive_surfaces(operation, &ArgumentValues::Object(arguments), metadata)
 }
 
 fn sensitive_surfaces(
@@ -555,6 +526,14 @@ fn visit_sensitive_surfaces(
         {
             add(surface);
         }
+    }
+    // A launch option counts only when the call supplies it under its own name: a description
+    // or a schema that mentions one does not relaunch the browser.
+    if keys
+        .iter()
+        .any(|key| SENSITIVE_LAUNCH_PATTERNS.contains(&key.as_str()))
+    {
+        add(Cdp);
     }
     if schema_keys.iter().any(|key| {
         SENSITIVE_PASSWORD_PATTERNS
@@ -776,8 +755,17 @@ pub fn evaluate_browser_mcp(
         } => BrowserMcpResultV1::Normalize {
             intent: normalize(artifact, arguments)?.map(Box::new),
         },
-        BrowserMcpRequestV1::Display { intent, arguments } => BrowserMcpResultV1::Display {
+        BrowserMcpRequestV1::Display {
+            intent,
+            arguments,
+            card,
+        } => BrowserMcpResultV1::Display {
             target: display(intent, arguments)?,
+            card: card
+                .as_deref()
+                .map(crate::browser_card::browser_card)
+                .transpose()?
+                .map(Box::new),
         },
     })
 }
@@ -787,6 +775,26 @@ pub(crate) struct BrowserRiskFacts {
     pub external_domain: bool,
     pub shared_profile: bool,
     pub sensitive_surface: bool,
+    /// The action targets Guard's own approval center (R-SELF).
+    pub guard_origin: bool,
+    /// Where the action lands, when Guard knows: its own URL argument, else the reported page for
+    /// an action on that page. A history step or a tab switch with no URL leaves the reported
+    /// page, so its destination is unknown.
+    pub destination: Option<String>,
+    pub profile: BrowserProfileModeV1,
+    /// The server's launch arguments name a remote-debugging or shared-profile flag.
+    pub debugging_or_shared_launch: bool,
+}
+
+/// Whether the page the driver reports is where this action lands. Inspection and interaction act
+/// on it; of the navigations, only a reload or a wait stays on it.
+fn current_page_is_destination(intent: &BrowserIntentV1, operation: &str) -> bool {
+    if !matches!(intent, BrowserIntentV1::Navigation) {
+        return true;
+    }
+    let name = operation.to_ascii_lowercase();
+    let name = name.strip_prefix("browser_").unwrap_or(&name);
+    name.starts_with("reload") || name.starts_with("wait_for")
 }
 
 pub(crate) fn browser_risk_facts(
@@ -810,28 +818,50 @@ pub(crate) fn browser_risk_facts(
         }
         _ => ArgumentValues::Parsed(Map::new()),
     };
-    let target = target_url(&values)
-        .or_else(|| optional_str(artifact.metadata.get("browser_current_page_url")));
-    let external_domain = target
-        .and_then(|target| urlsplit(target).ok())
-        .is_some_and(|parts| {
-            hostname(&parts).is_some_and(|domain| {
-                !domain.is_empty()
-                    && !domain.eq_ignore_ascii_case("localhost")
-                    && !matches!(domain, "127.0.0.1" | "::1")
+    let argument_target = target_url(&values);
+    let current_page = optional_str(artifact.metadata.get("browser_current_page_url"));
+    let target = argument_target.or(current_page);
+    let destination = argument_target
+        .or_else(|| current_page.filter(|_| current_page_is_destination(&intent, operation)));
+    let external_domain = target.is_some_and(|target| {
+        !crate::browser_guard_origin::loopback_port(target).is_some_and(|(loopback, _)| loopback)
+            && urlsplit(target).ok().is_some_and(|parts| {
+                hostname(&parts).is_some_and(|domain| {
+                    !domain.is_empty()
+                        && !domain.eq_ignore_ascii_case("localhost")
+                        && !matches!(domain, "127.0.0.1" | "::1")
+                })
             })
-        });
+    });
+    let guard_origin = [
+        target,
+        optional_str(artifact.metadata.get("browser_current_page_url")),
+    ]
+    .into_iter()
+    .flatten()
+    .any(crate::browser_guard_origin::is_guard_origin);
     let mut sensitive_surface = false;
     visit_sensitive_surfaces(operation, &values, &artifact.metadata, |_| {
         sensitive_surface = true
     });
+    let profile = profile_mode(&artifact.metadata);
     Some(BrowserRiskFacts {
         intent,
         external_domain,
         shared_profile: matches!(
-            profile_mode(&artifact.metadata),
+            profile,
             BrowserProfileModeV1::Shared | BrowserProfileModeV1::RemoteDebugging
         ),
         sensitive_surface,
+        guard_origin,
+        destination: destination.map(str::to_owned),
+        profile,
+        debugging_or_shared_launch: crate::browser_launch_args::debugging_or_shared_launch(
+            crate::browser_launch_args::launch_args(&artifact.metadata),
+        ),
     })
 }
+
+#[cfg(test)]
+#[path = "browser_mcp_intent_driver_tests.rs"]
+mod driver_tests;

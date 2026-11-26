@@ -165,3 +165,71 @@ fn a_credential_store_or_key_name_the_markers_miss_is_refused() {
         );
     }
 }
+
+/// A Windows harness reports its working directory as a drive path. A
+/// relative data-file setting names a location inside that folder exactly
+/// as it does below a Unix one, so it is projected away the same way, and
+/// the same climbs and key stores keep the command unprojected.
+#[test]
+fn a_workspace_path_setting_below_a_windows_drive_folder_is_projected_away() {
+    for cwd in [
+        r"C:\work\site",
+        r"C:\work\site\",
+        "C:/work/site",
+        r"d:\work\site",
+    ] {
+        let context = PathContext {
+            cwd: Some(cwd),
+            ..PathContext::default()
+        };
+        for (command, expected) in [
+            ("REPORT_LEDGER_PATH=out/ledger.jsonl ls -la .", "ls -la ."),
+            ("REPORT_SUMMARY_PATH=build/summary.json ls", "ls"),
+            ("DATA_DIR=./data ls", "ls"),
+        ] {
+            assert_eq!(
+                project(command, context).as_deref(),
+                Some(expected),
+                "{cwd}: {command}"
+            );
+        }
+        for command in [
+            "OUT_DIR=../sibling/out ls -la .",
+            "OUT_DIR=build/../../sibling ls",
+            "DATA_DIR=.aws/credentials ls",
+            "DATA_DIR=vendor/.ssh/id_rsa ls",
+            "DATA_DIR=vendor/.env ls",
+            // A `/`-rooted value is not below a drive folder.
+            "OUT_DIR=/work/site/build ls",
+            "cd build && OUT_DIR=out/report ls",
+        ] {
+            assert_eq!(project(command, context), None, "{cwd}: {command}");
+        }
+    }
+}
+
+/// A Windows working directory that names no single folder, or a folder
+/// whose own spelling is a key store, measures nothing.
+#[test]
+fn a_windows_working_directory_without_a_fixed_folder_measures_nothing() {
+    for cwd in [
+        r"C:\",
+        "C:/",
+        r"C:work\site",
+        r"\\server\share\site",
+        r"\\?\C:\work\site",
+        r"C:\\work\site",
+        r"C:\work\site:data",
+        r"C:\Users\dev\.ssh",
+    ] {
+        let context = PathContext {
+            cwd: Some(cwd),
+            ..PathContext::default()
+        };
+        assert_eq!(
+            project("REPORT_LEDGER_PATH=out/ledger.jsonl ls -la .", context),
+            None,
+            "{cwd}"
+        );
+    }
+}

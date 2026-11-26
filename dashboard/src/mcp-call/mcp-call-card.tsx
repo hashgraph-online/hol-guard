@@ -4,6 +4,7 @@ import { LoggedActionPanel } from "../logged-action-panel";
 import { plainMcpReason } from "./explain-mcp-call";
 import type { McpCallExplanation, McpCodeBlock, McpFact } from "./mcp-call-types";
 import { McpAppMark } from "./mcp-app-mark";
+import { BrowserReportPrompt } from "./browser-report-prompt";
 import { actingApp, mcpMarkName } from "./mcp-brand";
 import { ConsequenceNote, EffectPill, FactList, StepRow } from "./mcp-call-parts";
 
@@ -161,6 +162,7 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
           {explanation.truncated ? " Long text is shown shortened here." : ""}
         </p>
       </div>
+      {item.browser_card ? <BrowserReportPrompt requestId={item.request_id} /> : null}
     </section>
   );
 }

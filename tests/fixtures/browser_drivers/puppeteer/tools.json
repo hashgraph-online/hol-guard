@@ -1,0 +1,157 @@
+{
+  "schemaVersion": "guard.browser-driver-tools.v1",
+  "driver": "puppeteer",
+  "note": "Tool names and input shapes of the Puppeteer MCP reference servers, written by hand for Gauntlet fixtures. Descriptions are shortened.",
+  "tools": [
+    {
+      "name": "puppeteer_navigate",
+      "description": "Navigate to a URL",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to navigate to"
+          },
+          "launchOptions": {
+            "type": "object",
+            "description": "Browser launch options; a change relaunches the browser"
+          },
+          "allowDangerous": {
+            "type": "boolean",
+            "description": "Allow launch options that reduce security"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_screenshot",
+      "description": "Take a screenshot of the current page or an element",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "selector": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "encoded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_click",
+      "description": "Click an element on the page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_fill",
+      "description": "Fill out an input field",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_select",
+      "description": "Select an element on the page with a select tag",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector",
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_hover",
+      "description": "Hover over an element on the page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_evaluate",
+      "description": "Execute JavaScript in the browser console",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "script": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "script"
+        ]
+      }
+    },
+    {
+      "name": "puppeteer_connect_active_tab",
+      "description": "Connect to an existing browser tab with remote debugging enabled",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "targetUrl": {
+            "type": "string"
+          },
+          "debugPort": {
+            "type": "number"
+          }
+        },
+        "required": []
+      }
+    }
+  ]
+}

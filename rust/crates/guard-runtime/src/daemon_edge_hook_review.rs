@@ -41,9 +41,10 @@ mod managed;
 mod readiness;
 use envelopes::{
     capacity_reason, envelope, fail_safe, policy_wait_outlived_deadline, prepare_refusal, refusal,
+    startup_reason,
 };
 #[cfg(test)]
-use envelopes::{event_kind, fill, ENVELOPES};
+use envelopes::{event_kind, fill, ENVELOPES, STARTING_REASON};
 
 /// `availability_harness_response`'s reason for a hook the worker never reviewed.
 const WORKER_UNAVAILABLE_REASON: &str =
@@ -313,7 +314,13 @@ impl Hook<'_> {
             .to_lowercase()
             .replace('_', "-");
         let reply_event = reply_event(&payload);
-        let fail = |reason: &str, code: &str| fail_safe(&reply_harness, &reply_event, reason, code);
+        // A start in progress names itself on every refusal that reached no
+        // verdict, so the user retries instead of repairing a healthy daemon.
+        let starting = self.reads.starting();
+        let fail = |reason: &str, code: &str| {
+            let reason = startup_reason(starting, reason, code);
+            fail_safe(&reply_harness, &reply_event, reason, code)
+        };
         let unavailable = || fail(WORKER_UNAVAILABLE_REASON, WORKER_UNAVAILABLE_CODE);
 
         // The daemon's direct lane (`direct_hook`) already asked the resident
@@ -448,7 +455,7 @@ impl Hook<'_> {
                     code,
                 );
             }
-            return prepare_refusal(&reply_harness, &reply_event, refused)
+            return prepare_refusal(&reply_harness, &reply_event, refused, &payload, starting)
                 .unwrap_or_else(unavailable);
         }
         if let Some(answer) = self.lifecycle(&reply_harness, &event, &payload, expires) {

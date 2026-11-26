@@ -40,6 +40,8 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 SCHEMA = "hol.guard.upstream-drift.v1"
 _GITHUB_PIN = re.compile(r"^https://github\.com/([\w.-]+)/([\w.-]+)/(?:tree|blob)/([0-9a-f]{40})(?:/|$)")
 _NPM_PIN = re.compile(r"^https://www\.npmjs\.com/package/((?:@[\w.-]+/)?[\w.-]+)/v/([\w.+-]+)$")
+FIRST_PARTY_DRIVERS = "rust/crates/guard-command/src/browser_first_party_drivers.rs"
+_BUNDLED_PROFILE = re.compile(r'include_str!\(\s*"(?:\.\./)*(contributions/browser-drivers/[\w.-]+\.json)"\s*\)')
 _DISCOVERY_URL = "https://www.googleapis.com/discovery/v1/apis/{name}/{version}/rest"
 _DISCOVERY_SCHEMA = "hol.guard.upstream-discovery-pins.v1"
 _TIMEOUT_SECONDS = 20
@@ -91,6 +93,30 @@ def pins(repository: Path) -> list[Pin]:
             elif match := _NPM_PIN.match(url):
                 package, version = match.groups()
                 found.append(Pin(extension["extension_id"], "npm", package, version, source))
+    return found
+
+
+def browser_driver_pins(repository: Path) -> list[Pin]:
+    """Return the npm release each first-party browser driver profile was reviewed against.
+
+    A first-party profile with no ``referenceVersion`` or no package is returned with
+    kind ``unpinned`` so the report names it instead of skipping it.
+
+    The native runtime makes a profile first-party only by bundling it, so the list comes from
+    the ``include_str!`` paths in the bundle module, not from the manifest's ``verified`` flag.
+    """
+    bundle = repository / FIRST_PARTY_DRIVERS
+    if not bundle.is_file():
+        return []
+    found = []
+    for source in sorted(set(_BUNDLED_PROFILE.findall(bundle.read_text(encoding="utf-8")))):
+        profile = json.loads((repository / source).read_text(encoding="utf-8"))
+        packages = (profile.get("match") or {}).get("packages") or ()
+        version = profile.get("referenceVersion")
+        if packages and isinstance(version, str) and version:
+            found.append(Pin(profile["id"], "npm", packages[0], version, source))
+        else:
+            found.append(Pin(profile["id"], "unpinned", packages[0] if packages else profile["id"], "none", source))
     return found
 
 
@@ -265,8 +291,13 @@ def _discovery(pin: Pin, fetch: Fetch) -> tuple[str, str | None, str]:
     return "drifted", revision, "changed: " + ", ".join(changed)
 
 
+def _unpinned(pin: Pin, fetch: Fetch) -> tuple[str, str | None, str]:
+    return "unpinned", None, "the profile records no referenceVersion"
+
+
 _CHECKS: dict[str, Callable[[Pin, Fetch], tuple[str, str | None, str]]] = {
     "github": _github,
+    "unpinned": _unpinned,
     "npm": _npm,
     "discovery": _discovery,
 }
@@ -312,8 +343,15 @@ def summary(findings: list[Finding]) -> str:
             f"| `{item.current or '?'}` | {item.status}: {item.detail} | {proofs} |"
         )
     lines.append("")
-    if any(item.pin.kind != "discovery" for item in stale):
+    browser = [item for item in stale if item.pin.source.startswith("contributions/browser-drivers/")]
+    if any(item.pin.kind != "discovery" and item not in browser for item in stale):
         lines.append("Review the upstream change, then update the command source pin and rerun the listed proofs.")
+    if browser:
+        lines.append(
+            "For a browser driver profile, compare the release's tool list with the profile's `tools`, "
+            "map each new tool to a verb, then set `referenceVersion` to the reviewed release. "
+            "A tool the profile does not list stays an unclassified review until then."
+        )
     if any(item.pin.kind == "discovery" for item in stale):
         lines.append(
             "For a Discovery change, review the listed methods, resources and schemas, then run "
@@ -392,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"re-pinned {path.relative_to(args.repository).as_posix()}")
         return 0
     findings = check(
-        pins(args.repository) + discovery_pins(args.repository),
+        pins(args.repository) + discovery_pins(args.repository) + browser_driver_pins(args.repository),
         http_json,
         pack_members(args.repository),
         gauntlet_scenarios(args.repository),

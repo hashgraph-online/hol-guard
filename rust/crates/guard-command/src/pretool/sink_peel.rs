@@ -36,6 +36,17 @@ const PRESERVE_UNQUOTED_BACKSLASH: bool = cfg!(windows);
 /// sandbox, not to a shell, so a redirection or list operator inside a word
 /// would be passed through as text rather than obeyed.
 pub(in crate::pretool) const ARGUMENT_REJECT: &str = "<>|&;";
+/// [`ARGUMENT_REJECT`] for the words of a peeled core. The lexer ends a word
+/// at every `|` the shell would act on, so a `|` still inside one was quoted
+/// or escaped and reaches the program as text, as in the title alternation of
+/// `vitest run -t "loads|saves"`. The core keeps that text: `shell_quote`
+/// quotes such a word back whole. Windows keeps the whole screen: its quoting
+/// is not POSIX single quotes, so a rejoined `|` is not shown to survive there.
+pub(in crate::pretool) const CORE_ARGUMENT_REJECT: &str = if cfg!(windows) {
+    ARGUMENT_REJECT
+} else {
+    "<>&;"
+};
 /// The quiet `cd` suffix the peel resolves itself instead of the shell.
 const QUIET_SUFFIX: &str = "2>/dev/null";
 /// The longest label a final `; echo "<label>$?"` may carry.
@@ -295,7 +306,7 @@ pub(super) fn peel(
             || (Some(index) != program
                 && value
                     .chars()
-                    .any(|character| ARGUMENT_REJECT.contains(character)))
+                    .any(|character| CORE_ARGUMENT_REJECT.contains(character)))
     });
     if !exact || tokens.is_empty() || rejected {
         return Err("unsupported wrapper shape");

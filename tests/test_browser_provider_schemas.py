@@ -275,9 +275,11 @@ def test_provider_schema_rejects(edit) -> None:
     assert not PROVIDER.is_valid(_mutated(PROVIDER_EXAMPLE, edit))
 
 
-def test_provider_icon_accepts_react_icon_names_and_none() -> None:
-    for icon in ("FiShield", "none"):
+def test_provider_icon_accepts_only_the_closed_icon_names_and_none() -> None:
+    for icon in ("HiMiniGlobeAlt", "HiMiniCloud", "none"):
         assert PROVIDER.is_valid(_mutated(PROVIDER_EXAMPLE, lambda d, icon=icon: d.update(icon=icon)))
+    for icon in ("FiShield", "NotARealIconComponent", "https://exampleshield.example/icon.png"):
+        assert not PROVIDER.is_valid(_mutated(PROVIDER_EXAMPLE, lambda d, icon=icon: d.update(icon=icon)))
 
 
 def test_provider_accepts_root_and_plain_paths_and_urls() -> None:

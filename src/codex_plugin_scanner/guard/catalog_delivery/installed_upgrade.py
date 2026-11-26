@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import cast
 
 from ..runtime.extension_control_authority import AuthorityPhase, layers_to_json
@@ -10,6 +13,32 @@ from ..runtime.extension_control_proof import ExtensionControlMutation
 from ..runtime.generated_command_catalog import GeneratedCommandCatalog
 from . import activation_store, active_security, lifecycle
 from .cache_io import Lease
+
+# Who hears the migration's own steps. Only the daemon's worker host sets it,
+# for its first attempt: the daemon timestamps each step in its lifecycle
+# journal, so a slow startup names the step that spent the time.
+_STEP_REPORTER: ContextVar[Callable[[str], None] | None] = ContextVar(
+    "installed_authority_migration_step_reporter", default=None
+)
+
+
+@contextmanager
+def reporting_migration_steps(report: Callable[[str], None] | None) -> Generator[None]:
+    """Send each ``report_migration_step`` inside this block to ``report``."""
+
+    token = _STEP_REPORTER.set(report)
+    try:
+        yield
+    finally:
+        _STEP_REPORTER.reset(token)
+
+
+def report_migration_step(step: str) -> None:
+    """Tell the listening caller, if any, that a migration step finished."""
+
+    report = _STEP_REPORTER.get()
+    if report is not None:
+        report(step)
 
 
 @lifecycle.one_runtime
@@ -24,7 +53,9 @@ def migrate_active(store, installed):
             previous.engine == installed.engine and anchor is not None and anchor.phase is AuthorityPhase.COMMITTED
         )
     if current:
+        report_migration_step("authority_current")
         active_security.reconcile(store)
+        report_migration_step("pack_security_reconciled")
         return
     # Finish an anchored replacement before preparing another one. A shared
     # read cannot resume the SQL/anchor journal after an interrupted startup.
@@ -44,11 +75,13 @@ def migrate_active(store, installed):
             previous.metadata.catalog_digest,
             migration_registry=GeneratedCommandCatalog.from_prepared_packs(previous),
         )
+    report_migration_step("authority_recovered")
     previous = activation_store.read(store)
     if previous is None:
         raise ValueError("installed command pack activation missing after recovery")
     if previous.engine == installed.engine:
         active_security.reconcile(store)
+        report_migration_step("pack_security_reconciled")
         return
     registry = GeneratedCommandCatalog.from_prepared_packs(previous)
     local = store.read_extension_control_authority_for_registry(
@@ -70,6 +103,7 @@ def migrate_active(store, installed):
     )
     if candidate is None:
         raise ValueError("installed command pack upgrade candidate missing")
+    report_migration_step("candidate_prepared")
     draft = candidate.draft
     try:
         evidence = {
@@ -113,6 +147,8 @@ def migrate_active(store, installed):
                 installed_upgrade=evidence,
                 current_manifest=store._catalog_target_manifest(registry),
             )
+        report_migration_step("catalog_migrated")
         active_security.reconcile(store)
+        report_migration_step("pack_security_reconciled")
     finally:
         cast(Lease, draft._cache_lease).close()

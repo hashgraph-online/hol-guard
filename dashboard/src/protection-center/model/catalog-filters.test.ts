@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { protectionModuleFixture } from "../fixtures/protection-fixtures";
 import {
+  availableCatalogKinds,
   CATALOG_KIND_FILTERS,
   CATALOG_TRUST_FILTERS,
   catalogFilterChipAriaLabel,
@@ -68,7 +69,7 @@ assert.equal(catalogTrustLabel("external"), "External");
 assert.equal(catalogKindLabel("commands"), "Commands");
 assert.equal(catalogKindLabel("mcp"), "MCP");
 assert.deepEqual(CATALOG_TRUST_FILTERS, ["first-party", "trusted-library", "external"]);
-assert.deepEqual(CATALOG_KIND_FILTERS, ["commands", "mcp"]);
+assert.deepEqual(CATALOG_KIND_FILTERS, ["commands", "mcp", "browser"]);
 
 assert.deepEqual(toggleCatalogFilterValue([], "external"), ["external"]);
 assert.deepEqual(toggleCatalogFilterValue(["external"], "external"), []);
@@ -155,3 +156,22 @@ const futureSurface = protectionModuleFixture({
 assert.equal(catalogItemMatchesFilters(futureSurface, { ...EMPTY_CATALOG_FILTERS, kinds: ["commands"] }), false, "unknown surfaces are not listed as commands");
 assert.equal(catalogItemMatchesFilters(futureSurface, { ...EMPTY_CATALOG_FILTERS, kinds: ["mcp"] }), false, "unknown surfaces are not listed as MCP");
 assert.equal(catalogItemMatchesFilters(futureSurface, EMPTY_CATALOG_FILTERS), true, "unknown surfaces stay in the unfiltered inventory");
+
+const playwrightMcp = protectionModuleFixture({
+  extension_id: "command.mcp-playwright",
+  name: "Playwright MCP",
+  trust_class: "first-party",
+  surface: "mcp",
+  surfaces: ["mcp", "browser"],
+});
+const browserFilter = { ...EMPTY_CATALOG_FILTERS, kinds: ["browser" as const] };
+assert.equal(catalogKindLabel("browser"), "Browser");
+assert.equal(catalogItemMatchesFilters(playwrightMcp, browserFilter), true, "browser-capable MCP entries match the browser kind");
+assert.equal(catalogItemMatchesFilters(playwrightMcp, { ...EMPTY_CATALOG_FILTERS, kinds: ["mcp"] }), true, "browser entries stay under MCP");
+assert.equal(catalogItemMatchesFilters(filesystemMcp, browserFilter), false, "plain MCP entries are not browser coverage");
+assert.equal(catalogItemMatchesFilters(futureSurface, browserFilter), false);
+assert.equal(customItemMatchesKind({ surface: "mcp" }, ["browser"]), false, "custom entries never claim browser coverage");
+assert.deepEqual(availableCatalogKinds([filesystemMcp]), ["commands", "mcp"], "browser kind hides without browser coverage");
+assert.deepEqual(availableCatalogKinds([filesystemMcp, playwrightMcp]), ["commands", "mcp", "browser"]);
+assert.deepEqual(pruneCatalogFilters(browserFilter, [filesystemMcp]).kinds, [], "browser filter prunes when coverage disappears");
+assert.deepEqual(pruneCatalogFilters(browserFilter, [playwrightMcp]).kinds, ["browser"]);

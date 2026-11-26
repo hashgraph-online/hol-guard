@@ -1,0 +1,540 @@
+{
+  "schemaVersion": "guard.browser-driver.v1",
+  "id": "browser.playwright-mcp",
+  "name": "Playwright MCP",
+  "publisher": {
+    "name": "HOL Guard",
+    "url": "https://github.com/hashgraph-online/hol-guard",
+    "verified": true
+  },
+  "referenceUrls": [
+    "https://github.com/microsoft/playwright-mcp"
+  ],
+  "referenceVersion": "0.0.86",
+  "match": {
+    "mcpServerNames": [
+      "playwright"
+    ],
+    "packages": [
+      "@playwright/mcp"
+    ],
+    "toolNamespaces": [
+      "mcp__playwright__"
+    ],
+    "harnessTools": []
+  },
+  "profileMode": {
+    "default": "unknown",
+    "flags": {
+      "isolated": [
+        "--isolated",
+        "--isolated-context"
+      ],
+      "dedicated": [
+        "--user-data-dir",
+        "--persistent",
+        "--profile-dir",
+        "--storage-state"
+      ],
+      "shared": [
+        "--shared",
+        "--no-isolated"
+      ],
+      "remoteDebugging": [
+        "--remote-debugging-port",
+        "--remote-debugging-pipe",
+        "--ws-endpoint"
+      ]
+    }
+  },
+  "tools": [
+    {
+      "name": "browser_accessibility_snapshot",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_annotate",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_auth_headers",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_click",
+      "verb": "Click",
+      "element": {
+        "name": [
+          "element"
+        ]
+      }
+    },
+    {
+      "name": "browser_clipboard_read",
+      "verb": "Download"
+    },
+    {
+      "name": "browser_clipboard_write",
+      "verb": "Upload"
+    },
+    {
+      "name": "browser_close",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_close_context",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_close_page",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_console_messages",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_context_manage",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_cookie_clear",
+      "verb": "CookieWrite"
+    },
+    {
+      "name": "browser_cookie_delete",
+      "verb": "CookieWrite"
+    },
+    {
+      "name": "browser_cookie_get",
+      "verb": "CookieRead"
+    },
+    {
+      "name": "browser_cookie_list",
+      "verb": "CookieRead"
+    },
+    {
+      "name": "browser_cookie_set",
+      "verb": "CookieWrite"
+    },
+    {
+      "name": "browser_cookies_clear",
+      "verb": "CookieWrite"
+    },
+    {
+      "name": "browser_cookies_get",
+      "verb": "CookieRead"
+    },
+    {
+      "name": "browser_cookies_set",
+      "verb": "CookieWrite"
+    },
+    {
+      "name": "browser_dialog_accept",
+      "verb": "Click"
+    },
+    {
+      "name": "browser_dialog_dismiss",
+      "verb": "Click"
+    },
+    {
+      "name": "browser_download",
+      "verb": "Download"
+    },
+    {
+      "name": "browser_drag",
+      "verb": "Click"
+    },
+    {
+      "name": "browser_drag_and_drop_file",
+      "verb": "Upload"
+    },
+    {
+      "name": "browser_drop",
+      "verb": "Upload",
+      "element": {
+        "name": [
+          "element"
+        ]
+      },
+      "file": [
+        "paths"
+      ]
+    },
+    {
+      "name": "browser_emulate_media",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_evaluate",
+      "verb": "Evaluate",
+      "script": [
+        "function"
+      ]
+    },
+    {
+      "name": "browser_execute_script",
+      "verb": "Evaluate",
+      "script": [
+        "script"
+      ]
+    },
+    {
+      "name": "browser_file_upload",
+      "verb": "Upload"
+    },
+    {
+      "name": "browser_fill",
+      "verb": "Type",
+      "element": {
+        "name": [
+          "element"
+        ]
+      },
+      "text": [
+        "value"
+      ]
+    },
+    {
+      "name": "browser_fill_form",
+      "verb": "Type"
+    },
+    {
+      "name": "browser_find",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_focus",
+      "verb": "Click"
+    },
+    {
+      "name": "browser_get_config",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_get_dom",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_get_html",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_handle_dialog",
+      "verb": "Click",
+      "text": [
+        "promptText"
+      ]
+    },
+    {
+      "name": "browser_hide_highlight",
+      "verb": "Read",
+      "element": {
+        "name": [
+          "element"
+        ]
+      }
+    },
+    {
+      "name": "browser_highlight",
+      "verb": "Read",
+      "element": {
+        "name": [
+          "element"
+        ]
+      }
+    },
+    {
+      "name": "browser_hover",
+      "verb": "Click",
+      "element": {
+        "name": [
+          "element"
+        ]
+      }
+    },
+    {
+      "name": "browser_list_pages",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_localstorage_clear",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "browser_localstorage_delete",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "browser_localstorage_get",
+      "verb": "StorageRead"
+    },
+    {
+      "name": "browser_localstorage_list",
+      "verb": "StorageRead"
+    },
+    {
+      "name": "browser_localstorage_set",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "browser_navigate",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "browser_navigate_back",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_navigate_forward",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_network_intercept",
+      "verb": "Intercept"
+    },
+    {
+      "name": "browser_network_request",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_network_requests",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_network_state_set",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_new_context",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_new_page",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "browser_pdf_save",
+      "verb": "Download"
+    },
+    {
+      "name": "browser_performance",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_press_key",
+      "verb": "Key",
+      "text": [
+        "key"
+      ]
+    },
+    {
+      "name": "browser_profile_manage",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_raw_cdp",
+      "verb": "Attach"
+    },
+    {
+      "name": "browser_reload",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_resize",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_resume",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_route",
+      "verb": "Intercept"
+    },
+    {
+      "name": "browser_route_intercept",
+      "verb": "Intercept"
+    },
+    {
+      "name": "browser_route_list",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_run_code_unsafe",
+      "verb": "Evaluate",
+      "script": [
+        "code"
+      ]
+    },
+    {
+      "name": "browser_screenshot",
+      "verb": "Screenshot"
+    },
+    {
+      "name": "browser_scroll",
+      "verb": "Click"
+    },
+    {
+      "name": "browser_select_option",
+      "verb": "Select",
+      "element": {
+        "name": [
+          "element"
+        ]
+      }
+    },
+    {
+      "name": "browser_select_page",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_select_text",
+      "verb": "Select"
+    },
+    {
+      "name": "browser_session_manage",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_sessionstorage_clear",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "browser_sessionstorage_delete",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "browser_sessionstorage_get",
+      "verb": "StorageRead"
+    },
+    {
+      "name": "browser_sessionstorage_list",
+      "verb": "StorageRead"
+    },
+    {
+      "name": "browser_sessionstorage_set",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "browser_set_storage_state",
+      "verb": "CookieWrite",
+      "file": [
+        "filename"
+      ]
+    },
+    {
+      "name": "browser_snapshot",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_start_recording",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_start_tracing",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_start_video",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_stop_recording",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_stop_tracing",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_stop_video",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_storage_clear",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "browser_storage_get",
+      "verb": "StorageRead"
+    },
+    {
+      "name": "browser_storage_set",
+      "verb": "StorageWrite"
+    },
+    {
+      "name": "browser_storage_state",
+      "verb": "CookieRead",
+      "file": [
+        "filename"
+      ]
+    },
+    {
+      "name": "browser_submit_form",
+      "verb": "Click"
+    },
+    {
+      "name": "browser_tabs",
+      "verb": "TabControl",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "browser_take_screenshot",
+      "verb": "Screenshot",
+      "element": {
+        "name": [
+          "element"
+        ]
+      }
+    },
+    {
+      "name": "browser_type",
+      "verb": "Type",
+      "element": {
+        "name": [
+          "element"
+        ]
+      },
+      "text": [
+        "text"
+      ]
+    },
+    {
+      "name": "browser_unroute",
+      "verb": "Intercept"
+    },
+    {
+      "name": "browser_video_chapter",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_video_hide_actions",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_video_show_actions",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_wait_for",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_wait_for_load_state",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_wait_for_url",
+      "verb": "Navigate"
+    }
+  ]
+}

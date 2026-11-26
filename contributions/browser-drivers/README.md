@@ -7,6 +7,9 @@ browser review card and to scope approvals to an origin instead of a raw argumen
 
 A profile only describes a driver. It cannot allow anything, lower a review, or add a verb.
 
+To write or change one, follow
+[Contribute a browser driver profile](../../docs/guard/extensions/browser-driver-contributing.md).
+
 ## Files
 
 - Name the file `<id>.json`, for example `browser.example-pilot.json`.
@@ -17,6 +20,14 @@ A profile only describes a driver. It cannot allow anything, lower a review, or 
 - Profiles that are not publisher-verified cannot claim generic names such as `browser`,
   `chrome`, `playwright`, shells or interpreters.
 - Use invented names in examples and fixtures.
+
+## Upstream version
+
+Set `referenceVersion` to the npm release of the driver whose tool list the profile was reviewed
+against. For a first-party profile, the weekly upstream drift check
+(`python -m scripts.upstream_drift`) compares it with the npm `latest` of the first package in
+`match.packages`. A first-party profile without a version is reported as `unpinned`. The check only
+reports; it never edits a profile.
 
 ## Trust
 

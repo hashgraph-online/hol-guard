@@ -33,7 +33,8 @@ const TARGETS: [&str; 3] = ["exact", "category", "server"];
 const DURATIONS: [(&str, i64); 3] = [("15m", 900), ("1h", 3600), ("5h", 18000)];
 /// `_HARD_RISK_EXCLUSIONS` — the shapes no grant ever covers, carried on the
 /// card so the surface can say so.
-const HARD_RISK_EXCLUSIONS: [&str; 10] = [
+const HARD_RISK_EXCLUSIONS: [&str; 11] = [
+    "browser_guard_origin",
     "browser_transfer",
     "browser_privileged",
     "browser_sensitive_surface",

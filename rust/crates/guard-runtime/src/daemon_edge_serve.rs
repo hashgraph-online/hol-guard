@@ -359,6 +359,7 @@ fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
     }
     crate::runtime_output::stdout_line(format_args!("{}", json!({"port": port, "pid": pid})));
     let _ = io::stdout().flush();
+    reads.mark_ready();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
     match serve(
         &listener,

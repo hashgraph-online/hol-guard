@@ -164,3 +164,77 @@ def test_dev_wheel_cache_hit_skips_the_build(tmp_path: Path, monkeypatch: pytest
 def test_wheel_script_keeps_the_dev_marker() -> None:
     commands = (qualify.REPO / qualify_setup.WHEEL_BUILD_SCRIPT).read_text(encoding="utf-8")
     assert 'if [[ "${HOL_GUARD_DEV_WHEEL:-}" == "1" ]]; then' in commands
+
+
+_TOOLCHAINS = (
+    "stable-aarch64-apple-darwin\n1.88-aarch64-apple-darwin\n1.88.0-aarch64-apple-darwin (active, default)\n"
+    "1.91.0-aarch64-apple-darwin\n1.89.0-aarch64-apple-darwin\nnightly-aarch64-apple-darwin\n"
+)
+
+
+def _fake_rustup(default: str, toolchains: str = _TOOLCHAINS, *, cwds: list[Path] | None = None):
+    def runner(argv: list[str], *, env: dict[str, str], cwd: Path, **_kw: Any) -> subprocess.CompletedProcess[str]:
+        if cwds is not None:
+            cwds.append(cwd)
+        if argv == ["rustup", "toolchain", "list"]:
+            return subprocess.CompletedProcess(argv, 0, stdout=toolchains, stderr="")
+        assert argv == ["rustc", "--version"]
+        name = env.get("RUSTUP_TOOLCHAIN", default)
+        return subprocess.CompletedProcess(argv, 0, stdout=f"rustc {name.split('-')[0]} (abc 2026-01-01)\n", stderr="")
+
+    return runner
+
+
+def _rust_workspace(root: Path, rust_version: str = "1.89") -> Path:
+    (root / "rust").mkdir(parents=True, exist_ok=True)
+    (root / "rust" / "Cargo.toml").write_text(f'[workspace.package]\nrust-version = "{rust_version}"\n')
+    return root
+
+
+def test_an_old_default_rustc_builds_with_the_oldest_installed_toolchain_that_satisfies_the_workspace(
+    tmp_path: Path,
+) -> None:
+    env: dict[str, str] = {}
+    cwds: list[Path] = []
+    qualify_setup._pin_rust_toolchain(_rust_workspace(tmp_path), env, runner=_fake_rustup("1.88.0", cwds=cwds))
+    assert env["RUSTUP_TOOLCHAIN"] == "1.89.0-aarch64-apple-darwin"
+    # rustup resolves directory overrides, so every probe runs where the build runs.
+    assert cwds and set(cwds) == {tmp_path}
+
+
+def test_a_default_rustc_new_enough_is_left_alone(tmp_path: Path) -> None:
+    env: dict[str, str] = {}
+    qualify_setup._pin_rust_toolchain(_rust_workspace(tmp_path), env, runner=_fake_rustup("1.92.0"))
+    assert "RUSTUP_TOOLCHAIN" not in env
+
+
+def test_no_installed_toolchain_new_enough_stops_before_cargo_runs(tmp_path: Path) -> None:
+    env: dict[str, str] = {}
+    only_old = "1.88.0-aarch64-apple-darwin (active, default)\n1.89-aarch64-apple-darwin\nstable-aarch64-apple-darwin\n"
+    with pytest.raises(RuntimeError, match=r"requires Rust 1\.89 .* would use 1\.88\.0"):
+        qualify_setup._pin_rust_toolchain(_rust_workspace(tmp_path), env, runner=_fake_rustup("1.88.0", only_old))
+    assert "RUSTUP_TOOLCHAIN" not in env
+
+
+def test_the_wheel_build_runs_under_the_pinned_toolchain(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tag = "macosx_11_0_arm64"
+    calls, envs = _wheel_build_fakes(tmp_path, monkeypatch, tag, script=_dev_wheel_script())
+    monkeypatch.delenv("RUSTUP_TOOLCHAIN", raising=False)
+    pin = qualify_setup._pin_rust_toolchain
+
+    def pin_with_fake(worktree: Path, env: dict[str, str], **_kw: Any) -> None:
+        pin(_rust_workspace(worktree), env, runner=_fake_rustup("1.88.0"))
+
+    monkeypatch.setattr(qualify_setup, "_pin_rust_toolchain", pin_with_fake)
+    qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run", release_profile=True)
+    build_index = next(i for i, argv in enumerate(calls) if argv[:3] == ["nice", "-n", "10"])
+    assert envs[build_index]["RUSTUP_TOOLCHAIN"] == "1.89.0-aarch64-apple-darwin"
+
+
+@pytest.mark.parametrize("failure", [FileNotFoundError("rustup"), subprocess.TimeoutExpired("rustc", 60)])
+def test_a_missing_or_hung_rust_tool_reaches_the_install_hint(tmp_path: Path, failure: Exception) -> None:
+    def runner(argv: list[str], **_kw: Any) -> subprocess.CompletedProcess[str]:
+        raise failure
+
+    with pytest.raises(RuntimeError, match=r"requires Rust 1\.89 .* would use no working rustc"):
+        qualify_setup._pin_rust_toolchain(_rust_workspace(tmp_path), {}, runner=runner)

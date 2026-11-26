@@ -324,3 +324,42 @@ def test_the_early_bundle_check_waits_for_the_one_the_worker_host_started(monkey
     # A later attempt checks for itself.
     extension_control_host._verify_installed_bundle_early()
     assert loads == ["early", "load"]
+
+
+def test_a_migration_step_reaches_only_a_caller_that_listens(tmp_path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery.installed_upgrade import report_migration_step
+
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: None)
+
+    def stepping() -> None:
+        report_migration_step("candidate_prepared")
+
+    store = SimpleNamespace(guard_home=tmp_path, migrate_installed_command_pack_authority=stepping)
+    steps: list[str] = []
+
+    # An extension-control host passes no reporter; its steps go nowhere.
+    assert migrate_installed_authority(store, wait_seconds=0) is True  # pyright: ignore[reportArgumentType]
+    assert migrate_installed_authority(store, wait_seconds=0.05, on_phase=steps.append) is True  # pyright: ignore[reportArgumentType]
+    assert steps == ["bundle_checked", "turn_held", "candidate_prepared"]
+    # Outside a migration a step is heard by no one and costs nothing.
+    report_migration_step("catalog_migrated")
+    assert steps == ["bundle_checked", "turn_held", "candidate_prepared"]
+
+
+def test_a_reporter_that_fails_never_fails_the_migration(tmp_path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery.installed_upgrade import report_migration_step
+
+    monkeypatch.setattr(extension_control_host, "_verify_installed_bundle_early", lambda: None)
+    finished: list[str] = []
+
+    def stepping() -> None:
+        report_migration_step("candidate_prepared")
+        finished.append("migrated")
+
+    def broken(step: str) -> None:
+        raise BrokenPipeError(step)
+
+    store = SimpleNamespace(guard_home=tmp_path, migrate_installed_command_pack_authority=stepping)
+
+    assert migrate_installed_authority(store, wait_seconds=0.05, on_phase=broken) is True  # pyright: ignore[reportArgumentType]
+    assert finished == ["migrated"]

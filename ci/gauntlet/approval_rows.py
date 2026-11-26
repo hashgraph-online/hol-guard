@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+import time
 from typing import Any
 
 PERSISTENT_SCOPES = frozenset({"workspace", "harness", "global", "publisher", "artifact"})
@@ -31,11 +34,45 @@ def _opaque_group(value: Any) -> str:
     return group if not group or CONNECTOR_GROUP_ID.fullmatch(group) else REDACTED_GROUP
 
 
-def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
+# A browser row keeps only the normalized verb class and tool operation of its intent: no origin,
+# domain, URL, selector or text, so the projection stays redacted by construction.
+BROWSER_INTENT_FIELDS = ("intent", "operation")
+
+
+def _browser_intent(row: dict[str, Any]) -> dict[str, str] | None:
+    """The redacted browser intent a row was reviewed under, or None when the row carries none."""
+    value = row.get("browser_intent")
+    if value is None:
+        raw = row.get("browser_intent_json")
+        try:
+            value = json.loads(raw) if isinstance(raw, str) and raw else None
+        except ValueError:
+            value = None
+    intent = _mapping(value)
+    kept = {field: str(intent[field]) for field in BROWSER_INTENT_FIELDS if intent.get(field)}
+    return kept if kept.get("intent") else None
+
+
+def _action_key(row: dict[str, Any]) -> str:
+    """An opaque key equal for two rows about the same reviewed action; empty when the row names none.
+
+    Guard binds an answer to the artifact hash, so a row with the same artifact after an answer is a
+    repeat even though its ``dedupe_count`` starts again at 1. Only a short digest is kept.
+    """
+    artifact = str(row.get("artifact_hash") or "")
+    if not artifact:
+        return ""
+    return hashlib.sha256(f"{row.get('artifact_id') or ''}\0{artifact}".encode()).hexdigest()[:16]
+
+
+def approval_rows(
+    store: Any, known_ids: set[str], *, changed_from: dict[str, int] | None = None
+) -> list[dict[str, Any]]:
     """Return redacted-by-construction facts for rows added during the run.
 
-    Only the tool, reason, queue group and whether an Always option is offered are kept; commands and
-    paths are already in the redacted tool evidence, so they are not copied again. The queue group
+    Only the tool, reason, queue group, browser intent class and whether an Always option is offered
+    are kept; commands and paths are already in the redacted tool evidence, so they are not copied
+    again. The queue group
     is kept only as an opaque ``connector:<hash>:<digest>`` id; any other stored value is replaced.
     """
     from codex_plugin_scanner.guard.approval_scope_support import _native_scopes
@@ -43,7 +80,13 @@ def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
     rows = []
     observations = _observations(store)
     for row in store.list_approval_requests(status=None, limit=200):
-        if not isinstance(row, dict) or str(row.get("request_id") or "") in known_ids:
+        if not isinstance(row, dict):
+            continue
+        request_id = str(row.get("request_id") or "")
+        dedupe_count = int(row.get("dedupe_count") or 1)
+        if request_id in known_ids and (
+            changed_from is None or dedupe_count <= changed_from.get(request_id, 0)
+        ):
             continue
         # The native contract also binds a token carried in the artifact hash, not only the envelope's.
         ((contract, token),) = _native_scopes([row])
@@ -66,7 +109,9 @@ def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
                 "queue_group_id": _opaque_group(row.get("queue_group_id")),
                 "always_available": contract.exact_action_persistence_eligible is True
                 or any(scope in PERSISTENT_SCOPES for scope in scopes),
-                "dedupe_count": int(row.get("dedupe_count") or 1),
+                "dedupe_count": dedupe_count,
+                "action_key": _action_key(row),
+                "browser_intent": _browser_intent(row),
             }
         )
         rows[-1]["connector_class"] = connector_class(rows[-1], envelope, observations)
@@ -198,3 +243,31 @@ def connector_coverage(cases: list[dict[str, Any]]) -> dict[str, Any] | None:
         "supported": sorted(covered_connector_classes(catalog.values())),
         "uncovered": [{"class": name, "rows": observed.get(name, 0)} for name in universe if name not in covered],
     }
+
+
+def await_rows(
+    store: Any,
+    known: set[str],
+    *,
+    waiting: bool,
+    retried: bool = False,
+    changed_from: dict[str, int] | None = None,
+    seconds: float = 10.0,
+) -> list[dict[str, Any]]:
+    """The rows a stopped call queued, once the resident's evidence drain has written them.
+
+    The drain runs after the relay has answered, so a stopped call (``waiting``) polls for its row.
+    A retry waits until its pending row records the second call.
+    """
+    rows = approval_rows(store, known, changed_from=changed_from)
+    deadline = time.monotonic() + seconds
+
+    def settled() -> bool:
+        if not rows:
+            return False
+        return not retried or any(row["dedupe_count"] >= 2 for row in rows)
+
+    while waiting and not settled() and time.monotonic() < deadline:
+        time.sleep(0.1)
+        rows = approval_rows(store, known, changed_from=changed_from)
+    return rows

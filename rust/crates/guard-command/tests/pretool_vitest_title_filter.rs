@@ -37,6 +37,37 @@ fn a_title_filter_with_a_credential_word_rides_into_containment() {
     std::fs::remove_dir_all(root).unwrap();
 }
 
+/// Vitest reads `-t` as a regular expression, so a title filter often holds
+/// `|` alternation. The run is still contained, never sent to a sensitive
+/// review for a credential word in one of the alternatives.
+#[test]
+fn a_title_alternation_with_a_credential_word_stays_contained() {
+    let root = fixture();
+    let project = root.join("project");
+    let project = project.to_str().unwrap();
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        for command in [
+            format!("cd {project} && bunx vitest run -t \"never|keeps the secret\""),
+            format!("cd {project} && bunx vitest run x --silent -t \"keeps the order|keeps the secret\""),
+            format!("cd {project} && bunx vitest run --testNamePattern='password|token'"),
+        ] {
+            let result = classify(&root, harness, &command);
+            assert_ne!(
+                result.reason_code, "native_sensitive_access_review",
+                "{harness}: {command}"
+            );
+            if cfg!(target_os = "macos") {
+                assert_eq!(
+                    result.minimum_action, "sandbox-required",
+                    "{harness}: {command}: {}",
+                    result.reason_code
+                );
+            }
+        }
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn a_title_filter_that_can_name_a_file_keeps_its_review() {
     let root = fixture();

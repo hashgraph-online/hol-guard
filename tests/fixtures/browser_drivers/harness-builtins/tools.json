@@ -1,0 +1,142 @@
+{
+  "schemaVersion": "guard.browser-driver-tools.v1",
+  "driver": "harness-builtins",
+  "note": "Built-in browser tools that harnesses expose without an MCP server: the action-discriminated browser tool, the headless browser_action tool and the open_url and visit_url aliases. Written by hand for Gauntlet fixtures; descriptions are shortened.",
+  "tools": [
+    {
+      "name": "browser",
+      "description": "Control a browser the harness manages, one action per call",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "start",
+              "stop",
+              "profiles",
+              "tabs",
+              "open",
+              "focus",
+              "close",
+              "snapshot",
+              "screenshot",
+              "navigate",
+              "console",
+              "pdf",
+              "upload",
+              "dialog",
+              "act"
+            ],
+            "description": "Action to run"
+          },
+          "targetUrl": {
+            "type": "string",
+            "description": "URL to open or navigate to"
+          },
+          "url": {
+            "type": "string",
+            "description": "URL to open or navigate to"
+          },
+          "targetId": {
+            "type": "string",
+            "description": "Tab to act on"
+          },
+          "profile": {
+            "type": "string",
+            "description": "Browser profile to use"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Files to upload"
+          },
+          "request": {
+            "type": "object",
+            "description": "Page interaction for act"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "browser_action",
+      "description": "Drive a headless browser: launch at a URL, click or hover at a coordinate, type, scroll, resize or close",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "launch",
+              "click",
+              "hover",
+              "type",
+              "scroll_down",
+              "scroll_up",
+              "resize",
+              "close"
+            ],
+            "description": "Action to run"
+          },
+          "url": {
+            "type": "string",
+            "description": "URL for launch"
+          },
+          "coordinate": {
+            "type": "string",
+            "description": "x,y position for click and hover"
+          },
+          "text": {
+            "type": "string",
+            "description": "Text for type"
+          },
+          "size": {
+            "type": "string",
+            "description": "w,h viewport size for resize"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "open_url",
+      "description": "Open a URL in the browser",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to open"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "visit_url",
+      "description": "Visit a URL in the browser",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to visit"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    }
+  ]
+}

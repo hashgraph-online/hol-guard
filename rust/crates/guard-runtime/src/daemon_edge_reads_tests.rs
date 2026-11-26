@@ -575,3 +575,16 @@ fn update_status_forbids_revalidation() {
     let plain = json_response(200, &json!({}), None, None, false);
     assert_eq!(max_age_zero(plain.clone()), plain);
 }
+
+#[test]
+fn a_daemon_counts_as_starting_until_it_settles_after_ready() {
+    let reads = NativeReads::new(None);
+    assert!(!reads.starting(), "an edge in front of another daemon");
+    reads.mark_standalone();
+    assert!(reads.starting(), "before ready");
+    reads.mark_ready();
+    assert!(reads.starting(), "just after ready");
+    let ready = *reads.ready_at.get().unwrap();
+    assert!(reads.starting_at(ready + STARTUP_SETTLE - Duration::from_secs(1)));
+    assert!(!reads.starting_at(ready + STARTUP_SETTLE));
+}

@@ -531,8 +531,12 @@ use split::split;
 /// name a proxy or a credential. Only a bare assignment counts: no command
 /// word, so nothing runs with it in its environment. The value is a literal
 /// path or a double-quoted `$HOME` root, so no substitution, arithmetic or
-/// subscript runs while it is set. An uppercase name keeps the review, since
-/// one already exported (`GIT_DIR`, `PAGER`) would reach Git.
+/// subscript runs while it is set. A name with capitals may already be
+/// exported and so reach Git, so it counts only when
+/// [`plain_name`](super::generic::chain_literals::inert::assigned::plain_name)
+/// accepts it: no `GIT_` prefix, no name the shell or a pager reads
+/// (`PAGER`, `LESS`), and no part of a name a program reads to choose what it
+/// runs (`*_COMMAND`, `*_DIR`, `*_CONFIG`).
 fn shell_local_assignment(segment: &crate::CommandSegmentV1) -> bool {
     let text = segment.text.trim();
     let Some((name, value)) = text.split_once('=') else {
@@ -552,9 +556,9 @@ fn shell_local_assignment(segment: &crate::CommandSegmentV1) -> bool {
         && !name.starts_with(|c: char| c.is_ascii_digit())
         && name
             .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-        && name.bytes().any(|byte| byte.is_ascii_lowercase())
-        && super::generic::chain_literals::ordinary_name(name)
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        && name.bytes().any(|byte| byte.is_ascii_alphabetic())
+        && super::generic::chain_literals::inert::assigned::plain_name(name)
         && !value.is_empty()
         && value.chars().all(|c| {
             c.is_ascii_alphanumeric()
