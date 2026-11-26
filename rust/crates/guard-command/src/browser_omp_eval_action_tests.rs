@@ -120,3 +120,52 @@ fn programs_without_browser_calls_have_no_action() {
         );
     }
 }
+
+#[test]
+fn options_guard_cannot_read_may_attach_another_browser() {
+    for code in [
+        "const o = {app: 'chrome'}; await browser.open(o);",
+        "const o = {app: 'chrome'}; await browser.open({...o});",
+        "const k = 'app'; await browser.open({[k]: 'chrome'});",
+        "const app = 'chrome'; await browser.open({app});",
+    ] {
+        let found = action(code);
+        assert_eq!(
+            found.session.profile_mode,
+            BrowserProfileModeV1::RemoteDebugging,
+            "{code}"
+        );
+        assert_eq!(found.verb, BrowserVerbV1::Attach, "{code}");
+    }
+    for code in [
+        "await browser.open();",
+        "await browser.open({url: 'https://example.com', headed: true});",
+        "const url = 'https://example.com'; await browser.open({url, headed: true,});",
+    ] {
+        let found = action(code);
+        assert_eq!(
+            found.session.profile_mode,
+            BrowserProfileModeV1::Isolated,
+            "{code}"
+        );
+        assert_eq!(found.verb, BrowserVerbV1::Navigate, "{code}");
+    }
+}
+
+#[test]
+fn facade_access_the_scanner_does_not_model_is_still_a_browser_action() {
+    for code in [
+        "await browser['open']({url: 'https://example.com'});",
+        "await browser?.open({url: 'https://example.com'});",
+        "const {open} = browser; await open({url: 'https://example.com'});",
+    ] {
+        let found = omp_eval_browser_action(code, "omp", &[]).expect(code);
+        assert_eq!(found.verb, BrowserVerbV1::Other, "{code}");
+        assert_eq!(found.intent, BrowserIntentV1::Privileged, "{code}");
+        assert_eq!(
+            found.session.profile_mode,
+            BrowserProfileModeV1::Unknown,
+            "{code}"
+        );
+    }
+}

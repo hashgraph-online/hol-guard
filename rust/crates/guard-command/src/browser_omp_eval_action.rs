@@ -53,15 +53,12 @@ pub fn omp_eval_browser_action(
     };
     let (steps, profile_mode) = match tokens {
         Some(tokens) => scan(&tokens)?,
-        None if code.contains("browser.") || code.contains("browser[") => (
-            vec![Step {
-                method: "eval".to_owned(),
-                verb: BrowserVerbV1::Other,
-                url: None,
-                element: None,
-            }],
-            BrowserProfileModeV1::Unknown,
-        ),
+        None if ["browser.", "browser[", "browser?", "= browser"]
+            .iter()
+            .any(|facade| code.contains(facade)) =>
+        {
+            unmodelled()
+        }
         None => return None,
     };
     let mut surfaces = Vec::new();
@@ -129,6 +126,19 @@ pub fn omp_eval_browser_action(
         cdp: None,
         volatile_fields_dropped: Vec::new(),
     })
+}
+
+/// One step for a program whose browser calls cannot be read: privileged, on an unknown profile.
+fn unmodelled() -> (Vec<Step>, BrowserProfileModeV1) {
+    (
+        vec![Step {
+            method: "eval".to_owned(),
+            verb: BrowserVerbV1::Other,
+            url: None,
+            element: None,
+        }],
+        BrowserProfileModeV1::Unknown,
+    )
 }
 
 /// Higher is stronger. Reading a page is weaker than leaving it.
@@ -299,22 +309,46 @@ fn scan(tokens: &[Token]) -> Option<(Vec<Step>, BrowserProfileModeV1)> {
         });
     }
     if steps.is_empty() {
-        return None;
+        // `browser['open'](...)`, `browser?.open(...)` or a destructured facade method still
+        // drive the browser: they project as the unmodelled privileged step.
+        return tokens
+            .iter()
+            .any(|token| matches!(token, Token::Ident(word) if word == "browser"))
+            .then(unmodelled);
     }
     Some((steps, profile.unwrap_or(BrowserProfileModeV1::Unknown)))
 }
 
 /// The `url` of a `browser.open({...})` options object and the profile it names. An option the
 /// isolated facade does not list, or an `app` other than OMP's own browser, may attach another
-/// browser, so it reads as a remote-debugging profile.
+/// browser, so it reads as a remote-debugging profile. So do options Guard cannot read: a variable
+/// or call in place of the object, a spread, a computed key, or a shorthand key it does not list.
 fn open_options(tokens: &[Token], start: usize) -> (Option<String>, BrowserProfileModeV1) {
     let mut url = None;
     let mut mode = BrowserProfileModeV1::Isolated;
-    if tokens.get(start) != Some(&Token::Punct('{')) {
-        return (url, mode);
+    match tokens.get(start) {
+        Some(Token::Punct('{')) => {}
+        Some(Token::Punct(')')) => return (url, mode),
+        _ => return (url, BrowserProfileModeV1::RemoteDebugging),
     }
     let mut depth = 0usize;
     for (index, token) in tokens.iter().enumerate().skip(start) {
+        let key_position = depth == 1
+            && index > 0
+            && matches!(tokens.get(index - 1), Some(Token::Punct('{' | ',')));
+        if key_position {
+            let readable = match token {
+                Token::Ident(key) | Token::Str(key) => {
+                    tokens.get(index + 1) == Some(&Token::Punct(':'))
+                        || (key != "app" && OPEN_KEYS.contains(&key.as_str()))
+                }
+                Token::Punct('}') => true,
+                _ => false,
+            };
+            if !readable {
+                mode = BrowserProfileModeV1::RemoteDebugging;
+            }
+        }
         match token {
             Token::Punct('{' | '(' | '[') => depth += 1,
             Token::Punct('}' | ')' | ']') => {
