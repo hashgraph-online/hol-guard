@@ -147,7 +147,7 @@ fn projection_allowlists_cover_every_source_field() {
                 .keys()
                 .map(String::as_str)
         })
-        .filter(|key| !matches!(*key, "catalog_defaults" | "content_revision"))
+        .filter(|key| !matches!(*key, "catalog_defaults" | "content_revision" | "surfaces"))
         .collect();
     projected.extend(EXTENSION_FIELDS_NOT_IN_DETAIL);
     assert_eq!(projected, extension_keys);
@@ -230,6 +230,11 @@ fn index_and_detail_values_match_source_catalog() {
         assert_eq!(item["catalog_defaults"]["activation"], source["activation"]);
         let detail = ok_body(&read(snapshot, &format!("extensions/{id}"), ""));
         for (key, value) in detail["extension"].as_object().unwrap() {
+            assert_ne!(
+                key.as_str(),
+                "surfaces",
+                "{id}: the detail page has no derived surfaces"
+            );
             if !matches!(key.as_str(), "catalog_defaults" | "content_revision") {
                 assert_eq!(*value, source[key], "{id} {key}");
             }
@@ -297,6 +302,14 @@ fn filters_are_bounded_and_exact() {
         all.iter().filter(|item| item["surface"] == "mcp").count()
     );
     assert!(!mcp.is_empty());
+    for (surface, expected) in [("terminal", true), ("package", true), ("mcp", true)] {
+        let found = traverse(snapshot, "index", &format!("surface={surface}&limit=100"));
+        assert_eq!(!found.is_empty(), expected, "{surface}");
+        assert!(found.iter().all(|item| item["surfaces"]
+            .as_array()
+            .unwrap()
+            .contains(&Value::String(surface.to_owned()))));
+    }
     assert_eq!(
         ok_body(&read(snapshot, "index", &format!("q={}", "a".repeat(256))))["total_count"],
         0
@@ -336,3 +349,43 @@ mod request_tests;
 
 #[path = "catalog_read_search_tests.rs"]
 mod search_tests;
+
+#[test]
+fn surfaces_derive_from_identity_mcp_surface_and_delegation() {
+    use crate::catalog_read_projection::derived_surfaces;
+    let package = Value::String("package-firewall".into());
+    assert_eq!(derived_surfaces("command.git", None, None), ["terminal"]);
+    assert_eq!(
+        derived_surfaces("command.package.node", None, Some(&package)),
+        ["terminal", "package"]
+    );
+    assert_eq!(
+        derived_surfaces("command.mcp-filesystem", Some("mcp"), None),
+        ["mcp"]
+    );
+    let profiled: BTreeSet<&str> =
+        crate::browser_first_party_drivers::first_party_browser_drivers()
+            .iter()
+            .flat_map(|driver| driver.matches.mcp_server_names.iter().map(String::as_str))
+            .collect();
+    let listed: BTreeSet<&str> = crate::catalog_read_projection::FIRST_PARTY_BROWSER_MCP_SERVERS
+        .iter()
+        .copied()
+        .collect();
+    assert_eq!(listed, profiled);
+    // A first-party driver profile names the `playwright` MCP server.
+    assert_eq!(
+        derived_surfaces("command.mcp-playwright", Some("mcp"), None),
+        ["mcp", "browser"]
+    );
+    for item in traverse(snapshot(), "index", "limit=100") {
+        let surfaces = item["surfaces"].as_array().unwrap();
+        assert!(!surfaces.is_empty(), "{}", item["extension_id"]);
+        assert_eq!(
+            surfaces.contains(&Value::String("mcp".into())),
+            item["surface"] == "mcp",
+            "{}",
+            item["extension_id"]
+        );
+    }
+}

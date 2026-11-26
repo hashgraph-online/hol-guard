@@ -551,10 +551,11 @@ fn a_home_spelled_read_before_a_git_read_keeps_its_proof() {
 }
 
 // Agents name a directory once and reuse it: `dir=/tmp/work; ls "$dir";
-// git status`. A bare lowercase assignment runs nothing and sets a variable
-// Git never reads, so the later read keeps its proof. An uppercase name, one
-// a shell or proxy reads, a command prefix, and any value that runs a
-// substitution keep the floor.
+// git status`. A bare assignment runs nothing and, with a plain name, sets a
+// variable Git never reads, so the later read keeps its proof. A name with
+// capitals that a program reads to choose what it runs (it may already be
+// exported), one a shell or proxy reads, a command prefix, and any value
+// that runs a substitution keep the floor.
 #[test]
 fn a_shell_local_variable_before_a_git_read_keeps_its_proof() {
     let root =
@@ -582,6 +583,8 @@ fn a_shell_local_variable_before_a_git_read_keeps_its_proof() {
         "h=/tmp/fixture-home; git status --short",
         "dir=\"$HOME/projects\"; git status --short && git log --oneline -3",
         "out_dir=/tmp/report; echo done; git status --short",
+        "H=/tmp/fixture-home; git status --short",
+        "REF=HEAD; git log --oneline -1",
     ] {
         assert_ne!(
             reason(&home, &repository, command),
@@ -591,11 +594,16 @@ fn a_shell_local_variable_before_a_git_read_keeps_its_proof() {
         );
     }
     for command in [
-        "H=/tmp/fixture-home; git status --short",
         "GIT_DIR=/tmp/elsewhere; git status --short",
+        "LESS=/tmp/x; git log --oneline -1",
+        "MANPAGER=/tmp/x; git status --short",
+        "GNUPGHOME=/tmp/x; git log --oneline -1",
+        "FZF_DEFAULT_COMMAND=/tmp/x; git status --short",
         "path=/tmp/bin; git status --short",
         "http_proxy=http://127.0.0.1:9; git status --short",
-        "h=$(id -u); git status --short",
+        "h=$(git config core.pager cat); git status --short",
+        "h=$(git -c core.fsmonitor=/tmp/x status); git status --short",
+        "h=$(cat ~/.ssh/id_rsa); git status --short",
         "h=`id -u`; git status --short",
         "h=$HOME/x; git status --short",
         "a[$(id -u)]=1; git status --short",
@@ -616,5 +624,34 @@ fn a_shell_local_variable_before_a_git_read_keeps_its_proof() {
             "{command}: {}",
             result.reason_code
         );
+    }
+    // A value kept from a command is judged as that command run in its place,
+    // so the chain gets the verdict of the chain the shell runs.
+    for (kept, written) in [
+        (
+            "h=$(id -u); git status --short",
+            "id -u; git status --short",
+        ),
+        ("REF=HEAD; git log --oneline -1", "git log --oneline -1"),
+        (
+            "REF=HEAD; H=$(git rev-parse \"$REF\"); git log --oneline -1 \"$H\"",
+            "git rev-parse HEAD; git log --oneline -1",
+        ),
+    ] {
+        let controls = github_controls("enabled");
+        let verdict = |command: &str| {
+            evaluate_pre_tool_envelope_with_context(
+                "omp",
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&controls),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            )
+            .minimum_action
+        };
+        assert_eq!(verdict(kept), verdict(written), "{kept}");
+        assert_eq!(verdict(kept), "allow", "{kept}");
     }
 }

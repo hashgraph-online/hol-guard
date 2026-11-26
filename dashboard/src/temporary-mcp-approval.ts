@@ -7,53 +7,6 @@ import type {
 
 const TARGETS = new Set<GuardTemporaryMcpGrantTarget>(["exact", "category", "server"]);
 const DURATIONS = new Set<GuardTemporaryMcpGrantDuration>(["once", "15m", "1h", "5h"]);
-const ROUTINE_BROWSER_OPERATIONS = new Set([
-  "accept_dialog",
-  "accessibility_snapshot",
-  "click",
-  "close_page",
-  "dismiss_dialog",
-  "drag",
-  "emulate",
-  "fill_form",
-  "fill_input",
-  "focus_element",
-  "get_console",
-  "get_console_message",
-  "get_dom",
-  "get_html",
-  "get_network",
-  "get_performance",
-  "get_snapshot",
-  "go_back",
-  "go_forward",
-  "handle_dialog",
-  "hover",
-  "lighthouse_audit",
-  "list_console_messages",
-  "list_network_requests",
-  "list_pages",
-  "list_resources",
-  "navigate_page",
-  "new_page",
-  "performance_analyze_insight",
-  "performance_start_trace",
-  "performance_stop_trace",
-  "performance_trace",
-  "press_key",
-  "read_console",
-  "read_network",
-  "reload_page",
-  "resize_page",
-  "scroll",
-  "select_dropdown",
-  "select_page",
-  "submit_form",
-  "take_screenshot",
-  "take_snapshot",
-  "type_text",
-  "wait_for",
-]);
 
 export type TemporaryMcpApprovalOptions = Omit<GuardTemporaryMcpApproval, "eligible">;
 
@@ -104,15 +57,6 @@ export function temporaryMcpApprovalOptions(item: GuardApprovalRequest): Tempora
   if (value === undefined) return null;
   const { eligible: _, ...options } = value;
   return options;
-}
-
-export function temporaryMcpApprovalNeedsRetry(item: GuardApprovalRequest): boolean {
-  if (temporaryMcpApprovalOptions(item) !== null || item.artifact_type !== "tool_call") {
-    return false;
-  }
-  const operation = item.artifact_name?.split(":", 2)[1] ?? "";
-  return /^[^:]+:runtime:(?:global|project):[^:]+:[^:]+$/.test(item.artifact_id)
-    && ROUTINE_BROWSER_OPERATIONS.has(operation);
 }
 
 export function defaultTemporaryMcpTarget(options: TemporaryMcpApprovalOptions): GuardTemporaryMcpGrantTarget {

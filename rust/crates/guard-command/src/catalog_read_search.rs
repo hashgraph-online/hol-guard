@@ -45,10 +45,9 @@ pub(super) fn matches_filter(entry: &ExtensionEntry, filter: &CatalogFilter) -> 
         .source
         .as_ref()
         .is_none_or(|value| *value == entry.source)
-        && filter
-            .surface
-            .as_ref()
-            .is_none_or(|value| entry.surface.as_ref() == Some(value))
+        && filter.surface.as_ref().is_none_or(|value| {
+            entry.surface.as_ref() == Some(value) || entry.surfaces.contains(&value.as_str())
+        })
         && filter
             .trust_class
             .as_ref()

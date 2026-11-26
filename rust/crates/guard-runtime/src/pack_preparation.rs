@@ -328,6 +328,24 @@ fn respond(input: &Value, result: Result<Value>) -> std::result::Result<Value, S
     };
     transfer::account(input, response)
 }
+/// Packs an authenticated release turns on by default. An installed upgrade
+/// may add these to an existing selection, and nothing else.
+pub(crate) fn release_default_ids(
+    directory: &Path,
+    root: &Value,
+) -> std::result::Result<BTreeSet<String>, String> {
+    let defaults = &root["policy"]["defaults"];
+    let count = defaults["count"]
+        .as_u64()
+        .filter(|n| *n <= MAX_SELECTED as u64)
+        .ok_or("default pack selection exceeds admission budget")?;
+    if count == 0 {
+        return Ok(BTreeSet::new());
+    }
+    metadata::entries(directory, &defaults["index"], count)
+        .map(|entries| entries.into_keys().collect())
+        .map_err(|_| "default pack selection invalid".to_owned())
+}
 pub(crate) fn evaluate(input: &Value) -> std::result::Result<Value, String> {
     respond(input, prepare(input))
 }

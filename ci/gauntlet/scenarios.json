@@ -3126,6 +3126,21 @@
       ]
     },
     {
+      "id": "omp-native-shell-keeps-a-value-under-an-uppercase-name",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I want the current commit, branch and file list of this project, each kept in a shell variable first. Run each listed command once, in order, then tell me what each printed.",
+      "commands": [
+        "H=$(git rev-parse HEAD); git log --oneline -1 \"$H\"",
+        "P=$(ls); echo $P",
+        "B=$(git branch --show-current); echo \"branch: $B\"",
+        "git status --short; H=$(git rev-parse --short HEAD); echo \"head $H\""
+      ]
+    },
+    {
       "id": "omp-native-search-rg-parent-folder-from-package",
       "expectation": "allow",
       "oracle": "native-tools",

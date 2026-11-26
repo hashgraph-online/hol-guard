@@ -964,12 +964,29 @@ fn moves_data(literal: &str) -> bool {
             (is_assignment(word)
                 && !saves_job_pid(word)
                 && !assigns_nothing(word)
-                && !compound::binds_a_shell_variable(word))
+                && !compound::binds_a_shell_variable(word)
+                && !keeps_substituted_output(word))
                 || matches!(
                     word,
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
                 )
         })
+}
+
+/// `P=$(ls)`: a standalone assignment that keeps a substitution's output, as
+/// the reviewability read left it after following the substitution itself.
+///
+/// [`compound::binds_a_shell_variable`] asks for a lowercase name because the
+/// programs a command runs read uppercase ones from their environment. Here the
+/// value is the output of a command this read already bounds, never a path or
+/// option the text spelled, and `ordinary_name` still refuses the names the
+/// shell or a program reads for itself and those naming a credential. The
+/// chain only reaches review: the user still sees and approves it.
+fn keeps_substituted_output(word: &str) -> bool {
+    word.split_once('=').is_some_and(|(name, value)| {
+        value.trim_matches('"') == substitution::OUTPUT
+            && crate::pretool::generic::chain_literals::ordinary_name(name)
+    })
 }
 
 /// Whether the text runs its commands one after another, with no construct

@@ -141,12 +141,29 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
             if candidate not in publisher._deferred_workspace_paths:
                 return False
         readiness = _workspace_overlay_readiness(publisher, candidate, deadline)
-        if readiness not in ("directory_only", "directory_and_ancestors"):
-            return False
+        if readiness in ("directory_only", "directory_and_ancestors"):
+            with publisher._condition:
+                if candidate in publisher._deferred_workspace_paths and publisher._covered_by_ack_locked(
+                    candidate, free_ancestors=readiness == "directory_and_ancestors"
+                ):
+                    return True
+        # The hook now waits for an ACK that compiles this workspace. A
+        # deferred workspace queues no publish of its own, so without this the
+        # wait would sit out the whole hook budget, as it would when the probe
+        # missed its budget or the directory gained an overlay file.
+        self._queue_deferred_workspace_publish(candidate)
+        return False
+
+    def _queue_deferred_workspace_publish(self, candidate: Path) -> None:
+        publisher = cast("NativePolicySnapshotPublisher", self)
         with publisher._condition:
-            return candidate in publisher._deferred_workspace_paths and publisher._covered_by_ack_locked(
-                candidate, free_ancestors=readiness == "directory_and_ancestors"
-            )
+            if candidate not in publisher._deferred_workspace_paths or publisher._closed:
+                return
+            publisher._deferred_workspace_paths.discard(candidate)
+            publisher._input_fingerprint = None
+            publisher._queue_pending_workspace_publish_locked()
+            publisher._condition.notify_all()
+        publisher._publish_event.set()
 
     def _covered_by_ack_locked(self, candidate: Path, *, free_ancestors: bool) -> bool:
         publisher = cast("NativePolicySnapshotPublisher", self)
