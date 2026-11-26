@@ -191,8 +191,9 @@ place to put its cases.
     under `tests/fixtures/provider_integrations/`, the CI job and `extensions generate/validate --provider`.
   - Recordings and CI done: `conformance_fixtures.rs` reads `recordings.json` and the benign gate's
     browser rows, and the `conformance_kit` cargo test runs the kit over the reference fixture
-    provider and every contributed manifest. Still open: the CLI command and
-    `extensions generate/validate --provider`.
+    provider and every contributed manifest.
+  - CLI done: `hol-guard integrations conformance <manifest>` runs the native `provider-conformance`
+    command. Still open: `extensions generate/validate --provider`.
 - [x] **BP-T181** Calibration for `verified` (D12): document the report format, the public list named
   by digest and the starting thresholds in the provider contributing guide. No list is checked in.
 - [ ] **BP-T182** Noise view on the provider detail page and in `hol-guard integrations status <id>`:
