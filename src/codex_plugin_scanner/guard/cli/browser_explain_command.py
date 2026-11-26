@@ -68,7 +68,7 @@ def _explain(args: argparse.Namespace) -> dict[str, object]:
     request = {"driver": str(args.driver).strip(), "tool": str(args.tool).strip(), "arguments": arguments}
     reply = _native_request(json.dumps(request, separators=(",", ":")))
     if reply.get("ok") is not True:
-        error = reply.get("error") if isinstance(reply.get("error"), dict) else {}
+        error = _mapping(reply.get("error"))
         message = str(error.get("message") or "The call could not be explained.")
         drivers = reply.get("drivers")
         if isinstance(drivers, list) and drivers:
@@ -98,8 +98,12 @@ def _native_request(line: str) -> dict[str, object]:
     return reply
 
 
+def _mapping(value: object) -> dict[str, object]:
+    return {str(key): item for key, item in value.items()} if isinstance(value, dict) else {}
+
+
 def _print(result: dict[str, object], stream: TextIO) -> None:
-    driver = result.get("driver") if isinstance(result.get("driver"), dict) else {}
+    driver = _mapping(result.get("driver"))
     print(f"{result.get('tool')} on {driver.get('name')} ({driver.get('id')})", file=stream)
     action = result.get("action")
     if isinstance(action, dict):
@@ -110,12 +114,12 @@ def _print(result: dict[str, object], stream: TextIO) -> None:
             print("  sensitive surfaces: " + ", ".join(str(flag) for flag in flags), file=stream)
     else:
         print(f"  unclassified: {result.get('unclassified')}", file=stream)
-    decision = result.get("decision") if isinstance(result.get("decision"), dict) else {}
+    decision = _mapping(result.get("decision"))
     print(f"Default decision: {decision.get('action')} ({decision.get('summaryCode')})", file=stream)
     risks = result.get("riskCategories")
     if isinstance(risks, list) and risks:
         print("Risk categories: " + ", ".join(str(risk) for risk in risks), file=stream)
-    grant = result.get("grant") if isinstance(result.get("grant"), dict) else {}
+    grant = _mapping(result.get("grant"))
     if grant.get("eligible") is True:
         print(f"A temporary browser grant can cover this call ({grant.get('category')}).", file=stream)
     else:
