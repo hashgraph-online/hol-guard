@@ -203,17 +203,20 @@ class ResidentEvidenceDrain:
         return cast("tuple[Path, Callable[..., bytes | None]] | None", transport())
 
     def _run(self) -> None:
-        wait_seconds = self._interval_seconds
-        while not self._stop.is_set():
-            more = False
-            records = self.records
-            with suppress(Exception):
-                more = self.drain_once()
-            if more:
-                wait_seconds = self._interval_seconds
-                continue
-            wait_seconds = self._next_wait_seconds(wait_seconds, drained=self.records != records)
-            self._stop.wait(wait_seconds)
+        from .native_resident_client_pool import background_resident_lane
+
+        with background_resident_lane():
+            wait_seconds = self._interval_seconds
+            while not self._stop.is_set():
+                more = False
+                records = self.records
+                with suppress(Exception):
+                    more = self.drain_once()
+                if more:
+                    wait_seconds = self._interval_seconds
+                    continue
+                wait_seconds = self._next_wait_seconds(wait_seconds, drained=self.records != records)
+                self._stop.wait(wait_seconds)
 
     def _next_wait_seconds(self, previous: float, *, drained: bool) -> float:
         """Poll at the base interval after records arrive; back off while idle."""

@@ -76,7 +76,7 @@ export function parseContextBrief(value: unknown): ContextBrief {
 
 /** Plain words for a refused request. A refused pick names its likely cause:
  *  reading files again cannot help with a secret-looking, blocked or private file. */
-function refusal(code: string, action: string, status: number): string {
+function refusal(code: string, action: string, status: number, maxActiveWorkspaces?: number): string {
   if (/runtime_(deadline_exceeded|not_verified|closed|crashed|cancelled|transport_failed)$/.test(code)) {
     return "CIGAR stopped before it could finish. Restart CIGAR at the top of this page, then try again. Your saved project choices are kept.";
   }
@@ -84,6 +84,14 @@ function refusal(code: string, action: string, status: number): string {
   if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
   if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
     return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
+  }
+  if (code.endsWith("context_path_limit") && action === "grant") {
+    return "CIGAR can read up to 32 files in one project. Pick fewer files, then try again.";
+  }
+  if (code.endsWith("context_resource_limit") && action === "grant") {
+    const limit = Number.isSafeInteger(maxActiveWorkspaces) && (maxActiveWorkspaces as number) > 0
+      ? ` (${maxActiveWorkspaces})` : "";
+    return `CIGAR is already working with as many projects as your Context size allows${limit}. Remove a project, or raise Active workspaces under Custom limits.`;
   }
   if (code.endsWith("context_busy") || code.endsWith("_busy")) return "CIGAR is still finishing something. Try again in a moment.";
   if (code.endsWith("context_scope_denied") && action === "grant") {
@@ -99,13 +107,13 @@ const refusalCode = (value: unknown): string | null => text(value) && /^[a-z0-9_
 /** CIGAR's own refusals carry `code`. The approval check's carry `error` and a
  *  plain-language `message` (a locked gate, a wrong code, a gate that did not
  *  answer), which is shown as is rather than replaced by a generic line. */
-function refusalFromBody(body: unknown, action: string, status: number): { code: string; message: string } {
+function refusalFromBody(body: unknown, action: string, status: number, maxActiveWorkspaces?: number): { code: string; message: string } {
   const fields = object(body) ? body : {};
   const engineCode = refusalCode(fields.code);
   const code = engineCode ?? refusalCode(fields.error) ?? "context_request_refused";
   const gateMessage = !engineCode && code.includes("approval_gate") && text(fields.message)
     && fields.message.trim() && fields.message.length <= 300 ? fields.message : null;
-  return { code, message: gateMessage ?? refusal(code, action, status) };
+  return { code, message: gateMessage ?? refusal(code, action, status, maxActiveWorkspaces) };
 }
 
 async function ask(route: "workspace" | "workspace-access" | "workspace-grant", input: Record<string, unknown>, proof?: ContextProof, signal?: AbortSignal) {

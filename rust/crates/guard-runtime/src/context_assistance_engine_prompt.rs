@@ -13,6 +13,7 @@ use std::time::{Instant, SystemTime};
 mod quick;
 pub(crate) use quick::{
     definition, opened, project_context_on, prose, quick_excerpts, screened_texts, withheld_texts,
+    written_name,
 };
 
 /// The graph holds 128 sources, Guard's own included, and a removed file

@@ -199,6 +199,7 @@ export function ContextAssistanceSettings(props: Props) {
   const access = <ContextWorkspacesPanel ready={status?.effective_enabled === true} waking={cigarWaking(status)} generation={status?.generation ?? null}
       dirty={dirty} documentsAllowed={status?.effective_preferences.sources.workspace_documents === true}
       agentsAllowed={status?.effective_preferences.features.agent_context === true}
+      maxActiveWorkspaces={status?.effective_preferences.limits.max_active_workspaces}
       executionAllowed={status?.effective_preferences.features.execution_context === true
         && status?.capabilities?.execution_context === true}
       sharingAllowed={status?.effective_preferences.features.shared_agents === true && status?.runtime?.shared_compile_verified === true}

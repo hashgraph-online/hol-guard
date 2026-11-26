@@ -190,7 +190,7 @@ class HookWorkerNativeMixin:
     ) -> tuple[dict[str, object], bool]:
         from ..runtime_transition_hook_probe import transition_hook_probe
 
-        probe = transition_hook_probe(payload)
+        probe = transition_hook_probe(payload, deadline_monotonic=deadline)
         # Worker threads are reused, so clear any failure code left by an
         # earlier request before this review can report its own.
         record_native_resident_client_failure_code(None)

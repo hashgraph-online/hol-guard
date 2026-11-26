@@ -571,6 +571,7 @@
       "src/pretool/literal_secret_value.rs",
       "src/pretool/planted_instructions.rs",
       "src/pretool/liveness_probes.rs",
+      "src/pretool/headless_browser_reads.rs",
       "src/pretool/network_facts.rs",
       "src/pretool/status_facts.rs",
       "src/pretool/lockfile_install.rs",

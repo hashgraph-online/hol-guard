@@ -14,6 +14,7 @@ from ci.native_runtime import probe_installed_pi_output as probe
 
 from .case_worker import SubprocessCaseWorker
 from .catalog import Scenario, catalog_digest, load_catalog
+from .eval_browser import EVAL_BROWSER_ORACLE
 from .file_write_cases import FILE_WRITE_ORACLE
 from .task_brief_cases import TASK_BRIEF_ORACLE
 from .output_cases import OUTPUT_ORACLE
@@ -27,11 +28,19 @@ from .source_identity import source_identity
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-# Protection cases that drive an Oh My Pi tool no other lane has (learn, task, and eval's sh helper), and
+# Protection cases that drive an Oh My Pi tool no other lane has (learn, task, and eval's sh and browser
+# helpers), and
 # the output cases, whose judge reads the post-tool rows only the Oh My Pi lane binds per call, and
 # the loop cases, which need the per-session call history only the Oh My Pi lane's bridge proves.
 OMP_TOOL_ORACLES = frozenset(
-    {"blocked-memory-note", "blocked-eval-shell", OUTPUT_ORACLE, TASK_BRIEF_ORACLE, REPEAT_ORACLE}
+    {
+        "blocked-memory-note",
+        "blocked-eval-shell",
+        EVAL_BROWSER_ORACLE,
+        OUTPUT_ORACLE,
+        TASK_BRIEF_ORACLE,
+        REPEAT_ORACLE,
+    }
 )
 
 

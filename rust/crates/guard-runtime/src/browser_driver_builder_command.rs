@@ -7,6 +7,10 @@
 //! profile mode is `unknown`, and the publisher is never verified. `validate` runs a profile
 //! through the same compiler Guard uses at runtime, as a contributed profile, and reports what it
 //! claims. Nothing is written and no setting is read.
+//!
+//! Both ops also carry benign gate rows (BP-T057): `generate` drafts a protect row and its benign
+//! pair for every tool, and `validate` refuses a profile without rows that cover every tool and pair
+//! every protect row. The rules live in [`crate::browser_driver_gate_rows`].
 
 use std::collections::BTreeMap;
 
@@ -16,6 +20,8 @@ use guard_command::browser_driver_compile::{
     compile_browser_driver, BrowserDriverOrigin, CompiledBrowserDriverV1, CompiledBrowserToolV1,
 };
 use guard_command::browser_first_party_drivers::first_party_browser_drivers;
+
+use crate::browser_driver_gate_rows::{check_gate_rows, draft_gate_rows};
 
 pub(crate) const COMMAND: &str = "browser-driver";
 
@@ -279,6 +285,7 @@ fn generate(request: &Map<String, Value>) -> Value {
     if let Some(package) = text(request, "package") {
         matches["packages"] = json!([package]);
     }
+    let gate_rows = draft_gate_rows(slug, server, &tools);
     let profile = json!({
         "schemaVersion": "guard.browser-driver.v1",
         "id": format!("browser.{slug}"),
@@ -315,10 +322,14 @@ fn generate(request: &Map<String, Value>) -> Value {
         }
         Ok(_) => {}
     }
+    let mut gate_rows_text = serde_json::to_string_pretty(&gate_rows).unwrap_or_default();
+    gate_rows_text.push('\n');
     json!({
         "ok": true,
         "profile": profile,
         "profileText": profile_text,
+        "gateRows": gate_rows,
+        "gateRowsText": gate_rows_text,
         "proposals": proposals,
         "notes": notes,
     })
@@ -396,7 +407,20 @@ fn validate(request: &Map<String, Value>) -> Value {
                     "A shipped first-party profile already uses this id.",
                 );
             }
-            summary(&driver)
+            let Some(gate_rows) = request.get("gateRows").and_then(Value::as_str) else {
+                return refusal(
+                    "gate_rows_missing",
+                    "Provide the benign gate rows for the profile with --gate-rows.",
+                );
+            };
+            match check_gate_rows(&driver, gate_rows) {
+                Ok(count) => {
+                    let mut reply = summary(&driver);
+                    reply["gateRows"] = json!(count);
+                    reply
+                }
+                Err(refused) => refused,
+            }
         }
         Err(error) => json!({
             "ok": false,

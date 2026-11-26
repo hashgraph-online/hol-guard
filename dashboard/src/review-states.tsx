@@ -26,6 +26,8 @@ import { normalizeGuardAction } from "./guard-action";
 import { LoggedActionPanel } from "./logged-action-panel";
 import { explainMcpCall } from "./mcp-call/explain-mcp-call";
 import { McpCallCard } from "./mcp-call/mcp-call-card";
+import { BrowserCallCard } from "./browser-call/browser-call-card";
+import { parseBrowserCard } from "./mcp-call/browser-card";
 import { protectionHealthFor, unavailableProtectionHealth, useProtectionPresentationState } from "./protection-health";
 
 const PROTECTION_APPEARANCE = {
@@ -202,6 +204,10 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
 
 export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
   const mcpCall = explainMcpCall(item);
+  const browserCard = parseBrowserCard(item.browser_card);
+  if (mcpCall !== null && browserCard !== null) {
+    return <BrowserCallCard item={item} card={browserCard} explanation={mcpCall} />;
+  }
   if (mcpCall !== null) {
     return <McpCallCard item={item} explanation={mcpCall} />;
   }

@@ -24,7 +24,7 @@
 
 - HOL Guard version (`hol-guard --version`):
 - Agent connected with `hol-guard install`:
-- `hol-guard extensions validate --browser <profile>` result:
+- `hol-guard extensions validate --browser <profile> --gate-rows <rows>` result:
 - `hol-guard browser explain` for one privileged tool and one routine tool:
 
 ### Checklist

@@ -11,6 +11,7 @@ from .clone_fixtures import LONG_LIVED_CLONE_CASE, LONG_LIVED_WORKTREE_CASE
 from .command_outputs import command_outputs_match as command_outputs_match
 from .extension_catalog_fixtures import CATALOG_CASE, CATALOG_CHECK
 from .fast_forward_fixtures import FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE
+from .eval_browser import EVAL_BROWSER_BLOCK_REASONS, EVAL_BROWSER_ORACLE
 from .file_write_cases import FILE_WRITE_BLOCK_REASONS, FILE_WRITE_CHECK, FILE_WRITE_ORACLE
 from .git_rules_cases import GIT_RULES_BLOCK_REASONS, git_rules_required_checks
 from .input_evidence import edit_headers, input_digest, input_matches, post_input_matches
@@ -63,6 +64,8 @@ def block_reasons(scenario: Scenario) -> frozenset[str]:
         return FILE_WRITE_BLOCK_REASONS
     if scenario.oracle == TASK_BRIEF_ORACLE:
         return TASK_BRIEF_BLOCK_REASONS
+    if scenario.oracle == EVAL_BROWSER_ORACLE:
+        return BLOCK_REASONS | EVAL_BROWSER_BLOCK_REASONS
     if scenario.id in SCRIPT_BLOCK_REASONS:
         return SCRIPT_BLOCK_REASONS[scenario.id]
     if scenario.id in RUNTIME_BLOCK_REASONS:

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 
 _OVERLAY_READINESS_BUDGET_SECONDS = 0.15
+_FILE_LESS_READINESS = ("directory_only", "directory_and_ancestors")
 
 
 def _workspace_overlay_readiness(
@@ -55,6 +56,29 @@ def _workspace_overlay_readiness(
     return result.get("readiness") if result and result.get("request_id") == request_id else None
 
 
+def _readiness_or_last_proven(publisher: NativePolicySnapshotPublisher, candidate: Path, readiness: object) -> object:
+    """``readiness``, or the deferred workspace's last proven answer when the probe gave none.
+
+    A probe that gets no answer in its budget, as on a loaded host, proves
+    nothing about the directory. A deferred workspace already proved it had
+    no overlay, and the publisher's input fingerprint watches its overlay
+    files like any registered workspace's, so a file added since triggers a
+    publish. Treating the missing answer as an overlay instead sent every such
+    hook to wait for a publish that outlives its deadline. An answer that the
+    directory has an overlay or a link is never replaced. Call with the
+    publisher's condition held.
+    """
+
+    if readiness is not None or candidate not in publisher._deferred_workspace_paths:
+        return readiness
+    return publisher._deferred_workspace_readiness.get(candidate)
+
+
+def _drop_deferred_locked(publisher: NativePolicySnapshotPublisher, candidate: Path) -> None:
+    publisher._deferred_workspace_paths.discard(candidate)
+    publisher._deferred_workspace_readiness.pop(candidate, None)
+
+
 class NativePolicySnapshotWorkspaceReadinessMixin:
     """Gate only a newly observed workspace while its overlay is published.
 
@@ -79,16 +103,17 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
                 return False
             can_reuse_snapshot = publisher._acked or publisher._under_settled_workspace_locked(candidate)
         readiness = _workspace_overlay_readiness(publisher, candidate, deadline) if can_reuse_snapshot else None
-        file_less = readiness in ("directory_only", "directory_and_ancestors")
-        free_ancestors = readiness == "directory_and_ancestors"
         with publisher._condition:
+            readiness = _readiness_or_last_proven(publisher, candidate, readiness)
+            file_less = readiness in _FILE_LESS_READINESS
+            free_ancestors = readiness == "directory_and_ancestors"
             if candidate in publisher._workspace_paths:
                 if candidate not in publisher._deferred_workspace_paths or (
                     file_less and publisher._covered_by_ack_locked(candidate, free_ancestors=free_ancestors)
                 ):
                     return False
                 # A deferred workspace gained an overlay; it now needs its own ACK.
-                publisher._deferred_workspace_paths.discard(candidate)
+                _drop_deferred_locked(publisher, candidate)
                 registered = False
             else:
                 publisher._workspace_paths.add(candidate)
@@ -101,6 +126,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
                     # A publish now would supersede the generation its hooks
                     # are presenting, so it compiles with the next publish.
                     publisher._deferred_workspace_paths.add(candidate)
+                    publisher._deferred_workspace_readiness[candidate] = readiness
                     return True
             if publisher._closed:
                 return registered
@@ -141,7 +167,9 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
             if candidate not in publisher._deferred_workspace_paths:
                 return False
         readiness = _workspace_overlay_readiness(publisher, candidate, deadline)
-        if readiness in ("directory_only", "directory_and_ancestors"):
+        with publisher._condition:
+            readiness = _readiness_or_last_proven(publisher, candidate, readiness)
+        if readiness in _FILE_LESS_READINESS:
             with publisher._condition:
                 if candidate in publisher._deferred_workspace_paths and publisher._covered_by_ack_locked(
                     candidate, free_ancestors=readiness == "directory_and_ancestors"
@@ -159,7 +187,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
         with publisher._condition:
             if candidate not in publisher._deferred_workspace_paths or publisher._closed:
                 return
-            publisher._deferred_workspace_paths.discard(candidate)
+            _drop_deferred_locked(publisher, candidate)
             publisher._input_fingerprint = None
             publisher._queue_pending_workspace_publish_locked()
             publisher._condition.notify_all()
@@ -195,6 +223,8 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
         publisher = cast("NativePolicySnapshotPublisher", self)
         publisher._pending_workspace_paths.difference_update(compiled_workspaces)
         publisher._deferred_workspace_paths.intersection_update(publisher._pending_workspace_paths)
+        for settled in set(publisher._deferred_workspace_readiness) - publisher._deferred_workspace_paths:
+            del publisher._deferred_workspace_readiness[settled]
         if publisher._pending_workspace_paths - publisher._deferred_workspace_paths:
             publisher._queue_pending_workspace_publish_locked()
             publisher._publish_event.set()

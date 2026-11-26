@@ -36,6 +36,7 @@ from .native_policy_snapshot_harness_postures import (
 )
 from .native_policy_snapshot_reconcile import reconcile_policy_inputs
 from .native_process_stop_scope import native_process_stop_scope
+from .native_resident_client_pool import background_resident_lane
 from .resident_evidence_drain import EVIDENCE_BATCH_FEATURE
 
 if TYPE_CHECKING:
@@ -62,7 +63,7 @@ class NativePolicySnapshotPublicationMixin:
         from .native_context import bind_context_digest_home
 
         bind_context_digest_home(publisher.guard_home)
-        with native_process_stop_scope(publisher._close_event):
+        with native_process_stop_scope(publisher._close_event), background_resident_lane():
             self._run_until_closed(publisher)
 
     def _run_until_closed(self, publisher: NativePolicySnapshotPublisher) -> None:
@@ -76,7 +77,14 @@ class NativePolicySnapshotPublicationMixin:
                 if publisher._closed:
                     return
                 publisher._mark_expired_locked()
-                publisher._renew_direct_lane_ack()
+            # Renewal writes the direct-lane ACK file, which on Windows is
+            # several resident round trips. `_ACK_LOCK` already orders it
+            # against invalidation, so hooks waiting on the barrier lock do
+            # not wait for the file write too.
+            publisher._renew_direct_lane_ack()
+            with publisher._condition:
+                if publisher._closed:
+                    return
                 now = publisher._monotonic_clock()
                 wait_seconds = publisher._poll_interval_seconds
                 if publisher._retry_not_before_monotonic is not None:
@@ -95,7 +103,10 @@ class NativePolicySnapshotPublicationMixin:
                 if publisher._closed:
                     return
                 publisher._mark_expired_locked()
-                publisher._renew_direct_lane_ack()
+            publisher._renew_direct_lane_ack()
+            with publisher._condition:
+                if publisher._closed:
+                    return
                 now = publisher._monotonic_clock()
                 if (
                     publisher._acked
