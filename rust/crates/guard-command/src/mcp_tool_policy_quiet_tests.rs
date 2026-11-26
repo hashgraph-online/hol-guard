@@ -45,9 +45,10 @@ fn loopback_dev_pages_are_quiet_under_a_stricter_default() {
     );
     // The relay renders evidence from the verdict's summary code; an unknown code fails the
     // whole decision.
+    let artifact =
+        browser_request("browser_click", click.clone(), Some(local), &[], config()).artifact;
     let input: guard_contracts::McpToolRiskInputV1 = serde_json::from_value(serde_json::json!({
-        "artifact": {"name": "playwright:browser_click", "command": "browser_click",
-            "metadata": {"server_name": "playwright"}},
+        "artifact": artifact,
         "arguments": {"format": "other", "value": click.clone()},
         "risk_categories": quiet.risk_categories.clone(),
         "summary_code": quiet.summary_code.clone(),
