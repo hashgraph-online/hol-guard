@@ -1,6 +1,6 @@
 import { harnessDisplayName } from "../approval-center-utils";
 import type { GuardActionEnvelope, GuardApprovalRequest } from "../guard-types";
-import { explainBrowserTool } from "./browser-tools";
+import { explainBrowserCard, parseBrowserCard } from "./browser-card";
 import { explainComposioTool, THOUGHT_CAPTION, type McpCallBody } from "./composio-calls";
 import type { McpCallExplanation } from "./mcp-call-types";
 import { explainHostAppTool, hostAppTool, type HostAppTool } from "./host-app-tools";
@@ -49,10 +49,12 @@ export function explainMcpCall(item: GuardApprovalRequest): McpCallExplanation |
   // A built-in tool exists only inside its own app, so once the call is shown to come from that app, it is the one asking.
   const harness = host?.requester ?? harnessDisplayName(item.harness);
   const connector = host?.app ?? (ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER);
+  // Core's browser card comes from the driver profile that lists the tool, so it outranks every name-based reading.
+  const browserCard = parseBrowserCard(item.browser_card);
   const body =
+    (browserCard !== null ? explainBrowserCard(browserCard, { connector, input }) : null) ??
     (host !== null ? explainHostAppTool(host, input) : null) ??
     (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ??
-    (host === null ? explainBrowserTool(ref.server, shortTool, { harness, connector, input }) : null) ??
     explainGenericTool({ harness, connector, shortTool, input });
 
   return {

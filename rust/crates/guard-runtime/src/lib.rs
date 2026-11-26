@@ -99,6 +99,7 @@ mod bounded_hook_bridge_grok_script;
 mod bounded_hook_bridge_hermes;
 mod bounded_hook_bridge_remediation;
 mod bounded_hook_bridge_render;
+mod approval_browser_card;
 mod browser_explain_command;
 mod browser_open;
 pub mod browser_session_store;

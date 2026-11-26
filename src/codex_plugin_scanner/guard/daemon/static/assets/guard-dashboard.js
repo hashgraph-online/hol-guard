@@ -437,8 +437,8 @@ function requireReact_production() {
   react_production.use = function(usable) {
     return ReactSharedInternals.H.use(usable);
   };
-  react_production.useActionState = function(action2, initialState, permalink) {
-    return ReactSharedInternals.H.useActionState(action2, initialState, permalink);
+  react_production.useActionState = function(action, initialState, permalink) {
+    return ReactSharedInternals.H.useActionState(action, initialState, permalink);
   };
   react_production.useCallback = function(callback, deps) {
     return ReactSharedInternals.H.useCallback(callback, deps);
@@ -916,8 +916,8 @@ function requireReactDom_production() {
   reactDom_production.unstable_batchedUpdates = function(fn, a) {
     return fn(a);
   };
-  reactDom_production.useFormState = function(action2, initialState, permalink) {
-    return ReactSharedInternals.H.useFormState(action2, initialState, permalink);
+  reactDom_production.useFormState = function(action, initialState, permalink) {
+    return ReactSharedInternals.H.useFormState(action, initialState, permalink);
   };
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
@@ -4162,8 +4162,8 @@ function requireReactDomClient_production() {
     memoCache.index++;
     return updateQueue;
   }
-  function basicStateReducer(state, action2) {
-    return "function" === typeof action2 ? action2(state) : action2;
+  function basicStateReducer(state, action) {
+    return "function" === typeof action ? action(state) : action;
   }
   function updateReducer(reducer) {
     var hook = updateWorkInProgressHook();
@@ -4380,12 +4380,12 @@ function requireReactDomClient_production() {
     }
   }
   function runActionStateAction(actionQueue, node) {
-    var action2 = node.action, payload = node.payload, prevState = actionQueue.state;
+    var action = node.action, payload = node.payload, prevState = actionQueue.state;
     if (node.isTransition) {
       var prevTransition = ReactSharedInternals.T, currentTransition = {};
       ReactSharedInternals.T = currentTransition;
       try {
-        var returnValue = action2(prevState, payload), onStartTransitionFinish = ReactSharedInternals.S;
+        var returnValue = action(prevState, payload), onStartTransitionFinish = ReactSharedInternals.S;
         null !== onStartTransitionFinish && onStartTransitionFinish(currentTransition, returnValue);
         handleActionReturnValue(actionQueue, node, returnValue);
       } catch (error) {
@@ -4395,7 +4395,7 @@ function requireReactDomClient_production() {
       }
     } else
       try {
-        prevTransition = action2(prevState, payload), handleActionReturnValue(actionQueue, node, prevTransition);
+        prevTransition = action(prevState, payload), handleActionReturnValue(actionQueue, node, prevTransition);
       } catch (error$66) {
         onActionError(actionQueue, node, error$66);
       }
@@ -4436,7 +4436,7 @@ function requireReactDomClient_production() {
   function actionStateReducer(oldState, newState) {
     return newState;
   }
-  function mountActionState(action2, initialStateProp) {
+  function mountActionState(action, initialStateProp) {
     if (isHydrating) {
       var ssrFormState = workInProgressRoot.formState;
       if (null !== ssrFormState) {
@@ -4504,7 +4504,7 @@ function requireReactDomClient_production() {
     JSCompiler_inline_result$jscomp$0 = {
       state: initialStateProp,
       dispatch: null,
-      action: action2,
+      action,
       pending: null
     };
     JSCompiler_inline_result.queue = JSCompiler_inline_result$jscomp$0;
@@ -4516,14 +4516,14 @@ function requireReactDomClient_production() {
       ssrFormState
     );
     JSCompiler_inline_result$jscomp$0.dispatch = ssrFormState;
-    JSCompiler_inline_result.memoizedState = action2;
+    JSCompiler_inline_result.memoizedState = action;
     return [initialStateProp, ssrFormState, false];
   }
-  function updateActionState(action2) {
+  function updateActionState(action) {
     var stateHook = updateWorkInProgressHook();
-    return updateActionStateImpl(stateHook, currentHook, action2);
+    return updateActionStateImpl(stateHook, currentHook, action);
   }
-  function updateActionStateImpl(stateHook, currentStateHook, action2) {
+  function updateActionStateImpl(stateHook, currentStateHook, action) {
     currentStateHook = updateReducerImpl(
       stateHook,
       currentStateHook,
@@ -4540,26 +4540,26 @@ function requireReactDomClient_production() {
     else state = currentStateHook;
     currentStateHook = updateWorkInProgressHook();
     var actionQueue = currentStateHook.queue, dispatch = actionQueue.dispatch;
-    action2 !== currentStateHook.memoizedState && (currentlyRenderingFiber.flags |= 2048, pushSimpleEffect(
+    action !== currentStateHook.memoizedState && (currentlyRenderingFiber.flags |= 2048, pushSimpleEffect(
       9,
       { destroy: void 0 },
-      actionStateActionEffect.bind(null, actionQueue, action2),
+      actionStateActionEffect.bind(null, actionQueue, action),
       null
     ));
     return [state, dispatch, stateHook];
   }
-  function actionStateActionEffect(actionQueue, action2) {
-    actionQueue.action = action2;
+  function actionStateActionEffect(actionQueue, action) {
+    actionQueue.action = action;
   }
-  function rerenderActionState(action2) {
+  function rerenderActionState(action) {
     var stateHook = updateWorkInProgressHook(), currentStateHook = currentHook;
     if (null !== currentStateHook)
-      return updateActionStateImpl(stateHook, currentStateHook, action2);
+      return updateActionStateImpl(stateHook, currentStateHook, action);
     updateWorkInProgressHook();
     stateHook = stateHook.memoizedState;
     currentStateHook = updateWorkInProgressHook();
     var dispatch = currentStateHook.queue.dispatch;
-    currentStateHook.memoizedState = action2;
+    currentStateHook.memoizedState = action;
     return [stateHook, dispatch, false];
   }
   function pushSimpleEffect(tag, inst, create, deps) {
@@ -4731,7 +4731,7 @@ function requireReactDomClient_production() {
   }
   function noop() {
   }
-  function startHostTransition(formFiber, pendingState, action2, formData) {
+  function startHostTransition(formFiber, pendingState, action, formData) {
     if (5 !== formFiber.tag) throw Error(formatProdErrorMessage(476));
     var queue = ensureFormComponentIsStateful(formFiber).queue;
     startTransition(
@@ -4739,9 +4739,9 @@ function requireReactDomClient_production() {
       queue,
       pendingState,
       sharedNotPendingObject,
-      null === action2 ? noop : function() {
+      null === action ? noop : function() {
         requestFormReset$1(formFiber);
-        return action2(formData);
+        return action(formData);
       }
     );
   }
@@ -4815,29 +4815,29 @@ function requireReactDomClient_production() {
       provider = provider.return;
     }
   }
-  function dispatchReducerAction(fiber, queue, action2) {
+  function dispatchReducerAction(fiber, queue, action) {
     var lane = requestUpdateLane();
-    action2 = {
+    action = {
       lane,
       revertLane: 0,
       gesture: null,
-      action: action2,
+      action,
       hasEagerState: false,
       eagerState: null,
       next: null
     };
-    isRenderPhaseUpdate(fiber) ? enqueueRenderPhaseUpdate(queue, action2) : (action2 = enqueueConcurrentHookUpdate(fiber, queue, action2, lane), null !== action2 && (scheduleUpdateOnFiber(action2, fiber, lane), entangleTransitionUpdate(action2, queue, lane)));
+    isRenderPhaseUpdate(fiber) ? enqueueRenderPhaseUpdate(queue, action) : (action = enqueueConcurrentHookUpdate(fiber, queue, action, lane), null !== action && (scheduleUpdateOnFiber(action, fiber, lane), entangleTransitionUpdate(action, queue, lane)));
   }
-  function dispatchSetState(fiber, queue, action2) {
+  function dispatchSetState(fiber, queue, action) {
     var lane = requestUpdateLane();
-    dispatchSetStateInternal(fiber, queue, action2, lane);
+    dispatchSetStateInternal(fiber, queue, action, lane);
   }
-  function dispatchSetStateInternal(fiber, queue, action2, lane) {
+  function dispatchSetStateInternal(fiber, queue, action, lane) {
     var update = {
       lane,
       revertLane: 0,
       gesture: null,
-      action: action2,
+      action,
       hasEagerState: false,
       eagerState: null,
       next: null
@@ -4847,7 +4847,7 @@ function requireReactDomClient_production() {
       var alternate = fiber.alternate;
       if (0 === fiber.lanes && (null === alternate || 0 === alternate.lanes) && (alternate = queue.lastRenderedReducer, null !== alternate))
         try {
-          var currentState = queue.lastRenderedState, eagerState = alternate(currentState, action2);
+          var currentState = queue.lastRenderedState, eagerState = alternate(currentState, action);
           update.hasEagerState = true;
           update.eagerState = eagerState;
           if (objectIs(eagerState, currentState))
@@ -4855,18 +4855,18 @@ function requireReactDomClient_production() {
         } catch (error) {
         } finally {
         }
-      action2 = enqueueConcurrentHookUpdate(fiber, queue, update, lane);
-      if (null !== action2)
-        return scheduleUpdateOnFiber(action2, fiber, lane), entangleTransitionUpdate(action2, queue, lane), true;
+      action = enqueueConcurrentHookUpdate(fiber, queue, update, lane);
+      if (null !== action)
+        return scheduleUpdateOnFiber(action, fiber, lane), entangleTransitionUpdate(action, queue, lane), true;
     }
     return false;
   }
-  function dispatchOptimisticSetState(fiber, throwIfDuringRender, queue, action2) {
-    action2 = {
+  function dispatchOptimisticSetState(fiber, throwIfDuringRender, queue, action) {
+    action = {
       lane: 2,
       revertLane: requestTransitionLane(),
       gesture: null,
-      action: action2,
+      action,
       hasEagerState: false,
       eagerState: null,
       next: null
@@ -4877,7 +4877,7 @@ function requireReactDomClient_production() {
       throwIfDuringRender = enqueueConcurrentHookUpdate(
         fiber,
         queue,
-        action2,
+        action,
         2
       ), null !== throwIfDuringRender && scheduleUpdateOnFiber(throwIfDuringRender, fiber, 2);
   }
@@ -9608,10 +9608,10 @@ function requireReactDomClient_production() {
   }
   function extractEvents$1(dispatchQueue, domEventName, maybeTargetInst, nativeEvent, nativeEventTarget) {
     if ("submit" === domEventName && maybeTargetInst && maybeTargetInst.stateNode === nativeEventTarget) {
-      var action2 = coerceFormActionProp(
+      var action = coerceFormActionProp(
         (nativeEventTarget[internalPropsKey] || null).action
       ), submitter = nativeEvent.submitter;
-      submitter && (domEventName = (domEventName = submitter[internalPropsKey] || null) ? coerceFormActionProp(domEventName.formAction) : submitter.getAttribute("formAction"), null !== domEventName && (action2 = domEventName, submitter = null));
+      submitter && (domEventName = (domEventName = submitter[internalPropsKey] || null) ? coerceFormActionProp(domEventName.formAction) : submitter.getAttribute("formAction"), null !== domEventName && (action = domEventName, submitter = null));
       var event = new SyntheticEvent(
         "action",
         "action",
@@ -9634,22 +9634,22 @@ function requireReactDomClient_production() {
                       pending: true,
                       data: formData,
                       method: nativeEventTarget.method,
-                      action: action2
+                      action
                     },
                     null,
                     formData
                   );
                 }
               } else
-                "function" === typeof action2 && (event.preventDefault(), formData = submitter ? createFormDataWithSubmitter(nativeEventTarget, submitter) : new FormData(nativeEventTarget), startHostTransition(
+                "function" === typeof action && (event.preventDefault(), formData = submitter ? createFormDataWithSubmitter(nativeEventTarget, submitter) : new FormData(nativeEventTarget), startHostTransition(
                   maybeTargetInst,
                   {
                     pending: true,
                     data: formData,
                     method: nativeEventTarget.method,
-                    action: action2
+                    action
                   },
-                  action2,
+                  action,
                   formData
                 ));
             },
@@ -12280,15 +12280,15 @@ function requireReactDomClient_production() {
         if ("function" === typeof submitterOrAction)
           formProps || scheduleReplayQueueIfNeeded(i);
         else if (formProps) {
-          var action2 = null;
+          var action = null;
           if (submitterOrAction && submitterOrAction.hasAttribute("formAction"))
             if (form = submitterOrAction, formProps = submitterOrAction[internalPropsKey] || null)
-              action2 = formProps.formAction;
+              action = formProps.formAction;
             else {
               if (null !== findInstanceBlockingTarget(form)) continue;
             }
-          else action2 = formProps.action;
-          "function" === typeof action2 ? i[queuedTarget + 1] = action2 : (i.splice(queuedTarget, 3), queuedTarget -= 3);
+          else action = formProps.action;
+          "function" === typeof action ? i[queuedTarget + 1] = action : (i.splice(queuedTarget, 3), queuedTarget -= 3);
           scheduleReplayQueueIfNeeded(i);
         }
       }
@@ -13336,71 +13336,71 @@ function hasScopeContractMetadata(item) {
 function hasCompleteScopeContractBinding(item) {
   return typeof item.scope_contract_version === "string" && item.scope_contract_version.length > 0 && typeof item.scope_contract_digest === "string" && item.scope_contract_digest.length > 0;
 }
-function declaredScopesForAction(item, action2) {
-  if (action2 === "allow" && item.once_only_reason === "script_execution_binding_unavailable") {
+function declaredScopesForAction(item, action) {
+  if (action === "allow" && item.once_only_reason === "script_execution_binding_unavailable") {
     return [];
   }
-  if (action2 === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && item.exact_action_persistence_eligible !== true) {
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && item.exact_action_persistence_eligible !== true) {
     return [];
   }
   if (hasScopeContractMetadata(item) && !hasCompleteScopeContractBinding(item)) {
     return [];
   }
-  const actionScopes = item.allowed_scopes_by_action?.[action2];
+  const actionScopes = item.allowed_scopes_by_action?.[action];
   if (Array.isArray(actionScopes)) {
     return actionScopes;
   }
-  if (action2 === "allow" && Array.isArray(item.allowed_scopes)) {
+  if (action === "allow" && Array.isArray(item.allowed_scopes)) {
     return item.allowed_scopes;
   }
   return null;
 }
-function requestSupportsScope(item, action2, scope) {
-  if (action2 === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && scope !== "artifact") {
+function requestSupportsScope(item, action, scope) {
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && scope !== "artifact") {
     return false;
   }
-  const declaredScopes = declaredScopesForAction(item, action2);
+  const declaredScopes = declaredScopesForAction(item, action);
   if (declaredScopes !== null) {
     return declaredScopes.includes(scope);
   }
   return scope === "artifact";
 }
-function filterScopeChoicesForRequest(item, action2, choices) {
-  return choices.filter((choice) => requestSupportsScope(item, action2, choice.value));
+function filterScopeChoicesForRequest(item, action, choices) {
+  return choices.filter((choice) => requestSupportsScope(item, action, choice.value));
 }
-function scopeChoicesForRequest(item, action2 = "allow") {
+function scopeChoicesForRequest(item, action = "allow") {
   return filterScopeChoicesForRequest(
     item,
-    action2,
-    action2 === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES
-  ).map((choice) => action2 === "allow" && choice.value === "artifact" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") ? { ...choice, label: "Exact reviewed action", description: "Choose a duration below. This request requires persistent consent." } : choice);
+    action,
+    action === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES
+  ).map((choice) => action === "allow" && choice.value === "artifact" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") ? { ...choice, label: "Exact reviewed action", description: "Choose a duration below. This request requires persistent consent." } : choice);
 }
 const ADVANCED_SCOPE_VALUES = /* @__PURE__ */ new Set(["global"]);
-function advancedScopeChoicesForRequest(item, action2 = "allow") {
-  return scopeChoicesForRequest(item, action2).filter(
+function advancedScopeChoicesForRequest(item, action = "allow") {
+  return scopeChoicesForRequest(item, action).filter(
     (choice) => ADVANCED_SCOPE_VALUES.has(choice.value)
   );
 }
-function standardScopeChoicesForRequest(item, action2 = "allow") {
-  return scopeChoicesForRequest(item, action2).filter(
+function standardScopeChoicesForRequest(item, action = "allow") {
+  return scopeChoicesForRequest(item, action).filter(
     (choice) => !ADVANCED_SCOPE_VALUES.has(choice.value)
   );
 }
-function recommendedScopeForAction(item, action2) {
-  const actionRecommendation = item.recommended_scope_by_action?.[action2] ?? null;
-  if (actionRecommendation !== null && requestSupportsScope(item, action2, actionRecommendation)) {
+function recommendedScopeForAction(item, action) {
+  const actionRecommendation = item.recommended_scope_by_action?.[action] ?? null;
+  if (actionRecommendation !== null && requestSupportsScope(item, action, actionRecommendation)) {
     return actionRecommendation;
   }
-  if (action2 === "allow" && item.recommended_scope !== null && requestSupportsScope(item, action2, item.recommended_scope)) {
+  if (action === "allow" && item.recommended_scope !== null && requestSupportsScope(item, action, item.recommended_scope)) {
     return item.recommended_scope;
   }
-  return scopeChoicesForRequest(item, action2)[0]?.value ?? null;
+  return scopeChoicesForRequest(item, action)[0]?.value ?? null;
 }
-function normalizeDecisionScope(item, action2, scope) {
-  if (requestSupportsScope(item, action2, scope)) {
+function normalizeDecisionScope(item, action, scope) {
+  if (requestSupportsScope(item, action, scope)) {
     return scope;
   }
-  return recommendedScopeForAction(item, action2);
+  return recommendedScopeForAction(item, action);
 }
 const ONCE_ONLY_REASON_COPY = {
   no_command_identity: "Always allow is unavailable: this tool call has no stable command or file to remember. You can allow it once.",
@@ -13497,8 +13497,8 @@ function buildDecisionPayload(input) {
     } : {}
   };
 }
-function willPersistExactAction(item, action2, scope, requested) {
-  return requested && normalizeDecisionScope(item, action2, scope) === "artifact" && item.exact_action_persistence_eligible === true;
+function willPersistExactAction(item, action, scope, requested) {
+  return requested && normalizeDecisionScope(item, action, scope) === "artifact" && item.exact_action_persistence_eligible === true;
 }
 const MCP_EFFECT_COPY = {
   // Only a built-in agent-app tool gets this; no name is read as in-app on its own.
@@ -13945,11 +13945,11 @@ function splitToolSlug(slug) {
   if (split <= 0) {
     return { app: null, action: sentenceCase(slug) };
   }
-  const action2 = words.slice(split);
-  action2[0] = PLAIN_VERBS.get(action2[0]) ?? action2[0];
+  const action = words.slice(split);
+  action[0] = PLAIN_VERBS.get(action[0]) ?? action[0];
   return {
     app: serviceDisplayName(words.slice(0, split).join("_")),
-    action: capitalize(action2.join(" "))
+    action: capitalize(action.join(" "))
   };
 }
 const PLAIN_VERBS = /* @__PURE__ */ new Map([
@@ -14241,12 +14241,12 @@ function readComposioCode(code) {
     const start = at + match[0].length;
     const { args, unknown } = literalArguments(scan, quoted, start, callEnd(scan, quoted, start));
     const tool = slug.toUpperCase();
-    const { app, action: action2 } = splitToolSlug(tool);
+    const { app, action } = splitToolSlug(tool);
     const { facts, hidden } = scalarFacts(args, { max: 4, tool });
     steps.push({
       id: `code-${steps.length}-${slug}`,
       app,
-      action: action2,
+      action,
       effect: classifyMcpEffect(slug),
       details: facts,
       hiddenDetails: hidden + unknown
@@ -14506,12 +14506,12 @@ function batchTitle(first, count2, apps) {
 }
 function toStep(tool, index) {
   const slug = textOf(tool?.tool_slug, 120) ?? "";
-  const { app, action: action2 } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
+  const { app, action } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
   const { facts, hidden } = scalarFacts(recordOf(tool?.arguments), { max: 5, tool: slug });
   return {
     id: `${index}-${slug}`,
     app,
-    action: action2,
+    action,
     effect: slug.length > 0 ? classifyMcpEffect(slug) : "unknown",
     details: facts,
     hiddenDetails: hidden
@@ -14569,188 +14569,135 @@ function remoteCode(context, title, field, label) {
   };
 }
 function slugLabel(slug) {
-  const { app, action: action2 } = splitToolSlug(slug);
-  return app !== null ? `${app} · ${action2}` : action2;
+  const { app, action } = splitToolSlug(slug);
+  return app !== null ? `${app} · ${action}` : action;
 }
-const BROWSER_WORDS = ["browser", "playwright", "puppeteer", "chrome", "selenium", "webdriver", "stagehand"];
-const SCREEN_WORDS = ["computeruse", "computer", "desktop"];
-const AGENT_TEXT_KEYS$1 = ["thought", "use_case"];
-const POINTER_KEYS = ["tabid", "tab_id", "coordinate", "coordinates", "start_coordinate", "ref", "element_ref", "uid", "node_id"];
-function surfaceOf(server) {
-  const key = server.toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (BROWSER_WORDS.some((word) => key.includes(word))) return "page";
-  if (SCREEN_WORDS.some((word) => key.includes(word))) return "screen";
-  return null;
+const VERBS = {
+  navigate: { title: "Open a web page", effect: "act-as-you" },
+  read: { title: "Read the page", effect: "read" },
+  click: { title: "Click on the page", effect: "act-as-you" },
+  type: { title: "Type on the page", effect: "act-as-you" },
+  key: { title: "Press a key", effect: "act-as-you" },
+  select: { title: "Choose an option", effect: "act-as-you" },
+  scroll: { title: "Move around the page", effect: "act-as-you" },
+  screenshot: { title: "Take a picture of the page", effect: "read" },
+  upload: { title: "Upload a file to a website", effect: "send" },
+  download: { title: "Download a file", effect: "write" },
+  evaluate: { title: "Run code on the page", effect: "run-code" },
+  cookie_read: { title: "Read the site's cookies", effect: "read" },
+  cookie_write: { title: "Change the site's cookies", effect: "act-as-you" },
+  storage_read: { title: "Read the site's stored data", effect: "read" },
+  storage_write: { title: "Change the site's stored data", effect: "act-as-you" },
+  intercept: { title: "Watch or change network traffic", effect: "act-as-you" },
+  permission: { title: "Change site permissions", effect: "act-as-you" },
+  tab_control: { title: "Manage browser tabs", effect: "act-as-you" },
+  attach: { title: "Attach to a browser", effect: "act-as-you" },
+  other: { title: "Control the browser", effect: "unknown" }
+};
+const PROFILES = {
+  shared: "Your own browser profile",
+  dedicated: "A separate automation profile",
+  isolated: "A throwaway browser",
+  "remote-debugging": "A browser attached over remote debugging",
+  unknown: "A browser Guard could not identify"
+};
+const SURFACES = {
+  cookies: "Cookies",
+  storage: "Site storage",
+  auth_headers: "Sign-in headers",
+  cdp: "Browser debugging protocol",
+  script_eval: "Runs page code",
+  upload: "File upload",
+  download: "File download",
+  clipboard: "Clipboard",
+  network_intercept: "Network traffic",
+  password_field: "Password field"
+};
+const INPUT_NOUNS = { text: "text", key: "keys", file: "file path", script: "code" };
+const CODE_KEYS = ["function", "script", "expression", "code", "text"];
+const BASIS = "Read from Guard's browser driver profile for this tool.";
+function isRecord$d(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function action(title, phrase, effect) {
-  return { title, phrase, effect };
+function stringOrNull(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
-function actionFor(name, surface) {
-  const on = surface === "page" ? "the page" : "the screen";
-  const word = name.toLowerCase().replace(/^(browser|page|mouse|computer)_/, "");
-  switch (word) {
-    case "navigate":
-    case "navigate_page":
-    case "goto":
-    case "go_to":
-    case "open":
-    case "open_url":
-    case "open_page":
-    case "new_page":
-    case "new_tab":
-    case "tab_new":
-    case "tabs_create":
-    case "tabs_create_mcp":
-    case "preview_start":
-      return action("Open a web page", "open a web page", "act-as-you");
-    case "navigate_back":
-    case "go_back":
-    case "back":
-      return action("Go back a page", "go back a page", "act-as-you");
-    case "click":
-    case "left_click":
-    case "right_click":
-    case "middle_click":
-    case "double_click":
-    case "triple_click":
-    case "tap":
-      return action(`Click on ${on}`, `click on ${on}`, "act-as-you");
-    case "left_click_drag":
-    case "drag":
-    case "drag_and_drop":
-      return action(`Drag on ${on}`, `drag something on ${on}`, "act-as-you");
-    case "type":
-    case "type_text":
-    case "fill":
-    case "fill_form":
-    case "form_input":
-    case "input_text":
-    case "select_option":
-      return action(`Type on ${on}`, `type on ${on}`, "act-as-you");
-    case "key":
-    case "press":
-    case "press_key":
-    case "keyboard":
-      return action("Press a key", `press a key on ${on}`, "act-as-you");
-    case "scroll":
-    case "scroll_to":
-    case "hover":
-    case "mouse_move":
-      return action(`Move around ${on}`, `move around ${on}`, "act-as-you");
-    case "screenshot":
-    case "take_screenshot":
-    case "zoom":
-      return action(surface === "page" ? "Take a picture of the page" : "Take a picture of your screen", "take a screenshot", "read");
-    case "snapshot":
-    case "read_page":
-    case "get_page_text":
-    case "get_text":
-    case "get_content":
-    case "extract":
-      return action("Read the page", "read the page", "read");
-    case "find":
-    case "find_element":
-      return action("Find something on the page", "find something on the page", "read");
-    case "tabs_context":
-    case "tabs_context_mcp":
-    case "tabs":
-    case "list_tabs":
-    case "tab_list":
-      return action("See which tabs are open", "see which tabs are open", "read");
-    case "read_console_messages":
-    case "console_messages":
-      return action("Read the page's developer messages", "read the page's developer messages", "read");
-    case "read_network_requests":
-    case "network_requests":
-      return action("See what the page loaded", "see what the page loaded", "read");
-    case "wait":
-    case "wait_for":
-      return action("Wait for the page", "wait for the page", "read");
-    case "resize_window":
-    case "resize":
-      return action("Resize the window", "resize the window", "act-as-you");
-    case "close":
-    case "close_tab":
-    case "tab_close":
-    case "tabs_close":
-      return action("Close a tab", "close a tab", "act-as-you");
-    case "file_upload":
-    case "upload_file":
-    case "upload_image":
-      return action("Upload a file to a website", "upload a file to a website", "send");
-    case "evaluate":
-    case "javascript":
-    case "javascript_tool":
-    case "execute_script":
-    case "run_script":
-      return action("Run code on the page", "run code on the page", "run-code");
-    case "open_application":
-    case "open_app":
-      return action("Open an app", "open an app on your computer", "act-as-you");
-    default:
-      return null;
-  }
+function lengthOrNull(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+function parseBrowserCard(value) {
+  if (!isRecord$d(value) || typeof value.headline !== "string" || value.headline.trim().length === 0) return null;
+  const verb = value.verb;
+  if (typeof verb !== "string" || !(verb in VERBS)) return null;
+  const profile = value.profile_line;
+  if (typeof profile !== "string" || !(profile in PROFILES)) return null;
+  const site = isRecord$d(value.site) ? value.site : {};
+  const detail = isRecord$d(value.detail) ? value.detail : {};
+  const inputKind = detail.input_kind;
+  const chips = Array.isArray(value.risk_chips) ? value.risk_chips.filter((chip) => typeof chip === "string" && chip in SURFACES) : [];
+  return {
+    headline: value.headline.trim(),
+    verb,
+    site: {
+      origin: stringOrNull(site.origin),
+      first_visit_in_task: site.first_visit_in_task === true,
+      left_granted_site: site.left_granted_site === true
+    },
+    profile_line: profile,
+    detail: {
+      element_preview: stringOrNull(detail.element_preview),
+      input_kind: typeof inputKind === "string" && inputKind in INPUT_NOUNS ? inputKind : null,
+      input_length: lengthOrNull(detail.input_length),
+      input_masked: detail.input_masked === true
+    },
+    risk_chips: [...new Set(chips)],
+    provider_findings: [],
+    choices: Array.isArray(value.choices) ? value.choices.filter((choice) => typeof choice === "string") : [],
+    steps: []
+  };
+}
+function inputValue(card) {
+  const { input_kind: kind, input_length: length, input_masked: masked } = card.detail;
+  if (kind === null) return null;
+  const size = length === null ? null : `${length} ${length === 1 ? "character" : "characters"}`;
+  if (masked) return size === null ? "Hidden" : `Hidden · ${size}`;
+  return size === null ? INPUT_NOUNS[kind] : `${size} of ${INPUT_NOUNS[kind]}`;
 }
 function fact$1(label, value, key, kind = "text") {
   return value !== null && value.length > 0 ? [{ label, value, key, kind }] : [];
 }
-function firstKey(input, keys2) {
-  if (input === null) return null;
-  return keys2.find((key) => typeof input[key] === "string" && input[key].trim().length > 0) ?? null;
+function siteLabel(origin) {
+  if (origin === null) return null;
+  const host = origin.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
+  return host.length > 0 ? host : null;
 }
-const URL_KEYS = ["url", "href", "link"];
-const TEXT_KEYS = ["text", "value", "values"];
-const KEY_KEYS = ["key", "keys"];
-const TARGET_KEYS = ["element", "description", "target", "selector"];
-const QUERY_KEYS = ["query"];
-const CODE_KEYS = ["function", "script", "expression", "code"];
-function browserFacts(input, act) {
-  const urlKey = firstKey(input, URL_KEYS);
-  const textKey = act.effect === "run-code" ? null : firstKey(input, TEXT_KEYS);
-  const keyKey = firstKey(input, KEY_KEYS);
-  const targetKey = firstKey(input, TARGET_KEYS);
-  const queryKey = firstKey(input, QUERY_KEYS);
+function explainBrowserCard(card, context) {
+  const { title, effect } = VERBS[card.verb];
+  const { input } = context;
   const facts = [
-    ...urlKey !== null ? fact$1("Web page", textOf(input?.[urlKey]), urlKey, "url") : [],
-    ...targetKey !== null ? fact$1("On", textOf(input?.[targetKey], 160), targetKey) : [],
-    ...textKey !== null ? fact$1("What it types", textOf(input?.[textKey]), textKey, "long") : [],
-    ...keyKey !== null ? fact$1("Key", textOf(input?.[keyKey], 60), keyKey) : [],
-    ...queryKey !== null ? fact$1("Looking for", textOf(input?.[queryKey], 160), queryKey) : []
+    ...fact$1("Web page", card.site.origin, "browser_site", "url"),
+    ...fact$1("On", card.detail.element_preview, "browser_element"),
+    ...fact$1(card.detail.input_kind === "script" ? "Code" : "What it types", inputValue(card), "browser_input"),
+    ...fact$1("Browser", PROFILES[card.profile_line], "browser_profile"),
+    ...fact$1("Touches", card.risk_chips.map((chip) => SURFACES[chip]).join(", "), "browser_surfaces")
   ];
-  return { facts, used: [urlKey, textKey, keyKey, targetKey, queryKey].filter((key) => key !== null) };
-}
-function hostOf(facts) {
-  const url = facts.find((item) => item.kind === "url")?.value;
-  return url !== void 0 ? linkParts(url)?.host ?? null : null;
-}
-function explainBrowserTool(server, shortTool, context) {
-  const surface = surfaceOf(server);
-  if (surface === null) return null;
-  const { harness, connector, input } = context;
-  const stepName = shortTool.toLowerCase() === "computer" ? textOf(input?.action, 40) ?? "" : shortTool;
-  const act = actionFor(stepName, surface);
-  if (act === null) return null;
-  const { facts: named, used } = browserFacts(input, act);
-  const codeKey = act.effect === "run-code" ? firstKey(input, [...CODE_KEYS, "text"]) : null;
+  const codeKey = card.verb === "evaluate" && input !== null ? CODE_KEYS.find((key) => typeof input[key] === "string" && input[key].trim().length > 0) ?? null : null;
   const code = codeKey !== null ? codeOf(input?.[codeKey]) : null;
-  const skip = [...AGENT_TEXT_KEYS$1, ...used, ...codeKey !== null ? [codeKey] : [], "action", ...POINTER_KEYS];
-  const { facts: rest } = scalarFacts(input, { skip, max: Math.max(0, 6 - named.length) });
-  const facts = [...named, ...rest];
-  const host = act.title === "Open a web page" ? hostOf(facts) : null;
-  const phrase = host !== null ? `open ${host}` : act.phrase;
   const thought = textOf(input?.thought, 300);
+  const site = siteLabel(card.site.origin);
+  const rowTitle = card.verb === "navigate" && site !== null ? `Open ${site}` : title;
   return {
-    headline: `${harness} wants to ${phrase} in ${connector}`,
-    title: act.title,
+    headline: card.headline,
+    title,
     aside: null,
-    effect: act.effect,
-    effectBasis: "Read from the tool's name. Guard has not checked what it does.",
+    effect,
+    effectBasis: BASIS,
     facts,
     steps: [],
     quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
     code: code !== null ? { label: "Code", text: code } : null,
-    queueTitle: `${connector} · ${host !== null ? `Open ${host}` : act.title}`,
-    queueDetail: host === null ? facts[0]?.value ?? null : null
+    queueTitle: `${context.connector} · ${rowTitle}`,
+    queueDetail: card.verb === "navigate" ? null : facts[0]?.value ?? null
   };
 }
 const CLAUDE_APP = "the Claude app";
@@ -14764,7 +14711,7 @@ function fact(label, value, key, kind = "text") {
   return value !== null && value.length > 0 ? [{ label, value, key, kind }] : [];
 }
 function summaryFacts(input) {
-  const buttons = recordList(input?.actions, 4).map((action2) => textOf(action2.label, 40)).filter((label) => label !== null && label.length > 0);
+  const buttons = recordList(input?.actions, 4).map((action) => textOf(action.label, 40)).filter((label) => label !== null && label.length > 0);
   return [
     ...fact("Summary", textOf(input?.recap, 400), "recap", "long"),
     ...fact("Question", textOf(input?.ask, 160), "ask"),
@@ -14889,7 +14836,8 @@ function explainMcpCall(item) {
   const host = hostAppTool(ref.server, shortTool, { harness: item.harness, raw });
   const harness = host?.requester ?? harnessDisplayName(item.harness);
   const connector = host?.app ?? (ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER);
-  const body = (host !== null ? explainHostAppTool(host, input) : null) ?? (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? (host === null ? explainBrowserTool(ref.server, shortTool, { harness, connector, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
+  const browserCard = parseBrowserCard(item.browser_card);
+  const body = (browserCard !== null ? explainBrowserCard(browserCard, { connector, input }) : null) ?? (host !== null ? explainHostAppTool(host, input) : null) ?? (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
   return {
     ...body,
     consequence: consequenceFor(body.effect, whereItActs(body, connector)),
@@ -16510,7 +16458,7 @@ const ACTION_PRESENTATIONS = {
   }
 };
 function isGuardAction(value) {
-  return typeof value === "string" && GUARD_ACTIONS$1.some((action2) => action2 === value);
+  return typeof value === "string" && GUARD_ACTIONS$1.some((action) => action === value);
 }
 function isRecognizedGuardActionInput(value) {
   return value === "ask" || isGuardAction(value);
@@ -16529,7 +16477,7 @@ function guardActionPresentation(value) {
 }
 function mostRestrictiveGuardAction(...values) {
   if (values.length === 0) return "review";
-  const rank = new Map(GUARD_ACTIONS$1.map((action2, index) => [action2, index]));
+  const rank = new Map(GUARD_ACTIONS$1.map((action, index) => [action, index]));
   return values.map(normalizeGuardAction).reduce(
     (strongest, candidate) => (rank.get(candidate) ?? 0) > (rank.get(strongest) ?? 0) ? candidate : strongest
   );
@@ -16744,16 +16692,16 @@ function plainEnglishDescription(receipt) {
     const outcome = `You approved it once, but a one-time approval could not let ${app} run it, so it stayed stopped.`;
     return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${formatSubtitle(subtitle)}${outcome}` : `${app} tried to ${infinitiveVerb(type)} ${title}. ${outcome}`;
   }
-  const action2 = guardActionPresentation(receipt.policy_decision);
-  if (action2.disposition === "allowed") {
-    const outcome = action2.action === "warn" ? "allowed it with a warning" : "allowed it";
+  const action = guardActionPresentation(receipt.policy_decision);
+  if (action.disposition === "allowed") {
+    const outcome = action.action === "warn" ? "allowed it with a warning" : "allowed it";
     if (receipt.user_override !== null) {
       return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and ${outcome}.` : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and ${outcome}.`;
     }
-    const automaticOutcome = action2.action === "warn" ? "Guard allowed it automatically with a warning." : "Guard allowed it automatically.";
+    const automaticOutcome = action.action === "warn" ? "Guard allowed it automatically with a warning." : "Guard allowed it automatically.";
     return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} ${automaticOutcome}` : `${app} ${pastTenseVerb(type)} ${title}. ${automaticOutcome}`;
   }
-  const enforcementCopy = `${guardActionActivityCopy(action2.action, "Guard", "it")}.`;
+  const enforcementCopy = `${guardActionActivityCopy(action.action, "Guard", "it")}.`;
   return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy} ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy}`;
 }
 function pastTenseVerb(type) {
@@ -17164,16 +17112,16 @@ function resolveDataFlowSinkLabel(signal) {
   }
   return "External sink";
 }
-function buildRetryAfterApprovalCopy(item, action2, persistedExactAction = false) {
+function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false) {
   const harness = harnessDisplayName(item.harness);
   if (isWatchOnlyObservation(item)) {
-    if (persistedExactAction && action2 === "allow") {
+    if (persistedExactAction && action === "allow") {
       return "Saved. Guard will allow this exact action next time when the remembered option is selected.";
     }
     if (persistedExactAction) return "Saved. Guard will stop this exact action next time.";
     return "Reviewed. Watch already allowed this action to run; no future rule was saved.";
   }
-  if (action2 === "allow") {
+  if (action === "allow") {
     if (persistedExactAction) {
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
@@ -17296,8 +17244,8 @@ function scopeLabel(scope, variant = "review") {
       return scope;
   }
 }
-function policyActionLabel(action2) {
-  return guardActionPresentation(action2).label;
+function policyActionLabel(action) {
+  return guardActionPresentation(action).label;
 }
 function requestResolutionBlockReason(item) {
   if (item.native_business_review_display_only) {
@@ -18134,9 +18082,9 @@ function stringValue$2(value) {
 function remainingStep(candidate) {
   const step = stringValue$2(candidate.step);
   const message = stringValue$2(candidate.message);
-  const action2 = stringValue$2(candidate.action);
-  if ((step === "intelligence_sync" && action2 === "connect" || step === "package_shims" && action2 === "check_access") && message !== null) {
-    return { step, message, action: action2 };
+  const action = stringValue$2(candidate.action);
+  if ((step === "intelligence_sync" && action === "connect" || step === "package_shims" && action === "check_access") && message !== null) {
+    return { step, message, action };
   }
   return null;
 }
@@ -20641,7 +20589,7 @@ function parseDecisionV2(raw) {
     return null;
   }
   const guardAction = raw["guard_action"];
-  const action2 = raw["action"];
+  const action = raw["action"];
   const reason = raw["reason"];
   const userTitle = raw["user_title"];
   const userBody = raw["user_body"];
@@ -20651,12 +20599,12 @@ function parseDecisionV2(raw) {
   const retryInstruction = raw["retry_instruction"];
   const signals = raw["signals"];
   const confidence = raw["confidence"];
-  if (!isGuardAction(guardAction) || !isDecisionV2Action(action2) || action2 !== guardDecisionV2Action(guardAction) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
+  if (!isGuardAction(guardAction) || !isDecisionV2Action(action) || action !== guardDecisionV2Action(guardAction) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
     return null;
   }
   return {
     guard_action: guardAction,
-    action: action2,
+    action,
     reason,
     user_title: userTitle,
     user_body: userBody,
@@ -20675,8 +20623,8 @@ function parseLegacyPackageActionMetadata(raw) {
   if (Object.keys(raw).some((key) => isActionBearingKey(key) && key !== "policy_action")) {
     return { recognized: false, action: null };
   }
-  const action2 = raw["policy_action"];
-  return { recognized: true, action: isRecognizedGuardActionInput(action2) ? normalizeGuardAction(action2) : null };
+  const action = raw["policy_action"];
+  return { recognized: true, action: isRecognizedGuardActionInput(action) ? normalizeGuardAction(action) : null };
 }
 const DECISION_SCOPE_VALUES = /* @__PURE__ */ new Set([
   "artifact",
@@ -20721,7 +20669,7 @@ function normalizeApprovalRequest(item) {
   const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_action);
   const hasMalformedActionEnvelope = item.action_envelope_json !== void 0 && item.action_envelope_json !== null && actionEnvelope === null && !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
   const hasContradictoryActionEnvelope = actionEnvelope !== null && [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
-    (action2) => action2 !== void 0 && action2 !== null && action2 !== policyAction
+    (action) => action !== void 0 && action !== null && action !== policyAction
   ) || legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction;
   const hasDecisionContractError = rawContractError !== void 0 || hasUnknownPolicyAction || hasMalformedActionEnvelope || hasContradictoryActionEnvelope || item.decision_v2_json !== void 0 && item.decision_v2_json !== null && decisionV2 === null || decisionV2 !== null && (decisionV2.guard_action !== policyAction || decisionV2.action !== guardDecisionV2Action(policyAction));
   const failClosedPolicyAction = hasDecisionContractError ? mostRestrictiveGuardAction(
@@ -21468,7 +21416,7 @@ function normalizeReceipt(item) {
   const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_decision);
   const hasMalformedActionEnvelope = item.action_envelope_json !== void 0 && item.action_envelope_json !== null && actionEnvelope === null && !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
   const hasContradictoryActionEnvelope = actionEnvelope !== null && [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
-    (action2) => action2 !== void 0 && action2 !== null && action2 !== policyAction
+    (action) => action !== void 0 && action !== null && action !== policyAction
   ) || legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction;
   const hasDecisionContractError = item.decision_contract_error !== void 0 || hasUnknownPolicyAction || hasMalformedActionEnvelope || hasContradictoryActionEnvelope;
   const failClosedPolicyAction = hasDecisionContractError ? mostRestrictiveGuardAction(
@@ -22669,14 +22617,14 @@ async function fetchSupplyChainBundle() {
   }
   return bundle;
 }
-async function runPackageFirewallAction(action2, manager, credentials) {
+async function runPackageFirewallAction(action, manager, credentials) {
   const payload = {
     ...manager !== null ? { managers: [manager] } : {},
     ...credentials?.approval_password !== void 0 ? { approval_password: credentials.approval_password } : {},
     ...credentials?.approval_totp_code !== void 0 ? { approval_totp_code: credentials.approval_totp_code } : {}
   };
   const { response, payload: payloadBody } = await fetchLocalProtectionJson(
-    `/v1/supply-chain/package-shims/${action2}`,
+    `/v1/supply-chain/package-shims/${action}`,
     {
       method: "POST",
       headers: {
@@ -23875,8 +23823,8 @@ function approvalGateLockRemainingSeconds(gate, nowMs = Date.now()) {
 function approvalGateIsLocked(gate, nowMs = Date.now()) {
   return approvalGateLockRemainingSeconds(gate, nowMs) > 0;
 }
-function approvalGateRequiredForResolution(gate, action2, scope) {
-  return gate?.enabled === true && (action2 === "allow" || scope === "global" || gate.strict_all_decisions === true);
+function approvalGateRequiredForResolution(gate, action, scope) {
+  return gate?.enabled === true && (action === "allow" || scope === "global" || gate.strict_all_decisions === true);
 }
 function approvalGateCooldownLabel(seconds) {
   if (seconds === 0) return "Every approval";
@@ -27209,7 +27157,7 @@ function waitForStatusRetry(signal) {
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
-async function request$1(path, action2, signal) {
+async function request$1(path, action, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context assistance setup requires a local Guard installation.");
   const timeout = AbortSignal.timeout(1e4);
   const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -27218,7 +27166,7 @@ async function request$1(path, action2, signal) {
     const response = await fetchWithGuardAuth(path, {
       cache: "no-store",
       signal: requestSignal,
-      ...action2 ? {
+      ...action ? {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{}"
@@ -27227,7 +27175,7 @@ async function request$1(path, action2, signal) {
     if (response.ok) return parseContextAssistanceStatus(await response.json());
     const body = await response.json().catch(() => null);
     const code = body !== null && typeof body === "object" && "code" in body && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_assistance_unavailable";
-    if (!action2 && response.status === 409 && code === "native_context_assistance_busy" && retry < 8) {
+    if (!action && response.status === 409 && code === "native_context_assistance_busy" && retry < 8) {
       await waitForStatusRetry(requestSignal);
       continue;
     }
@@ -27239,12 +27187,12 @@ async function request$1(path, action2, signal) {
 }
 const fetchContextAssistance = (signal) => request$1("/v1/context-assistance", void 0, signal);
 const fetchContextInstallations = (signal) => request$1("/v1/context-assistance/installations", void 0, signal);
-function controlContextAssistance(action2, signal) {
-  if (!["recheck", "activate", "stop"].includes(action2)) {
+function controlContextAssistance(action, signal) {
+  if (!["recheck", "activate", "stop"].includes(action)) {
     return Promise.reject(new ContextAssistanceApiError("action_invalid", "Invalid context assistance action."));
   }
-  if (action2 === "stop") forgetTurnOn();
-  return request$1(`/v1/context-assistance/${action2}`, action2, signal);
+  if (action === "stop") forgetTurnOn();
+  return request$1(`/v1/context-assistance/${action}`, action, signal);
 }
 function ContextBriefView({ brief, scope }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
@@ -27302,17 +27250,17 @@ function parseContextBrief(value) {
   if (!object$2(value) || value.schema !== "guard-cigar-context-brief.v1" || value.data_role !== true || !digest$4(value.snapshot_id) || !text$2(value.policy_revision) || !count$1(value.graph_revision) || !text$2(value.rendered) || value.rendered.length > 262144 || !count$1(value.rendered_tokens) || !Array.isArray(value.excerpts) || value.excerpts.length > 16 || !value.excerpts.every((excerpt) => object$2(excerpt) && text$2(excerpt.text) && Array.isArray(excerpt.citations)) || !Array.isArray(value.citations) || value.citations.length > 1024 || !value.citations.every((citation) => object$2(citation) && text$2(citation.source) && text$2(citation.node_id) && count$1(citation.start_line) && citation.start_line > 0 && count$1(citation.end_line) && citation.end_line >= citation.start_line && digest$4(citation.document_digest))) invalid$3();
   return value;
 }
-function refusal(code, action2, status) {
+function refusal(code, action, status) {
   if (/runtime_(deadline_exceeded|not_verified|closed|crashed|cancelled|transport_failed)$/.test(code)) {
     return "CIGAR stopped before it could finish. Restart CIGAR at the top of this page, then try again. Your saved project choices are kept.";
   }
   if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
   if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
-  if (code.endsWith("context_resource_limit") && action2 === "authorize_agent") {
+  if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
     return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
   }
   if (code.endsWith("context_busy") || code.endsWith("_busy")) return "CIGAR is still finishing something. Try again in a moment.";
-  if (code.endsWith("context_scope_denied") && action2 === "grant") {
+  if (code.endsWith("context_scope_denied") && action === "grant") {
     return "CIGAR couldn't add these files. It won't read a file that looks like it holds a password or key, a file your settings block, or a folder Guard keeps private. Take that file out, or pick another folder, and try again.";
   }
   if (code.endsWith("context_stale") || code.endsWith("context_scope_denied")) return "The project or its files changed. Choose Read files again, or add the project again.";
@@ -27320,12 +27268,12 @@ function refusal(code, action2, status) {
   return `CIGAR could not finish that (${code}). Refresh and try again.`;
 }
 const refusalCode = (value) => text$2(value) && /^[a-z0-9_]{1,160}$/.test(value) ? value : null;
-function refusalFromBody(body, action2, status) {
+function refusalFromBody(body, action, status) {
   const fields2 = object$2(body) ? body : {};
   const engineCode = refusalCode(fields2.code);
   const code = engineCode ?? refusalCode(fields2.error) ?? "context_request_refused";
   const gateMessage = !engineCode && code.includes("approval_gate") && text$2(fields2.message) && fields2.message.trim() && fields2.message.length <= 300 ? fields2.message : null;
-  return { code, message: gateMessage ?? refusal(code, action2, status) };
+  return { code, message: gateMessage ?? refusal(code, action, status) };
 }
 async function ask(route, input, proof, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context sources require a local Guard installation.");
@@ -27368,8 +27316,8 @@ async function authorizeContextAgentSession(sessionId, scopeId, proof, signal) {
 async function revokeContextAgentSession(sessionId, signal) {
   return ask("workspace-access", { action: "revoke_agent", session_id: sessionId }, void 0, signal);
 }
-async function manageContextWorkspace(action2, scopeId, sourceId, signal) {
-  return ask("workspace-access", { action: action2, ...scopeId ? { scope_id: scopeId } : {}, ...sourceId ? { source_id: sourceId } : {} }, void 0, signal);
+async function manageContextWorkspace(action, scopeId, sourceId, signal) {
+  return ask("workspace-access", { action, ...scopeId ? { scope_id: scopeId } : {}, ...sourceId ? { source_id: sourceId } : {} }, void 0, signal);
 }
 async function compileWorkspaceContext(scopeId, query, signal) {
   const result = await ask("workspace", { action: "compile", scope_id: scopeId, query }, void 0, signal);
@@ -27809,18 +27757,18 @@ function nextSafeStep(receipt) {
   if (approvalLeftActionStopped(receipt)) {
     return 'A one-time approval cannot let the agent run this command. Run it yourself, or approve the next request with "Always allow exact action" when that option is offered.';
   }
-  const action2 = guardActionPresentation(receipt.policy_decision).action;
-  if (action2 === "block") {
+  const action = guardActionPresentation(receipt.policy_decision).action;
+  if (action === "block") {
     return "This action is blocked. Review the governing policy or choose a safer alternative; it cannot be approved from the review queue.";
   }
-  if (action2 === "sandbox-required") {
+  if (action === "sandbox-required") {
     return "Run this action through an approved sandbox, then retry only after the sandbox requirement is satisfied.";
   }
-  if (action2 === "allow" || action2 === "warn") {
+  if (action === "allow" || action === "warn") {
     return null;
   }
   const category = detectCategory(receipt);
-  const approvalCopy = action2 === "require-reapproval" ? "grant fresh approval" : "approve it";
+  const approvalCopy = action === "require-reapproval" ? "grant fresh approval" : "approve it";
   if (category === "supply-chain") {
     return `Review the package source and version, then ${approvalCopy} from the review queue if it is safe.`;
   }
@@ -27844,7 +27792,7 @@ function NextSafeCommandHint({ receipt }) {
   ] });
 }
 function EvidenceTimeline({ receipt }) {
-  const action2 = guardActionPresentation(receipt.policy_decision);
+  const action = guardActionPresentation(receipt.policy_decision);
   const stopped = approvalLeftActionStopped(receipt);
   const events = [
     {
@@ -27853,9 +27801,9 @@ function EvidenceTimeline({ receipt }) {
       icon: "start"
     },
     {
-      label: stopped ? APPROVAL_LEFT_STOPPED_LABEL : action2.label,
+      label: stopped ? APPROVAL_LEFT_STOPPED_LABEL : action.label,
       time: receipt.timestamp,
-      icon: stopped ? "blocked" : action2.disposition
+      icon: stopped ? "blocked" : action.disposition
     }
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -31341,8 +31289,8 @@ const FEEDBACK_LABELS$1 = {
   should_not_have_interrupted: "Should not have interrupted",
   expected_guard_to_stop_this: "Expected Guard to stop this"
 };
-function commandDecisionLabel(action2) {
-  return action2 === null ? "Decision unavailable" : DECISION_LABELS[action2];
+function commandDecisionLabel(action) {
+  return action === null ? "Decision unavailable" : DECISION_LABELS[action];
 }
 function commandExecutionLabel(status) {
   return EXECUTION_LABELS[status];
@@ -35242,9 +35190,9 @@ function decisionButtonLabels(input) {
   const blockLabel = watchOnlyObservation || persistExactBlock ? "Stop this next time" : blockButtonLabel(blockScope);
   return { persistExactAllow, persistExactBlock, allowLabel, blockLabel };
 }
-function resolvedActionCopy(item, action2, persistedExactAction) {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action2, persistedExactAction);
-  if (action2 === "allow") return "Approved: action can proceed";
+function resolvedActionCopy(item, action, persistedExactAction) {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
+  if (action === "allow") return "Approved: action can proceed";
   return "Blocked: action stopped";
 }
 const EXTENSION_BRANDS = {
@@ -35871,17 +35819,17 @@ function PrimaryActionCard({ item }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(LoggedActionCard, { item });
 }
 function LoggedActionCard({ item }) {
-  const action2 = buildPrimaryReviewAction(item);
+  const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
   const agentIntent = resolveAgentStatedIntent(item);
   const watchOnlyObservation = isWatchOnlyObservation(item);
   const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
-  const actionLabel = watchOnlyObservation ? "Would have stopped" : action2.label;
+  const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: watchOnlyObservation ? "What Watch observed" : "What was stopped" }),
-        action2.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action2.detail })
+        action.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: actionLabel })
     ] }),
@@ -35890,7 +35838,7 @@ function LoggedActionCard({ item }) {
         LoggedActionPanel,
         {
           label: actionLabel,
-          text: action2.text,
+          text: action.text,
           copyAriaLabel: `Copy full ${actionDescription} to clipboard`,
           expandAriaLabel: `Expand full ${actionDescription}`,
           collapseAriaLabel: `Collapse full ${actionDescription}`
@@ -37862,30 +37810,30 @@ function useReviewDecisionResolve(params) {
     setFreshCodeRequired(false);
   }, [decisionSubjectKey]);
   const handleResolve = reactExports.useCallback(
-    async (action2, gateOverride) => {
+    async (action, gateOverride) => {
       if (!item || resolutionBlockReason !== null) return;
-      if (action2 === "allow" && !canSubmitAllow) {
+      if (action === "allow" && !canSubmitAllow) {
         setErrorMessage(hasAllowScope ? "Choose 'Always allow exact action' before approving; run once is unavailable." : "This action has no eligible approval scope.");
         return;
       }
       const requestId = item.request_id;
-      const requestedScope = action2 === "allow" ? allowScope : blockScope;
+      const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = gateOverride ?? approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action2, requestedScope);
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
       if (gateRequired && approvalGateIsLocked(gate)) {
         setErrorMessage(
           `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
         );
         return;
       }
-      setSubmitting(action2);
+      setSubmitting(action);
       setErrorMessage(null);
       try {
         const persistExactAction = willPersistExactAction(
           item,
-          action2,
+          action,
           requestedScope,
-          action2 === "allow" ? rememberExactAction : watchOnlyObservation
+          action === "allow" ? rememberExactAction : watchOnlyObservation
         );
         const includeGateFields = gateRequired && gate?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
           gate.cooldown_active,
@@ -37896,9 +37844,9 @@ function useReviewDecisionResolve(params) {
         await onResolve({
           ...buildDecisionPayload({
             item,
-            action: action2,
+            action,
             scope: requestedScope,
-            reason: action2 === "allow" ? "approved in review" : "blocked in review",
+            reason: action === "allow" ? "approved in review" : "blocked in review",
             persistExactAction
           }),
           ...proof,
@@ -37907,7 +37855,7 @@ function useReviewDecisionResolve(params) {
           } : {}
         });
         if (!isStillShown(requestId)) return;
-        setResolved({ requestId, action: action2, persistedExactAction: persistExactAction });
+        setResolved({ requestId, action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setCooldownOptOut(false);
@@ -37964,25 +37912,25 @@ function useReviewDecisionResolve(params) {
     ]
   );
   const handleRequestResolve = reactExports.useCallback(
-    (action2) => {
+    (action) => {
       if (resolutionBlockReason !== null || decisionBusy) return;
       if (!recheckSignIn()) return;
-      if (action2 === "allow" && !hasAllowScope) {
+      if (action === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
         return;
       }
-      if (action2 === "allow" && !canSubmitAllow) {
+      if (action === "allow" && !canSubmitAllow) {
         setErrorMessage("Choose 'Always allow exact action' before approving; run once is unavailable.");
         return;
       }
-      if (action2 === "block" && blockScopeOptions.length === 0) {
+      if (action === "block" && blockScopeOptions.length === 0) {
         setErrorMessage("This action has no eligible block scope.");
         return;
       }
-      setLastAction(action2);
-      const requestedScope = action2 === "allow" ? allowScope : blockScope;
+      setLastAction(action);
+      const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action2, requestedScope);
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
       if (gateRequired && approvalGateIsLocked(gate)) {
         setErrorMessage(
           `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
@@ -38005,35 +37953,35 @@ function useReviewDecisionResolve(params) {
               setEffectiveApprovalGate(fresh2.gate);
             }
           }
-          if (approvalGateRequiredForResolution(current, action2, requestedScope) && approvalGateIsLocked(current)) {
+          if (approvalGateRequiredForResolution(current, action, requestedScope) && approvalGateIsLocked(current)) {
             setErrorMessage(
               `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(current)} seconds.`
             );
             return;
           }
-          const gateEnabled = approvalGateRequiredForResolution(current, action2, requestedScope) && current?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
+          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
             current.cooldown_active,
             current.strict_all_decisions,
             requestedScope
           ));
           if (!gateEnabled) {
-            void handleResolve(action2, current);
+            void handleResolve(action, current);
             return;
           }
           setErrorMessage(null);
           if (freshCodeRequired || !approvalProofRecentlySatisfied(current)) {
-            setPendingAction(action2);
+            setPendingAction(action);
             setPendingContractKey(decisionContractKey);
             return;
           }
           const fresh = await fetchResolvedApprovalGate().catch(() => current);
           if (requestId !== null && !isStillShown(requestId)) return;
           if (approvalProofRecentlySatisfied(fresh ?? current)) {
-            void handleResolve(action2, fresh ?? current);
+            void handleResolve(action, fresh ?? current);
             return;
           }
           if (fresh) setEffectiveApprovalGate(fresh);
-          setPendingAction(action2);
+          setPendingAction(action);
           setPendingContractKey(decisionContractKey);
         } finally {
           setPreflighting(false);
@@ -42422,11 +42370,11 @@ function WatchProtectionBanner(props) {
   const perApp = props.model !== void 0 && props.model !== null && !props.model.globalWatch;
   const actionLabel = perApp ? "Turn protection on for these apps" : "Turn protection on";
   let detail = null;
-  let action2;
+  let action;
   switch (state.kind) {
     case "confirming":
       detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage });
-      action2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+      action = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void handleConfirm(), disabled, className: PRIMARY_BUTTON, children: "Turn on" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleCancel, className: SECONDARY_BUTTON, children: "Not now" })
       ] });
@@ -42434,21 +42382,21 @@ function WatchProtectionBanner(props) {
     case "working":
     case "proof":
       detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage });
-      action2 = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: true, "aria-busy": "true", className: PRIMARY_BUTTON, children: state.kind === "proof" ? "Waiting for approval…" : "Turning on…" });
+      action = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: true, "aria-busy": "true", className: PRIMARY_BUTTON, children: state.kind === "proof" ? "Waiting for approval…" : "Turning on…" });
       break;
     case "error":
       detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-1 text-sm text-slate-600", children: state.message });
-      action2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+      action = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void handleConfirm(), disabled, className: PRIMARY_BUTTON, children: "Try again" }),
         onOpenSettings !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onOpenSettings, className: SECONDARY_BUTTON, children: "Open settings" }) : null
       ] });
       break;
     case "locked":
       detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: LOCKED_COPY });
-      action2 = null;
+      action = null;
       break;
     default:
-      action2 = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleAsk, disabled, className: PRIMARY_BUTTON, children: actionLabel });
+      action = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleAsk, disabled, className: PRIMARY_BUTTON, children: actionLabel });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
@@ -42464,7 +42412,7 @@ function WatchProtectionBanner(props) {
             detail
           ] })
         ] }),
-        action2,
+        action,
         state.kind === "proof" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           SettingsSaveProofModal,
           {

@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import type { GuardActionEnvelope, GuardApprovalRequest } from "../guard-types";
+import type { GuardActionEnvelope, GuardApprovalRequest, GuardBrowserCardV1 } from "../guard-types";
 import { queueItemPreview } from "../review-queue-item";
 import { PrimaryActionCard } from "../review-states";
 import { explainMcpCall } from "./explain-mcp-call";
@@ -112,34 +112,77 @@ const call = (server: string, tool: string, input: unknown) => request(envelope(
   assert(markup.includes("Gmail, through Composio"), "T-APP-23: the card still names the service in between");
 }
 
-// Browser tools read as plain steps, and say the agent acts as you.
+// Browser steps come from Core's native card, never from the tool's name.
 {
-  const open = explainMcpCall(call("Claude_Browser", "navigate", { url: "https://www.example-shop.com/checkout?cart=12", tabId: 3 }));
-  assert(open?.title === "Open a web page", "T-APP-24: navigate is opening a web page");
-  assert(open?.headline === "Claude Code wants to open www.example-shop.com in Claude's browser", "T-APP-25: the headline names the site and the browser");
+  const card = (overrides: Partial<GuardBrowserCardV1>): GuardBrowserCardV1 => ({
+    headline: "Claude Code wants to open www.example-shop.com",
+    verb: "navigate",
+    site: { origin: "https://www.example-shop.com", first_visit_in_task: false, left_granted_site: false },
+    profile_line: "shared",
+    detail: { element_preview: null, input_kind: null, input_length: null, input_masked: false },
+    risk_chips: [],
+    provider_findings: [],
+    choices: ["allow_once", "always_allow", "deny"],
+    steps: [],
+    ...overrides,
+  });
+  const carded = (server: string, tool: string, input: unknown, browserCard: GuardBrowserCardV1) => ({
+    ...call(server, tool, input),
+    browser_card: browserCard,
+  });
+
+  const open = explainMcpCall(
+    carded("playwright", "browser_navigate", { url: "https://www.example-shop.com/checkout?cart=12", tabId: 3 }, card({})),
+  );
+  assert(open?.title === "Open a web page", "T-APP-24: a navigate card is opening a web page");
+  assert(open?.headline === "Claude Code wants to open www.example-shop.com", "T-APP-25: the headline is Core's");
   assert(open?.effect === "act-as-you" && open?.consequence.text.includes("as if it were you"), "T-APP-26: a browser step says it acts as you");
-  assert(open?.facts[0]?.label === "Web page" && open?.facts[0]?.kind === "url", "T-APP-27: the address is the first row");
-  assert(open?.facts.every((fact) => !/tab/i.test(fact.label)) === true, "T-APP-28: the tab id stays in the exact input");
-  assert(open?.queueTitle === "Claude's browser · Open www.example-shop.com", "T-APP-29: the row names the site");
+  assert(open?.facts[0]?.label === "Web page" && open?.facts[0]?.value === "https://www.example-shop.com", "T-APP-27: the site is the first row, without its path");
+  assert(open?.facts.some((fact) => fact.label === "Browser" && fact.value === "Your own browser profile") === true, "T-APP-28: the browser line names the profile");
+  assert(open?.queueTitle.endsWith("· Open www.example-shop.com") === true, "T-APP-29: the row names the site");
 
-  const click = explainMcpCall(call("claude-in-chrome", "computer", { action: "left_click", coordinate: [420, 610], tabId: 2 }));
-  assert(click?.title === "Click on the page" && click?.connector === "Chrome", "T-APP-30: a computer click is a click in Chrome");
-  assert(click?.facts.length === 0, "T-APP-31: coordinates and tab ids are not rows");
-  assert(click?.headline === "Claude Code wants to click on the page in Chrome", "T-APP-32: the headline says where it clicks");
+  const typed = explainMcpCall(
+    carded(
+      "playwright",
+      "browser_type",
+      { element: "Password", text: "hunter2-secret" },
+      card({
+        headline: "Claude Code wants to type into a form on www.example-shop.com",
+        verb: "type",
+        detail: { element_preview: "Password", input_kind: "text", input_length: 14, input_masked: true },
+        risk_chips: ["password_field"],
+      }),
+    ),
+  );
+  assert(typed?.title === "Type on the page", "T-APP-30: a type card is typing on the page");
+  assert(typed?.facts.some((fact) => fact.label === "What it types" && fact.value === "Hidden · 14 characters") === true, "T-APP-31: masked input shows only its length");
+  assert(typed?.facts.every((fact) => !fact.value.includes("hunter2")) === true, "T-APP-32: typed text never becomes a row");
+  assert(typed?.facts.some((fact) => fact.label === "Touches" && fact.value === "Password field") === true, "T-APP-33: risk chips are named");
 
-  const typed = explainMcpCall(call("claude-in-chrome", "computer", { action: "type", text: "hello" }));
-  assert(typed?.title === "Type on the page" && typed?.facts.some((fact) => fact.label === "What it types" && fact.value === "hello") === true, "T-APP-33: typing shows the text");
-
-  const shot = explainMcpCall(call("Claude_Browser", "computer", { action: "screenshot" }));
+  const shot = explainMcpCall(
+    carded("playwright", "browser_take_screenshot", {}, card({ headline: "Claude Code wants to take a screenshot on www.example-shop.com", verb: "screenshot" })),
+  );
   assert(shot?.effect === "read" && shot?.consequence.tone === "calm", "T-APP-34: a screenshot only looks");
 
-  const code = explainMcpCall(call("claude-in-chrome", "javascript_tool", { action: "javascript_exec", text: "document.title" }));
-  assert(code?.effect === "run-code" && code?.code?.text === "document.title", "T-APP-35: page code is shown as code");
+  const code = explainMcpCall(
+    carded(
+      "playwright",
+      "browser_evaluate",
+      { function: "() => document.title" },
+      card({
+        headline: "Claude Code wants to run a script on www.example-shop.com",
+        verb: "evaluate",
+        detail: { element_preview: null, input_kind: "script", input_length: 21, input_masked: false },
+        risk_chips: ["script_eval"],
+      }),
+    ),
+  );
+  assert(code?.effect === "run-code" && code?.code?.text === "() => document.title", "T-APP-35: page code is shown as code");
 
-  const odd = explainMcpCall(call("playwright", "browser_frobnicate", { x: 1 }));
-  assert(odd?.effect === "unknown", "T-APP-36: an unknown browser tool stays unclear");
-  const plain = explainMcpCall(call("github", "navigate", { url: "https://example.com" }));
-  assert(plain?.effect !== "act-as-you", "T-APP-37: only browser servers read as acting as you");
+  const uncarded = explainMcpCall(call("playwright", "browser_navigate", { url: "https://example.com" }));
+  assert(uncarded?.effect !== "act-as-you" && uncarded?.title !== "Open a web page", "T-APP-36: without a card a browser-named tool reads as an ordinary tool");
+  const malformed = explainMcpCall({ ...call("playwright", "browser_click", {}), browser_card: { headline: "x", verb: "fly" } as unknown as GuardBrowserCardV1 });
+  assert(malformed !== null && !malformed.effectBasis.includes("browser driver profile") && malformed.title !== "Click on the page", "T-APP-37: a malformed card falls back to the generic card");
 }
 
 // Technical pointer fields and raw dates are made readable.
