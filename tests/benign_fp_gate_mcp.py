@@ -42,6 +42,7 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import McpServerIdentity,
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_browser import (
     BROWSER_SERVERS,
+    PENDING_SAME_CALL,
     browser_server_command,
     start_page,
     unwired_state,
@@ -382,10 +383,7 @@ def drain_report(worker: HookWorker) -> dict[str, object]:
     return {
         "drain": None
         if drain is None
-        else {
-            name: getattr(drain, name, None)
-            for name in ("pages", "records", "failures", "last_failure")
-        },
+        else {name: getattr(drain, name, None) for name in ("pages", "records", "failures", "last_failure")},
         "transport": callable(transport) and transport() is not None,
         "bound": getattr(publisher, "_direct_lane_evidence_bound", None),
         # Which receipts the drain wrote, so a missing review row names its step.
@@ -409,27 +407,56 @@ def replay(
         allow_ready_server(store, identity)
     command = _relay_command(case, fixture)
     known = {str(row.get("request_id")) for row in store.list_approval_requests(status=None, limit=500)}
-    # The first session reports the server's catalog; a call refused while the
-    # resident still records it is sent again in a later session.
-    deadline = time.monotonic() + _WARM_SECONDS
     with start_page(fixture.home, case.page):
-        while True:
-            responses, defers = _session(command, fixture, _messages(case))
-            response = responses.get(3, {})
-            if not _warming(response) or time.monotonic() > deadline:
-                break
-            time.sleep(0.25)
+        if case.state == PENDING_SAME_CALL:
+            # The same call is made once first and left unanswered, so the measured call is a retry.
+            seed = _decide(command, fixture, case)
+            if "relay_defer" in seed:
+                return seed, [], identity.identity_hash
+            _await_rows(store, known, seed)
+        response = _decide(command, fixture, case)
+    rows = _await_rows(store, known, response, retried=case.state == PENDING_SAME_CALL)
+    return response, rows, identity.identity_hash
+
+
+def _decide(command: list[str], fixture: BenignFixture, case: McpCase) -> dict[str, Any]:
+    """One decided answer to the case's call.
+
+    The first session reports the server's catalog; a call refused while the resident still records
+    it is sent again in a later session.
+    """
+    deadline = time.monotonic() + _WARM_SECONDS
+    while True:
+        responses, defers = _session(command, fixture, _messages(case))
+        response = responses.get(3, {})
+        if not _warming(response) or time.monotonic() > deadline:
+            break
+        time.sleep(0.25)
     if _warming(response):
         # Name why the relay never decided, so a failing case says more than the refusal.
-        response = {**response, "relay_defer": defers}
+        return {**response, "relay_defer": defers}
+    return response
+
+
+def _await_rows(
+    store: GuardStore, known: set[str], response: dict[str, Any], *, retried: bool = False
+) -> list[dict[str, Any]]:
+    """The rows a stopped call queued, once the resident's evidence drain has written them.
+
+    The drain runs after the relay has answered. A retry waits until its pending row records it.
+    """
     rows = approval_rows(store, known)
-    # The resident writes a stopped call's review row from its evidence drain,
-    # after the relay has answered, so a refusal waits for that row to land.
-    rows_deadline = time.monotonic() + _ROW_SECONDS
-    while not rows and "error" in response and not _warming(response) and time.monotonic() < rows_deadline:
+    deadline = time.monotonic() + _ROW_SECONDS
+
+    def settled() -> bool:
+        if not rows:
+            return False
+        return not retried or any(row["dedupe_count"] >= 2 for row in rows)
+
+    while "error" in response and not settled() and time.monotonic() < deadline:
         time.sleep(0.1)
         rows = approval_rows(store, known)
-    return response, rows, identity.identity_hash
+    return rows
 
 
 def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, Any]], identity: str) -> str | None:
@@ -444,6 +471,9 @@ def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, An
         if "result" not in response or rows:
             return f"an allowed server was held: {response}"
         return None
+    if case.state == PENDING_SAME_CALL and (len(rows) != 1 or rows[0]["dedupe_count"] < 2):
+        # R-QUIET-1: the retry attaches to the pending row of the first call; it never adds a card.
+        return f"a retried call must attach to its pending row, got {rows}"
     if not isinstance(error, dict):
         return f"the call must not reach the server: {response}"
     is_setup = data.get("guardReasonCode") == RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED
