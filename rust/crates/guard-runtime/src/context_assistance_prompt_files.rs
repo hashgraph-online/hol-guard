@@ -462,8 +462,8 @@ mod read;
 use read::Reading;
 
 #[cfg(test)]
-#[path = "context_assistance_prompt_files_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "context_assistance_prompt_files_prose_tests.rs"]
 mod prose_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_files_tests.rs"]
+mod tests;
