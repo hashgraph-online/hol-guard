@@ -394,6 +394,9 @@ fn scan_into(
                     // walks the tree again, so it is asked last: every reading
                     // above answers the same question without it.
                     || (!dereference && includes.narrows(target, context))
+                    // A skill tree opens only documents and scripts a direct
+                    // read allows. That walk refuses every link it meets.
+                    || includes.skill_tree(target, context)
             };
             missing::recursive_targets_proven(&targets, proven, context, absent.recursive)
         })

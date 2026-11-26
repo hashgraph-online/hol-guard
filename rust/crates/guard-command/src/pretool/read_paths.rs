@@ -1,7 +1,8 @@
 #[path = "read_path_allowances.rs"]
 mod allowances;
 pub(super) use allowances::{
-    agent_skill_listing_directory, agent_state_tree_holds_only_documents, inside_agent_state_tree,
+    agent_skill_document, agent_skill_listing_directory, agent_skill_script,
+    agent_state_tree_holds_only_documents, inside_agent_state_tree,
     project_skill_listing_directory, skill_link_resolves_over_home,
 };
 #[path = "read_feature_directories.rs"]
@@ -29,9 +30,8 @@ pub(super) use private_temporary::inside_private_temporary_directory;
 #[path = "workspace_scratch_reads.rs"]
 mod scratch;
 use allowances::{
-    agent_home_state, agent_skill_document, agent_skill_script, codex_notes_document,
-    execution_output_log, git_config_document, git_ref_document, guard_safety_doc,
-    project_skill_document, worktree_gitfile,
+    agent_home_state, codex_notes_document, execution_output_log, git_config_document,
+    git_ref_document, guard_safety_doc, project_skill_document, worktree_gitfile,
 };
 pub(super) use omp_targets::{
     bounded_omp_directory_read_target, bounded_omp_file_read_target,

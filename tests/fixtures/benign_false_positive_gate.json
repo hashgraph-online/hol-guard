@@ -30003,6 +30003,86 @@
       "expect": "not_allow"
     },
     {
+      "id": "grep-r-home-skill-tree-markdown-include",
+      "fix_area": "skill-tree-search",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn -i skill ${HOME}/.agent/skills/x --include='*.md'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-r-home-skill-tree-documents-and-scripts",
+      "fix_area": "skill-tree-search",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln fixture ${HOME}/.agent/skills/x"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-r-home-skill-tree-markdown-include-piped",
+      "fix_area": "skill-tree-search",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln -i skill ${HOME}/.agents/skills/x --include='*.md' | head -5"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-r-skill-tree-opens-data-and-token-files",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn fixture ${HOME}/.agents/skills/x"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-r-skill-tree-script-include-reaches-credential-store",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn fixture ${HOME}/.agents/skills/x --include='*.sh'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-node-tmp-script",
       "fix_area": "negative",
       "harnesses": [
