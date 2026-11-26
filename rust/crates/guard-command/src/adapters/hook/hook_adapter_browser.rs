@@ -68,7 +68,7 @@ pub fn hook_browser_action(
         Some(OValue::Map(inner)) if canonical == "cline" && mcp_server.is_some() => inner.clone(),
         _ => tool_input,
     };
-    let Value::Object(arguments) = OValue::Map(arguments).to_wire() else {
+    let Value::Object(arguments) = plain_json(&OValue::Map(arguments)) else {
         return Ok(None);
     };
     Ok(Some(project_screened_browser_action(
@@ -77,4 +77,24 @@ pub fn hook_browser_action(
         &Map::new(),
         &BrowserProjectionContext::default(),
     )))
+}
+
+/// Plain JSON for a hook value. `OValue::to_wire` is the tagged-array form the Python bridge reads,
+/// which the profile pointers cannot walk.
+fn plain_json(value: &OValue) -> Value {
+    match value {
+        OValue::Null => Value::Null,
+        OValue::Bool(flag) => Value::Bool(*flag),
+        OValue::Int(token) | OValue::Float(token) => token
+            .parse::<serde_json::Number>()
+            .map(Value::Number)
+            .unwrap_or(Value::Null),
+        OValue::Str(text) => Value::String(text.clone()),
+        OValue::List(items) => Value::Array(items.iter().map(plain_json).collect()),
+        OValue::Map(map) => Value::Object(
+            map.iter()
+                .map(|(key, item)| (key.to_owned(), plain_json(item)))
+                .collect(),
+        ),
+    }
 }
