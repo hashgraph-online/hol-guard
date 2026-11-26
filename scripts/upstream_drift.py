@@ -40,6 +40,8 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 SCHEMA = "hol.guard.upstream-drift.v1"
 _GITHUB_PIN = re.compile(r"^https://github\.com/([\w.-]+)/([\w.-]+)/(?:tree|blob)/([0-9a-f]{40})(?:/|$)")
 _NPM_PIN = re.compile(r"^https://www\.npmjs\.com/package/((?:@[\w.-]+/)?[\w.-]+)/v/([\w.+-]+)$")
+FIRST_PARTY_DRIVERS = "rust/crates/guard-command/src/browser_first_party_drivers.rs"
+_BUNDLED_PROFILE = re.compile(r'include_str!\(\s*"(?:\.\./)*(contributions/browser-drivers/[\w.-]+\.json)"\s*\)')
 _DISCOVERY_URL = "https://www.googleapis.com/discovery/v1/apis/{name}/{version}/rest"
 _DISCOVERY_SCHEMA = "hol.guard.upstream-discovery-pins.v1"
 _TIMEOUT_SECONDS = 20
@@ -99,13 +101,16 @@ def browser_driver_pins(repository: Path) -> list[Pin]:
 
     A first-party profile with no ``referenceVersion`` or no package is returned with
     kind ``unpinned`` so the report names it instead of skipping it.
+
+    The native runtime makes a profile first-party only by bundling it, so the list comes from
+    the ``include_str!`` paths in the bundle module, not from the manifest's ``verified`` flag.
     """
+    bundle = repository / FIRST_PARTY_DRIVERS
+    if not bundle.is_file():
+        return []
     found = []
-    for path in sorted((repository / "contributions/browser-drivers").glob("*.json")):
-        profile = json.loads(path.read_text(encoding="utf-8"))
-        if not (profile.get("publisher") or {}).get("verified"):
-            continue
-        source = path.relative_to(repository).as_posix()
+    for source in sorted(set(_BUNDLED_PROFILE.findall(bundle.read_text(encoding="utf-8")))):
+        profile = json.loads((repository / source).read_text(encoding="utf-8"))
         packages = (profile.get("match") or {}).get("packages") or ()
         version = profile.get("referenceVersion")
         if packages and isinstance(version, str) and version:

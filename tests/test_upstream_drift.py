@@ -332,7 +332,7 @@ def test_scheduled_workflow_only_reads():
     assert any(step.get("run", "").startswith("python -m scripts.upstream_drift ") for step in job["steps"])
 
 
-def _profile(root: Path, name: str, **fields: object) -> None:
+def _profile(root: Path, name: str, *, bundled: bool = True, **fields: object) -> None:
     profile = {
         "id": f"browser.{name}",
         "publisher": {"name": "HOL Guard", "verified": True},
@@ -342,6 +342,12 @@ def _profile(root: Path, name: str, **fields: object) -> None:
     directory = root / "contributions/browser-drivers"
     directory.mkdir(parents=True, exist_ok=True)
     (directory / f"browser.{name}.json").write_text(json.dumps(profile), encoding="utf-8")
+    if bundled:
+        bundle = root / "rust/crates/guard-command/src/browser_first_party_drivers.rs"
+        bundle.parent.mkdir(parents=True, exist_ok=True)
+        line = f'const P: &str =\n    include_str!("../../../../contributions/browser-drivers/browser.{name}.json");\n'
+        with bundle.open("a", encoding="utf-8") as handle:
+            handle.write(line)
 
 
 def test_browser_driver_pins_use_the_first_package_and_reference_version(tmp_path):
@@ -389,9 +395,11 @@ def test_first_party_profile_without_a_version_is_reported_unpinned(tmp_path):
     assert "referenceVersion" in finding.detail
 
 
-def test_community_profiles_are_not_checked(tmp_path):
-    _profile(tmp_path, "pilot", referenceVersion="1.0.0", publisher={"name": "Example", "verified": False})
-    assert browser_driver_pins(tmp_path) == []
+def test_only_bundled_profiles_are_checked(tmp_path):
+    _profile(tmp_path, "pilot", referenceVersion="1.0.0")
+    _profile(tmp_path, "claimed", bundled=False, referenceVersion="1.0.0")
+    _profile(tmp_path, "community", bundled=False, publisher={"name": "Example", "verified": False})
+    assert [pin.extension_id for pin in browser_driver_pins(tmp_path)] == ["browser.pilot"]
 
 
 def test_repository_first_party_browser_profiles_are_all_checked():
