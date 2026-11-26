@@ -81,21 +81,25 @@ fn a_reflog_walk_answers_for_the_signature_configuration_a_log_walk_does() {
     );
     let result = session.evaluate_at("git reflog", &session.primary);
     assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
-    // A program the repository names is one the user never chose, so every
-    // signature-checking walk keeps its review.
+    // A program the repository names is one the user never chose, so a
+    // walk the setting makes check signatures keeps its review.
     git(
         &session.home,
         &session.primary,
         &["config", "gpg.program", "./synthetic-never-execute"],
     );
-    for command in ["git reflog", "git reflog --format=%G?"] {
-        let result = session.evaluate_at(command, &session.primary);
-        assert_ne!(
-            result.minimum_action, "allow",
-            "{command}: {}",
-            result.reason_code
-        );
-    }
+    let result = session.evaluate_at("git reflog", &session.primary);
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+    // Without the setting, only the `%G` placeholder asks for a signature.
+    git(
+        &session.home,
+        &session.primary,
+        &["config", "--unset", "log.showSignature"],
+    );
+    let result = session.evaluate_at("git reflog --format=%G?", &session.primary);
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+    let result = session.evaluate_at("git reflog", &session.primary);
+    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
 }
 
 #[test]

@@ -1,4 +1,4 @@
-use super::user_programs;
+use super::{search_path, user_programs};
 
 #[test]
 fn user_and_system_settings_name_the_programs_a_check_can_start() {
@@ -89,5 +89,21 @@ fn a_program_path_the_kernel_resolves_per_process_is_never_trusted() {
         "bin/gpg",
     ] {
         assert!(!process_relative(Path::new(path)), "{path}");
+    }
+}
+
+#[test]
+fn a_search_path_with_a_per_process_entry_proves_nothing() {
+    let environment = |path: &str| guard_contracts::GuardExecutionEnvironmentV1 {
+        path: path.to_owned(),
+        ..Default::default()
+    };
+    assert!(search_path(Some(&environment("/usr/bin:/bin"))).is_some());
+    for path in [
+        "/proc/self/cwd:/usr/bin",
+        "/usr/bin:/dev/fd/3",
+        "bin:/usr/bin",
+    ] {
+        assert!(search_path(Some(&environment(path))).is_none(), "{path}");
     }
 }

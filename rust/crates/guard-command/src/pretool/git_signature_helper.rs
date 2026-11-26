@@ -125,7 +125,8 @@ fn user_programs(output: &[u8]) -> Option<Vec<String>> {
 
 /// The search path a bare program name is looked up on. A relative entry is
 /// read from the directory Git runs in, which a `-C` route moves, so such a
-/// path proves nothing about what a bare name starts.
+/// path proves nothing about what a bare name starts, and so does an entry
+/// such as `/proc/self/cwd` that the kernel resolves per process.
 fn search_path(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Option<Vec<std::path::PathBuf>> {
@@ -135,7 +136,7 @@ fn search_path(
     let entries = std::env::split_paths(&path).collect::<Vec<_>>();
     entries
         .iter()
-        .all(|entry| entry.is_absolute())
+        .all(|entry| entry.is_absolute() && !super::git_config_trust::process_relative(entry))
         .then_some(entries)
 }
 

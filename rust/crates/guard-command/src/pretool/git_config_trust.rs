@@ -145,6 +145,11 @@ pub(in crate::pretool) fn trusted_command(
             .map(|context| std::ffi::OsString::from(&context.path))
             .or_else(|| std::env::var_os("PATH"))?;
         for directory in std::env::split_paths(&path) {
+            // A directory the kernel resolves per process names one place
+            // for the hook and another for a Git run from elsewhere.
+            if process_relative(&directory) {
+                return None;
+            }
             let directory = if directory.is_absolute() {
                 directory
             } else {
