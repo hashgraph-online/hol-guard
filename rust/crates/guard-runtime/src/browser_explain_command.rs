@@ -2,8 +2,10 @@
 //!
 //! One request names a shipped driver profile, one of its tools and example arguments. The answer
 //! is the `BrowserActionV2` the profile projects, the decision Guard's default policy gives the
-//! call, and whether a temporary browser grant could ever cover it. Nothing is read from or written
-//! to a Guard home, so the answer describes the shipped rules, not this device's saved choices.
+//! call, and whether a temporary browser grant could ever cover it. Nothing is written, and no saved
+//! approval, grant or setting is read, so the answer describes the shipped rules, not this device's
+//! saved choices. The one device fact it reads is which loopback port Guard's own daemon answers
+//! on: a call aimed at Guard's approval center is blocked here exactly as it is at runtime.
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -16,9 +18,9 @@ use guard_command::browser_driver_compile::CompiledBrowserDriverV1;
 use guard_command::browser_driver_match::{BrowserDriverMatch, BrowserDriverMatchKind};
 use guard_command::browser_first_party_drivers::first_party_browser_drivers;
 use guard_command::mcp_tool_policy::evaluate_tool_policy;
-use guard_contracts::{BrowserMcpArtifactV1, McpToolPolicyRequestV1};
+use guard_contracts::{BrowserMcpArtifactV1, McpToolArgumentsV1, McpToolPolicyRequestV1};
 
-use crate::mcp_tool_policy_grants::{category_for, risks_allow_grant};
+use crate::mcp_tool_policy_grants::{grant_category, normalized_browser_intent, risks_allow_grant};
 
 pub(crate) const COMMAND: &str = "browser-explain";
 
@@ -41,8 +43,13 @@ fn default_config() -> Map<String, Value> {
 struct Request {
     driver: String,
     tool: String,
-    #[serde(default)]
-    arguments: Option<Value>,
+    /// Omitted means no arguments; an explicit `null` or any other non-object is refused.
+    #[serde(default = "no_arguments")]
+    arguments: Value,
+}
+
+fn no_arguments() -> Value {
+    Value::Object(Map::new())
 }
 
 pub(crate) fn run_command(bytes: &[u8]) -> Value {
@@ -66,9 +73,8 @@ fn explain(drivers: &[CompiledBrowserDriverV1], request: &Request) -> Value {
         return refusal("tool_missing", "Name the tool to explain.");
     }
     let arguments = match &request.arguments {
-        None | Some(Value::Null) => Map::new(),
-        Some(Value::Object(object)) => object.clone(),
-        Some(_) => return refusal("arguments_invalid", "The arguments must be a JSON object."),
+        Value::Object(object) => object.clone(),
+        _ => return refusal("arguments_invalid", "The arguments must be a JSON object."),
     };
     let server = driver
         .matches
@@ -90,13 +96,32 @@ fn explain(drivers: &[CompiledBrowserDriverV1], request: &Request) -> Value {
     let mut metadata = Map::new();
     metadata.insert("server_name".to_owned(), json!(server));
     metadata.insert("mcp_tool_identity".to_owned(), json!({"tool_name": tool}));
+    let artifact = BrowserMcpArtifactV1 {
+        name: format!("{server}:{tool}"),
+        command: Some(tool.to_owned()),
+        metadata,
+    };
+    let arguments = Value::Object(arguments);
+    // Grant eligibility reads the normalized intent, exactly as the runtime grant path does; the
+    // projected action can be stricter (a `javascript:` navigation projects as privileged).
+    let entries = McpToolArgumentsV1::Mapping {
+        entries: arguments
+            .as_object()
+            .map(|object| {
+                object
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default(),
+    };
+    let intent = match normalized_browser_intent(&artifact, &entries) {
+        Ok(intent) => intent,
+        Err(code) => return refusal(code, "The call could not be normalized."),
+    };
     let policy = evaluate_tool_policy(&McpToolPolicyRequestV1 {
-        artifact: BrowserMcpArtifactV1 {
-            name: format!("{server}:{tool}"),
-            command: Some(tool.to_owned()),
-            metadata,
-        },
-        arguments: Value::Object(arguments),
+        artifact,
+        arguments,
         config: default_config(),
         harness: EXPLAIN_HARNESS.to_owned(),
         artifact_id: format!("{}:{tool}", driver.id),
@@ -110,10 +135,7 @@ fn explain(drivers: &[CompiledBrowserDriverV1], request: &Request) -> Value {
         BrowserProjection::Classified(action) => (Some(action.as_ref()), None),
         BrowserProjection::Unclassified { reason, .. } => (None, Some(reason)),
     };
-    let intent = action.map(|action| action.intent);
-    let category = intent
-        .and_then(|intent| serde_json::to_value(intent).ok())
-        .and_then(|value| value.as_str().and_then(category_for));
+    let category = intent.as_ref().and_then(grant_category);
     let grant_eligible =
         category.is_some_and(|category| risks_allow_grant(category, &policy.risk_categories));
     json!({

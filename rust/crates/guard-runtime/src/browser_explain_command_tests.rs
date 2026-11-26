@@ -61,6 +61,10 @@ fn malformed_requests_are_refused() {
             json!({"driver": PLAYWRIGHT, "tool": "browser_snapshot", "arguments": [1]}),
             "arguments_invalid",
         ),
+        (
+            json!({"driver": PLAYWRIGHT, "tool": "browser_snapshot", "arguments": null}),
+            "arguments_invalid",
+        ),
         (json!({"driver": PLAYWRIGHT, "tool": "  "}), "tool_missing"),
         (
             json!({"driver": PLAYWRIGHT, "tool": "browser_snapshot", "extra": 1}),
@@ -75,4 +79,31 @@ fn malformed_requests_are_refused() {
         run_command(b"not json")["error"]["code"],
         json!("request_invalid")
     );
+}
+
+#[test]
+fn grant_eligibility_follows_the_normalized_intent_not_the_projected_action() {
+    let answer = explain(json!({
+        "driver": PLAYWRIGHT,
+        "tool": "browser_navigate",
+        "arguments": {"url": "javascript:alert(1)"},
+    }));
+    assert_eq!(answer["ok"], json!(true), "{answer}");
+    // The runtime grant path reads the normalized navigation intent, so the category is reported
+    // even though the projected action is stricter.
+    assert_eq!(
+        answer["grant"]["category"],
+        json!("browser_navigation"),
+        "{answer}"
+    );
+    let risks: Vec<String> =
+        serde_json::from_value(answer["riskCategories"].clone()).unwrap_or_default();
+    let expected = crate::mcp_tool_policy_grants::risks_allow_grant("browser_navigation", &risks);
+    assert_eq!(answer["grant"]["eligible"], json!(expected), "{answer}");
+}
+
+#[test]
+fn an_omitted_argument_object_means_no_arguments() {
+    let answer = explain(json!({"driver": PLAYWRIGHT, "tool": "browser_snapshot"}));
+    assert_eq!(answer["ok"], json!(true), "{answer}");
 }

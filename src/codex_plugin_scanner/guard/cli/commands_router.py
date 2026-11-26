@@ -224,7 +224,7 @@ def _dispatch_guard_command(
         # Side-effect free: the native runtime explains one call against the shipped profiles.
         from .browser_explain_command import run_browser_command
 
-        return run_browser_command(args, output_stream=output_stream)
+        return run_browser_command(args, output_stream=output_stream, error_stream=error_stream)
     if args.guard_command == "policy":
         from .commands_dispatch_policy_dx import FILE_COMMANDS, run_policy_file_command
 

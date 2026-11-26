@@ -2,7 +2,7 @@
 
 The native runtime projects the call through the named driver profile, evaluates it under the
 default policy and checks grant eligibility. This module only parses the arguments, sends one
-request and prints the answer. Nothing is read from or written to the Guard home.
+request and prints the answer. Nothing is written, and no saved approval, grant or setting is read.
 """
 
 from __future__ import annotations
@@ -39,8 +39,14 @@ def configure_guard_browser_parser(
     explain.add_argument("--json", action="store_true", help="Print the native answer as JSON")
 
 
-def run_browser_command(args: argparse.Namespace, *, output_stream: TextIO | None = None) -> int:
+def run_browser_command(
+    args: argparse.Namespace,
+    *,
+    output_stream: TextIO | None = None,
+    error_stream: TextIO | None = None,
+) -> int:
     stream = output_stream if output_stream is not None else sys.stdout
+    errors = error_stream if error_stream is not None else sys.stderr
     as_json = bool(getattr(args, "json", False))
     try:
         result = _explain(args)
@@ -48,7 +54,7 @@ def run_browser_command(args: argparse.Namespace, *, output_stream: TextIO | Non
         if as_json:
             print(json.dumps({"ok": False, "error": {"code": exc.code, "message": str(exc)}}), file=stream)
         else:
-            print(f"{exc.code}: {exc}", file=sys.stderr)
+            print(f"{exc.code}: {exc}", file=errors)
         return 2
     if as_json:
         print(json.dumps(result, sort_keys=True), file=stream)
@@ -65,6 +71,8 @@ def _explain(args: argparse.Namespace) -> dict[str, object]:
         arguments = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise BrowserExplainError("arguments_invalid", "--args must be a JSON object.") from exc
+    if not isinstance(arguments, dict):
+        raise BrowserExplainError("arguments_invalid", "--args must be a JSON object.")
     request = {"driver": str(args.driver).strip(), "tool": str(args.tool).strip(), "arguments": arguments}
     reply = _native_request(json.dumps(request, separators=(",", ":")))
     if reply.get("ok") is not True:

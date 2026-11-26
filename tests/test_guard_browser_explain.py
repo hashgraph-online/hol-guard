@@ -80,13 +80,26 @@ def test_explain_renders_an_unclassified_call(
     assert "No temporary browser grant can cover this call." in out
 
 
-def test_explain_refuses_unparseable_arguments_before_the_native_call(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("raw", ["{", "null", "[1]", '"text"'])
+def test_explain_refuses_non_object_arguments_before_the_native_call(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], raw: str
 ) -> None:
     sent = _record(monkeypatch, [])
-    status = _explain("--tool", "browser_snapshot", "--args", "{", "--json")
+    status = _explain("--tool", "browser_snapshot", "--args", raw, "--json")
     assert (status, json.loads(capsys.readouterr().out)["error"]["code"]) == (2, "arguments_invalid")
     assert sent == []
+
+
+def test_a_text_mode_failure_goes_to_the_supplied_error_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+    import argparse
+    import io
+
+    _record(monkeypatch, [])
+    args = argparse.Namespace(driver=PLAYWRIGHT, tool="browser_snapshot", tool_arguments="null", json=False)
+    out, err = io.StringIO(), io.StringIO()
+    assert browser_explain_command.run_browser_command(args, output_stream=out, error_stream=err) == 2
+    assert out.getvalue() == ""
+    assert err.getvalue().startswith("arguments_invalid:")
 
 
 def test_a_native_refusal_names_the_shipped_profiles(
