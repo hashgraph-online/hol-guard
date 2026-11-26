@@ -11,8 +11,8 @@ resident cannot prove makes the hook take the daemon path instead.
 Every publisher for a Guard home shares the one file, and short-lived request
 and hook processes run publishers of their own beside the daemon's. A
 publisher therefore withdraws only the ACK it wrote itself. A new publisher
-removes a leftover ACK only when no live publisher holds the liveness lock,
-which the kernel releases when its process exits.
+removes an ACK only when the process that wrote it no longer holds the lock
+named for its generation, which the kernel releases when that process exits.
 """
 
 from __future__ import annotations
@@ -29,7 +29,13 @@ from pathlib import Path
 
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
-from .native_policy_snapshot_direct_lane_owner import hold_liveness, liveness_held, names_target, renewable
+from .native_policy_snapshot_direct_lane_owner import (
+    hold_liveness,
+    names_target,
+    prune_liveness,
+    renewable,
+    writer_alive,
+)
 from .native_policy_snapshot_direct_lane_windows import unlink_windows_ack, write_windows_ack
 
 DIRECT_LANE_ACK_DIRECTORY = "direct-lane"
@@ -279,6 +285,7 @@ class NativePolicySnapshotDirectLaneAck:
     # A shared lock held while this publisher keeps an ACK, so a new
     # publisher can tell a live peer's ACK from one a dead process left.
     _direct_lane_liveness_fd: int | None = None
+    _direct_lane_liveness_generation: int | None = None
     _direct_lane_lease_expires_at_ms: int = 0
     # The custom command-line rule revision the open lane was bound against.
     _direct_lane_local_cli_revision: int | None = None
@@ -480,11 +487,13 @@ class NativePolicySnapshotDirectLaneAck:
     def _withdraw_abandoned_direct_lane_ack(self) -> None:
         """Remove an ACK whose publisher is gone, never a live peer's.
 
-        A publisher holds the liveness lock while it keeps an ACK, and the
-        kernel drops it when that process exits. When the lock is free, any
-        ACK on disk was left behind and the resident must stop trusting it
-        now rather than when its lease runs out. Windows has no such lock
-        here, so it keeps withdrawing any ACK it finds.
+        A publisher holds a lock named for its ACK's generation while it keeps
+        that ACK, and the kernel drops it when the process exits. When the
+        lock for the generation on disk is free, its writer is gone and the
+        resident must stop trusting that ACK now rather than when its lease
+        runs out, even while an older publisher still holds its own lock.
+        Windows has no such lock here, so it keeps withdrawing any ACK it
+        finds.
         """
 
         path = self._direct_lane_ack_path()
@@ -495,8 +504,10 @@ class NativePolicySnapshotDirectLaneAck:
             if not path.parent.is_dir():
                 return
             with _ack_file_lock(path):
-                if not liveness_held(path):
-                    path.unlink()
+                with contextlib.suppress(FileNotFoundError):
+                    if not writer_alive(path):
+                        path.unlink()
+                prune_liveness(path)
         except FileNotFoundError:
             pass
         except (OSError, RuntimeError):
@@ -506,6 +517,7 @@ class NativePolicySnapshotDirectLaneAck:
     def _release_direct_lane_liveness(self) -> None:
         descriptor = self._direct_lane_liveness_fd
         self._direct_lane_liveness_fd = None
+        self._direct_lane_liveness_generation = None
         if descriptor is not None:
             with contextlib.suppress(OSError):
                 os.close(descriptor)
@@ -558,8 +570,11 @@ class NativePolicySnapshotDirectLaneAck:
                         handle.write(body)
                     # Held before the ACK appears, so no new publisher can
                     # mistake it for one a dead process left behind.
-                    if self._direct_lane_liveness_fd is None:
-                        self._direct_lane_liveness_fd = hold_liveness(path)
+                    if self._direct_lane_liveness_generation != generation:
+                        held = hold_liveness(path, generation)
+                        self._release_direct_lane_liveness()
+                        self._direct_lane_liveness_fd = held
+                        self._direct_lane_liveness_generation = generation
                     os.replace(temporary, path)
                 except BaseException:
                     with contextlib.suppress(OSError):

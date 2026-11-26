@@ -100,9 +100,10 @@ def test_ack_follows_the_barrier(tmp_path: Path) -> None:
     assert 0 < body["lease_expires_at_ms"] - direct_lane._now_ms() <= DIRECT_LANE_ACK_LEASE_MS
     assert stat.S_IMODE(ack.stat().st_mode) == 0o600
     assert stat.S_IMODE(ack.parent.stat().st_mode) == 0o700
-    # No temporary file is left behind; the locks every ACK writer shares stay.
+    # No temporary file is left behind; the shared lock and this writer's
+    # liveness lock for generation 3 stay.
     assert sorted(entry.name for entry in ack.parent.iterdir()) == sorted(
-        [ack.name, f".{ack.name}.lock", f".{ack.name}.live"]
+        [ack.name, f".{ack.name}.lock", f".{ack.name}.3.live"]
     )
 
     publisher._acked = False

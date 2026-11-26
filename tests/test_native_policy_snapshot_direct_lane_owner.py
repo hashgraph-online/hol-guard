@@ -155,3 +155,34 @@ def test_a_new_publisher_withdraws_an_ack_only_once_its_writer_process_exits(tmp
 
     peer._withdraw_abandoned_direct_lane_ack()
     assert not ack.exists()
+
+
+def test_a_live_superseded_publisher_does_not_keep_a_dead_writers_ack(tmp_path: Path, clock: list[int]) -> None:
+    # Publisher A wrote generation 3 and is still alive. B wrote generation 5
+    # over it and then exited, leaving its ACK behind.
+    stale = _Publisher(tmp_path, 3)
+    gone = _Publisher(tmp_path, 5)
+    ack = gone._direct_lane_ack_path()
+    gone._release_direct_lane_liveness()
+    assert _ack(stale)["generation"] == 5
+
+    peer = NativePolicySnapshotDirectLaneAck()
+    peer.guard_home = tmp_path
+    peer._withdraw_abandoned_direct_lane_ack()
+    assert not ack.exists()
+    # The dead writer's lock file is pruned; the live publisher's stays.
+    assert sorted(entry.name for entry in ack.parent.iterdir()) == sorted([f".{ack.name}.lock", f".{ack.name}.3.live"])
+
+
+def test_a_live_writer_keeps_its_ack_after_moving_to_a_new_generation(tmp_path: Path, clock: list[int]) -> None:
+    live = _Publisher(tmp_path, 3)
+    live._publish_direct_lane_ack({"generation": 4, "policy_digest": "4" * 64})
+    ack = live._direct_lane_ack_path()
+
+    peer = NativePolicySnapshotDirectLaneAck()
+    peer.guard_home = tmp_path
+    peer._withdraw_abandoned_direct_lane_ack()
+    assert _ack(live)["generation"] == 4
+    assert sorted(entry.name for entry in ack.parent.iterdir()) == sorted(
+        [ack.name, f".{ack.name}.lock", f".{ack.name}.4.live"]
+    )
