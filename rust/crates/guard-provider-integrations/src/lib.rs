@@ -9,11 +9,17 @@
 //! - `render`: a request body built from declared body fields and the shareable facts of one
 //!   action, and nothing else.
 //! - `parse`: strict JSON with duplicate keys refused, and bounded JSON pointer reads.
+//! - `answer`: a response mapped onto the closed verdicts, declared reason codes and a clamped
+//!   lifetime. Anything the manifest does not declare reads `unknown` or is dropped.
+//! - `adapter`: the closed list of reviewed adapters for protocols data cannot express, and the
+//!   bar a new one must meet. Empty in this phase.
 //! - `testkit` (feature `testkit`): an in-memory provider for acceptance tests.
 //!
 //! Nothing here reads settings, stores a secret or decides an action. The resident worker is the
 //! only caller, and the hook path never waits on a provider.
 
+pub mod adapter;
+pub mod answer;
 pub mod client;
 pub mod parse;
 pub mod render;

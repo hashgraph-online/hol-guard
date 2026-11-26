@@ -462,12 +462,20 @@ transcript in the pull request (after BP-T052).
   - `tests/https_client.rs` runs each case against a real TLS server on the loopback interface,
     reached through the policy's proxy with a `CONNECT` tunnel and a certificate the policy's trust
     roots pin, so the synthetic provider host never resolves.
-- [ ] **BP-T112** Strict JSON parse and pointer mapping. Lift `strict_json.rs` from
+- [x] **BP-T112** Strict JSON parse and pointer mapping. Lift `strict_json.rs` from
   `guard-yanez-pulse` into a shared location only if Pulse behavior and tests stay byte-identical;
   otherwise copy with attribution in a comment. Unknown verdict values map to `unknown`; undeclared
   reason codes are dropped; at most eight are kept.
-- [ ] **BP-T113** Adapter registry: closed adapter ids for protocols that are not expressible as data.
+  - Copied with attribution (`parse.rs`), so Pulse is untouched. `answer.rs` maps a body: an
+    unlisted, missing or non-string verdict reads `unknown`; reason codes are filtered against the
+    manifest allow-list and the contract's code shape before the cap of eight, so undeclared codes
+    cannot crowd out declared ones; the lifetime is clamped into the manifest bounds. A body that is
+    not strict JSON is refused as `provider_answer_invalid`.
+- [x] **BP-T113** Adapter registry: closed adapter ids for protocols that are not expressible as data.
   Empty in this phase. Document the review bar.
+  - `adapter.rs`: `ProviderAdapterId` is an uninhabited enum, so no manifest can name an adapter yet;
+    the module documentation holds the seven-point review bar (data first, same transport, custody,
+    answer mapping and shares, tests, synthetic names).
 
 ### Resident
 
