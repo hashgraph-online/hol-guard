@@ -752,8 +752,17 @@ pub fn evaluate_browser_mcp(
         } => BrowserMcpResultV1::Normalize {
             intent: normalize(artifact, arguments)?.map(Box::new),
         },
-        BrowserMcpRequestV1::Display { intent, arguments } => BrowserMcpResultV1::Display {
+        BrowserMcpRequestV1::Display {
+            intent,
+            arguments,
+            card,
+        } => BrowserMcpResultV1::Display {
             target: display(intent, arguments)?,
+            card: card
+                .as_deref()
+                .map(crate::browser_card::browser_card)
+                .transpose()?
+                .map(Box::new),
         },
     })
 }
