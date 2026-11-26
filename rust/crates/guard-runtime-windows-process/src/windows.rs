@@ -291,8 +291,11 @@ pub(crate) fn create_suspended_managed_child(
         child_stdout.as_raw_handle() as HANDLE,
         child_stderr.as_raw_handle() as HANDLE,
     ];
-    // The job exists before the child does, so no instant of the child's life
-    // is outside it.
+    // The job exists before the child does, so on the normal path no instant
+    // of the child's life is outside it. Parent-death cleanup stays best
+    // effort: if the job cannot be created, or the fallback below cannot
+    // assign it, the child runs without one as it did before, and on the
+    // fallback path it is outside the job until the assignment completes.
     let job = process_lifecycle::create_process_job()
         .and_then(|job| {
             process_lifecycle::set_kill_on_close(&job, true)?;

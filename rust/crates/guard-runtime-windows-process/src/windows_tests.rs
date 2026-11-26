@@ -174,10 +174,12 @@ fn child_dies_with_parent_killed_before_resume() {
         if let Ok(text) = std::fs::read_to_string(&pid_file) {
             break text.trim().parse::<u32>().unwrap();
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "probe never published its suspended child"
-        );
+        if std::time::Instant::now() >= deadline {
+            let _ = parent.kill();
+            let _ = parent.wait();
+            let _ = std::fs::remove_dir_all(&directory);
+            panic!("probe never published its suspended child");
+        }
         std::thread::sleep(std::time::Duration::from_millis(20));
     };
     // Hard termination: no destructor in the parent runs.
