@@ -19,7 +19,7 @@
 //!   compute over the DOM but not name a network, navigation, markup or code
 //!   sink, a global object, a URL, or a computed property.
 //! - `await new Promise(r => setTimeout(r, MS))`, a pause.
-//! - `display(...)`, `log(...)` and `console.log(...)` of literals, declared
+//! - `display(...)`, `log(...)`, `print(...)` and `console.log(...)` of literals, declared
 //!   names and awaited tab calls, negated or read for their `.length`.
 //! - Waiting for a local server: `fetch` GET of a literal loopback URL, its
 //!   `text()`, `json()`, `status` and `ok`, a counted `for` retry loop with
@@ -185,7 +185,8 @@ impl Parser {
             "if" => self.if_throw(),
             "break" if self.loops > 0 => Some(()),
             "return" => self.value(),
-            "display" | "log" => self.output_args(),
+            // `print` is the eval prelude's own alias for `console.log`.
+            "display" | "log" | "print" => self.output_args(),
             "console" => {
                 self.punct('.')?;
                 if !matches!(self.ident()?.as_str(), "log" | "info" | "warn" | "error") {

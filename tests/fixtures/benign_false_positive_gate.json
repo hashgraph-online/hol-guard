@@ -9293,6 +9293,36 @@
       "expect": "allow"
     },
     {
+      "id": "omp-eval-browser-print-observe",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const tab = browser.tab('game-smoke'); const observed = await tab.observe(); print(observed); print(await tab.screenshot({selector: '.game-card'}));",
+        "language": "js",
+        "title": "Check the game page"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "omp-eval-browser-print-evaluate",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "const tab = browser.tab('game-smoke'); await tab.click('button'); await tab.waitForSelector('.overlay.hidden'); print(await tab.evaluate(() => ({overlayHidden: document.querySelector('#overlay').classList.contains('hidden'), status: document.querySelector('#status-label').textContent, canvas: [document.querySelector('#game').width, document.querySelector('#game').height]})));",
+        "language": "js",
+        "title": "Start the game"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "omp-eval-commit-draft",
       "fix_area": "omp",
       "harnesses": [

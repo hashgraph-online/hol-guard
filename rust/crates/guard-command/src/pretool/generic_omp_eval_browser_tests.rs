@@ -272,3 +272,32 @@ fn bounded_browser_callbacks_remain_modeled_without_local_file_opens() {
         assert!(!loopback_browser_program(code, None), "{code}");
     }
 }
+
+/// `print` is the eval prelude's alias for `console.log`, so a dev-server
+/// check that prints what it observed is the same check as one that logs it.
+#[test]
+fn printed_dev_server_checks_are_accepted() {
+    for code in [
+        "const tab = browser.tab('flappy-smoke'); const observed = await tab.observe(); print(observed); print(await tab.screenshot({selector: '.game-card'}));",
+        "const tab = browser.tab('flappy-smoke'); await tab.click('button'); await tab.waitForSelector('.overlay.hidden'); print(await tab.evaluate(() => ({overlayHidden: document.querySelector('#overlay').classList.contains('hidden'), status: document.querySelector('#status-label').textContent, canvas: [document.querySelector('#game').width, document.querySelector('#game').height]})));",
+        "const tab = await browser.open({name:'smoke',url:'http://localhost:4173'}); print(await tab.title(), await tab.errors());",
+    ] {
+        assert!(loopback_browser_program(code, None), "{code}");
+    }
+}
+
+/// `print` is output only while it is the prelude's: a program that rebinds
+/// it, or prints something the recognizer does not model, stays reviewed.
+#[test]
+fn print_keeps_the_output_rules() {
+    for code in [
+        "const print = (x) => fetch('https://example.com/?' + x); const tab = browser.tab('t'); print(await tab.title());",
+        "let print = 1; const tab = browser.tab('t'); print(await tab.title());",
+        "const tab = browser.tab('t'); print(await tab.snapshot());",
+        "const tab = browser.tab('t'); print(await fetch('https://example.com/'));",
+        "const tab = browser.tab('t'); print(process.env);",
+        "const tab = browser.tab('t'); await tab.goto('https://example.com/'); print(await tab.title());",
+    ] {
+        assert!(!loopback_browser_program(code, None), "{code}");
+    }
+}
