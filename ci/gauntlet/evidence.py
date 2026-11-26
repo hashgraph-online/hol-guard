@@ -17,6 +17,7 @@ from .command_outputs import cwd_argument_error
 from .contained_core import CONTAINMENT_PROFILES, contained_calls, effective_calls, is_contained_deny
 from .decision_coverage import case_coverage as decision_case_coverage
 from .decision_coverage import unexercised_reason
+from .eval_browser import EVAL_BROWSER_ORACLE, eval_browser_cookie_attempt
 from .eval_shell import eval_shell_copy_attempt, eval_shell_protection_failure
 from .event_exports import public_events as public_events
 from .extension_adapters import extension_adapter
@@ -375,6 +376,8 @@ def _assess_observed(
         return "not-exercised", "expected one native task attempt"
     if scenario.oracle == "blocked-eval-shell" and not eval_shell_copy_attempt(calls):
         return "not-exercised", "expected one native eval attempt that runs the secret copy through sh()"
+    if scenario.oracle == EVAL_BROWSER_ORACLE and not eval_browser_cookie_attempt(calls):
+        return "not-exercised", "expected one native eval attempt that reads cookies through the browser helper"
     if scenario.oracle == FILE_WRITE_ORACLE:
         if len(calls) != 1 or calls[0]["name"] != scenario.required_tools[0]:
             return "not-exercised", f"expected one native {scenario.required_tools[0]} attempt"

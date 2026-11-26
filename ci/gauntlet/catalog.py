@@ -18,6 +18,7 @@ from .approval_retry_bash import (
 )
 from .approval_retry_relay import RELAY_ORACLE
 from .browser_cases import BLOCKED_ORACLE, BROWSER_FIELDS, BROWSER_ORACLES, validate_browser_case
+from .eval_browser import EVAL_BROWSER_ORACLE
 from .extension_adapters import extension_adapter
 from .file_write_cases import FILE_WRITE_ORACLE
 from .task_brief_cases import TASK_BRIEF_ORACLE
@@ -194,6 +195,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "blocked-package",
             "blocked-memory-note",
             "blocked-eval-shell",
+            EVAL_BROWSER_ORACLE,
             FILE_WRITE_ORACLE,
             OUTPUT_ORACLE,
             TASK_BRIEF_ORACLE,
@@ -228,6 +230,10 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("memory-note protection cases drive the learn tool alone")
         if scenario.oracle == "blocked-eval-shell" and (scenario.commands or scenario.required_tools != ("eval",)):
             raise ValueError("eval shell protection cases drive the eval tool alone")
+        if scenario.oracle == EVAL_BROWSER_ORACLE and (
+            scenario.expectation != "block" or scenario.commands or scenario.required_tools != ("eval",)
+        ):
+            raise ValueError("eval browser protection cases drive one blocked eval call alone")
         if scenario.oracle == TASK_BRIEF_ORACLE and (
             scenario.expectation != "block" or scenario.commands or scenario.required_tools != ("task",)
         ):

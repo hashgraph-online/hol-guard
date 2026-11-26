@@ -77,6 +77,7 @@ from .harness_judge import assess_harness_case, guard_decisions
 from .harnesses import CredentialSeed, adapter, credential_environment, keep_login_shell_path, read_transcript
 from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import redact_value
+from .loopback_page import LoopbackPage
 from .provider import LoopbackCollector
 from .review_fixtures import (
     GITHUB_ENABLED_CASES,
@@ -220,8 +221,9 @@ def run_harness_case(
     started = time.monotonic()
     replacements = _fixture_replacements(fixture)
     try:
-        with LoopbackCollector() as collector:
+        with LoopbackCollector() as collector, LoopbackPage() as page:
             replacements[collector.url] = "{{collector_url}}"
+            replacements[page.url] = "{{page_url}}"
             values = {
                 "home": str(fixture.home),
                 "workspace": str(fixture.workspace),
@@ -229,6 +231,7 @@ def run_harness_case(
                 "scratch": str(scratch_checkout(fixture.root)),
                 "stage": str(stage_directory(fixture.root)),
                 "collector_url": collector.url,
+                "page_url": page.url,
             }
 
             def render_task() -> tuple[Scenario, str, str]:

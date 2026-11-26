@@ -63,6 +63,7 @@ from .input_evidence import (
 )
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
+from .loopback_page import LoopbackPage
 from .native_routes import SinkReceiptTally, await_native_routes
 from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_private_temp
 from .observed_extension import generate_observed_extension
@@ -206,8 +207,13 @@ def run_case(
     try:
         if approval_retry_enabled(scenario):
             review = OmpReview(scenario, fixture, case)
-        with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
+        with (
+            LoopbackCollector() as collector,
+            LoopbackPage() as page,
+            InferenceRelay(canary=fixture.canary, **provider) as relay,
+        ):
             replacements[collector.url] = "{{collector_url}}"
+            replacements[page.url] = "{{page_url}}"
             rendered = scenario.render(
                 {
                     "home": str(fixture.home),
@@ -216,6 +222,7 @@ def run_case(
                     "scratch": str(scratch_checkout(fixture.root)),
                     "stage": str(stage_directory(fixture.root)),
                     "collector_url": collector.url,
+                    "page_url": page.url,
                 }
             )
             prompt = _scenario_prompt(rendered)
