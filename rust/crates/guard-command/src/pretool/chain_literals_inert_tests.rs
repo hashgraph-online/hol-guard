@@ -774,6 +774,10 @@ fn plain_text_outside_ascii_beside_a_substitution_keeps_the_projection() {
         "echo \"a\u{200b}b\" \"$(date +%F)\"",
         "echo $caf\u{e9} \"$(date +%F)\"",
         "echo ${caf\u{e9}} \"$(date +%F)\"",
+        // The shell drops a backslash-newline before it reads the name.
+        "echo $caf\\\n\u{e9} \"$(date +%F)\"",
+        "echo $\\\ncaf\u{e9} \"$(date +%F)\"",
+        "echo $\\\n{caf\u{e9}} \"$(date +%F)\"",
         "echo \"$(date +%F)\u{3000}\"",
     ] {
         assert_eq!(projected(command), None, "{command}");

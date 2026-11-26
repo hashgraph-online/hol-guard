@@ -230,10 +230,26 @@ pub(super) fn plain_non_ascii(chars: &[char], at: usize) -> bool {
     {
         return false;
     }
-    let start = chars[..at]
-        .iter()
-        .rposition(|c| c.is_ascii() && !(c.is_ascii_alphanumeric() || *c == '_'))
-        .map_or(0, |before| before + 1);
-    let opener = |offset: usize| start.checked_sub(offset).map(|index| chars[index]);
-    !(opener(1) == Some('$') || (opener(1) == Some('{') && opener(2) == Some('$')))
+    // The index of the character before `end`, stepping over every
+    // backslash-newline, which the shell removes before it reads a name.
+    let previous = |mut end: usize| loop {
+        let index = end.checked_sub(1)?;
+        if chars[index] == '\n' && index > 0 && chars[index - 1] == '\\' {
+            end = index - 1;
+            continue;
+        }
+        return Some(index);
+    };
+    let mut start = at;
+    while let Some(index) = previous(start) {
+        let c = chars[index];
+        if c.is_ascii() && !(c.is_ascii_alphanumeric() || c == '_') {
+            break;
+        }
+        start = index;
+    }
+    let first = previous(start);
+    let opener = first.map(|index| chars[index]);
+    let second = first.and_then(previous).map(|index| chars[index]);
+    !(opener == Some('$') || (opener == Some('{') && second == Some('$')))
 }
