@@ -106,13 +106,23 @@ def generate_browser_draft(args: argparse.Namespace) -> dict[str, object]:
     if not isinstance(rows_text, str):
         raise BuilderError("browser_generate", "The native drafter returned no gate rows.")
     rows_path = gate_rows_path(args.output, getattr(args, "gate_output", None))
-    if rows_path == args.output:
+    if rows_path == args.output or rows_path.resolve() == Path(args.output).resolve():
         raise BuilderError("output_exists", "The gate rows need a file of their own; choose another --gate-output.")
     if rows_path.exists() or rows_path.is_symlink():
         raise BuilderError("output_exists", "The gate rows file already exists; choose a new --gate-output.")
     # Write the exact text the native compiler checked, so the file on disk is the one it accepted.
+    # The pair lands together: a rows file that cannot be written takes the new profile with it,
+    # so the same command can run again.
     _write_new(args.output, profile_text)
-    _write_new(rows_path, rows_text)
+    try:
+        _write_new(rows_path, rows_text)
+    except BaseException as exc:
+        Path(args.output).unlink(missing_ok=True)
+        if isinstance(exc, OSError):
+            raise BuilderError(
+                "unsafe_path", "The gate rows file could not be written; choose a writable --gate-output."
+            ) from exc
+        raise
     return {
         "generated": True,
         "browser": True,

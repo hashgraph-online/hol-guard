@@ -159,6 +159,26 @@ def test_browser_generate_writes_gate_rows_to_a_new_file_only(
     status, error = run("generate", [*generate_args(tmp_path, second), "--gate-output", str(second)], capsys)
     assert (status != 0, error["error"]["code"]) == (True, "output_exists")
     assert not second.exists()
+    (tmp_path / "sub").mkdir()
+    alias = tmp_path / "sub" / ".." / "second.json"
+    status, error = run("generate", [*generate_args(tmp_path, second), "--gate-output", str(alias)], capsys)
+    assert (status != 0, error["error"]["code"]) == (True, "output_exists")
+    assert not second.exists()
+
+
+def test_browser_generate_removes_the_profile_when_the_rows_cannot_be_written(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(extension_builder_browser, "native_browser_request", lambda request, *, code: DRAFT)
+    output = tmp_path / "out.json"
+    missing = tmp_path / "missing-dir" / "rows.json"
+    status, error = run("generate", [*generate_args(tmp_path, output), "--gate-output", str(missing)], capsys)
+    assert (status != 0, error["error"]["code"]) == (True, "unsafe_path")
+    assert not output.exists()
+    rows = tmp_path / "rows.json"
+    status, result = run("generate", [*generate_args(tmp_path, output), "--gate-output", str(rows)], capsys)
+    assert status == 0, result
+    assert output.exists() and rows.exists()
 
 
 def test_browser_generate_refuses_wrong_inputs_and_existing_output(
