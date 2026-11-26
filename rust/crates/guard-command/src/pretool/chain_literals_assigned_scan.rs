@@ -36,6 +36,88 @@ pub(super) fn expands(body: &str) -> bool {
     single || double || escaped
 }
 
+/// Whether `body` is one pipeline: no unquoted list operator, grouping or
+/// comment. Written in place of its assignment it then runs as one command
+/// of the chain, as it did inside the substitution, and a `cd` it makes
+/// cannot reach the commands after it.
+pub(super) fn one_pipeline(body: &str) -> bool {
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    let mut previous = ' ';
+    for character in body.chars() {
+        if escaped {
+            escaped = false;
+        } else if single {
+            single = character != '\'';
+        } else {
+            match character {
+                '\\' => escaped = true,
+                '\'' if !double => single = true,
+                '"' => double = !double,
+                ';' | '&' | '(' | ')' | '{' | '}' | '#' if !double => return false,
+                '|' if !double && previous == '|' => return false,
+                _ => {}
+            }
+        }
+        previous = character;
+    }
+    !(single || double || escaped)
+}
+
+/// `value` with the double quotes dropped around each quoted run the shell
+/// reads the same way bare: `git rev-parse "HEAD"` becomes
+/// `git rev-parse HEAD`, so the lookup reads as the one the agent would have
+/// typed. A run keeps its quotes when it is empty or holds anything a bare
+/// word would expand, split or glob, or a `~` a bare word would expand.
+pub(super) fn plain_quotes_dropped(value: &str) -> String {
+    let chars: Vec<char> = value.chars().collect();
+    let mut text = String::with_capacity(value.len());
+    let (mut single, mut at) = (false, 0);
+    while at < chars.len() {
+        let character = chars[at];
+        if single {
+            single = character != '\'';
+        } else if character == '\\' {
+            text.push(character);
+            at += 1;
+            if let Some(&next) = chars.get(at) {
+                text.push(next);
+            }
+            at += 1;
+            continue;
+        } else if character == '\'' {
+            single = true;
+        } else if character == '"' {
+            let close = chars[at + 1..].iter().position(|c| *c == '"');
+            if let Some(length) = close {
+                let run: String = chars[at + 1..at + 1 + length].iter().collect();
+                let bare = !run.is_empty()
+                    && run.chars().all(|c| {
+                        c.is_ascii_alphanumeric()
+                            || matches!(
+                                c,
+                                '-' | '_' | '.' | '/' | ':' | '@' | '^' | '%' | '+' | ',' | '~'
+                            )
+                    })
+                    && !run.contains("=~")
+                    && !run.contains(":~")
+                    && !(run.starts_with('~')
+                        && (at == 0 || matches!(chars[at - 1], ' ' | '=' | ':')));
+                if bare {
+                    text.push_str(&run);
+                    at += length + 2;
+                    continue;
+                }
+                text.extend(&chars[at..at + length + 2]);
+                at += length + 2;
+                continue;
+            }
+        }
+        text.push(character);
+        at += 1;
+    }
+    text
+}
+
 /// Whether the text ahead of `end` is unquoted at `end` and opens no group,
 /// loop or conditional.
 pub(super) fn plain_ahead(masked: &[char], spans: &[ShellCommandSubstitution], end: usize) -> bool {
@@ -273,9 +355,9 @@ pub(super) fn steers(
     words.iter().any(|word| {
         listed(STEERING_WORDS, word)
             || matches!(word.as_str(), "(" | ")" | "{" | "}")
-            || word.split_once('=').is_some_and(|(name, _)| {
-                assignment_name(name) && !super::super::super::ordinary_name(name)
-            })
+            || word
+                .split_once('=')
+                .is_some_and(|(name, _)| assignment_name(name) && !super::plain_name(name))
             || word.contains(['(', ')'])
     })
 }

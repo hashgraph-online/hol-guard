@@ -452,9 +452,9 @@ pub(crate) fn compatibility_observations_in(
     // Set once a list item assigns a non-inert shell variable, which every
     // later command inherits when the session had already exported it.
     let mut assigned = false;
-    // Whether every such list item named only a lowercase shell variable that
-    // Git never reads (`dir=`, `out_dir=`). Git's own settings, the proxy
-    // names curl reads and the names a shell ties to its state stay steering.
+    // Whether every such list item named only a shell variable that Git never
+    // reads (`dir=`, `out_dir=`, `REF=`). Git's own settings, the proxy names
+    // curl reads and the names a shell ties to its state stay steering.
     let mut git_blind = true;
     for (index, segment) in command.segments.iter().enumerate() {
         deadline_check(deadline)?;
@@ -544,15 +544,17 @@ pub(crate) fn compatibility_observations_in(
     Ok(result)
 }
 
-/// A lowercase shell variable such as `dir` or `out_dir` is not one Git, or a
-/// program Git starts, reads from its environment. Git's own settings are
-/// uppercase (`GIT_DIR`, `PAGER`, `EDITOR`), and
-/// [`crate::pretool::generic::chain_literals::ordinary_name`] refuses the lowercase
-/// names that still steer: the proxy names curl reads (`http_proxy`) and the
-/// ones a shell ties to its own state (zsh's `path`, `cdpath`).
+/// A shell variable such as `dir`, `out_dir` or `REF` that is not one Git, or
+/// a program Git starts, reads from its environment.
+/// [`plain_name`](crate::pretool::generic::chain_literals::inert::assigned::plain_name)
+/// refuses the names that still steer: Git's own settings (`GIT_DIR`,
+/// `PAGER`, `EDITOR`), the proxy names curl reads (`http_proxy`), the ones a
+/// shell ties to its own state (zsh's `path`, `cdpath`) and, for a name with
+/// capitals that may already be exported, any part of a name a program reads
+/// to choose what it runs (`*_COMMAND`, `*_DIR`, `*_CONFIG`).
 fn git_ignores_shell_variable(name: &str) -> bool {
     name.bytes()
-        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-        && name.bytes().any(|byte| byte.is_ascii_lowercase())
-        && crate::pretool::generic::chain_literals::ordinary_name(name)
+        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        && name.bytes().any(|byte| byte.is_ascii_alphabetic())
+        && crate::pretool::generic::chain_literals::inert::assigned::plain_name(name)
 }

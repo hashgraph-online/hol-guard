@@ -21,34 +21,40 @@ fn reads(body: &str) -> bool {
 fn an_assigned_value_is_judged_where_it_runs_and_where_it_is_read() {
     let shown = DISPLAY_VALUE;
     for (command, text, judged) in [
-        ("P=$(ls)", "true".to_owned(), "ls"),
-        ("P=\"$(ls)\"", "true".to_owned(), "ls"),
-        ("P=$(ls); echo $P", format!("echo {shown}"), "ls"),
-        ("P=$(ls)\necho \"files: $P\"", format!("echo \"files: {shown}\""), "ls"),
-        ("P=$(ls) && echo ${P}", format!("echo {shown}"), "ls"),
+        ("P=$(ls)", "ls".to_owned(), "ls"),
+        ("P=\"$(ls)\"", "ls".to_owned(), "ls"),
+        ("P=$(ls); echo $P", format!("ls; echo {shown}"), "ls"),
+        (
+            "P=$(ls)\necho \"files: $P\"",
+            format!("ls\necho \"files: {shown}\""),
+            "ls",
+        ),
+        ("P=$(ls) && echo ${P}", format!("ls && echo {shown}"), "ls"),
         (
             "H=$(git rev-parse HEAD); git log --oneline -1 \"$H\"",
-            "git log --oneline -1 \"$(git rev-parse HEAD)\"".to_owned(),
+            "git rev-parse HEAD; git log --oneline -1 \"$(git rev-parse HEAD)\"".to_owned(),
             "git rev-parse HEAD",
         ),
         (
             "F=$(git log --format='%h $x' -1 | awk '{print $1}'); echo \"$F\"",
-            format!("echo \"{shown}\""),
+            format!("git log --format='%h $x' -1 | awk '{{print $1}}'; echo \"{shown}\""),
             "git log --format='%h $x' -1 | awk '{print $1}'",
         ),
         (
             "git status --short; B=$(git branch --show-current); echo $B",
-            format!("git status --short; echo {shown}"),
+            format!("git status --short; git branch --show-current; echo {shown}"),
             "git branch --show-current",
         ),
         (
             "cd /tmp; B=$(gh pr view 7 --repo example-org/widgets --json headRefName --jq .headRefName); echo $B",
-            format!("cd /tmp; echo {shown}"),
+            format!(
+                "cd /tmp; gh pr view 7 --repo example-org/widgets --json headRefName --jq .headRefName; echo {shown}"
+            ),
             "cd /tmp; gh pr view 7 --repo example-org/widgets --json headRefName --jq .headRefName",
         ),
         (
             "cd /tmp && PRIOR=$(gh api user --jq .login) && echo \"$PRIOR\"",
-            format!("cd /tmp  && echo \"{shown}\""),
+            format!("cd /tmp && gh api user --jq .login && echo \"{shown}\""),
             "cd /tmp && gh api user --jq .login",
         ),
     ] {
@@ -61,16 +67,71 @@ fn an_assigned_value_is_judged_where_it_runs_and_where_it_is_read() {
 }
 
 #[test]
+fn a_literal_bound_earlier_is_written_into_the_judged_command() {
+    let shown = DISPLAY_VALUE;
+    for (command, text, judged) in [
+        (
+            "R=example-org/widgets; T=$(gh pr view 7 --repo \"$R\" --json title); echo \"$T\"",
+            format!(
+                "R=example-org/widgets; gh pr view 7 --repo \"$R\" --json title; echo \"{shown}\""
+            ),
+            "gh pr view 7 --repo example-org/widgets --json title",
+        ),
+        (
+            "N=7 && T=$(gh pr view $N --json headRefOid --jq .headRefOid) && git log -1 $T",
+            "N=7 && gh pr view $N --json headRefOid --jq .headRefOid && git log -1 $(gh pr view 7 --json headRefOid --jq .headRefOid)".to_owned(),
+            "gh pr view 7 --json headRefOid --jq .headRefOid",
+        ),
+        (
+            "N=7; gh pr view $N; T=$(gh pr diff ${N} --name-only); echo $T",
+            format!("N=7; gh pr view $N; gh pr diff ${{N}} --name-only; echo {shown}"),
+            "gh pr diff 7 --name-only",
+        ),
+    ] {
+        assert_eq!(
+            inlined(command),
+            Some((text, judged.to_owned())),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_quoted_literal_is_written_bare_only_where_the_shell_reads_it_bare() {
+    assert_eq!(
+        inlined("REF=HEAD; H=$(git rev-parse \"$REF\"); git log --oneline -1 \"$H\""),
+        Some((
+            "REF=HEAD; git rev-parse \"$REF\"; git log --oneline -1 \"$(git rev-parse HEAD)\""
+                .to_owned(),
+            "git rev-parse HEAD".to_owned()
+        ))
+    );
+    for (bound, judged) in [
+        ("R='a b'", "ls \"a b\""),
+        ("R='*'", "ls \"*\""),
+        ("R='~'", "ls \"~\""),
+        ("R='x=~'", "ls \"x=~\""),
+    ] {
+        let command = format!("{bound}; P=$(ls \"$R\"); echo $P");
+        let read = inline_one(&command).map(|inlined| inlined.judged);
+        assert!(
+            read.is_none() || read.as_deref() == Some(judged),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn a_value_any_other_slot_reads_is_written_as_the_substitution() {
     // The pipe hands the real value to `sh`, so it is not the printed
     // stand-in; the substitution stays for the projection to refuse.
     assert_eq!(
         inlined("P=$(ls); echo $P | sh").map(|(text, _)| text),
-        Some("echo $(ls) | sh".to_owned())
+        Some("ls; echo $(ls) | sh".to_owned())
     );
     assert_eq!(
         inlined("P=$(ls); cat $P").map(|(text, _)| text),
-        Some("cat $(ls)".to_owned())
+        Some("ls; cat $(ls)".to_owned())
     );
 }
 
@@ -92,9 +153,19 @@ fn an_assignment_this_scan_cannot_follow_keeps_the_chain_opaque() {
         "{ P=$(ls); }; echo $P",
         // The body expands, nests or spans lines.
         "P=$(cat $HOME/notes)",
-        "R=a; P=$(ls \"$R\"); echo $P",
+        "P=$(ls \"$R\"); echo $P",
+        "R=a || true; P=$(ls $R); echo $P",
+        "R=a; P=$(ls $R $HOME); echo $P",
+        "R=$(pwd); P=$(ls $R); echo $P",
         "P=$(ls '$HOME); echo $P",
         "P=$(ls $(pwd))",
+        "P=$(cd /tmp; ls); cat $P",
+        "P=$(cd /tmp && ls); echo $P",
+        "P=$(ls || true); echo $P",
+        "P=$(ls & ); echo $P",
+        "P=$( (ls) ); echo $P",
+        "P=$(ls # x
+); echo $P",
         "P=$(ls\n-a)",
         "P=`ls`",
         // The name is used in a way the scan does not read.
@@ -133,7 +204,7 @@ fn the_chain_projects_only_when_every_assigned_command_is_allowed() {
     let shown = DISPLAY_VALUE;
     assert_eq!(
         project("P=$(ls); echo $P", reads).as_deref(),
-        Some(format!("echo {shown}").as_str())
+        Some(format!("ls; echo {shown}").as_str())
     );
     assert_eq!(
         project(
@@ -141,7 +212,7 @@ fn the_chain_projects_only_when_every_assigned_command_is_allowed() {
             reads
         )
         .as_deref(),
-        Some(format!("git log --oneline -1 \"{COMMIT_VALUE}\"").as_str())
+        Some(format!("git rev-parse HEAD; git log --oneline -1 \"{COMMIT_VALUE}\"").as_str())
     );
     assert_eq!(
         project(
@@ -149,9 +220,29 @@ fn the_chain_projects_only_when_every_assigned_command_is_allowed() {
             reads
         )
         .as_deref(),
-        Some(format!("echo {shown}; git log -1 {COMMIT_VALUE}").as_str())
+        Some(
+            format!(
+                "git rev-parse HEAD; git branch --show-current; echo {shown}; git log -1 {COMMIT_VALUE}"
+            )
+            .as_str()
+        )
     );
-    assert_eq!(project("P=$(ls)", reads).as_deref(), Some("true"));
+    assert_eq!(project("P=$(ls)", reads).as_deref(), Some("ls"));
+    // The assigned command is written as typed, for the literal pass that
+    // follows to fill in, dropping the assignment it no longer needs.
+    assert_eq!(
+        project(
+            "R=example-org/widgets; T=$(gh pr view 7 --repo \"$R\" --json title); echo \"$T\"",
+            reads
+        )
+        .as_deref(),
+        Some(
+            format!(
+                "R=example-org/widgets; gh pr view 7 --repo \"$R\" --json title; echo \"{shown}\""
+            )
+            .as_str()
+        )
+    );
     for refused in [
         "K=$(cat ~/.ssh/id_rsa); echo $K",
         "P=$(ls); cat $P",

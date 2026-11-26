@@ -622,7 +622,7 @@ fn date_arguments(arguments: &[&str]) -> bool {
 }
 
 #[path = "chain_literals_assigned.rs"]
-mod assigned;
+pub(crate) mod assigned;
 
 #[path = "chain_literals_commit_message.rs"]
 mod commit_message;
