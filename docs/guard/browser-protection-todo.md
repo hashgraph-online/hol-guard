@@ -104,7 +104,7 @@ place to put its cases.
   `ci/gauntlet/browser_judge.py` (approval-row count, rendered-card count, journal check,
   `decision_paths`). Evidence: catalog tests for each new field and each refusal; judge unit tests
   for pass, over budget, repeat prompt, protected call present, attempt never made.
-- [ ] **BP-T165** Pairing and coverage tests: `tests/test_gauntlet_browser_cases_in_fp_gate.py`
+- [x] **BP-T165** Pairing and coverage tests: `tests/test_gauntlet_browser_cases_in_fp_gate.py`
   (every `browser-quiet` tool call appears in `mcp_cases` as `allow`, modeled on
   `tests/test_gauntlet_native_commands_in_fp_gate.py`) and
   `tests/test_browser_driver_gate_coverage.py` (every tool of every shipped profile has a pinned row;
