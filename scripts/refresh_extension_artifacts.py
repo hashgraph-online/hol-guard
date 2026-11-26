@@ -75,6 +75,9 @@ def contribution_ids() -> list[str]:
 # They only need an authored trust binding, which starts as external (opt-in).
 INTEGRATION_CONTRIBUTIONS = {"browser-drivers": "browser", "provider-integrations": "provider"}
 _INTEGRATION_SLUG = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
+# Reserved for the loopback provider fixture origin used by live runs. A shipped manifest under this
+# prefix could be routed to it, so the native compiler and this listing both refuse it.
+_FIXTURE_PROVIDER_PREFIX = "provider.fixture-"
 
 
 def integration_contribution_ids() -> list[str]:
@@ -92,10 +95,12 @@ def integration_contribution_ids() -> list[str]:
                 or not identity.startswith(f"{prefix}.")
                 or not _INTEGRATION_SLUG.match(slug)
                 or path.name != f"{identity}.json"
+                or identity.startswith(_FIXTURE_PROVIDER_PREFIX)
             ):
                 raise SystemExit(
                     f"contributions/{directory}/{path.name} must declare an id of the form "
-                    f"{prefix}.<slug> and be named <id>.json"
+                    f"{prefix}.<slug>, be named <id>.json and not use the reserved "
+                    f"{_FIXTURE_PROVIDER_PREFIX} prefix"
                 )
             ids.append(identity)
     return sorted(ids)

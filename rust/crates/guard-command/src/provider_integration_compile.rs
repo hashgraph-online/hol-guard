@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use guard_contracts::{
     provider_id_is_valid, provider_reason_code_is_valid, ProviderCapabilityV1,
-    ProviderShareableFactV1, ProviderVerdictV1,
+    ProviderShareableFactV1, ProviderVerdictV1, PROVIDER_FIXTURE_ID_PREFIX,
 };
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -98,6 +98,23 @@ pub fn compile_provider_integration_set(
             return Err(E::ProviderIdDuplicate);
         }
         compiled.push(manifest);
+    }
+    Ok(compiled)
+}
+
+/// Compile the manifests shipped under `contributions/provider-integrations/`. On top of the set
+/// rules, a contributed manifest may not use the id prefix reserved for the loopback fixture
+/// origin, so no shipped provider can ever be routed to it.
+pub fn compile_contributed_provider_integration_set(
+    sources: &[&[u8]],
+    verified_providers: &[&str],
+) -> CompileResult<Vec<CompiledProviderIntegrationV1>> {
+    let compiled = compile_provider_integration_set(sources, verified_providers)?;
+    if compiled
+        .iter()
+        .any(|manifest| manifest.id.starts_with(PROVIDER_FIXTURE_ID_PREFIX))
+    {
+        return Err(E::FixtureIdContributed);
     }
     Ok(compiled)
 }

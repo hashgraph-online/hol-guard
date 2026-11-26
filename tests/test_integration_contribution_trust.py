@@ -122,6 +122,12 @@ def test_readme_is_not_a_contribution(refresh) -> None:
         pytest.param("provider-integrations", "provider.x.json", {"name": "x"}, id="missing-id"),
         pytest.param("provider-integrations", "provider.x.json", ["provider.x"], id="not-an-object"),
         pytest.param("provider-integrations", "provider.-x.json", {"id": "provider.-x"}, id="leading-hyphen"),
+        pytest.param(
+            "provider-integrations",
+            "provider.fixture-shield.json",
+            {"id": "provider.fixture-shield"},
+            id="reserved-fixture-prefix",
+        ),
         pytest.param("provider-integrations", "provider.x.json", {"id": "provider.x/../y"}, id="path-in-id"),
     ],
 )
