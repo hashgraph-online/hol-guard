@@ -38,10 +38,19 @@ def _artifact() -> GuardArtifact:
     )
 
 
-def _queue(store: GuardStore, artifact: GuardArtifact, origin: str, now: str) -> list[dict[str, Any]]:
+def _queue(
+    store: GuardStore,
+    artifact: GuardArtifact,
+    origin: str,
+    now: str,
+    *,
+    generic_site: str | None = None,
+) -> list[dict[str, Any]]:
+    """Queue one browser click; ``generic_site`` pins the non-browser identity fields to one site."""
     identity = artifact.metadata["mcp_server_identity"]
     assert isinstance(identity, dict)
     domain = origin.removeprefix("https://")
+    generic = generic_site or domain
     browser_intent = {
         "version": 1,
         "intent": "browser.interact",
@@ -64,13 +73,13 @@ def _queue(store: GuardStore, artifact: GuardArtifact, origin: str, now: str) ->
             "artifacts": [
                 {
                     "artifact_id": artifact.artifact_id,
-                    "artifact_hash": f"exact-hash-{domain}",
+                    "artifact_hash": f"exact-hash-{generic}",
                     "artifact_type": "tool_call",
                     "source_scope": "project",
                     "config_path": ".mcp.json",
                     "policy_action": "review",
                     "changed_fields": ["runtime_browser_tool_call"],
-                    "launch_target": f"{SERVER} browser_click {domain}",
+                    "launch_target": f"{SERVER} browser_click {generic}",
                     "browser_intent": browser_intent,
                 }
             ]
@@ -103,8 +112,15 @@ def test_the_same_click_on_another_site_is_its_own_row(tmp_path: Path, native_co
     store = GuardStore(tmp_path / "guard-home")
     artifact = _artifact()
 
+    # Only the browser intent names the second site, so the browser identity alone must split the rows.
     first = _queue(store, artifact, "https://shop.example.test", "2026-11-26T12:00:00+00:00")
-    other = _queue(store, artifact, "https://docs.example.test", "2026-11-26T12:00:05+00:00")
+    other = _queue(
+        store,
+        artifact,
+        "https://docs.example.test",
+        "2026-11-26T12:00:05+00:00",
+        generic_site="shop.example.test",
+    )
 
     rows = _pending(store)
     assert len(rows) == 2, rows

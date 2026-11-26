@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ci.gauntlet.approval_rows import CONNECTOR_GROUP_ID, approval_rows
+from ci.gauntlet.approval_rows import CONNECTOR_GROUP_ID, await_rows
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE
 from codex_plugin_scanner.guard.cli.commands_mcp_relay_launch import RELAY_COMMAND, relay_argv
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
@@ -59,7 +59,6 @@ READY_SERVER = "echo-ready"
 READY_TOOL = "lookup"
 _SESSION_SECONDS = 30.0
 _WARM_SECONDS = 30.0
-_ROW_SECONDS = 10.0
 _DRAIN_SECONDS = 30.0
 _GATE_DAEMON_SESSION = "benign-gate-relay"
 # The answer to a call the relay could not decide yet (`mcp_relay_authority::NO_DECISION`).
@@ -413,9 +412,9 @@ def replay(
             seed = _decide(command, fixture, case)
             if "relay_defer" in seed:
                 return seed, [], identity.identity_hash
-            _await_rows(store, known, seed)
+            await_rows(store, known, waiting="error" in seed)
         response = _decide(command, fixture, case)
-    rows = _await_rows(store, known, response, retried=case.state == PENDING_SAME_CALL)
+    rows = await_rows(store, known, waiting="error" in response, retried=case.state == PENDING_SAME_CALL)
     return response, rows, identity.identity_hash
 
 
@@ -436,27 +435,6 @@ def _decide(command: list[str], fixture: BenignFixture, case: McpCase) -> dict[s
         # Name why the relay never decided, so a failing case says more than the refusal.
         return {**response, "relay_defer": defers}
     return response
-
-
-def _await_rows(
-    store: GuardStore, known: set[str], response: dict[str, Any], *, retried: bool = False
-) -> list[dict[str, Any]]:
-    """The rows a stopped call queued, once the resident's evidence drain has written them.
-
-    The drain runs after the relay has answered. A retry waits until its pending row records it.
-    """
-    rows = approval_rows(store, known)
-    deadline = time.monotonic() + _ROW_SECONDS
-
-    def settled() -> bool:
-        if not rows:
-            return False
-        return not retried or any(row["dedupe_count"] >= 2 for row in rows)
-
-    while "error" in response and not settled() and time.monotonic() < deadline:
-        time.sleep(0.1)
-        rows = approval_rows(store, known)
-    return rows
 
 
 def mcp_failure(case: McpCase, response: dict[str, Any], rows: list[dict[str, Any]], identity: str) -> str | None:
