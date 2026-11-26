@@ -118,6 +118,9 @@ pub(crate) struct ExtensionEntry {
     pub(crate) source: String,
     pub(crate) trust_class: String,
     pub(crate) surface: Option<String>,
+    /// Where the extension acts (`terminal`, `mcp`, `browser`, `package`), derived from its
+    /// identity, its MCP surface and its delegated protection.
+    pub(crate) surfaces: Vec<&'static str>,
     pub(crate) risk_classes: BTreeSet<String>,
     pub(crate) search_text: String,
     pub(crate) index_item: Box<[u8]>,
@@ -172,6 +175,7 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
         Some(Value::String(surface)) => Some(surface.clone()),
         Some(_) => return Err("catalog_read_model_extension_field"),
     };
+    let surfaces = derived_surfaces(&id, surface.as_deref(), source.get("delegated_protection"));
     let strings = |key: &str| -> Vec<String> {
         source
             .get(key)
@@ -207,9 +211,11 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
     let mut index = project(source, INDEX_FIELDS, OPTIONAL_INDEX_FIELDS)?;
     index.insert("catalog_defaults".into(), defaults.clone());
     index.insert("content_revision".into(), Value::String(revision.clone()));
+    index.insert("surfaces".into(), serde_json::json!(surfaces));
     let mut detail = project(source, DETAIL_FIELDS, OPTIONAL_DETAIL_FIELDS)?;
     detail.insert("catalog_defaults".into(), defaults);
     detail.insert("content_revision".into(), Value::String(revision));
+    detail.insert("surfaces".into(), serde_json::json!(surfaces));
     let mut search_parts = vec![id.clone(), text("name")?, text("description")?];
     search_parts.extend(
         source
@@ -224,6 +230,7 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
         source: text("source")?,
         trust_class: text("trust_class")?,
         surface,
+        surfaces,
         risk_classes: strings("risk_classes").into_iter().collect(),
         search_text: search_parts.join("\n").to_lowercase(),
         index_item: encode(&Value::Object(index))?,
@@ -236,6 +243,39 @@ pub(crate) fn extension_entry(value: &Value) -> Result<ExtensionEntry, &'static 
         has_mcp_tools,
         id,
     })
+}
+
+/// The catalog surfaces an extension covers, in a fixed order. An MCP extension is `mcp`, and also
+/// `browser` when a first-party browser driver profile names the same server. Any other command
+/// extension is `terminal`; package-firewall delegation adds `package`.
+pub(crate) fn derived_surfaces(
+    id: &str,
+    surface: Option<&str>,
+    delegated_protection: Option<&Value>,
+) -> Vec<&'static str> {
+    let mut surfaces = Vec::new();
+    if surface == Some("mcp") {
+        surfaces.push("mcp");
+        let server = id.strip_prefix("command.mcp-").unwrap_or(id);
+        if crate::browser_first_party_drivers::first_party_browser_drivers()
+            .iter()
+            .any(|driver| {
+                driver
+                    .matches
+                    .mcp_server_names
+                    .iter()
+                    .any(|name| name == server)
+            })
+        {
+            surfaces.push("browser");
+        }
+    } else if id.starts_with("command.") {
+        surfaces.push("terminal");
+    }
+    if delegated_protection.and_then(Value::as_str) == Some("package-firewall") {
+        surfaces.push("package");
+    }
+    surfaces
 }
 
 /// Per-permission search text: the permission's label, example, permission
