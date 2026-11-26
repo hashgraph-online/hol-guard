@@ -301,9 +301,7 @@ pub(super) fn matched_leaf_glob_operand(value: &str, context: super::PathContext
 fn leaf_glob_matches(value: &str, context: super::PathContext<'_>) -> Option<usize> {
     // Windows spells the home path with `\`, so there it is a separator.
     let separator = |c: char| c == '/' || (c == '\\' && cfg!(windows));
-    let Some((directory, pattern)) = value.rsplit_once(separator) else {
-        return None;
-    };
+    let (directory, pattern) = value.rsplit_once(separator)?;
     if directory.is_empty()
         || directory.contains(['*', '?', '[', ']'])
         || pattern.is_empty()
@@ -346,9 +344,7 @@ fn leaf_glob_matches(value: &str, context: super::PathContext<'_>) -> Option<usi
     if pattern.starts_with(['.', '[']) && (candidate(".") || candidate("..")) {
         return None;
     }
-    let Some(base) = expanded_path(directory, context) else {
-        return None;
-    };
+    let base = expanded_path(directory, context)?;
     let Ok(canonical_base) = std::fs::canonicalize(&base) else {
         return None;
     };
@@ -374,12 +370,9 @@ fn leaf_glob_matches(value: &str, context: super::PathContext<'_>) -> Option<usi
     let mut matched = 0_usize;
     for entry in entries {
         seen += 1;
-        let Some(name) = entry
+        let name = entry
             .ok()
-            .and_then(|entry| entry.file_name().into_string().ok())
-        else {
-            return None;
-        };
+            .and_then(|entry| entry.file_name().into_string().ok())?;
         if seen > MAX_LEAF_ENTRIES {
             return None;
         }
@@ -387,9 +380,7 @@ fn leaf_glob_matches(value: &str, context: super::PathContext<'_>) -> Option<usi
             continue;
         }
         let path = base.join(&name);
-        let Some(text) = path.to_str() else {
-            return None;
-        };
+        let text = path.to_str()?;
         // Never a hidden directory (`.config`) or a key file (`server.pem`), as in `ls -R`.
         let listed = if std::fs::metadata(&path).is_ok_and(|metadata| metadata.is_dir()) {
             !name.starts_with('.')
