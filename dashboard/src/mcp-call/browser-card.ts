@@ -88,7 +88,7 @@ export function parseBrowserCard(value: unknown): GuardBrowserCardV1 | null {
   const detail = isRecord(value.detail) ? value.detail : {};
   const inputKind = detail.input_kind;
   const chips = Array.isArray(value.risk_chips)
-    ? value.risk_chips.filter((chip): chip is GuardBrowserSurfaceV1 => typeof chip === "string" && chip in SURFACES)
+    ? value.risk_chips.filter((chip): chip is GuardBrowserSurfaceV1 => typeof chip === "string" && Object.hasOwn(SURFACES, chip))
     : [];
   return {
     headline: value.headline.trim(),
@@ -121,7 +121,7 @@ export function browserProfileLabel(profile: GuardBrowserProfileLineV1): string 
 }
 
 /** What the input is, never what it says: the card has no typed text. */
-function inputValue(card: GuardBrowserCardV1): string | null {
+export function browserInputSummary(card: GuardBrowserCardV1): string | null {
   const { input_kind: kind, input_length: length, input_masked: masked } = card.detail;
   if (kind === null) return null;
   const size = length === null ? null : `${length} ${length === 1 ? "character" : "characters"}`;
@@ -134,7 +134,7 @@ function fact(label: string, value: string | null, key: string, kind: McpFact["k
 }
 
 /** The site without its scheme, as the card names it. */
-function siteLabel(origin: string | null): string | null {
+export function browserSiteLabel(origin: string | null): string | null {
   if (origin === null) return null;
   const host = origin.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
   return host.length > 0 ? host : null;
@@ -149,16 +149,16 @@ export function explainBrowserCard(
   const facts = [
     ...fact("Web page", card.site.origin, "browser_site", "url"),
     ...fact("On", card.detail.element_preview, "browser_element"),
-    ...fact(card.detail.input_kind === "script" ? "Code" : "What it types", inputValue(card), "browser_input"),
+    ...fact(card.detail.input_kind === "script" ? "Code" : "What it types", browserInputSummary(card), "browser_input"),
     ...fact("Browser", PROFILES[card.profile_line], "browser_profile"),
     ...fact("Touches", card.risk_chips.map((chip) => SURFACES[chip]).join(", "), "browser_surfaces"),
   ];
-  const codeKey = card.verb === "evaluate" && input !== null
+  const codeKey = card.verb === "evaluate" && input !== null && card.detail.input_masked !== true
     ? (CODE_KEYS.find((key) => typeof input[key] === "string" && (input[key] as string).trim().length > 0) ?? null)
     : null;
   const code = codeKey !== null ? codeOf(input?.[codeKey]) : null;
   const thought = textOf(input?.thought, 300);
-  const site = siteLabel(card.site.origin);
+  const site = browserSiteLabel(card.site.origin);
   const rowTitle = card.verb === "navigate" && site !== null ? `Open ${site}` : title;
   return {
     headline: card.headline,

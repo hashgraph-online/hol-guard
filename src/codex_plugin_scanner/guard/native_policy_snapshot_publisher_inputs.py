@@ -41,6 +41,7 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _pending_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _deferred_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _deferred_workspace_readiness: dict[Path, object]  # pyright: ignore[reportUninitializedInstanceVariable]
     _published_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     _observed_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     # The blocked-request mode every config of the last compile agreed on.
@@ -267,7 +268,11 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
 
     def _pending_workspace_policy_paths(self) -> set[str]:
         with self._condition:
-            return {str(path) for path in self._overlay_paths(tuple(self._pending_workspace_paths))}
+            # A deferred workspace queues no publish of its own, so its
+            # overlay files stay effective inputs: one written there must
+            # trigger the publish that compiles it.
+            undeferred = self._pending_workspace_paths - self._deferred_workspace_paths
+            return {str(path) for path in self._overlay_paths(tuple(undeferred))}
 
     def _compiled_effective_policy(
         self, *, settled_only: bool = False, workspaces: frozenset[Path] | None = None

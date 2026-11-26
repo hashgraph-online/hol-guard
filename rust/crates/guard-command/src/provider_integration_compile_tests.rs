@@ -353,6 +353,31 @@ fn a_set_refuses_two_manifests_with_one_id() {
 }
 
 #[test]
+fn a_contributed_manifest_cannot_claim_the_fixture_prefix() {
+    let shipped = serde_json::to_vec(&manifest()).unwrap();
+    let fixture = serde_json::to_vec(&with("/id", json!("provider.fixture-shield"))).unwrap();
+    assert_eq!(
+        compile_provider_integration(&fixture, &[]).map(|compiled| compiled.id),
+        Ok("provider.fixture-shield".to_owned())
+    );
+    assert_eq!(
+        compile_contributed_provider_integration_set(&[&shipped, &fixture], &[]),
+        Err(E::FixtureIdContributed)
+    );
+    assert_eq!(
+        compile_contributed_provider_integration_set(&[&fixture], &[]),
+        Err(E::FixtureIdContributed)
+    );
+    let lookalike = serde_json::to_vec(&with("/id", json!("provider.fixtures"))).unwrap();
+    assert_eq!(
+        compile_contributed_provider_integration_set(&[&shipped, &lookalike], &[])
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn every_refusal_has_a_distinct_stable_code() {
     let all = [
         E::SourceBytesInvalid,
@@ -389,6 +414,7 @@ fn every_refusal_has_a_distinct_stable_code() {
         E::PolicyUrlInvalid,
         E::IconInvalid,
         E::ProviderIdDuplicate,
+        E::FixtureIdContributed,
     ];
     let codes: BTreeSet<&str> = all.iter().map(|error| error.code()).collect();
     assert_eq!(codes.len(), all.len());

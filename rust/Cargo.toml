@@ -22,6 +22,7 @@ members = [
     "crates/guard-hook-payload",
     "crates/guard-policy-snapshot",
     "crates/guard-policy-bundle",
+    "crates/guard-provider-integrations",
     "crates/guard-pack-compiler",
     "crates/guard-plugin-kit",
     "crates/guard-plugin-telemetry",

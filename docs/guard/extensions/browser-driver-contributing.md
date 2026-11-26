@@ -43,7 +43,8 @@ hol-guard extensions generate --browser --from mcp --input tools.json \
   --publisher-name 'Example Maintainer' --output browser.example-pilot.json --json > draft-notes.json
 ```
 
-`--json` writes the proposals and notes to standard output while the profile goes to `--output`.
+`--json` writes the proposals and notes to standard output while the profile goes to `--output` and
+draft benign gate rows go to `browser.example-pilot.gate-rows.json` (or `--gate-output`).
 Keep `draft-notes.json` out of the pull request. The command never overwrites `--output`; to draft
 again, choose a new path. See
 [Draft a browser driver profile](../extension-builder/README.md#draft-a-browser-driver-profile) for
@@ -70,19 +71,23 @@ The draft errs toward strict and is incomplete on purpose. Work through its outp
 ## 3. Add regression cases
 
 Every changed tool needs a row in the benign false-positive gate, and every quiet case a matching
-gate row. See "Browser protection" in [`ci/gauntlet/README.md`](../../../ci/gauntlet/README.md).
+gate row. Start from the drafted gate rows: each tool has a protect row (`neg-` id) and its benign
+`allow` pair. Replace the placeholder arguments with a realistic call on a synthetic page, then add
+the rows to `tests/fixtures/benign_false_positive_gate.json`, mid-list. See "Browser protection" in [`ci/gauntlet/README.md`](../../../ci/gauntlet/README.md).
 Use synthetic origins and data only: no real sites, accounts, people or tokens.
 
 ## 4. Validate
 
 ```sh
-hol-guard extensions validate --browser browser.example-pilot.json
+hol-guard extensions validate --browser browser.example-pilot.json \
+  --gate-rows tests/fixtures/benign_false_positive_gate.json
 python scripts/refresh_extension_artifacts.py --trust-only
 ```
 
 `validate --browser` compiles the profile with the rules Guard applies to a contributed profile at
 runtime and lists the verb counts, the `Other` tools and any shipped profile that already matches
-the same identity. The refresh script writes the profile's `external` trust binding; include it in
+the same identity. It fails when a tool has no gate row, a row names an unmapped tool, or a protect
+row has no benign pair. The refresh script writes the profile's `external` trust binding; include it in
 the pull request.
 
 ## 5. Test with an installed Guard

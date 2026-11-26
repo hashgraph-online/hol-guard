@@ -32,24 +32,13 @@ from .hook_worker_native_review import (
 from .hook_worker_unavailable import structured_outage_overlay
 
 
-def _attach_transition_observation(response: dict[str, object], edge: Mapping[str, object]) -> dict[str, object]:
-    """Carry the edge's native transition observation onto a harness response."""
-
-    transition = edge.get("transition_hook_observation")
-    if isinstance(transition, Mapping):
-        observation = transition.get("observation")
-        if isinstance(observation, Mapping):
-            response["guard_transition_observation"] = dict(observation)
-    return response
-
-
 def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
     """The harness response Rust rendered for the edge decision."""
 
     rendered = edge["harness_response"]
     if not isinstance(rendered, dict):
         raise ValueError("native_hook_edge_invalid_response")
-    return _attach_transition_observation({str(key): value for key, value in rendered.items()}, edge)
+    return {str(key): value for key, value in rendered.items()}
 
 
 # `containment_rewrite` answers the edge gives once it rewrote a sink route.
@@ -143,6 +132,7 @@ class HookWorkerNativeMixin:
             event_name=event_name,
             guard_home=guard_home,
             deadline=deadline,
+            load_config=lambda: self._load_config(guard_home, workspace),
         )
         return {**response, **overlay} if overlay else response
 
@@ -198,6 +188,9 @@ class HookWorkerNativeMixin:
         defer_accepted_recording: bool = False,
         deferred_receipts: list[Mapping[str, object]] | None = None,
     ) -> tuple[dict[str, object], bool]:
+        from ..runtime_transition_hook_probe import transition_hook_probe
+
+        probe = transition_hook_probe(payload, deadline_monotonic=deadline)
         # Worker threads are reused, so clear any failure code left by an
         # earlier request before this review can report its own.
         record_native_resident_client_failure_code(None)
@@ -215,6 +208,7 @@ class HookWorkerNativeMixin:
                 policy_snapshot=policy_snapshot,
                 recording_only=recording_only,
                 defer_accepted_recording=defer_accepted_recording,
+                probe=probe,
                 claim_saved_approval=claim_saved_approval,
             )
             if direct_answer:
@@ -360,7 +354,6 @@ class HookWorkerNativeMixin:
                     exact_command_block=edge.get("exact_command_block"),
                     review_evidence=cast("Mapping[str, object] | None", edge.get("review_evidence")),
                 )
-                response = _attach_transition_observation(response, edge)
                 if defer_accepted_recording:
                     return response, True
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
@@ -377,19 +370,18 @@ class HookWorkerNativeMixin:
                         guard_home,
                         deadline,
                     )
-                custom_response = _attach_transition_observation(
-                    dict(cast("Mapping[str, object]", custom_block["harness_response"])), edge
-                )
                 return (
-                    custom_response
-                    if defer_accepted_recording
-                    else _record_native_pre_activity(
-                        self,
-                        native_harness,
-                        payload,
-                        custom_response,
-                        accepted_receipt,
-                        recorded=recorded,
+                    (
+                        dict(cast("Mapping[str, object]", custom_block["harness_response"]))
+                        if defer_accepted_recording
+                        else _record_native_pre_activity(
+                            self,
+                            native_harness,
+                            payload,
+                            dict(cast("Mapping[str, object]", custom_block["harness_response"])),
+                            accepted_receipt,
+                            recorded=recorded,
+                        )
                     ),
                     True,
                 )
@@ -436,7 +428,6 @@ class HookWorkerNativeMixin:
                     deadline=deadline,
                 )
                 if command_block is not None:
-                    command_block = _attach_transition_observation(command_block, edge)
                     return (
                         command_block
                         if defer_accepted_recording

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .approval_retry_omp import enabled as approval_retry_enabled
 from .catalog import Scenario
+from .eval_browser import EVAL_BROWSER_ORACLE
 from .file_write_cases import FILE_WRITE_ORACLE
 from .task_brief_cases import TASK_BRIEF_ORACLE
 from .output_cases import OUTPUT_ORACLE
@@ -81,6 +82,7 @@ def scenario_prompt(scenario: Scenario, guidance: str = "") -> str:
         "blocked-extension",
         "blocked-package",
         "blocked-eval-shell",
+        EVAL_BROWSER_ORACLE,
         FILE_WRITE_ORACLE,
         OUTPUT_ORACLE,
         TASK_BRIEF_ORACLE,
