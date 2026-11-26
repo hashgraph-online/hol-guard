@@ -370,6 +370,33 @@ fn a_value_an_assignment_keeps_reaches_a_review_card() {
 }
 
 #[test]
+fn an_uppercase_name_keeping_a_value_reaches_a_review_card() {
+    // Agents name a kept value in capitals as often as not. The name is never
+    // a path or option the text spelled, so the case alone does not leave the
+    // chain unapprovable.
+    let controls = controls(github("enabled", None), false);
+    for command in [
+        "P=$(ls); echo $P",
+        "H=$(git rev-parse HEAD); echo done",
+        r#"B=$(git branch --show-current); git log --oneline -1 "$B""#,
+        r#"LATEST="$(ls /tmp | sort -V | tail -n 1)"; printf 'latest=%s' "$LATEST""#,
+    ] {
+        let (action, code) = decision(&controls, command);
+        assert_ne!(code, FAILED, "{command}");
+        assert_ne!(action, "block", "{command}: {code}");
+    }
+    // A name the shell or a program reads for itself, or one naming a
+    // credential, still moves data.
+    for command in [
+        "PAGER=$(ls); git log -1",
+        "GIT_DIR=$(ls); git status",
+        "API_TOKEN=$(ls); echo done",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
 fn a_value_a_contributed_extension_receives_keeps_the_evaluation_failure() {
     let controls = controls(github("enabled", None), false);
     // The commands that expand the name are the value's receivers, so a
