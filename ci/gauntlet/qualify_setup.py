@@ -300,6 +300,66 @@ ASSET_OUTPUT_MARKER = "HOL_GUARD_BUNDLE_ASSET_OUTPUT"
 PACK_BUNDLE_SCRIPT = "scripts/command_pack_bundle_build.py"
 
 
+def _version_tuple(text: str) -> tuple[int, ...] | None:
+    parts = text.split(".")
+    if not 2 <= len(parts) <= 3 or not all(part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts) + (0,) * (3 - len(parts))
+
+
+def _required_rust(worktree: Path) -> tuple[str, tuple[int, ...]] | None:
+    manifest = worktree / "rust" / "Cargo.toml"
+    if not manifest.is_file():
+        return None
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # Python 3.10
+        import tomli as tomllib
+    declared = tomllib.loads(manifest.read_text()).get("workspace", {}).get("package", {}).get("rust-version")
+    version = _version_tuple(declared) if isinstance(declared, str) else None
+    return (declared, version) if version else None
+
+
+def _rustc_version(env: dict[str, str], runner) -> tuple[int, ...] | None:
+    result = runner(["rustc", "--version"], env=env, capture_output=True, text=True, timeout=60, check=False)
+    words = result.stdout.split() if result.returncode == 0 else []
+    return _version_tuple(words[1].split("-")[0]) if len(words) >= 2 else None
+
+
+def _pin_rust_toolchain(worktree: Path, env: dict[str, str], *, runner=subprocess.run) -> None:
+    """Build with a Rust at least as new as the candidate's declared rust-version.
+
+    The host default can lag the workspace minimum; cargo then fails deep in the
+    build. Prefer the oldest installed numeric toolchain that satisfies it (the
+    release pipeline pins that minimum), and stop with a clear message otherwise.
+    """
+    required = _required_rust(worktree)
+    if required is None:
+        return
+    declared, minimum = required
+    current = _rustc_version(env, runner)
+    if current is not None and current >= minimum:
+        return
+    listed = runner(["rustup", "toolchain", "list"], env=env, capture_output=True, text=True, timeout=60, check=False)
+    choices = []
+    for line in listed.stdout.splitlines() if listed.returncode == 0 else []:
+        name = line.split()[0] if line.split() else ""
+        version = _version_tuple(name.split("-")[0])
+        if version is not None and len(name.split("-")[0].split(".")) == 3 and version >= minimum:
+            choices.append((version, name))
+    for _version, name in sorted(choices):
+        pinned = {**env, "RUSTUP_TOOLCHAIN": name}
+        found = _rustc_version(pinned, runner)
+        if found is not None and found >= minimum:
+            env["RUSTUP_TOOLCHAIN"] = name
+            return
+    have = ".".join(map(str, current)) if current else "no working rustc"
+    raise RuntimeError(
+        f"candidate requires Rust {declared} (rust/Cargo.toml) but the build would use {have}; "
+        f"install it with `rustup toolchain install {declared}.0` or set RUSTUP_TOOLCHAIN"
+    )
+
+
 def _exported_assets(store: Path) -> Path | None:
     """The cached pack export, when the build actually wrote one."""
     assets = store / RELEASE_ASSETS_DIRECTORY
@@ -411,6 +471,7 @@ def _build_wheel(
         }
         if deployment:
             build_env["MACOSX_DEPLOYMENT_TARGET"] = deployment
+        _pin_rust_toolchain(worktree, build_env)
         if profile == "dev":
             build_env.update(DEV_WHEEL_ENV)
             # Same PATH as the build, so a cargo that lives only under ~/.cargo/bin is found.
