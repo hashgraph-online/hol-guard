@@ -201,9 +201,13 @@ _LABELS = {
 def browser_budget_lines(browser: dict[str, Any] | None) -> list[str]:
     """Markdown rows for the summary table; a missing section reads as unmeasured, never as a pass."""
     lines = []
+    lane_ran = any(((browser or {}).get(name) or {}).get("cases") for name in BROWSER_BUDGET_NAMES)
     for name in BROWSER_BUDGET_NAMES:
         label, kind = _LABELS[name]
         row = (browser or {}).get(name) or {"status": "unmeasured", "observed": None, "cases": 0, "budget": 0}
-        observed = "browser lane not run" if not row["cases"] else f"{row['observed']} in {row['cases']} cases"
+        if row["cases"]:
+            observed = f"{row['observed']} in {row['cases']} cases"
+        else:
+            observed = "no measured cases" if lane_ran else "browser lane not run"
         lines.append(f"| {label} | {kind} | {row['status']} | {observed} | {row['budget']} |")
     return lines

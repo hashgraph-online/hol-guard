@@ -92,6 +92,13 @@ def test_a_provider_case_without_its_twin_is_unmeasured() -> None:
     assert row["status"] == "unmeasured"
 
 
+def test_a_budget_without_cases_in_a_browser_run_does_not_blame_the_lane() -> None:
+    lines = browser_budget_lines(browser_budgets([_quiet()]))
+    provider = next(line for line in lines if line.startswith("| Provider-added prompts"))
+    assert "no measured cases" in provider
+    assert not any("browser lane not run" in line for line in lines)
+
+
 def test_a_failed_browser_protection_case_is_a_safety_regression() -> None:
     budgets = browser_budgets([_blocked(outcome="false-negative")])
     assert budgets["browser_protection_cases"]["status"] == "over"
