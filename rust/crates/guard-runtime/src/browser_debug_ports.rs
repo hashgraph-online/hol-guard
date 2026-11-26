@@ -123,6 +123,11 @@ pub(crate) fn apply(
     // A session that named more ports than the store keeps may have dropped the one the browser
     // listens on, so every loopback port in it is held rather than the overflow being missed.
     if overflowed || recorded.len() >= MAX_DEBUGGING_PORTS_PER_SESSION {
+        // Driving a saturated session keeps it alive too, so the hold does not lapse while the
+        // browser on the unrecorded port is still in use.
+        if let Some(harness_session) = harness_session.as_deref() {
+            record(guard_home, harness, harness_session, &reached, now_unix);
+        }
         return raise(result, SATURATED_REASON);
     }
     let matched: Vec<u16> = reached

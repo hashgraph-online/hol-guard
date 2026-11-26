@@ -208,6 +208,25 @@ fn a_saturated_session_holds_every_loopback_port() {
     assert_eq!(other.minimum_action, "allow");
 }
 
+#[test]
+fn driving_a_saturated_session_keeps_its_hold() {
+    let home = tempfile::tempdir().unwrap();
+    run(home.path(), &bash("session-a", &many_launches(17)), "allow");
+    let step = BROWSER_SESSION_IDLE_SECONDS - 60;
+    let mut now = NOW;
+    for _ in 0..3 {
+        now += step;
+        let reached = apply(
+            home.path(),
+            HARNESS,
+            &bash("session-a", "curl -s http://127.0.0.1:10016/json"),
+            now,
+            result("allow"),
+        );
+        assert_eq!(reached.reason, SATURATED_REASON);
+    }
+}
+
 fn cursor_call(conversation: &str, command: &str) -> Value {
     json!({
         "conversation_id": conversation,
