@@ -35723,12 +35723,13 @@ function McpCallCard({ item, explanation }) {
 function McpCallFooter({
   item,
   explanation,
-  reason
+  reason,
+  withheldInput
 }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the exact input" }),
-      explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      withheldInput !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: withheldInput }) : explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         LoggedActionPanel,
         {
           label: "Input",
@@ -35823,6 +35824,7 @@ function BrowserSiteLine({ site }) {
     ] })
   ] });
 }
+const MASKED_INPUT_NOTE = "This step types into a hidden field, so Guard does not show its input.";
 function BrowserCallCard(props) {
   const { item, card, explanation } = props;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -35853,7 +35855,15 @@ function BrowserCallCard(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the code it runs" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(McpCallFooter, { item, explanation, reason: mcpCallReason(item, explanation) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          McpCallFooter,
+          {
+            item,
+            explanation,
+            reason: mcpCallReason(item, explanation),
+            withheldInput: card.detail.input_masked ? MASKED_INPUT_NOTE : void 0
+          }
+        )
       ]
     }
   );

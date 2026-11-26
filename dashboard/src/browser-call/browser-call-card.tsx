@@ -10,6 +10,9 @@ import { BrowserProfileLine } from "./browser-profile-line";
 import { BrowserRiskChips } from "./browser-risk-chips";
 import { BrowserSiteLine } from "./browser-site-line";
 
+/** A masked step's typed text stays off the whole card, the exact input included. */
+const MASKED_INPUT_NOTE = "This step types into a hidden field, so Guard does not show its input.";
+
 /**
  * A browser step, drawn from Core's native card (PRD 5.8 items 1 to 5 and 7).
  * The page heading already says Core's headline, so the card names the step and
@@ -71,7 +74,12 @@ export function BrowserCallCard(props: {
         </details>
       )}
 
-      <McpCallFooter item={item} explanation={explanation} reason={mcpCallReason(item, explanation)} />
+      <McpCallFooter
+        item={item}
+        explanation={explanation}
+        reason={mcpCallReason(item, explanation)}
+        withheldInput={card.detail.input_masked ? MASKED_INPUT_NOTE : undefined}
+      />
     </section>
   );
 }

@@ -141,15 +141,20 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
   );
 }
 
-/** The exact input, why Guard asked, and what approving covers. */
+/**
+ * The exact input, why Guard asked, and what approving covers. A card that
+ * withholds the input passes the sentence to show in its place.
+ */
 export function McpCallFooter({
   item,
   explanation,
   reason,
+  withheldInput,
 }: {
   item: GuardApprovalRequest;
   explanation: McpCallExplanation;
   reason: string;
+  withheldInput?: string;
 }) {
   return (
     <>
@@ -157,7 +162,9 @@ export function McpCallFooter({
         <summary className="cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30">
           See the exact input
         </summary>
-        {explanation.rawInput !== null ? (
+        {withheldInput !== undefined ? (
+          <p className="mt-2 text-sm text-muted-foreground">{withheldInput}</p>
+        ) : explanation.rawInput !== null ? (
           <div className="mt-3">
             <LoggedActionPanel
               key={`${item.request_id}-input`}

@@ -127,7 +127,8 @@ const render = (request: GuardApprovalRequest) => renderToStaticMarkup(PrimaryAc
     ),
   );
   const visible = markup.split("See the exact input")[0] ?? "";
-  assert(!visible.includes("typed-sample-value"), "T-BCC-11: typed text is not on the card face");
+  assert(!markup.includes("typed-sample-value"), "T-BCC-11: masked typed text appears nowhere on the card, the exact input included");
+  assert(markup.includes("so Guard does not show its input."), "T-BCC-11b: the exact input says why it is withheld");
   assert(visible.includes(">On<") && visible.includes(">Password<"), "T-BCC-12: the element is named");
   assert(visible.includes("Hidden · 18 characters"), "T-BCC-13: masked input shows only its length");
   assert(visible.includes("Guard does not show what it types here."), "T-BCC-14: masking is explained");
