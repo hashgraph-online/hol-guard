@@ -10,6 +10,7 @@ import pytest
 from codex_plugin_scanner.guard import native_resident_client_pool as pool_module
 from codex_plugin_scanner.guard.native_resident_client import _PersistentNativeClientPool
 from codex_plugin_scanner.guard.native_resident_client_pool import background_resident_lane
+from codex_plugin_scanner.guard.native_resident_revival import arm_restart_hold, clear_restart_hold
 
 
 class _Running:
@@ -89,3 +90,21 @@ def test_hook_calls_take_the_last_parked_stream(tmp_path: Path, started: list[_C
     _ask(pool, b"warm")
     _ask(pool, b"hook")
     assert len(started) == 1
+
+
+def test_background_work_reuses_the_last_parked_stream_while_a_restart_hold_is_armed(
+    tmp_path: Path, started: list[_Client]
+) -> None:
+    # The hold means the resident is crash-looping; a fresh stream would only
+    # start another client the hold refuses, so background work takes the
+    # parked one instead.
+    pool = _pool(tmp_path)
+    _ask(pool, b"warm")
+    arm_restart_hold(pool._hold_key)
+    try:
+        with background_resident_lane():
+            _ask(pool, b"publish")
+    finally:
+        clear_restart_hold(pool._hold_key)
+    assert len(started) == 1
+    assert started[0].served == [b"warm", b"publish"]

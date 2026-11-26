@@ -193,9 +193,14 @@ class _PersistentNativeClientPool:
                         self._retiring.discard(retiring)
                         self._clients.discard(retiring)
                 # Background work keeps the last parked stream for hooks while
-                # the pool can still open one of its own.
+                # the pool can still open one of its own. Not while a restart
+                # hold is armed: the resident is crash-looping, and a new
+                # stream would only start another client the hold refuses.
                 spare_last = (
-                    _BACKGROUND_LANE.get() and len(self._idle) == 1 and len(self._clients) < _MAX_PERSISTENT_CLIENTS
+                    _BACKGROUND_LANE.get()
+                    and len(self._idle) == 1
+                    and len(self._clients) < _MAX_PERSISTENT_CLIENTS
+                    and not restart_hold_active(self._hold_key)
                 )
                 if self._idle and not spare_last:
                     client = self._idle.pop()
