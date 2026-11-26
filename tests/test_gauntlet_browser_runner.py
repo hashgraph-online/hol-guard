@@ -18,6 +18,7 @@ from ci.gauntlet.browser_runner import (
     stage_browser_case,
 )
 from ci.gauntlet.catalog import load_catalog
+from ci.gauntlet.fixtures import scenario_fixture_name
 from ci.gauntlet.harness_judge import assess_harness_case, guard_decisions
 from ci.gauntlet.proofs import required_checks
 
@@ -121,3 +122,9 @@ def test_rendered_text_counts_as_a_card() -> None:
 
 def test_the_driver_is_the_server_of_the_first_tool() -> None:
     assert driver_id(_QUIET) == "playwright"
+
+
+def test_every_browser_case_has_its_own_fixture_directory() -> None:
+    names = {scenario_fixture_name(case_id) for case_id in _SCENARIOS}
+    assert len(names) == len(_SCENARIOS)
+    assert scenario_fixture_name("secret-file-read") not in names
