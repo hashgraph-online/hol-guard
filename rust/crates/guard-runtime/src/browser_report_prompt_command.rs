@@ -18,7 +18,9 @@ use guard_command::browser_action_project::{
     project_screened_browser_action, BrowserProjection, BrowserProjectionContext,
     BrowserUnclassifiedReason,
 };
-use guard_command::browser_driver_compile::CompiledBrowserDriverV1;
+use guard_command::browser_driver_compile::{
+    CompiledBrowserDriverV1, CompiledBrowserOperationV1, CompiledBrowserToolV1,
+};
 use guard_command::browser_driver_match::{match_browser_driver, BrowserToolCallIdentity};
 use guard_command::browser_first_party_drivers::first_party_browser_drivers;
 
@@ -35,6 +37,44 @@ const MAX_DEPTH: usize = 8;
 const MAX_ITEMS: usize = 32;
 const KEY_MAX_BYTES: usize = 64;
 const REASON_CODE_MAX_BYTES: usize = 96;
+
+/// Argument names browser drivers use for their own controls. A key on this list, or one the
+/// matched tool's profile names, is a schema field and is kept; any other key may be data the user
+/// typed (a form field, a header, a storage key) and is replaced.
+const COMMON_ARGUMENT_KEYS: &[&str] = &[
+    "action",
+    "button",
+    "doubleClick",
+    "element",
+    "endElement",
+    "endRef",
+    "fields",
+    "filename",
+    "fullPage",
+    "function",
+    "height",
+    "index",
+    "key",
+    "modifiers",
+    "name",
+    "paths",
+    "raw",
+    "ref",
+    "selector",
+    "slowly",
+    "startElement",
+    "startRef",
+    "submit",
+    "text",
+    "textGone",
+    "time",
+    "timeout",
+    "type",
+    "url",
+    "value",
+    "values",
+    "width",
+];
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -203,9 +243,11 @@ fn report(drivers: &[CompiledBrowserDriverV1], stored: &StoredApproval) -> Value
         }
     }
     skeleton.insert("reason_codes".to_owned(), json!(stored.reason_codes));
+    // A tool the profile does not list has no known argument names, so every key is replaced.
+    let keys = matched.tool.map(schema_keys).unwrap_or_default();
     skeleton.insert(
         "arguments".to_owned(),
-        placeholder(&Value::Object(arguments), &mut sites, 0),
+        placeholder(&Value::Object(arguments), &keys, &mut sites, 0),
     );
     json!({"ok": true, "skeleton": skeleton})
 }
@@ -275,10 +317,50 @@ fn is_loopback(host: &str) -> bool {
             .is_ok_and(|address| address.is_loopback())
 }
 
+/// The argument names a listed tool is known to take: the names its profile points at, its
+/// discriminator, and the common browser control names.
+fn schema_keys(tool: &CompiledBrowserToolV1) -> BTreeSet<String> {
+    fn operation_pointers(operation: &CompiledBrowserOperationV1) -> impl Iterator<Item = &String> {
+        let pointers = &operation.pointers;
+        pointers
+            .url
+            .iter()
+            .chain(&pointers.element_name)
+            .chain(&pointers.text)
+            .chain(&pointers.script)
+            .chain(&pointers.file)
+    }
+    let pointers: Vec<&String> = match tool {
+        CompiledBrowserToolV1::Fixed(fixed) => operation_pointers(fixed).collect(),
+        CompiledBrowserToolV1::Discriminated {
+            discriminator,
+            cases,
+        } => cases
+            .values()
+            .flat_map(operation_pointers)
+            .chain(std::iter::once(discriminator))
+            .collect(),
+        CompiledBrowserToolV1::CdpPassthrough { method, params } => {
+            method.iter().chain(params).collect()
+        }
+    };
+    COMMON_ARGUMENT_KEYS
+        .iter()
+        .copied()
+        .chain(
+            pointers
+                .into_iter()
+                .flat_map(|pointer| pointer.split('/'))
+                .filter(|segment| is_field_name(segment)),
+        )
+        .map(str::to_owned)
+        .collect()
+}
+
 /// The value's shape with every value replaced: a web address by its synthetic site, any other
-/// text by `<text>`, numbers, booleans and nulls by their kind. Keys that look like schema field
-/// names are kept; any other key is data and becomes `<key>`.
-fn placeholder(value: &Value, sites: &mut Sites, depth: usize) -> Value {
+/// text by `<text>`, numbers, booleans and nulls by their kind. A key in `keys` is a schema field
+/// name and is kept; any other key may be data and becomes `<key-N>`.
+fn placeholder(value: &Value, keys: &BTreeSet<String>, sites: &mut Sites, depth: usize) -> Value {
     if depth >= MAX_DEPTH {
         return json!("<nested>");
     }
@@ -297,18 +379,18 @@ fn placeholder(value: &Value, sites: &mut Sites, depth: usize) -> Value {
             items
                 .iter()
                 .take(MAX_ITEMS)
-                .map(|item| placeholder(item, sites, depth + 1))
+                .map(|item| placeholder(item, keys, sites, depth + 1))
                 .collect(),
         ),
         Value::Object(fields) => {
             let mut shaped = Map::new();
             for (index, (key, field)) in fields.iter().take(MAX_ITEMS).enumerate() {
-                let key = if is_field_name(key) {
+                let key = if keys.contains(key) {
                     key.clone()
                 } else {
                     format!("<key-{}>", index + 1)
                 };
-                shaped.insert(key, placeholder(field, sites, depth + 1));
+                shaped.insert(key, placeholder(field, keys, sites, depth + 1));
             }
             Value::Object(shaped)
         }

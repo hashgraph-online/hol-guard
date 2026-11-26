@@ -193,7 +193,52 @@ fn a_tool_the_driver_does_not_list_is_reported_as_unclassified() {
     assert_eq!(reply["skeleton"]["driver"], "browser.playwright-mcp");
     assert_eq!(reply["skeleton"]["tool"], "browser_frobnicate");
     assert_eq!(reply["skeleton"]["unclassified"], "tool_not_listed");
-    assert_eq!(reply["skeleton"]["arguments"], json!({"level": "<number>"}));
+    assert_eq!(
+        reply["skeleton"]["arguments"],
+        json!({"<key-1>": "<number>"})
+    );
+}
+
+#[test]
+fn a_data_defined_key_is_replaced_even_when_it_looks_like_a_field_name() {
+    let home = tempfile::tempdir().unwrap();
+    let connection = store(home.path());
+    insert(
+        &connection,
+        "req-listed",
+        hook_envelope(
+            "browser_type",
+            json!({"element": "Search box", "text": "x", "customer_alice": 3, "nested": {"account_bob": true}}),
+        ),
+        json!({}),
+    );
+    insert(
+        &connection,
+        "req-unlisted",
+        hook_envelope(
+            "browser_frobnicate",
+            json!({"customer_alice": 3, "url": "https://shop.example.com/"}),
+        ),
+        json!({}),
+    );
+    let listed = report(home.path(), "req-listed");
+    assert_eq!(listed["ok"], true, "{listed}");
+    let arguments = &listed["skeleton"]["arguments"];
+    assert_eq!(arguments["element"], "<text>");
+    assert_eq!(arguments["text"], "<text>");
+    assert_placeholders(arguments);
+    let unlisted = report(home.path(), "req-unlisted");
+    assert_eq!(unlisted["ok"], true, "{unlisted}");
+    assert_eq!(
+        unlisted["skeleton"]["arguments"],
+        json!({"<key-1>": "<number>", "<key-2>": "https://site-a.example.test/"})
+    );
+    for reply in [&listed, &unlisted] {
+        let text = reply.to_string();
+        for private in ["customer_alice", "account_bob", "nested"] {
+            assert!(!text.contains(private), "{private}");
+        }
+    }
 }
 
 #[test]
