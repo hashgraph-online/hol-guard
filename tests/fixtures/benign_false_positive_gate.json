@@ -952,6 +952,22 @@
       "expect": "allow_or_review"
     },
     {
+      "id": "find-group-loop-reads-stay-reviewable",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -maxdepth 3 -type f -not -path './node_modules/*' -print | sort; printf '\\n--- package.json ---\\n'; sed -n '1,240p' package.json; printf '\\n--- source/test files ---\\n'; for f in $(find . -maxdepth 3 -type f \\( -name '*.js' -o -name '*.cjs' -o -name '*.mjs' -o -name '*.ts' \\) -not -path './node_modules/*' -print | sort); do echo \"### $f\"; sed -n '1,260p' \"$f\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow_or_review"
+    },
+    {
       "id": "checksum-value-from-an-awk-field",
       "fix_area": "shell",
       "harnesses": [
