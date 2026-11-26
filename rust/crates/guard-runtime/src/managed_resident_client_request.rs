@@ -30,9 +30,6 @@ const OWNER_RELEASE_POLL: Duration = Duration::from_millis(25);
 // An exiting owner releases the lock within about a second of retiring its
 // state, even with diagnostics draining; a holder past this is not exiting.
 const OWNER_RELEASE_WAIT: Duration = Duration::from_secs(2);
-/// A request only this runtime may answer found a resident of another
-/// runtime that would not make way for it.
-const FOREIGN_RESIDENT_IN_USE: &str = "native_resident_foreign_runtime_in_use";
 
 fn startup_limit(payload: &[u8]) -> Duration {
     let value = crate::strict_json_value(payload).ok();
@@ -160,8 +157,11 @@ fn try_home_states(
                 );
                 continue;
             }
+            // The foreign resident would not make way for a request only this
+            // runtime may answer, because its own clients still use it.
             return Err(format!(
-                "native_resident_live_request_failed:{FOREIGN_RESIDENT_IN_USE}"
+                "native_resident_live_request_failed:{}",
+                handoff::SHUTDOWN_REFUSED_IN_USE
             ));
         }
         let timeout = deadline.saturating_duration_since(Instant::now());
