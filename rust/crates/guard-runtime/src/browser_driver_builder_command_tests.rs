@@ -209,7 +209,7 @@ fn generate_refuses_a_draft_that_only_fits_without_indentation() {
         })
         .collect();
     let mut request = generate_request();
-    request["document"] = json!({ "tools": tools }).to_string();
+    request["document"] = Value::String(json!({ "tools": tools }).to_string());
     let result = run(request);
 
     // Without indentation this draft is about 143 KB, under the 256 KiB limit; the indented
