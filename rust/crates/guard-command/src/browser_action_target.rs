@@ -1,0 +1,261 @@
+//! Browser target and input facts for [`BrowserActionV2`](guard_contracts::BrowserActionV2).
+//!
+//! Every value that leaves this module is redacted: a URL keeps its scheme, host, port, path and
+//! query keys, every query value becomes `[redacted]`, and the fragment and any userinfo are dropped.
+//! Element names and input are kept only as a SHA-256 digest, a length and a bounded preview class.
+
+use guard_contracts::{
+    BrowserInputPreviewClassV1, BrowserTargetV2, BROWSER_ELEMENT_NAME_PREVIEW_MAX_CHARS,
+    BROWSER_URL_REDACTED_MAX_CHARS, BROWSER_URL_REDACTED_VALUE,
+};
+
+use crate::launch_identity_common::sha256_hex;
+
+/// A target with no URL: no origin, not loopback, not Guard's own origin.
+pub(crate) fn empty_target() -> BrowserTargetV2 {
+    BrowserTargetV2 {
+        origin: None,
+        site_group: None,
+        path_prefix: None,
+        is_loopback: false,
+        is_guard_origin: false,
+        url_redacted: None,
+    }
+}
+
+/// Facts about one URL. `guard_origins` are Guard's own origins (`scheme://host:port`, lowercase).
+pub(crate) fn browser_target(url: &str, guard_origins: &[&str]) -> BrowserTargetV2 {
+    let Some(parts) = split_http_url(url.trim()) else {
+        return empty_target();
+    };
+    let origin = match parts.port {
+        Some(port) => format!("{}://{}:{port}", parts.scheme, parts.host),
+        None => format!("{}://{}", parts.scheme, parts.host),
+    };
+    let mut url_redacted = format!("{origin}{}", parts.path);
+    if let Some(query) = parts.query {
+        url_redacted.push('?');
+        url_redacted.push_str(&redacted_query(query));
+    }
+    let url_redacted =
+        (url_redacted.chars().count() <= BROWSER_URL_REDACTED_MAX_CHARS).then_some(url_redacted);
+    let is_guard_origin = guard_origins
+        .iter()
+        .any(|guard| guard.eq_ignore_ascii_case(&origin));
+    BrowserTargetV2 {
+        site_group: Some(site_group(&parts.host)),
+        path_prefix: Some(path_prefix(parts.path)),
+        is_loopback: host_is_loopback(&parts.host),
+        is_guard_origin,
+        origin: Some(origin),
+        url_redacted,
+    }
+}
+
+/// True for a `javascript:` URL, which runs script in the page instead of navigating.
+pub(crate) fn url_runs_script(url: &str) -> bool {
+    url.trim_start()
+        .get(..11)
+        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("javascript:"))
+}
+
+struct HttpUrl<'a> {
+    scheme: &'static str,
+    host: String,
+    port: Option<u16>,
+    path: &'a str,
+    query: Option<&'a str>,
+}
+
+fn split_http_url(url: &str) -> Option<HttpUrl<'_>> {
+    let (scheme, rest) = url.split_once("://")?;
+    let scheme = if scheme.eq_ignore_ascii_case("https") {
+        "https"
+    } else if scheme.eq_ignore_ascii_case("http") {
+        "http"
+    } else {
+        return None;
+    };
+    let rest = rest.split('#').next().unwrap_or("");
+    let authority_end = rest.find(['/', '?']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(authority_end);
+    let host_port = authority.rsplit('@').next().unwrap_or(authority);
+    let (host, port) = split_host_port(host_port)?;
+    let (path, query) = match tail.split_once('?') {
+        Some((path, query)) => (path, Some(query)),
+        None => (tail, None),
+    };
+    let path = if path.is_empty() { "/" } else { path };
+    Some(HttpUrl {
+        scheme,
+        host,
+        port,
+        path,
+        query,
+    })
+}
+
+fn split_host_port(host_port: &str) -> Option<(String, Option<u16>)> {
+    let (host, port) = if let Some(bracketed) = host_port.strip_prefix('[') {
+        let (host, rest) = bracketed.split_once(']')?;
+        (format!("[{host}]"), rest.strip_prefix(':'))
+    } else {
+        match host_port.rsplit_once(':') {
+            Some((host, port)) => (host.to_owned(), Some(port)),
+            None => (host_port.to_owned(), None),
+        }
+    };
+    if host.is_empty() || host.chars().any(|ch| ch.is_whitespace() || ch.is_control()) {
+        return None;
+    }
+    let port = match port {
+        None | Some("") => None,
+        Some(port) => Some(port.parse::<u16>().ok()?),
+    };
+    Some((host.to_ascii_lowercase(), port))
+}
+
+fn redacted_query(query: &str) -> String {
+    query
+        .split('&')
+        .filter(|field| !field.is_empty())
+        .map(|field| match field.split_once('=') {
+            Some((key, value)) if !value.is_empty() => {
+                format!("{key}={BROWSER_URL_REDACTED_VALUE}")
+            }
+            Some((key, _)) => format!("{key}="),
+            None => field.to_owned(),
+        })
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
+/// The first path segment, so `/docs/intro` and `/docs/api` share `/docs`.
+fn path_prefix(path: &str) -> String {
+    let first = path.trim_start_matches('/').split('/').next().unwrap_or("");
+    format!("/{first}")
+}
+
+/// The last two DNS labels, or the whole host for an IP literal, `localhost` or a single label.
+/// This is a display grouping, not a public-suffix decision: grants key on the origin.
+fn site_group(host: &str) -> String {
+    if host.starts_with('[') || host.parse::<std::net::Ipv4Addr>().is_ok() {
+        return host.to_owned();
+    }
+    let labels: Vec<&str> = host.trim_end_matches('.').split('.').collect();
+    if labels.len() <= 2 {
+        return labels.join(".");
+    }
+    labels[labels.len() - 2..].join(".")
+}
+
+fn host_is_loopback(host: &str) -> bool {
+    let host = host.trim_end_matches('.');
+    if host == "localhost" || host.ends_with(".localhost") || host == "[::1]" {
+        return true;
+    }
+    host.parse::<std::net::Ipv4Addr>()
+        .is_ok_and(|address| address.is_loopback())
+}
+
+/// A bounded, display-only element name preview.
+pub(crate) fn element_preview(name: &str) -> String {
+    name.chars()
+        .filter(|ch| !ch.is_control())
+        .take(BROWSER_ELEMENT_NAME_PREVIEW_MAX_CHARS)
+        .collect()
+}
+
+pub(crate) fn digest(text: &str) -> String {
+    sha256_hex(text.as_bytes())
+}
+
+pub(crate) fn name_looks_like_password(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    ["password", "passwd", "passcode", "one-time code", "otp"]
+        .iter()
+        .any(|needle| name.contains(needle))
+}
+
+pub(crate) fn name_looks_like_payment(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    [
+        "card number",
+        "credit card",
+        "cvv",
+        "cvc",
+        "security code",
+        "expiry",
+        "expiration",
+    ]
+    .iter()
+    .any(|needle| name.contains(needle))
+}
+
+/// How the card may preview input, judged without storing it.
+pub(crate) fn input_preview_class(text: &str) -> BrowserInputPreviewClassV1 {
+    if text.trim().is_empty() {
+        return BrowserInputPreviewClassV1::Empty;
+    }
+    if looks_like_card_number(text) {
+        return BrowserInputPreviewClassV1::LooksLikePayment;
+    }
+    if looks_like_secret(text) {
+        return BrowserInputPreviewClassV1::LooksLikeSecret;
+    }
+    BrowserInputPreviewClassV1::Plain
+}
+
+fn looks_like_card_number(text: &str) -> bool {
+    if !text
+        .chars()
+        .all(|ch| ch.is_ascii_digit() || ch == ' ' || ch == '-')
+    {
+        return false;
+    }
+    let digits: Vec<u32> = text.chars().filter_map(|ch| ch.to_digit(10)).collect();
+    if !(13..=19).contains(&digits.len()) {
+        return false;
+    }
+    let sum: u32 = digits
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(index, &digit)| {
+            if index % 2 == 1 {
+                let doubled = digit * 2;
+                if doubled > 9 {
+                    doubled - 9
+                } else {
+                    doubled
+                }
+            } else {
+                digit
+            }
+        })
+        .sum();
+    sum % 10 == 0
+}
+
+/// One unbroken token of 20 or more characters mixing letters and digits, or a known key prefix.
+fn looks_like_secret(text: &str) -> bool {
+    let text = text.trim();
+    if text.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let known_prefix = [
+        "sk-",
+        "sk_live_",
+        "ghp_",
+        "gho_",
+        "github_pat_",
+        "xox",
+        "AKIA",
+        "eyJ",
+    ]
+    .iter()
+    .any(|prefix| text.starts_with(prefix));
+    let mixed = text.chars().any(|ch| ch.is_ascii_alphabetic())
+        && text.chars().any(|ch| ch.is_ascii_digit());
+    (known_prefix && text.len() >= 12) || (mixed && text.chars().count() >= 20)
+}
