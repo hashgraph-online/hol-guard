@@ -221,6 +221,9 @@ fn a_summary_glob_outside_the_working_directory_takes_the_listing_proof() {
         assert_eq!(decision(&home, &portal, &command), "allow", "{command}");
     }
     for command in [
+        // An unmatched glob can disappear under nullglob, leaving an implicit cwd.
+        format!("du -sh {builds}/missing-*"),
+        format!("du -h -d 1 {builds}/missing-*"),
         format!("du -sh {builds}/*.pem"),
         format!("du -sh {builds}/*"),
         format!("du -sH {builds}/run-*"),
