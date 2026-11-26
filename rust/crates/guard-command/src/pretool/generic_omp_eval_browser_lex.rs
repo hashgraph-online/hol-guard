@@ -2,7 +2,7 @@
 //! parser in `generic_omp_eval_browser.rs`.
 
 #[derive(Debug, Clone, PartialEq)]
-pub(super) enum Token {
+pub(crate) enum Token {
     Ident(String),
     Str(String),
     /// A number literal, with its value when it is a plain integer that
@@ -21,7 +21,7 @@ fn escape(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, quote: char) -> 
     }
 }
 
-pub(super) fn tokenize(code: &str) -> Option<Vec<Token>> {
+pub(crate) fn tokenize(code: &str) -> Option<Vec<Token>> {
     let mut tokens = Vec::new();
     let mut chars = code.chars().peekable();
     while let Some(&c) = chars.peek() {
@@ -309,7 +309,7 @@ pub(super) const OPTION_KEYS: &[&str] = &[
 /// `browser.open` keys that only shape a headless page. `app:'own'`
 /// is handled separately; other browser attachments, scripts, profile and
 /// file-access options are not accepted.
-pub(super) const OPEN_KEYS: &[&str] = &[
+pub(crate) const OPEN_KEYS: &[&str] = &[
     "dialogs",
     "headed",
     "name",

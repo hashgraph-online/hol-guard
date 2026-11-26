@@ -34,7 +34,7 @@
 
 use std::collections::HashSet;
 
-const MAX_CODE_BYTES: usize = 16 * 1024;
+pub(crate) const MAX_CODE_BYTES: usize = 16 * 1024;
 const MAX_DEPTH: usize = 12;
 
 #[path = "generic_omp_eval_browser_flow.rs"]
@@ -43,9 +43,10 @@ mod flow;
 mod lex;
 #[path = "generic_omp_eval_browser_page.rs"]
 mod page;
-use lex::{
-    loopback_url, timer_pause, tokenize, Token, NO_ARGUMENT_METHODS, OPEN_KEYS, OPTION_KEYS,
-};
+use lex::{loopback_url, timer_pause, NO_ARGUMENT_METHODS, OPTION_KEYS};
+/// The tokenizer and `open` option table, shared with the browser action projection in
+/// `browser_omp_eval_action.rs`.
+pub(crate) use lex::{tokenize, Token, OPEN_KEYS};
 
 #[derive(Default)]
 struct Parser {
@@ -467,7 +468,7 @@ impl Parser {
 
 /// Whether `code` is a JavaScript program that only drives the isolated
 /// browser against loopback pages and displays what it reads.
-pub(super) fn loopback_browser_program(code: &str, home_dir: Option<&str>) -> bool {
+pub(crate) fn loopback_browser_program(code: &str, home_dir: Option<&str>) -> bool {
     if code.len() > MAX_CODE_BYTES {
         return false;
     }
