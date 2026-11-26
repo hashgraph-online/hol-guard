@@ -153,6 +153,10 @@ fn connections_refuse_values_outside_the_contract() {
         );
     }
     assert!(set_connection_state(&connection, SHIELD, State::NotConnected, 1).is_err());
+    assert!(matches!(
+        set_connection_state(&connection, "Shield", State::Disabled, 1),
+        Err(ProviderStoreError::Invalid("provider_id"))
+    ));
     assert!(provider_connections(&connection).unwrap().is_empty());
 }
 
@@ -184,38 +188,128 @@ fn capability_settings_default_to_tighten_and_need_a_connection() {
     );
 }
 
+fn stored(connection: &Connection, signal: &ProviderSignalV1) -> u64 {
+    match put_signal(connection, signal).unwrap() {
+        PutSignalOutcome::Stored(revision) => revision,
+        PutSignalOutcome::NotRetained => panic!("signal was not retained"),
+    }
+}
+
 #[test]
 fn revision_moves_only_when_the_answer_changes() {
     let connection = store();
-    let first = signal(SHIELD, 1, V::Caution, &["new_domain"]);
-    assert_eq!(put_signal(&connection, &first).unwrap(), 1);
+    let first = signal(SHIELD, 1, V::Caution, &["new_domain", "phishing"]);
+    let one = stored(&connection, &first);
     let refreshed = ProviderSignalV1 {
         observed_at_ms: 15 * MINUTE,
         expires_at_ms: 25 * MINUTE,
         ..first.clone()
     };
-    assert_eq!(put_signal(&connection, &refreshed).unwrap(), 1);
+    assert_eq!(stored(&connection, &refreshed), one);
     assert_eq!(
-        put_signal(
+        stored(
             &connection,
-            &signal(SHIELD, 1, V::Caution, &["lookalike_domain"])
-        )
-        .unwrap(),
-        2
+            &signal(
+                SHIELD,
+                1,
+                V::Caution,
+                &["phishing", "new_domain", "phishing"]
+            )
+        ),
+        one,
+        "the same codes in another order are the same answer"
     );
+    let two = stored(
+        &connection,
+        &signal(SHIELD, 1, V::Caution, &["lookalike_domain"]),
+    );
+    assert!(two > one);
+    let three = stored(
+        &connection,
+        &signal(SHIELD, 1, V::Danger, &["lookalike_domain"]),
+    );
+    assert!(three > two);
+    assert!(stored(&connection, &signal(SHIELD, 2, V::Danger, &[])) > three);
+}
+
+#[test]
+fn a_changed_answer_never_reuses_a_revision_after_its_row_is_gone() {
+    let connection = store();
+    let caution = signal(SHIELD, 1, V::Caution, &["new_domain"]);
+    let first = stored(&connection, &caution);
+    prune_expired_signals(&connection, u64::MAX / 2).unwrap();
+    let after_prune = stored(&connection, &signal(SHIELD, 1, V::Danger, &["phishing"]));
+    assert!(after_prune > first);
+    put_connection(&connection, &connected(SHIELD)).unwrap();
+    forget_provider(&connection, SHIELD).unwrap();
+    assert!(stored(&connection, &caution) > after_prune);
+}
+
+#[test]
+fn an_observation_older_than_a_full_cache_is_not_retained() {
+    let connection = store();
+    for subject in 0..MAX_SIGNALS_PER_PROVIDER as u64 {
+        let mut row = signal(SHIELD, subject, V::Ok, &[]);
+        row.observed_at_ms = 1_000 + subject;
+        row.expires_at_ms = 1_000 + subject + MINUTE;
+        stored(&connection, &row);
+    }
+    let mut old = signal(SHIELD, 999_999, V::Danger, &["phishing"]);
+    old.observed_at_ms = 1;
+    old.expires_at_ms = MINUTE;
     assert_eq!(
-        put_signal(
-            &connection,
-            &signal(SHIELD, 1, V::Danger, &["lookalike_domain"])
+        put_signal(&connection, &old).unwrap(),
+        PutSignalOutcome::NotRetained
+    );
+    assert!(
+        signals_for_subject(&connection, Cap::OriginReputation, &digest(999_999))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn schema_refuses_a_trigger_on_an_owned_table_whatever_its_name() {
+    let connection = store();
+    connection
+        .execute_batch(
+            "create trigger refresh_audit before insert on provider_signals \
+             begin select raise(ignore); end",
         )
-        .unwrap(),
-        3
-    );
-    assert_eq!(
-        put_signal(&connection, &signal(SHIELD, 2, V::Danger, &[])).unwrap(),
-        1,
-        "another subject has its own revision"
-    );
+        .unwrap();
+    assert!(matches!(
+        ensure_provider_integration_schema(&connection),
+        Err(ProviderStoreError::Schema(_))
+    ));
+}
+
+#[test]
+fn an_empty_field_in_a_stored_list_is_damage() {
+    let connection = store();
+    stored(&connection, &signal(SHIELD, 1, V::Danger, &["phishing"]));
+    connection
+        .execute(
+            "update provider_signals set reason_codes = 'phishing,,new_domain'",
+            [],
+        )
+        .unwrap();
+    assert!(matches!(
+        signals_for_subject(&connection, Cap::OriginReputation, &digest(1)),
+        Err(ProviderStoreError::Schema(_))
+    ));
+    let mut record = connected(SHIELD);
+    record.opt_in_facts = vec![Fact::TargetPathPrefix];
+    put_connection(&connection, &record).unwrap();
+    connection
+        .execute(
+            "update provider_connections set opt_in_facts = opt_in_facts || ','",
+            [],
+        )
+        .unwrap();
+    assert!(matches!(
+        provider_connection(&connection, SHIELD),
+        Err(ProviderStoreError::Schema(_))
+    ));
 }
 
 #[test]

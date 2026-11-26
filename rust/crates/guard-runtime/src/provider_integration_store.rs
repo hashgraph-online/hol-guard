@@ -34,7 +34,7 @@ pub const EXPIRED_SIGNAL_GRACE_MS: u64 = 60 * 60 * 1000;
 const SAVEPOINT: &str = "provider_integration_schema";
 const WRITE_SAVEPOINT: &str = "provider_integration_write";
 
-const STATEMENTS: [&str; 5] = [
+const STATEMENTS: [&str; 6] = [
     "create table if not exists provider_connections (
         provider_id text primary key,
         manifest_digest text not null,
@@ -70,14 +70,19 @@ const STATEMENTS: [&str; 5] = [
         on provider_signals (capability, subject_digest)",
     "create index if not exists idx_provider_signals_expires
         on provider_signals (expires_at_ms)",
+    "create table if not exists provider_signal_revision_counter (
+        id integer primary key check (id = 1),
+        last_revision integer not null check (last_revision >= 1)
+    )",
 ];
 
-const OBJECTS: [(&str, &str); 5] = [
+const OBJECTS: [(&str, &str); 6] = [
     ("table", "provider_connections"),
     ("table", "provider_capability_settings"),
     ("table", "provider_signals"),
     ("index", "idx_provider_signals_subject"),
     ("index", "idx_provider_signals_expires"),
+    ("table", "provider_signal_revision_counter"),
 ];
 
 #[derive(Debug)]
@@ -132,13 +137,14 @@ pub struct CapabilitySetting {
     pub require_fresh: bool,
 }
 
-/// A cached signal and the revision the store gave it. The revision goes up each time the provider's
-/// verdict or reason codes for the subject change, so "one review per subject per signal version"
-/// (BP-T176) counts real changes, not refreshes.
+/// A cached signal and the revision the store gave it. A refresh with the same verdict and reason
+/// codes keeps the revision. Any other write takes the next value of one store-wide counter, which
+/// survives pruning, eviction and disconnect, so a changed answer never reuses a revision an earlier
+/// answer had and "one review per subject per signal version" (BP-T176) counts real changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoredSignal {
     pub signal: ProviderSignalV1,
-    pub revision: u32,
+    pub revision: u64,
 }
 
 fn normalized_sql(statement: &str) -> String {
@@ -151,10 +157,14 @@ fn normalized_sql(statement: &str) -> String {
 }
 
 fn validate_objects(connection: &Connection) -> ProviderStoreResult<()> {
+    // Objects named like ours, plus anything attached to one of our tables whatever its name (a
+    // trigger called `refresh_audit` on `provider_signals` could rewrite or refuse cache writes).
     let mut statement = connection.prepare(
         "select type, name, sql from sqlite_master \
          where name like 'provider\\_%' escape '\\' \
-            or name like 'idx\\_provider\\_%' escape '\\'",
+            or name like 'idx\\_provider\\_%' escape '\\' \
+            or tbl_name in ('provider_connections', 'provider_capability_settings', \
+                            'provider_signals', 'provider_signal_revision_counter')",
     )?;
     let mut actual: BTreeMap<(String, String), String> = BTreeMap::new();
     let mut rows = statement.query([])?;
@@ -234,12 +244,22 @@ fn ms_from_sql(value: i64, column: &str) -> ProviderStoreResult<u64> {
     u64::try_from(value).map_err(|_| ProviderStoreError::Schema(format!("row:{column}")))
 }
 
+/// Reason codes in one fixed order with no repeats, so a provider that lists the same codes in
+/// another order has not changed its answer.
 fn join_codes(codes: &[String]) -> String {
-    codes.join(",")
+    let mut sorted: Vec<&str> = codes.iter().map(String::as_str).collect();
+    sorted.sort_unstable();
+    sorted.dedup();
+    sorted.join(",")
 }
 
+/// An empty column is an empty list. A non-empty column keeps every field, empty ones included, so
+/// the contract checks reject `phishing,,new_domain` instead of reading it as two codes.
 fn split_list(text: &str) -> impl Iterator<Item = &str> {
-    text.split(',').filter(|part| !part.is_empty())
+    (!text.is_empty())
+        .then(|| text.split(','))
+        .into_iter()
+        .flatten()
 }
 
 fn check_connection(connection: &ProviderConnection) -> ProviderStoreResult<()> {
@@ -303,6 +323,9 @@ pub fn set_connection_state(
     state: ProviderConnectionStateV1,
     now_ms: u64,
 ) -> ProviderStoreResult<bool> {
+    if !provider_id_is_valid(provider_id) {
+        return Err(ProviderStoreError::Invalid("provider_id"));
+    }
     if state == ProviderConnectionStateV1::NotConnected {
         return Err(ProviderStoreError::Invalid("state"));
     }
@@ -378,12 +401,13 @@ pub fn put_capability_setting(
     capability: ProviderCapabilityV1,
     setting: CapabilitySetting,
 ) -> ProviderStoreResult<()> {
-    if provider_connection(connection, provider_id)?.is_none() {
-        return Err(ProviderStoreError::Invalid("not_connected"));
-    }
-    connection.execute(
+    // One statement checks the connection and writes the setting, so a disconnect on another
+    // connection cannot slip in between and leave a setting with no connection row.
+    let written = connection.execute(
         "insert into provider_capability_settings (provider_id, capability, effect_level, \
-             require_fresh) values (?1, ?2, ?3, ?4) \
+             require_fresh) \
+         select ?1, ?2, ?3, ?4 where exists \
+             (select 1 from provider_connections where provider_id = ?1) \
          on conflict (provider_id, capability) do update set \
              effect_level = excluded.effect_level, require_fresh = excluded.require_fresh",
         params![
@@ -393,6 +417,9 @@ pub fn put_capability_setting(
             i64::from(setting.require_fresh),
         ],
     )?;
+    if written == 0 {
+        return Err(ProviderStoreError::Invalid("not_connected"));
+    }
     Ok(())
 }
 
@@ -435,9 +462,37 @@ fn check_signal(signal: &ProviderSignalV1) -> ProviderStoreResult<()> {
         .map_err(|error| ProviderStoreError::Invalid(error.code()))
 }
 
-/// Caches a signal, replacing the previous one for the same provider, capability and subject. The
-/// revision goes up only when the verdict or reason codes changed. Returns the stored revision.
-pub fn put_signal(connection: &Connection, signal: &ProviderSignalV1) -> ProviderStoreResult<u32> {
+/// The next value of the store-wide revision counter.
+fn next_revision(connection: &Connection) -> ProviderStoreResult<i64> {
+    connection.execute(
+        "insert into provider_signal_revision_counter (id, last_revision) values (1, 1) \
+         on conflict (id) do update set last_revision = last_revision + 1",
+        [],
+    )?;
+    Ok(connection.query_row(
+        "select last_revision from provider_signal_revision_counter where id = 1",
+        [],
+        |row| row.get(0),
+    )?)
+}
+
+/// What [`put_signal`] did with a signal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PutSignalOutcome {
+    /// The signal is cached under this revision.
+    Stored(u64),
+    /// The provider already holds [`MAX_SIGNALS_PER_PROVIDER`] newer observations, so this older
+    /// one was dropped at once and nothing is cached for it.
+    NotRetained,
+}
+
+/// Caches a signal, replacing the previous one for the same provider, capability and subject. A
+/// refresh with the same verdict and reason codes keeps the cached revision; anything else takes a
+/// new one (see [`StoredSignal`]).
+pub fn put_signal(
+    connection: &Connection,
+    signal: &ProviderSignalV1,
+) -> ProviderStoreResult<PutSignalOutcome> {
     check_signal(signal)?;
     in_savepoint(connection, WRITE_SAVEPOINT, || {
         let previous: Option<(i64, String, String)> = connection
@@ -455,13 +510,12 @@ pub fn put_signal(connection: &Connection, signal: &ProviderSignalV1) -> Provide
         let verdict = enum_text(&signal.verdict);
         let codes = join_codes(&signal.reason_codes);
         let revision = match previous {
-            None => 1,
             Some((revision, old_verdict, old_codes))
                 if old_verdict == verdict && old_codes == codes =>
             {
                 revision
             }
-            Some((revision, ..)) => revision.saturating_add(1),
+            _ => next_revision(connection)?,
         };
         connection.execute(
             "insert or replace into provider_signals (provider_id, capability, subject_digest, \
@@ -487,7 +541,25 @@ pub fn put_signal(connection: &Connection, signal: &ProviderSignalV1) -> Provide
               order by observed_at_ms desc, rowid desc limit ?2)",
             params![signal.provider_id, MAX_SIGNALS_PER_PROVIDER],
         )?;
-        u32::try_from(revision).map_err(|_| ProviderStoreError::Schema("row:revision".to_owned()))
+        let retained = connection
+            .query_row(
+                "select 1 from provider_signals \
+                 where provider_id = ?1 and capability = ?2 and subject_digest = ?3",
+                params![
+                    signal.provider_id,
+                    signal.capability.as_str(),
+                    signal.subject.digest
+                ],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if !retained {
+            return Ok(PutSignalOutcome::NotRetained);
+        }
+        u64::try_from(revision)
+            .map(PutSignalOutcome::Stored)
+            .map_err(|_| ProviderStoreError::Schema("row:revision".to_owned()))
     })
 }
 
@@ -500,7 +572,7 @@ fn signal_from_row(row: &Row<'_>) -> ProviderStoreResult<StoredSignal> {
     {
         return Err(ProviderStoreError::Schema("row:reason_codes".to_owned()));
     }
-    let revision = u32::try_from(row.get::<_, i64>(4)?)
+    let revision = u64::try_from(row.get::<_, i64>(4)?)
         .ok()
         .filter(|revision| *revision >= 1)
         .ok_or_else(|| ProviderStoreError::Schema("row:revision".to_owned()))?;
