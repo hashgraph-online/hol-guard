@@ -157,7 +157,7 @@ pub(crate) fn apply(
 /// has no session to scope a port to, so nothing is recorded or matched
 /// against the store.
 fn harness_session_digest(harness: &str, payload: &Value) -> Option<String> {
-    let session = crate::edge_identity::session_identity_keys(harness)
+    let session = crate::edge::session_identity_keys(harness)
         .iter()
         .find_map(|key| payload.get(*key).and_then(Value::as_str))
         .map(str::trim)
