@@ -89,7 +89,7 @@ def test_omp_receipt_is_bound_to_fresh_probe_id():
     assert observation["native_receipt"]["decision_id"] == receipt["decision_id"]
 
 
-def test_probe_spends_no_more_than_the_hook_has_left(monkeypatch):
+def test_probe_leaves_the_review_most_of_the_hook_budget(monkeypatch):
     import time
 
     from codex_plugin_scanner.guard import runtime_transition_hook_probe as module
@@ -104,10 +104,12 @@ def test_probe_spends_no_more_than_the_hook_has_left(monkeypatch):
     deadline = time.monotonic() + 0.4
 
     assert transition_hook_probe(probe_payload(), deadline_monotonic=deadline) is None
-    assert calls[-1]["hard_deadline_monotonic"] == deadline
     # The digest grants a cold resident a multi-second allowance on top of its
     # timeout; the hard deadline is what keeps that inside the hook's answer.
-    assert 0 < calls[-1]["timeout_seconds"] <= 0.4
+    # The probe only names diagnostics, so the review that decides keeps at
+    # least half of what was left.
+    assert deadline - calls[-1]["hard_deadline_monotonic"] >= 0.2 - 0.01
+    assert 0 < calls[-1]["timeout_seconds"] <= 0.2
 
     transition_hook_probe(probe_payload())
     assert "hard_deadline_monotonic" not in calls[-1]
