@@ -573,7 +573,7 @@ def _reads_only(command: str, planted: set[str]) -> bool:
             operands = []
             options = True
             count = False
-            for word in rest:
+            for index, word in enumerate(rest):
                 if count:
                     if not re.fullmatch(r"[+-]?[0-9]+(?:b|[kKMGTPEZYRQ](?:B|iB)?)?", word):
                         return False
@@ -582,8 +582,20 @@ def _reads_only(command: str, planted: set[str]) -> bool:
                     options = False
                 elif options and word in ("-n", "-c", "--lines", "--bytes"):
                     count = True
-                elif options and word.startswith("-") and word != "-":
+                elif options and re.fullmatch(
+                    r"-[nc][+-]?[0-9]+(?:b|[kKMGTPEZYRQ](?:B|iB)?)?"
+                    r"|--(?:lines|bytes)=[+-]?[0-9]+(?:b|[kKMGTPEZYRQ](?:B|iB)?)?",
+                    word,
+                ):
                     continue
+                elif options and word in (
+                    "-q", "-v", "-z", "--quiet", "--silent", "--verbose", "--zero-terminated",
+                ):
+                    continue
+                elif options and index == 0 and re.fullmatch(r"-[0-9]+", word):
+                    continue
+                elif options and word.startswith("-") and word != "-":
+                    return False
                 else:
                     operands.append(word)
             if count:
