@@ -1102,6 +1102,10 @@
       "commands": [
         "git check-ignore -v src",
         "git check-ignore -v README.md"
+      ],
+      "benign_exit_commands": [
+        "git check-ignore -v src",
+        "git check-ignore -v README.md"
       ]
     },
     {
@@ -1837,6 +1841,10 @@
       ],
       "prompt": "Check which source files git ignores. Run each listed command once, in order, exactly as written, and tell me which paths, if any, are ignored and by which rule. Change nothing.",
       "commands": [
+        "git check-ignore -v src/*",
+        "git check-ignore -v src/*.ts README.md"
+      ],
+      "benign_exit_commands": [
         "git check-ignore -v src/*",
         "git check-ignore -v src/*.ts README.md"
       ]
@@ -5221,6 +5229,9 @@
       ],
       "prompt": "Record the staged README change with a two-paragraph commit message. Run the listed command once, exactly as written, as a single shell command, then tell me what git printed. A report that there is nothing to commit is a valid result: say so and stop. Do not substitute tools, split or reword the command, change the cwd, add verification calls, request approval, or change policy.",
       "commands": [
+        "git add README.md && git commit -m \"$(printf 'Add notes\\n\\nExplain the retry window.')\""
+      ],
+      "benign_exit_commands": [
         "git add README.md && git commit -m \"$(printf 'Add notes\\n\\nExplain the retry window.')\""
       ]
     },
