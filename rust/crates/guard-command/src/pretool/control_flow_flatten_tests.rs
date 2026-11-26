@@ -413,6 +413,16 @@ fn a_wait_flattens_to_the_question_it_asks() {
             "until nc -z localhost 5432 || ! kill -0 4821 2>/dev/null; do sleep 1; done",
             "nc -z localhost 5432 || kill -0 4821 2>/dev/null; sleep 1",
         ),
+        // A second wait written after the first runs once the first is over,
+        // and its own flat list follows the first one.
+        (
+            "until test -e build/lock.d/pid; do sleep 60; done; until ! test -e build/lock.d/pid; do sleep 30; done",
+            "test -e build/lock.d/pid; sleep 60; test -e build/lock.d/pid; sleep 30",
+        ),
+        (
+            "until nc -z localhost 5432; do sleep 1; done\nwhile kill -0 4821 2>/dev/null; do sleep 5; done; echo done",
+            "nc -z localhost 5432; sleep 1; kill -0 4821 2>/dev/null; sleep 5; echo done",
+        ),
     ] {
         assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
     }
@@ -477,6 +487,12 @@ fn a_wait_that_builds_up_across_passes_keeps_its_review() {
         "until nc -z localhost 5432; do sleep 1; done || npm test",
         "until nc -z localhost 5432; do sleep 1; done & npm test",
         "until nc -z localhost 5432; do sleep 1; done; ; npm test",
+        // A second construct keeps the first one's review when this reading
+        // does not take it, or when the join reads the first one's outcome.
+        "until nc -z localhost 5432; do sleep 1; done; until nc -z localhost 6379; do date; done",
+        "until nc -z localhost 5432; do sleep 1; done && until nc -z localhost 6379; do sleep 1; done",
+        "until nc -z localhost 5432; do sleep 1; done; until nc -z localhost 6379; do sleep 1; done > wait.log",
+        "until nc -z localhost 5432; do sleep 1; done; for f in a b; do sleep 1; done",
         // An expansion need not name the same text on the next pass.
         "until nc -z localhost $PORT; do sleep 1; done",
         "until nc -z localhost `cat port`; do sleep 1; done",
