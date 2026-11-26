@@ -2,6 +2,9 @@ use super::*;
 
 static EDGE_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+#[path = "edge_transition_tests.rs"]
+mod transition_tests;
+
 #[test]
 fn yield_report_scan_is_bound_into_the_pre_tool_receipt() {
     for (text, minimum) in [
@@ -171,63 +174,6 @@ fn normalizes_harness_event_and_extracts_pretool_command() {
     let encoded = serde_json::to_value(result.receipt).unwrap();
     assert!(encoded.get("raw_payload").is_none());
     assert!(encoded.get("command").is_none());
-}
-
-#[test]
-fn stamps_transition_probe_observation_on_the_edge_result() {
-    let operation_id = "12345678-1234-5678-1234-567812345678";
-    let request_id = "transition-hook-0123456789abcdef0123456789abcdef";
-    let mut request = envelope(
-        "PreToolUse",
-        serde_json::json!({
-            "hook_event_name": "PreToolUse",
-            "tool_input": {"command": "pwd"},
-            "guard_transition_probe": {
-                "schema": "hol-guard.transition-hook-probe.v1",
-                "operation_id": operation_id,
-                "request_id": request_id,
-            },
-        }),
-    );
-    request.harness = "codex".to_owned();
-    request.request_id = None;
-    let edge: GuardHookEdgeResultV2 =
-        serde_json::from_slice(&evaluate_isolated(request).unwrap()).unwrap();
-    assert_eq!(edge.receipt.request_id, request_id);
-    assert_eq!(
-        edge.transition_hook_observation
-            .as_ref()
-            .and_then(|value| value.get("operation_id"))
-            .and_then(Value::as_str),
-        Some(operation_id)
-    );
-    assert_eq!(
-        edge.transition_hook_observation
-            .as_ref()
-            .and_then(|value| value.get("observation"))
-            .and_then(|value| value.get("request_id"))
-            .and_then(Value::as_str),
-        Some(request_id)
-    );
-}
-
-#[test]
-fn rejects_a_request_id_that_does_not_match_the_transition_probe() {
-    let mut request = envelope(
-        "PreToolUse",
-        serde_json::json!({
-            "hook_event_name": "PreToolUse",
-            "tool_input": {"command": "pwd"},
-            "guard_transition_probe": {
-                "schema": "hol-guard.transition-hook-probe.v1",
-                "operation_id": "12345678-1234-5678-1234-567812345678",
-                "request_id": "transition-hook-0123456789abcdef0123456789abcdef",
-            },
-        }),
-    );
-    request.request_id = Some("request-foreign".to_owned());
-    let error = evaluate_isolated(request).unwrap_err();
-    assert_eq!(error, "native_hook_request_id_probe_mismatch");
 }
 
 #[test]
@@ -540,18 +486,13 @@ fn evaluates_generic_pretool_for_supported_harness_aliases() {
 
 #[path = "edge_payload_tests.rs"]
 mod payload_tests;
-
-#[path = "edge_request_identity_tests.rs"]
-mod request_identity_tests;
-
-#[path = "edge_review_anchor_tests.rs"]
-mod review_anchor_tests;
-
 #[path = "edge_prompt_notice_tests.rs"]
 mod prompt_notice_tests;
-
-#[path = "edge_watch_tests.rs"]
-mod watch_tests;
-
+#[path = "edge_request_identity_tests.rs"]
+mod request_identity_tests;
 #[path = "edge_result_check_tests.rs"]
 mod result_check_tests;
+#[path = "edge_review_anchor_tests.rs"]
+mod review_anchor_tests;
+#[path = "edge_watch_tests.rs"]
+mod watch_tests;

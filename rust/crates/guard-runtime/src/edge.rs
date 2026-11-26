@@ -37,6 +37,9 @@ pub(crate) use edge_result_check::standalone_receipt;
 #[path = "edge_snapshot.rs"]
 mod edge_snapshot;
 pub(crate) use edge_snapshot::evaluate_envelope_with_snapshot;
+#[path = "edge_cursor_probe.rs"]
+mod cursor_probe;
+pub(crate) use cursor_probe::evaluate_cursor_probe;
 
 /// Bind the exact validated tool intent without policy-generation identity.
 /// Policy evaluation remains bound by `request_identity`; this commitment is
@@ -474,33 +477,6 @@ pub(crate) fn evaluate_envelope_with_store(
     )?;
     let lease = policy_store.command_authority_lease(snapshot.snapshot())?;
     evaluate_validated_envelope(envelope, Some(snapshot.as_ref()), Some(policy_store), lease)
-}
-
-/// Review a Cursor routing probe on the same authenticated binding as the
-/// edge. Watch gives a plain probe allow and leaves the next hook to review
-/// the call that actually runs.
-pub(crate) fn evaluate_cursor_probe(
-    envelope: GuardHookEnvelopeV2,
-    policy_store: &crate::policy_store::PolicySnapshotStore,
-    harness_postures: Option<&Value>,
-) -> Result<Option<Vec<u8>>, String> {
-    validate_envelope_shape(&envelope)?;
-    let admitted = policy_store.validate_request_snapshot(
-        &envelope.policy_snapshot,
-        &envelope.source.guard_home,
-        envelope.policy_generation,
-    )?;
-    let snapshot = admitted.snapshot();
-    let binding = serde_json::json!({"mode": snapshot.mode, "harness_postures": harness_postures});
-    if crate::hook_render_posture::recording_only_for_binding(
-        Some(&binding),
-        &Value::from("cursor"),
-    ) {
-        return Ok(None);
-    }
-    let lease = policy_store.command_authority_lease(snapshot)?;
-    evaluate_validated_envelope(envelope, Some(admitted.as_ref()), Some(policy_store), lease)
-        .map(Some)
 }
 
 #[cfg(test)]
