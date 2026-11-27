@@ -544,8 +544,14 @@ transcript in the pull request (after BP-T052).
 - [x] **BP-T123** `provider_integration_decide.rs`: cache read only, applies PRD 6.6. Property test:
   for any signal set the decision is never weaker than the decision with no provider.
   - [ ] Wire `decide` into the hook and relay decision paths (with BP-T124's hot-path proof).
-- [ ] **BP-T124** Hot path proof: a test that fails if the hook or relay decision path performs
+- [x] **BP-T124** Hot path proof: a test that fails if the hook or relay decision path performs
   network I/O or waits on the worker. Latency evidence in `scripts/native_slo_contract.py`.
+  - `provider_integration_hot_path_tests.rs`: only the lookup and worker modules may name an item
+    that reaches a provider or the worker; the decide step names no network, thread, channel,
+    process or sleep primitive; decide p95 for a cached subject stays inside
+    `MAX_PROVIDER_DECIDE_P95_MS` (2 ms), mirrored by `provider_decide_gate` in the SLO contract.
+  - [ ] Feed a decide p95 from the installed SLO benchmark into `provider_decide_gate` once decide
+    is wired into the hook and relay paths.
 - [ ] **BP-T125** Settings "Enforce provider blocks" and "Require a fresh check", per provider and
   capability, off by default, protected mutation, settable by managed policy
   (`managed_policy_floor.rs`), never settable by a provider.

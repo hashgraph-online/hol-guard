@@ -1186,6 +1186,8 @@ mod protect_guidance;
 mod protect_request_op;
 mod protection_health_report_op;
 pub mod provider_integration_decide;
+#[cfg(test)]
+mod provider_integration_hot_path_tests;
 pub mod provider_integration_lookup;
 pub mod provider_integration_secret;
 pub mod provider_integration_store;

@@ -21,6 +21,7 @@ from scripts.native_slo_contract import (
     MAX_EVIDENCE_BYTES,
     MAX_INSTALLED_ADAPTER_P95_MS,
     MAX_INSTALLED_ADAPTER_P99_MS,
+    MAX_PROVIDER_DECIDE_P95_MS,
     MAX_READINESS_P95_MS,
     SIZE_CLASSES,
     all_gates_pass,
@@ -30,6 +31,7 @@ from scripts.native_slo_contract import (
     gate_results,
     percentile,
     proof_environment_violations,
+    provider_decide_gate,
     sanitize_aggregate,
     summarize,
 )
@@ -496,3 +498,22 @@ def test_browser_decision_gate_rejects_missing_or_invalid_measurements() -> None
     assert gate(browser_p95_ms=8.0, mcp_p95_ms=float("inf")) is False
     assert gate(browser_p95_ms=-1.0, mcp_p95_ms=8.0) is False
     assert gate(browser_p95_ms=True, mcp_p95_ms=8.0) is False  # type: ignore[arg-type]
+
+
+def test_provider_decide_gate_holds_the_cache_only_budget() -> None:
+    assert MAX_PROVIDER_DECIDE_P95_MS == 2.0
+    assert MAX_PROVIDER_DECIDE_P95_MS < MAX_BROWSER_ADDED_P95_MS
+    assert provider_decide_gate(decide_p95_ms=0.4) is True
+    assert provider_decide_gate(decide_p95_ms=2.0) is True
+    assert provider_decide_gate(decide_p95_ms=2.5) is False
+    for invalid in (float("nan"), float("inf"), -1.0, True):
+        assert provider_decide_gate(decide_p95_ms=invalid) is False  # type: ignore[arg-type]
+
+
+def test_provider_decide_budget_matches_the_rust_hot_path_proof() -> None:
+    source = (
+        Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/provider_integration_hot_path_tests.rs"
+    ).read_text(encoding="utf-8")
+    match = re.search(r"const MAX_PROVIDER_DECIDE_P95_MS: f64 = ([0-9.]+);", source)
+    assert match is not None
+    assert float(match.group(1)) == MAX_PROVIDER_DECIDE_P95_MS

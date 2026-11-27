@@ -48,6 +48,10 @@ MAX_EVIDENCE_BYTES: Final = 256 * 1024
 # runner speed.
 BROWSER_DECISION_BASELINE_P95_MS: Final = 73.7
 MAX_BROWSER_ADDED_P95_MS: Final = 5.0
+# The provider decide step reads the signal cache only (PRD 6.6 hot path rule).  Its p95 for one
+# cached subject is part of the browser budget above.  Mirrors MAX_PROVIDER_DECIDE_P95_MS in
+# rust/crates/guard-runtime/src/provider_integration_hot_path_tests.rs.
+MAX_PROVIDER_DECIDE_P95_MS: Final = 2.0
 
 SIZE_CLASSES: Final = ("1k", "250k", "1m", "5m")
 FORBIDDEN_FIELD_PARTS: Final = frozenset(
@@ -366,6 +370,22 @@ def browser_decision_gate(*, browser_p95_ms: float, mcp_p95_ms: float) -> bool:
     return browser_p95_ms - mcp_p95_ms <= MAX_BROWSER_ADDED_P95_MS
 
 
+def provider_decide_gate(*, decide_p95_ms: float) -> bool:
+    """Return true when the cache-only provider decide step stays inside its p95 budget.
+
+    A missing, negative or non-finite measurement fails the gate.
+    """
+
+    if (
+        not isinstance(decide_p95_ms, (int, float))
+        or isinstance(decide_p95_ms, bool)
+        or not math.isfinite(decide_p95_ms)
+        or decide_p95_ms < 0
+    ):
+        return False
+    return decide_p95_ms <= MAX_PROVIDER_DECIDE_P95_MS
+
+
 def all_gates_pass(gates: Mapping[str, bool]) -> bool:
     """Return true only when every named SLO gate passed."""
 
@@ -385,6 +405,7 @@ __all__ = [
     "MAX_EVIDENCE_BYTES",
     "MAX_INSTALLED_ADAPTER_P95_MS",
     "MAX_INSTALLED_ADAPTER_P99_MS",
+    "MAX_PROVIDER_DECIDE_P95_MS",
     "MAX_READINESS_P95_MS",
     "MAX_RSS_GROWTH",
     "MAX_SAFE_FAIL_RATE",
@@ -407,6 +428,7 @@ __all__ = [
     "gate_results",
     "percentile",
     "proof_environment_violations",
+    "provider_decide_gate",
     "sanitize_aggregate",
     "summarize",
 ]
