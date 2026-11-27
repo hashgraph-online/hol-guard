@@ -238,6 +238,14 @@ fn list_and_detail_show_the_provider_without_secrets() {
         Some(&0)
     );
     assert!(!detail.body.to_string().contains(KEY));
+    // The page renders the publisher, the hosts it calls and the provider's own policies.
+    let manifest = provider();
+    assert_eq!(parsed.publisher_name, manifest.publisher_name);
+    assert_eq!(parsed.hosts, manifest.hosts);
+    assert_eq!(parsed.privacy_url, manifest.privacy_url);
+    assert_eq!(parsed.terms_url, manifest.terms_url);
+    assert_eq!(parsed.obtain_url, manifest.obtain_url);
+    assert!(parsed.privacy_url.starts_with("https://"));
 
     let missing = fixture.call("GET", &format!("{PREFIX}/provider.otherwatch"), Value::Null);
     assert_eq!((missing.status, code(&missing)), (404, NOT_FOUND));

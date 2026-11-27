@@ -2,7 +2,7 @@ import { r as reactExports, aX as fetchResolvedApprovalGate, j as jsxRuntimeExpo
 import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, G as GuardRepairControl } from "./guard-repair-control-91tBByHP.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
 import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-C1Asj0OK.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-Cc2GZ_t7.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-BQdiKzoF.js";
 import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-hR3eI7UO.js";
 function describeAffectedHarness(item) {

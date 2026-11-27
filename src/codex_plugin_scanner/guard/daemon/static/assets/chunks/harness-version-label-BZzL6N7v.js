@@ -1,4 +1,4 @@
-import { eq as fetchGuardApi, r as reactExports, J as isConnectableAppHarness, bI as isGuardDemoMode, j as jsxRuntimeExports, eJ as HiMiniCheckBadge, aq as HiMiniExclamationTriangle, at as HiMiniMinusCircle, ao as HiMiniQuestionMarkCircle } from "../guard-dashboard.js";
+import { es as fetchGuardApi, r as reactExports, J as isConnectableAppHarness, bI as isGuardDemoMode, j as jsxRuntimeExports, en as HiMiniCheckBadge, aq as HiMiniExclamationTriangle, at as HiMiniMinusCircle, ao as HiMiniQuestionMarkCircle } from "../guard-dashboard.js";
 const PROTECTION_STATE_COPY = {
   configured: { label: "Configured, not proven", tone: "warning" },
   transport_ready: { label: "Hook answers, block not proven", tone: "warning" },

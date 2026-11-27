@@ -1,4 +1,4 @@
-import { r as reactExports, cZ as fetchEffectiveExtensionControls, aX as fetchResolvedApprovalGate, eh as recoverExtensionControlAuthority, j as jsxRuntimeExports, aY as ApprovalProofModal, cL as ExtensionControlApiError } from "../guard-dashboard.js";
+import { r as reactExports, cZ as fetchEffectiveExtensionControls, aX as fetchResolvedApprovalGate, ek as recoverExtensionControlAuthority, j as jsxRuntimeExports, aY as ApprovalProofModal, cL as ExtensionControlApiError } from "../guard-dashboard.js";
 const PROTECTION_REPAIR_ROUTE = "/protection/repair";
 const REPAIRABLE_HEALTH = /* @__PURE__ */ new Set(["tampered", "recovery-required"]);
 function protectionRepairView(health, gateReady) {
