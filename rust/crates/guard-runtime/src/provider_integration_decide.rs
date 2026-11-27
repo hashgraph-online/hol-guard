@@ -15,6 +15,8 @@
 //!   `enforce`), and `observe` only writes would-have-reviewed receipts. The strongest fresh verdict
 //!   wins and the subject raises at most one provider-caused review.
 //! - A fresh `danger` under `tighten` or `enforce` suspends grants for the subject.
+//! - Each provider's effect level and "Require a fresh check" are the stored setting composed with
+//!   managed policy ([`ManagedProviderSettings::effective`]).
 //! - A provider with no fresh answer is listed as unavailable. With "Require a fresh check" on for
 //!   the capability, that also reviews the action.
 //!
@@ -32,6 +34,7 @@ use guard_provider_integrations::noise::{
 };
 use rusqlite::Connection;
 
+use crate::provider_integration_managed::ManagedProviderSettings;
 use crate::provider_integration_store::{
     capability_settings, provider_connection, signals_for_subject, CapabilitySetting,
     ProviderStoreResult, StoredSignal,
@@ -54,6 +57,9 @@ pub struct DecideRequest<'a> {
     pub subject_digest: &'a str,
     pub providers: &'a [DecideProvider<'a>],
     pub now_ms: u64,
+    /// Settings managed policy imposes. A managed value floors the stored setting, or replaces it
+    /// when locked.
+    pub managed: &'a ManagedProviderSettings,
 }
 
 /// One provider's cached answer, as the card lists it.
@@ -136,10 +142,13 @@ fn candidates<'a>(
         seen.push(provider.provider_id);
         let state =
             provider_connection(connection, provider.provider_id)?.map(|stored| stored.state);
-        let setting = capability_settings(connection, provider.provider_id)?
+        let stored = capability_settings(connection, provider.provider_id)?
             .get(&request.capability)
             .copied()
             .unwrap_or_default();
+        let setting = request
+            .managed
+            .effective(provider.provider_id, request.capability, stored);
         let signal = cached.remove(provider.provider_id);
         let fresh = signal
             .as_ref()
