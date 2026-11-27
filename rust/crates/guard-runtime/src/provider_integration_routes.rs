@@ -207,6 +207,23 @@ fn read_body<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, RouteAnsw
     serde_json::from_value(value).map_err(|_| error(400, INVALID_REQUEST))
 }
 
+/// Reads an apply body. A body that is valid JSON and names a `proof` but fails the typed shape
+/// still spends that proof, so a refused first apply always spends its challenge. A body too large
+/// or too malformed to read names no proof.
+fn read_apply<T: serde::de::DeserializeOwned>(
+    ledger: &mut ProofLedger,
+    body: &[u8],
+) -> Result<T, RouteAnswer> {
+    read_body(body).map_err(|refused| {
+        if let Ok(value) = read_body::<Value>(body) {
+            if let Some(proof) = value.get("proof").and_then(Value::as_str) {
+                ledger.discard(proof);
+            }
+        }
+        refused
+    })
+}
+
 fn digest_of(label: &str) -> [u8; 32] {
     Sha256::digest(label.as_bytes()).into()
 }
@@ -364,7 +381,7 @@ fn settings_apply(
     provider: &CompiledProviderIntegrationV1,
     body: &[u8],
 ) -> Result<RouteAnswer, RouteAnswer> {
-    let request: ProviderSettingsRequestV1 = read_body(body)?;
+    let request: ProviderSettingsRequestV1 = read_apply(ledger, body)?;
     let change = SettingsChange {
         settings: request.settings,
         enabled_opt_in_facts: request.enabled_opt_in_facts,
@@ -433,7 +450,7 @@ fn disconnect(
     provider: &CompiledProviderIntegrationV1,
     body: &[u8],
 ) -> Result<RouteAnswer, RouteAnswer> {
-    let request: ProviderDisconnectRequestV1 = read_body(body)?;
+    let request: ProviderDisconnectRequestV1 = read_apply(ledger, body)?;
     if !ledger.spend(
         &request.proof,
         &provider.id,

@@ -20,8 +20,8 @@ use serde_json::{json, Value};
 use zeroize::Zeroizing;
 
 use super::{
-    digest_of, error, fact_rank, issue, ok, read_body, route, shares, unavailable, Action,
-    ProofAction, ProofLedger, Route, RouteAnswer, RouteContext, INVALID_REQUEST, NOT_FOUND,
+    digest_of, error, fact_rank, issue, ok, read_apply, read_body, route, shares, unavailable,
+    Action, ProofAction, ProofLedger, Route, RouteAnswer, RouteContext, INVALID_REQUEST, NOT_FOUND,
     PROOF_INVALID,
 };
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
@@ -133,7 +133,7 @@ pub fn prepare_connect<'p>(
         .iter()
         .find(|provider| provider.id == provider_id)
         .ok_or_else(|| error(404, NOT_FOUND))?;
-    let mut request: ProviderConnectRequestV1 = read_body(body)?;
+    let mut request: ProviderConnectRequestV1 = read_apply(ledger, body)?;
     let key = ProviderKey::new(Zeroizing::new(std::mem::take(&mut request.key)));
     if !spend_connect_proof(ledger, &request.proof, provider, now_ms) {
         return Err(error(403, PROOF_INVALID));

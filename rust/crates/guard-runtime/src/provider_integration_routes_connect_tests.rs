@@ -226,3 +226,61 @@ fn connect_is_never_answered_in_one_step() {
     assert!(!is_connect("GET", &path));
     assert!(!is_connect("POST", &format!("{path}/preview")));
 }
+
+#[test]
+fn a_misshapen_apply_still_spends_the_proof_it_presents() {
+    let mut fixture = Fixture::new();
+    let fake = FakeProvider::new(&[HOST], &key());
+    let proof = fixture.proof();
+    let refused = fixture.connect(json!({"key": 5, "proof": proof}), &fake);
+    assert_eq!((refused.status, code(&refused)), (400, INVALID_REQUEST));
+    let reused = fixture.connect(json!({"key": key(), "proof": proof}), &fake);
+    assert_eq!(code(&reused), PROOF_INVALID);
+
+    put_connection(
+        &fixture.connection,
+        &ProviderConnection {
+            provider_id: SHIELD.to_owned(),
+            manifest_digest: fixture.providers[0].manifest_digest.clone(),
+            state: State::Connected,
+            opt_in_facts: Vec::new(),
+            connected_at_ms: 1_000,
+            updated_at_ms: 1_000,
+            last_verified_at_ms: Some(1_000),
+        },
+    )
+    .unwrap();
+    let base = format!("{PREFIX}/{SHIELD}");
+    let empty = json!({"settings": [], "enabled_opt_in_facts": []});
+    for (preview_body, action, misshapen, valid) in [
+        (
+            empty.clone(),
+            "settings",
+            json!({"settings": true, "enabled_opt_in_facts": []}),
+            empty.clone(),
+        ),
+        (json!({}), "disconnect", json!({"extra": 1}), json!({})),
+    ] {
+        let mut ledger = std::mem::replace(&mut fixture.ledger, ProofLedger::new());
+        let context = fixture.context();
+        let preview_path = format!("{base}/{action}/preview");
+        let preview_bytes = serde_json::to_vec(&preview_body).unwrap();
+        let preview = answer(&mut ledger, &context, "POST", &preview_path, &preview_bytes).unwrap();
+        assert_eq!(preview.status, 200, "{}", preview.body);
+        let proof = preview.body["challenge"].clone();
+        let apply = format!("{base}/{action}");
+        let mut bad = misshapen;
+        bad["proof"] = proof.clone();
+        let bytes = serde_json::to_vec(&bad).unwrap();
+        let refused = answer(&mut ledger, &context, "POST", &apply, &bytes).unwrap();
+        assert_eq!(refused.status, 400, "{action}");
+        let mut good = valid;
+        good["proof"] = proof;
+        let bytes = serde_json::to_vec(&good).unwrap();
+        let reused = answer(&mut ledger, &context, "POST", &apply, &bytes).unwrap();
+        assert_eq!(code(&reused), PROOF_INVALID, "{action}");
+        drop(context);
+        fixture.ledger = ledger;
+    }
+    assert!(fixture.stored().is_some(), "nothing was disconnected");
+}

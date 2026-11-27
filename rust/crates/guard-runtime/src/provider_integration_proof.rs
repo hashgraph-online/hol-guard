@@ -80,6 +80,12 @@ impl ProofLedger {
 
     /// Spends `proof`. True only when it was issued for exactly this provider, action and body and
     /// has not expired. A proof that matched a pending entry is spent either way.
+    /// Drops a presented proof without honouring it.
+    pub fn discard(&mut self, proof: &str) {
+        let key: [u8; 32] = Sha256::digest(proof.as_bytes()).into();
+        self.pending.remove(&key);
+    }
+
     pub fn spend(
         &mut self,
         proof: &str,
