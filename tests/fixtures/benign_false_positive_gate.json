@@ -37250,6 +37250,74 @@
       "expect": "allow"
     },
     {
+      "id": "rg-glob-filters-over-a-source-tree",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"export|ordinary\" -g '*.ts*' -g '!__tests__/**' src | head -30"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grep-search-over-source-globs",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"export\\|ordinary\" src/*.ts src/**/*.ts 2>/dev/null | head -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-rg-glob-filters-beside-ssh-dir",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"export|ordinary\" -g '*.ts*' src ~/.ssh | head -30"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-search-globs-beside-ssh-glob",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"export\" src/*.ts ~/.ssh/* 2>/dev/null | head -20"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "session-ln-s-node-modules-into-local-clone-from-original",
       "fix_area": "queue",
       "harnesses": [

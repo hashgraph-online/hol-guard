@@ -355,7 +355,33 @@ pub(in crate::pretool) fn glob_matches_nothing(value: &str, context: ReadContext
 /// reads no more than a recursive search of that directory, which the same
 /// walk admits. A pattern only in the last component proves just the
 /// entries it names: `tests/*.py` never opens `tests/fixtures/.env`.
+///
+/// Each reading of the submission asks the same operand under the same
+/// context, so the expansion and its screens run once per evaluation: a
+/// glob over a test tree, expanded again for every floor, ran a plain
+/// `grep` past the hook's decision budget. Nothing here reads a clock.
+///
+/// Of the segment's quoted words, the proof asks only whether the operand
+/// itself is one, and it never asks whether the command creates nothing. It
+/// runs under a context that keeps just those answers, the second as the
+/// stricter `false`, and is remembered under every field of that context.
 pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadContext<'_>) -> bool {
+    let own_word = [value.to_owned()];
+    let quoted = context.literal_words.iter().any(|word| word == value);
+    let context = ReadContext {
+        literal_words: if quoted { &own_word } else { &[] },
+        creates_nothing: false,
+        ..context
+    };
+    let key = format!("glob-search-operand\0{value}\0{context:?}");
+    super::walk_memo::memoized_keyed(key, || {
+        #[cfg(test)]
+        super::walk_memo::count_walk("glob-search-operand", std::path::Path::new(value));
+        glob_search_operand_uncached(value, context)
+    })
+}
+
+fn glob_search_operand_uncached(value: &str, context: ReadContext<'_>) -> bool {
     if !literal_bracket::literal_spelling_searchable(value, context) {
         return false;
     }
