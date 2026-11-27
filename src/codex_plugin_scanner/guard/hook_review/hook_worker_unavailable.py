@@ -75,14 +75,20 @@ def structured_outage_overlay(
         return withhold
     if rendered is not None and rendered[0] == "document":
         overlay = rendered[1]
-        if overlay is not None and (not overlay or overlay == withhold):
-            return overlay
+        if overlay is not None and not overlay:
+            return {}
+        if overlay is not None and overlay != withhold:
+            return withhold
+        if overlay == withhold and not callable(load_config):
+            return withhold
     if callable(load_config):
         try:
             from ..native_policy_snapshot_direct_lane_structured import structured_output_view
 
             configured = load_config()
-            if configured is None or getattr(configured, "managed_policy", None) is None:
+            if configured is None:
+                return withhold
+            if getattr(configured, "managed_policy", None) is None:
                 return {}
             view = structured_output_view(configured)
             if view is None:
