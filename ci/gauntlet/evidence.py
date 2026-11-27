@@ -32,6 +32,7 @@ from .native_tools import (
     MISSPELLED_FIXTURE_READ,
     misspelled_fixture_reads,
     native_tools_scope_error,
+    without_approval_waits,
 )
 from .output_cases import OUTPUT_ORACLE, assess_output_block
 from .proofs import (
@@ -351,10 +352,12 @@ def _assess_observed(
             return "not-exercised", MISSPELLED_FIXTURE_READ
         # A Guard denial or review can stop the remaining steps; judge it as a false positive below.
         stopped = _guard_stopped(case, calls, guards)
+        # Waiting on the review Guard asked for is Guard's own instruction, not a detour.
+        scoped = without_approval_waits(calls) if stopped else calls
         scope_error = (
-            native_tools_scope_error(scenario, calls, case, guard_denied=stopped)
-            or repeat_sequence_error(scenario.commands, calls, guard_denied=stopped)
-            or cwd_argument_error(scenario, calls)
+            native_tools_scope_error(scenario, scoped, case, guard_denied=stopped)
+            or repeat_sequence_error(scenario.commands, scoped, guard_denied=stopped)
+            or cwd_argument_error(scenario, scoped)
         )
         if scope_error:
             return "not-exercised", scope_error
