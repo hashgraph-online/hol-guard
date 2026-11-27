@@ -150,13 +150,13 @@ fn leading_cd_target(model: &CanonicalCommandV1, context: PathContext<'_>) -> Op
     // Every caller judges reads only: the read sequences below, and the Git
     // floor and helper probe, which inspect each read where it runs. A plain
     // climb such as `cd ../app; git status` is proved for them.
-    crate::pretool::safe_reads::verified_cwd_target(target, context)
-        .or_else(|| crate::pretool::directory_targets::verified_climb_target(target, context))
-        .or_else(|| {
-            crate::pretool::directory_targets::notes::verified_note_directory_target(
-                target, context,
-            )
-        })
+    crate::pretool::directory_targets::quoted_brackets::verified_segment_cwd_target(
+        first, target, context,
+    )
+    .or_else(|| crate::pretool::directory_targets::verified_climb_target(target, context))
+    .or_else(|| {
+        crate::pretool::directory_targets::notes::verified_note_directory_target(target, context)
+    })
 }
 
 fn changes_directory(segment: &CommandSegmentV1) -> bool {

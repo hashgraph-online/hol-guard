@@ -9,6 +9,8 @@
 pub(crate) mod home_variable;
 #[path = "directory_targets_notes.rs"]
 pub(crate) mod notes;
+#[path = "directory_targets_quoted_brackets.rs"]
+pub(crate) mod quoted_brackets;
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
 #[path = "directory_targets_tmp_alias.rs"]
@@ -19,12 +21,18 @@ pub(crate) mod tmp_alias;
 pub(in crate::pretool) mod path_trust;
 
 pub(crate) fn safe_directory_target(target: &str) -> bool {
+    safe_directory_target_with(target, false)
+}
+
+/// [`safe_directory_target`], except that `[` and `]` pass when
+/// `literal_brackets` says the command quotes them (see [`quoted_brackets`]).
+fn safe_directory_target_with(target: &str, literal_brackets: bool) -> bool {
     // Windows spells an absolute directory with backslash separators. Check
     // a drive-absolute target in its forward-slash form; a backslash anywhere
     // else may be a shell escape and stays rejected.
     #[cfg(windows)]
     if let Some(target) = windows_drive_target(target) {
-        return safe_directory_target(&target);
+        return safe_directory_target_with(&target, literal_brackets);
     }
     let tilde_head = target
         .strip_prefix('~')
@@ -35,7 +43,8 @@ pub(crate) fn safe_directory_target(target: &str) -> bool {
     });
     crate::is_plain_cd_target(target)
         && !directory_history
-        && !target.contains(['*', '?', '[', ']', '\\'])
+        && !target.contains(['*', '?', '\\'])
+        && (literal_brackets || !target.contains(['[', ']']))
         && !super::sensitive_command(target)
         && !super::normalized_haystack(target)
             .split('/')
@@ -43,6 +52,14 @@ pub(crate) fn safe_directory_target(target: &str) -> bool {
 }
 
 pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<String> {
+    verified_cwd_target_with(value, context, false)
+}
+
+fn verified_cwd_target_with(
+    value: &str,
+    context: super::PathContext<'_>,
+    literal_brackets: bool,
+) -> Option<String> {
     // `$HOME` and `${HOME}` name the directory `~` names, and reach the shell
     // the same way. `home_targets_unquoted` has already turned back a segment
     // that keeps the spelling literal, so the proof below is the tilde's own.
@@ -60,7 +77,10 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
         }
         None => value,
     };
-    if context.home_dir.is_none() || context.cwd.is_none() || !safe_directory_target(value) {
+    if context.home_dir.is_none()
+        || context.cwd.is_none()
+        || !safe_directory_target_with(value, literal_brackets)
+    {
         return None;
     }
     // An unquoted leading `~` expands from the shell's HOME, so it is proved

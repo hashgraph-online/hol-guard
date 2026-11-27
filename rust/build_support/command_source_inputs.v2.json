@@ -373,6 +373,7 @@
       "src/pretool/directory_targets.rs",
       "src/pretool/directory_targets_home_variable.rs",
       "src/pretool/directory_targets_notes.rs",
+      "src/pretool/directory_targets_quoted_brackets.rs",
       "src/pretool/directory_targets_sibling.rs",
       "src/pretool/directory_targets_tmp_alias.rs",
       "src/pretool/dns_lookups.rs",
