@@ -136,7 +136,7 @@ place to put its cases.
   offers the covering grant as a suggestion. Tests: no URL, path or argument text in any row; no
   route exports the table off the device; the suggestion never creates a grant without the proof
   flow.
-- [ ] **BP-T172** Report path: card menu item "This should not have asked" and
+- [x] **BP-T172** Report path: card menu item "This should not have asked" and
   `hol-guard browser report-prompt <request-id>`, native. Output is the anonymized skeleton from PRD
   5.10. Test: every argument value is a placeholder and the origin is `site-a.example.test`.
 - [x] **BP-T173** R-QUIET-4: `observe` state for an external driver profile mapping. The decision is
@@ -150,30 +150,46 @@ place to put its cases.
 - [ ] **BP-T175** Effect level per provider and capability (`observe`, `tighten`, `enforce`) as a
   protected setting through the settings route (preview plus proof) and managed policy. Default
   `tighten`. `enforce` is the existing "Enforce provider blocks". Extends BP-T125.
-- [ ] **BP-T176** `rust/crates/guard-provider-integrations/src/noise.rs`: unverified `caution` is a
+- [x] **BP-T176** `rust/crates/guard-provider-integrations/src/noise.rs`: unverified `caution` is a
   finding only; one provider-caused review per subject per signal version; three per session per
   provider, then findings plus one Browser-area notice; `danger` uncapped; a review Guard raises
   anyway is not counted. Property test: for any signal sequence the number of provider-caused reviews
   never exceeds the caps, and no sequence produces an allow Guard would not have given.
+  - `NoiseLedger::admit` and `noise::apply` are pure; the resident wires them in with BP-T120. The
+    property runs 2000 seeded sequences of 60 signals over three providers without a new
+    dependency.
 - [ ] **BP-T177** Override accounting: after three allow-throughs of the same provider and reason code
   in seven days the card offers "Stop asking for this reason from <provider>". Accepting sets that
   reason code to `observe`. Integrations page lists each with undo. Tests: never automatic, never
   below Guard's own decision, undo restores.
+  - Ledger done: `overrides.rs` counts allow-throughs per provider and reason in the window,
+    offers only at the threshold, refuses an unoffered accept, lowers only to `observe` and
+    undo restores. Still open: the card offer, the Integrations page list and the resident wiring.
 - [ ] **BP-T178** Multi-provider composition: strongest fresh verdict per subject, one review per
   subject, rows sorted by verdict then provider id, three rows plus "N more", placement never orders.
   Vectors and a Playwright spec for the card with four providers.
+  - `compose.rs` holds the vectors (order, "N more", arrival order, stale rows, one review per
+    subject). The Playwright spec waits for the provider rows on the card (BP-T047).
 - [ ] **BP-T179** `fixture_origin.rs` and the loopback provider stub (PRD 8.3).
   `HOL_GUARD_PROVIDER_FIXTURE_ORIGIN`, modeled on `HOL_GUARD_DISCOVERY_FIXTURE_ORIGIN`. One Rust test
   per restriction: loopback only; `provider.fixture-` ids only; the compiler rejects that prefix under
   `contributions/`; only the literal fixture key is ever sent; a stored secret is never sent; the
   Integrations page marks the provider as a fixture. Stub in `ci/gauntlet/browser_fixtures.py` with
   per-case scripts and a request journal.
+  - Rust side landed in `guard-provider-integrations/src/fixture_origin.rs`: the loopback-only
+    origin parser, the `provider.fixture-` route that never reroutes another provider and has no
+    route without an origin, and a transport that always sends the literal fixture key (proven
+    against a loopback stub). Still open: the compiler refusal under `contributions/`, the
+    resident wiring, the Integrations page mark and the Gauntlet stub.
 - [ ] **BP-T180** Conformance kit: `conformance.rs` and `hol-guard integrations conformance
   <manifest>` (PRD 6.12), runnable from the released CLI. Five checks: compile and labels, recorded
   responses, share set, no added prompt, bounded prompt. CI runs it for every manifest under
   `contributions/provider-integrations/`. Add `hol-guard extensions generate --provider` and
   `validate --provider` so a manifest is generated with its fixtures and gate rows.
-- [ ] **BP-T181** Calibration for `verified` (D12): document the report format, the public list named
+  - Kit done: `guard-provider-integrations/src/conformance.rs` runs the five checks over a manifest,
+    its recorded responses and the corpus decisions. Still open: the CLI command, recorded fixtures
+    under `tests/fixtures/provider_integrations/`, the CI job and `extensions generate/validate --provider`.
+- [x] **BP-T181** Calibration for `verified` (D12): document the report format, the public list named
   by digest and the starting thresholds in the provider contributing guide. No list is checked in.
 - [ ] **BP-T182** Noise view on the provider detail page and in `hol-guard integrations status <id>`:
   reviews caused in seven days, allowed through, quieted reason codes, effect level per capability.

@@ -5,6 +5,9 @@ uses add evidence to Guard's browser reviews through Guard's hooks. Guard does t
 on its own; a connected provider can only make a review stricter or add context to it. A provider
 can never allow an action, and its verdict map has no allow value.
 
+For what a provider can change, the noise caps and the calibration report needed for `verified`,
+see the [provider integration guide](../../docs/guard/extensions/provider-integration-contributing.md).
+
 ## Files
 
 - Name the file `<id>.json`, for example `provider.exampleshield.json`.
