@@ -7676,7 +7676,7 @@
       "expect": "allow"
     },
     {
-      "id": "neg-git-search-pattern-names-guard-state",
+      "id": "neg-git-search-pattern-then-guard-control",
       "fix_area": "git",
       "harnesses": [
         "codex",
@@ -7687,7 +7687,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "git diff --cached -G\"~/.hol-guard/guard.db x\" --stat HEAD"
+        "command": "git diff --cached -G\"hol-guard status\" --stat && hol-guard hooks remove"
       },
       "cwd": "worktree",
       "expect": "not_allow"
