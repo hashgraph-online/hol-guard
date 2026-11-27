@@ -576,6 +576,11 @@ transcript in the pull request (after BP-T052).
   new `daemon_edge_integrations.rs`: header token plus dashboard session, hosted dashboard origins
   refused, preview plus one-use proof on connect, settings and disconnect, rate limit on test.
   Contract tests for every error code.
+  - [x] Native route service `provider_integration_routes.rs`: list, detail, connect preview,
+    settings preview and apply, disconnect preview and apply, the one-use proof ledger, the managed
+    policy check and the rollback switch. Contract tests cover every code these routes answer.
+  - [ ] Edge wiring (route paths, header token plus session, hosted origins refused), the
+    compiled-provider loader, and the `connect` and `test` routes, which call the provider.
 - [ ] **BP-T131** CLI `hol-guard integrations list|status|connect|disconnect|test|settings`. The key is
   read from a prompt or stdin, never an argument, never echoed. Python is glue only, modeled on
   `cli/approval_pulse_commands.py` and `cli/approval_pulse_parser.py`.

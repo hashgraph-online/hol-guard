@@ -920,7 +920,9 @@ refused. Register in `rust/crates/guard-runtime/src/daemon_route_paths.rs` and
 | `/v1/integrations/providers/<id>` | GET | Detail, shares, settings, last verify, cache counts. |
 | `/v1/integrations/providers/<id>/connect/preview` | POST | Returns the exact share set and a proof challenge. |
 | `/v1/integrations/providers/<id>/connect` | POST | Key plus one-use proof. Verifies, stores, enables. |
-| `/v1/integrations/providers/<id>/settings` | POST | Preview plus proof. Effect level per capability, enforcement and fresh-check toggles, fact toggles, quieted reason codes. |
+| `/v1/integrations/providers/<id>/settings/preview` | POST | Checks the requested settings against the manifest and managed policy, returns them and a proof challenge bound to them. |
+| `/v1/integrations/providers/<id>/settings` | POST | Preview plus proof. Effect level per capability, enforcement and fresh-check toggles, fact toggles, quieted reason codes. Applies exactly the previewed body. |
+| `/v1/integrations/providers/<id>/disconnect/preview` | POST | Returns a proof challenge. |
 | `/v1/integrations/providers/<id>/disconnect` | POST | Proof. Deletes secret and cache. |
 | `/v1/integrations/providers/<id>/test` | POST | One live call for a user-typed public origin. Rate limited. |
 | `/v1/browser/sessions` | GET | Live sessions and posture. |
@@ -932,6 +934,12 @@ Errors follow the existing code style: `provider_integration_unavailable`, `prov
 `provider_capability_unavailable`. Rollback switch: `HOL_GUARD_PROVIDER_INTEGRATIONS=off` makes every
 route answer `provider_capability_unavailable` and makes `provider_integration_decide` a no-op, the
 same shape as `HOL_GUARD_DISCOVERY=off`.
+
+A challenge is bound to the provider, the action and the exact previewed body, expires after two
+minutes and is spent by the first apply that presents it, even a refused one. A requested setting
+that managed policy would change answers `409 provider_setting_managed`; managed policy is checked
+again at apply time. Other route codes: `404 provider_not_found`, `409 provider_not_connected`,
+`403 provider_proof_invalid`, `400 invalid_request`.
 
 ### 6.10 Sponsors and discovery
 
