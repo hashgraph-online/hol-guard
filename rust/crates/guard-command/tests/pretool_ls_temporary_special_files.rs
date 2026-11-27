@@ -11,7 +11,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 
 use crate::git_helper_fixture as fixture;
-use crate::pretool_home_layout_reads::{assert_decision, repository};
+use crate::pretool_home_layout_reads::{assert_decision, decide_with_shell_home, repository};
 
 /// Removes plain entries placed directly in the shared temporary root.
 struct EntryCleanup(Vec<PathBuf>);
@@ -70,6 +70,7 @@ fn world(tag: &str) -> World {
         UnixListener::bind(&socket).unwrap(),
         UnixListener::bind(scratch.join(".s.PGSQL.5432")).unwrap(),
         UnixListener::bind(home.join(".ssh/agent.sock")).unwrap(),
+        UnixListener::bind(workspace.join(".s.APP")).unwrap(),
     ];
     fifo(&pipe);
     std::os::unix::fs::symlink(&socket, &link).unwrap();
@@ -129,4 +130,21 @@ fn links_stores_and_deeper_missing_names_keep_their_review() {
     for command in commands {
         assert_decision(&world.workspace, &world.home, &command, false);
     }
+}
+
+/// The shell expands `~` from its own HOME. When that is not the declared
+/// home, `~/…` names some other file than the one the screens resolved, so a
+/// socket named through `~` keeps its review.
+#[test]
+fn a_home_spelled_socket_needs_the_shell_to_share_the_home() {
+    let world = world("home");
+    let command = "ls -la ~/Code/app-portal/.s.APP";
+    let shared = decide_with_shell_home(&world.workspace, &world.home, command, true);
+    assert_eq!(
+        (shared.decision.as_str(), shared.reason_code.as_str()),
+        ("allow", "native_exact_safe_command"),
+        "{command}"
+    );
+    let other = decide_with_shell_home(&world.workspace, &world.home, command, false);
+    assert_ne!(other.decision, "allow", "{command}: {}", other.reason_code);
 }

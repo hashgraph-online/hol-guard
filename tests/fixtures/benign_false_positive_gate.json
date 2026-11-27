@@ -36395,7 +36395,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls -la ${PRIVATE_TMP}/.s.PGSQL.5432"
+        "command": "ls -la ${PG_RUN}/.s.PGSQL.5432"
       },
       "cwd": "org",
       "expect": "allow"
@@ -36429,7 +36429,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "ls -la /tmp/.s.PGSQL.5432.lock 2>/dev/null"
+        "command": "ls -la /tmp/.guard-benign-gate-absent.lock 2>/dev/null"
       },
       "cwd": "org",
       "expect": "allow"

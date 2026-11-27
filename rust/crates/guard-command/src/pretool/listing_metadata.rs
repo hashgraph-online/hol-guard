@@ -28,6 +28,9 @@ fn plain_operand(value: &str, context: crate::pretool::PathContext<'_>) -> Optio
             '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '\\', '*', '?', '[', ']', '{', '}',
         ])
         || !crate::pretool::safe_reads::verified_path_context(context.home_dir, context.cwd)
+        // The shell expands `~` from its own HOME, so a home the shell does
+        // not share would make the screened path a different file.
+        || (value.starts_with('~') && !context.shell_home_matches)
     {
         return None;
     }
