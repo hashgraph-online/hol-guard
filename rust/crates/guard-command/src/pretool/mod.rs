@@ -280,7 +280,7 @@ mod decompress_reads;
 mod dump_filter_options;
 mod name_pattern_text;
 mod search;
-pub(crate) use search::{search_pattern_words, search_patterns};
+pub(crate) use search::search_patterns;
 mod search_pattern_clearance;
 mod search_pattern_text;
 mod search_scope;

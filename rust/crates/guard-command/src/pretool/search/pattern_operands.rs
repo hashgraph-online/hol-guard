@@ -6,16 +6,9 @@
 
 use super::options;
 
-/// The arguments of a `grep`, `egrep`, `fgrep` or `rg` argument list that
-/// supply its pattern: every `-e`/`--regexp` argument or, without one, the
-/// first positional. An attached pattern, as in `-neword` or
-/// `--regexp=word`, is the whole argument that carries it.
-///
-/// Returns `None` when any option is one this reading does not know, so a
-/// value-taking option can never shift a path into the pattern slot, and for
-/// `rg --files`, which searches for no pattern and reads every positional as
-/// a path.
-pub(crate) fn search_pattern_words(executable: &str, arguments: &[String]) -> Option<Vec<String>> {
+/// The words of [`search_patterns`].
+#[cfg(test)]
+fn search_pattern_words(executable: &str, arguments: &[String]) -> Option<Vec<String>> {
     search_patterns(executable, arguments).map(|patterns| patterns.words)
 }
 
@@ -30,8 +23,18 @@ pub(crate) struct SearchPatterns {
     pub(crate) from_options: bool,
 }
 
-/// [`search_pattern_words`], saying whether the words came from pattern
-/// options or from the first positional.
+/// The arguments of a `grep`, `egrep`, `fgrep` or `rg` argument list that
+/// supply its pattern: every `-e`/`--regexp` argument or, without one, the
+/// first positional. An attached pattern, as in `-neword` or
+/// `--regexp=word`, is the whole argument that carries it.
+///
+/// Returns `None` when any option is one this reading does not know, so a
+/// value-taking option can never shift a path into the pattern slot, and for
+/// `rg --files`, which searches for no pattern and reads every positional as
+/// a path.
+///
+/// The result also says whether the words came from pattern options or from
+/// the first positional.
 pub(crate) fn search_patterns(executable: &str, arguments: &[String]) -> Option<SearchPatterns> {
     let rg = match executable {
         "rg" => true,
