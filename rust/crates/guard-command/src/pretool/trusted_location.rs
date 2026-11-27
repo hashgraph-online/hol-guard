@@ -90,15 +90,25 @@ pub(super) fn trusted_library_search_path(value: &str, home: &Path, cwd: &Path) 
             .all(|entry| trusted_loader_entry(Path::new(entry), home, cwd))
 }
 
-/// The Windows loader resolves DLLs through its own search order and never
-/// reads the Unix loader search paths, and only a Git from the system install
-/// roots is trusted, so on Windows a search path cannot load a library into
-/// Git. Injection variables such as `LD_PRELOAD` stay refused everywhere.
-pub(super) fn inert_loader_search_path(name: &str, windows: bool) -> bool {
-    windows
-        && guard_contracts::LIBRARY_SEARCH_PATH_NAMES
+/// Loader search paths the running platform's loader never reads, so they
+/// cannot load a library into Git. `os` is a [`std::env::consts::OS`] value.
+///
+/// - Windows resolves DLLs through its own search order and reads none of
+///   the Unix search paths; only a Git from the system install roots is
+///   trusted there.
+/// - macOS dyld reads the `DYLD_*` paths and never `LD_LIBRARY_PATH`, so on
+///   macOS only that one is inert. The `DYLD_*` paths are still checked
+///   entry by entry.
+///
+/// Injection variables such as `LD_PRELOAD` stay refused everywhere.
+pub(super) fn inert_loader_search_path(name: &str, os: &str) -> bool {
+    match os {
+        "windows" => guard_contracts::LIBRARY_SEARCH_PATH_NAMES
             .iter()
-            .any(|known| known.eq_ignore_ascii_case(name))
+            .any(|known| known.eq_ignore_ascii_case(name)),
+        "macos" => name == "LD_LIBRARY_PATH",
+        _ => false,
+    }
 }
 
 /// A launcher directory an installed program owns: one that sits outside the
@@ -261,11 +271,26 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn search_paths_are_inert_only_on_windows() {
+    fn search_paths_are_inert_only_where_the_loader_ignores_them() {
         for name in guard_contracts::LIBRARY_SEARCH_PATH_NAMES {
-            assert!(inert_loader_search_path(name, true));
-            assert!(inert_loader_search_path(&name.to_ascii_lowercase(), true));
-            assert!(!inert_loader_search_path(name, false));
+            assert!(inert_loader_search_path(name, "windows"));
+            assert!(inert_loader_search_path(
+                &name.to_ascii_lowercase(),
+                "windows"
+            ));
+            assert!(!inert_loader_search_path(name, "linux"));
+            assert!(!inert_loader_search_path(name, "freebsd"));
+        }
+        // dyld reads only the DYLD_* paths.
+        assert!(inert_loader_search_path("LD_LIBRARY_PATH", "macos"));
+        assert!(!inert_loader_search_path("ld_library_path", "macos"));
+        for name in [
+            "DYLD_LIBRARY_PATH",
+            "DYLD_FALLBACK_LIBRARY_PATH",
+            "DYLD_FRAMEWORK_PATH",
+            "DYLD_FALLBACK_FRAMEWORK_PATH",
+        ] {
+            assert!(!inert_loader_search_path(name, "macos"));
         }
         for name in [
             "LD_PRELOAD",
@@ -273,8 +298,9 @@ mod tests {
             "LD_AUDIT",
             "GIT_EXEC_PATH",
         ] {
-            assert!(!inert_loader_search_path(name, true));
-            assert!(!inert_loader_search_path(name, false));
+            for os in ["windows", "macos", "linux"] {
+                assert!(!inert_loader_search_path(name, os));
+            }
         }
     }
 
