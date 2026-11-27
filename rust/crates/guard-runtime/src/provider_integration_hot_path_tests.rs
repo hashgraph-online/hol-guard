@@ -44,15 +44,22 @@ const NETWORK_OR_WORKER_ITEMS: &[&str] = &[
     "guard_provider_integrations::fixture_origin",
 ];
 
-/// The modules allowed to name those items: their owners, their tests and the module list.
+/// The modules allowed to name those items: their owners and their tests. `lib.rs` is scanned like
+/// any other file apart from the module declarations in `MODULE_DECLARATIONS`.
 /// The daemon's background scheduler joins this list when it lands, never a hook or relay module.
 const OWNERS: &[&str] = &[
-    "lib.rs",
     "provider_integration_hot_path_tests.rs",
     "provider_integration_lookup.rs",
     "provider_integration_lookup_tests.rs",
     "provider_integration_worker.rs",
     "provider_integration_worker_tests.rs",
+];
+
+/// The only lines of `lib.rs` that may name an owner module.
+const MODULE_DECLARATIONS: &[&str] = &[
+    "pub mod provider_integration_lookup;",
+    "pub mod provider_integration_worker;",
+    "mod provider_integration_hot_path_tests;",
 ];
 
 /// Primitives that perform I/O beyond the local store or that wait.
@@ -115,7 +122,11 @@ fn only_the_owners_name_an_item_that_reaches_a_provider_or_the_worker() {
         if OWNERS.contains(&relative.as_str()) {
             continue;
         }
-        let code = code_of(&path);
+        let code: String = code_of(&path)
+            .lines()
+            .filter(|line| relative != "lib.rs" || !MODULE_DECLARATIONS.contains(&line.trim()))
+            .collect::<Vec<_>>()
+            .join("\n");
         for item in NETWORK_OR_WORKER_ITEMS {
             if code.contains(item) {
                 offenders.push(format!("{relative}: {item}"));
@@ -141,6 +152,18 @@ fn the_decide_step_names_no_network_worker_or_waiting_primitive() {
         named.is_empty(),
         "provider_integration_decide.rs names {named:?}"
     );
+}
+
+#[test]
+fn lib_rs_is_scanned_apart_from_its_module_declarations() {
+    let lib = std::fs::read_to_string(source_root().join("lib.rs")).unwrap();
+    for declaration in MODULE_DECLARATIONS {
+        assert!(
+            lib.lines().any(|line| line.trim() == *declaration),
+            "{declaration} is not in lib.rs"
+        );
+    }
+    assert!(!OWNERS.contains(&"lib.rs"));
 }
 
 #[test]
@@ -227,8 +250,13 @@ fn deciding_a_cached_subject_stays_inside_the_latency_budget() {
     }
     samples.sort_by(f64::total_cmp);
     let p95 = samples[samples.len() * 95 / 100];
-    assert!(
-        p95 <= MAX_PROVIDER_DECIDE_P95_MS,
-        "decide p95 {p95:.3} ms is over {MAX_PROVIDER_DECIDE_P95_MS} ms"
-    );
+    // The SLO holds for optimised builds. Debug and coverage-instrumented CI runs share the CPU with
+    // other tests, so they only catch a decide step that has become grossly slow (a network wait
+    // would be far over either bound).
+    let budget = if cfg!(debug_assertions) {
+        MAX_PROVIDER_DECIDE_P95_MS * 25.0
+    } else {
+        MAX_PROVIDER_DECIDE_P95_MS
+    };
+    assert!(p95 <= budget, "decide p95 {p95:.3} ms is over {budget} ms");
 }
