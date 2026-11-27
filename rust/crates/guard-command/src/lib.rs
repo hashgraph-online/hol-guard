@@ -305,6 +305,7 @@ mod protection_health_facts_tests;
 mod protection_health_tests;
 pub mod provider_integration_compile;
 pub mod provider_origin_share;
+pub mod public_suffix;
 pub mod pytest_argv;
 #[cfg(test)]
 mod pytest_argv_tests;

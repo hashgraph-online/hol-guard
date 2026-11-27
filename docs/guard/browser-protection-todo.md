@@ -419,8 +419,12 @@ transcript in the pull request (after BP-T052).
   `temporary-mcp-approval-controls.tsx` and `buildTemporaryMcpResolutionFields` for the new targets and
   durations, driven by the native options. Default preselection `site-category` for 15 minutes when
   eligible. "Block on this site" under More choices.
-- [ ] **BP-T068** Public-suffix snapshot for `site-group` in `guard-command-catalog-data` with a
+- [x] **BP-T068** Public-suffix snapshot for `site-group` in `guard-command-catalog-data` with a
   refresh script and a pinned digest (D5). Until it lands, `site-group` is not offered.
+  - Landed: the snapshot and its SHA-256 pin in `guard-command-catalog-data/public-suffix/` (the
+    build refuses a list that differs from the pin), `scripts/refresh_public_suffix_snapshot.py`
+    with an offline `--check`, and native `guard_command::public_suffix::registrable_domain`. The
+    browser target's `site_group` now uses it.
 - [ ] **BP-T069** Policy bundle: add `browserVerb`, `siteGroup`, `browserDriver` to
   `BROWSER_SCOPE_KEYS` in `rust/crates/guard-policy-bundle/src/policy_bundle_v1_rules.rs`, update
   `spec/guard-policy/v1alpha1/schema.json`, `docs/policy/schema-reference.md`, and

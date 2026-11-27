@@ -1,6 +1,8 @@
 //! Compile canonical sources for this build; no generated file is an input.
 #[path = "../../build_support/command_identity.rs"]
 mod command_identity;
+#[path = "build_support/public_suffix.rs"]
+mod public_suffix;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
@@ -75,12 +77,16 @@ fn write_json(path: &Path, value: &Value) -> Vec<u8> {
 
 fn write_embedded_json(out: &Path, name: &str, env_prefix: &str, value: &Value) {
     let bytes = write_json(&out.join(name), value);
+    write_embedded_bytes(out, name, env_prefix, &bytes);
+}
+
+fn write_embedded_bytes(out: &Path, name: &str, env_prefix: &str, bytes: &[u8]) {
     println!(
         "cargo:rustc-env={env_prefix}_SHA256={}",
         hex::encode(Sha256::digest(&bytes))
     );
     println!("cargo:rustc-env={env_prefix}_LEN={}", bytes.len());
-    let mut encoder = zstd::stream::read::Encoder::new(bytes.as_slice(), 19).expect("zstd encoder");
+    let mut encoder = zstd::stream::read::Encoder::new(bytes, 19).expect("zstd encoder");
     encoder
         .include_checksum(false)
         .expect("zstd checksum option");
@@ -257,5 +263,20 @@ fn main() {
         "native-command-build.v1.json",
         "GUARD_PACKAGED_BUILD",
         &serde_json::to_value(compiled).expect("compiled output"),
+    );
+    let suffixes = public_suffix::compile(&package, |path| read_input(root, path));
+    write_embedded_bytes(
+        &out,
+        "public-suffix-rules.v1.txt",
+        "GUARD_PUBLIC_SUFFIX_RULES",
+        &suffixes.rules,
+    );
+    println!(
+        "cargo:rustc-env=GUARD_PUBLIC_SUFFIX_SNAPSHOT_SHA256={}",
+        suffixes.snapshot_sha256
+    );
+    println!(
+        "cargo:rustc-env=GUARD_PUBLIC_SUFFIX_VERSION={}",
+        suffixes.version
     );
 }
