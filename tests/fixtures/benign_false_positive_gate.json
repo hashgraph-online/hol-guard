@@ -56571,6 +56571,61 @@
       "expect": "not_allow"
     },
     {
+      "id": "cat-glob-missing-folder-worktree",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short && cat notes/NOTE* 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cat-glob-missing-subfolder-worktree",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "head -20 docs/adr/*.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cat-glob-missing-folder-sibling",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && cat notes/NOTE* 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-cat-glob-missing-folder-credential-store",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.ssh/keys/id* 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cat-glob-missing-folder-planted-link",
+      "fix_area": "shell",
+      "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir notes && ln -s ${HOME}/.ssh/id_ed25519 notes/NOTE; cat notes/NOTE*"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "test-symlink-predicate-shared-node-modules",
       "fix_area": "shell",
       "harnesses": ["codex", "zcode", "claude-code", "omp", "cursor"],
@@ -61116,8 +61171,8 @@
       "contained_ok": true
     },
     {
-      "id": "neg-read-glob-in-missing-directory",
-      "fix_area": "negative",
+      "id": "read-glob-in-missing-directory",
+      "fix_area": "shell",
       "harnesses": [
         "codex",
         "zcode",
@@ -61130,8 +61185,7 @@
         "command": "wc -l nosuch-dir/*.ts"
       },
       "cwd": "worktree",
-      "expect": "not_allow",
-      "contained_ok": true
+      "expect": "allow"
     },
     {
       "id": "head-absolute-path-that-is-not-there",

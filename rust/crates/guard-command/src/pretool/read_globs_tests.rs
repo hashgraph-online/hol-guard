@@ -201,9 +201,10 @@ fn a_bare_pattern_still_refuses_an_option_or_a_secret() {
 
 /// A pattern that matches nothing reads nothing: the shell passes the word on
 /// unchanged and no file of that name can exist, since it would have matched.
-/// A copy has nothing to copy, and a missing directory, a bare word a reader
-/// would take for an option, or a dotfile the pattern could match under
-/// `dotglob` is not an empty match.
+/// A pattern below a missing directory matches nothing either, as a literal
+/// read under a missing parent reads nothing. A copy has nothing to copy, and
+/// a bare word a reader would take for an option, or a dotfile the pattern
+/// could match under `dotglob`, is not an empty match.
 #[test]
 fn a_pattern_that_matches_nothing_reads_nothing() {
     let root =
@@ -230,7 +231,13 @@ fn a_pattern_that_matches_nothing_reads_nothing() {
         ..context
     };
 
-    for value in ["snapshot*.py", "src/snapshot*.py", "./src/v?.md"] {
+    for value in [
+        "snapshot*.py",
+        "src/snapshot*.py",
+        "./src/v?.md",
+        "missing/*.py",
+        "src/missing/deeper/*.md",
+    ] {
         assert!(
             super::bounded_glob_file_read_target(value, context),
             "{value}"
@@ -245,7 +252,7 @@ fn a_pattern_that_matches_nothing_reads_nothing() {
     let absolute = format!("{}/src/snapshot*.py", workspace.display());
     assert!(super::bounded_glob_file_read_target(&absolute, context));
 
-    for value in ["-n*", "missing/*.py", "src/*.toml"] {
+    for value in ["-n*", "src/*.toml"] {
         assert!(
             !super::bounded_glob_file_read_target(value, context),
             "{value}"
