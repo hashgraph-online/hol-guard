@@ -199,6 +199,11 @@ class GuardDaemonServer:
         self._daemon.start()
         self.port = self._daemon.port
 
+    def wait_for_hook_worker(self, timeout_seconds: float = 60.0) -> bool:
+        """Wait for the daemon's start-time hook warm-up; see ``NativeGuardDaemon``."""
+
+        return self._daemon.wait_for_hook_worker(timeout_seconds)
+
     def stop(self) -> None:
         self._daemon.stop()
         self._library.close()
