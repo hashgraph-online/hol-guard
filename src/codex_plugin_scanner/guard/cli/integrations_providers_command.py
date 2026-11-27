@@ -17,7 +17,7 @@ import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol, TextIO
+from typing import Any, Protocol, TextIO
 
 PROVIDERS_PATH = "/v1/integrations/providers"
 DEFAULT_CAPABILITY = "browser.origin-reputation"
@@ -41,7 +41,7 @@ class ProviderCommandError(Exception):
         self.code = code
 
 
-def configure_provider_subcommands(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+def configure_provider_subcommands(commands: argparse._SubParsersAction[Any]) -> None:
     listing = commands.add_parser("list", help="List the providers this Guard ships and their state")
     listing.add_argument("--json", action="store_true", help="Print the daemon answer as JSON")
 
@@ -176,7 +176,10 @@ class _Session:
         if command == "status":
             return self._emit(self._client().get(base, timeout=_READ_TIMEOUT_S), _print_detail)
         if command == "test":
-            payload = {"capability": str(self.args.capability), "origin": str(self.args.origin).strip()}
+            payload: dict[str, object] = {
+                "capability": str(self.args.capability),
+                "origin": str(self.args.origin).strip(),
+            }
             return self._emit(self._post(f"{base}/test", payload, _PROVIDER_CALL_TIMEOUT_S), _print_test)
         if command == "connect":
             return self._connect(base)
