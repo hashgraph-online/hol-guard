@@ -159,9 +159,11 @@ fn one_evaluation_asks_each_filter_question_once() {
     .unwrap();
     let git = git_binary();
     let run = |arguments: &[&str]| {
+        // A repository-location override inherited from the caller, such as
+        // `GIT_WORK_TREE`, would point Git away from the fixture.
         assert!(std::process::Command::new(&git)
-            .env_remove("GIT_DIR")
-            .env_remove("GIT_INDEX_FILE")
+            .env_clear()
+            .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("HOME", &home)
             .arg("-C")
             .arg(&repository)
