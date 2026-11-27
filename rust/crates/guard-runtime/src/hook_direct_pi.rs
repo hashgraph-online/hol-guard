@@ -137,7 +137,6 @@ pub(crate) fn outage_overlay_with_binding(
     }
     let mut overlay = serde_json::Map::new();
     if structured_mediation(harness, event)
-        && view.is_some()
         && resolution(harness, view)
             .is_none_or(|resolved| resolved["required"].as_bool() != Some(false))
     {
@@ -151,6 +150,16 @@ pub(crate) fn outage_overlay_with_binding(
         );
     }
     overlay
+}
+
+/// A native managed-policy read that found no authority leaves the destination
+/// open. This is distinct from a bound lane whose view is absent, which stays
+/// fail-closed in `outage_overlay_with_binding` above.
+pub(crate) fn outage_overlay_without_managed_policy(
+    _harness: &str,
+    _event: &str,
+) -> serde_json::Map<String, Value> {
+    serde_json::Map::new()
 }
 
 /// The binding a resolution names, as the recheck reads it.

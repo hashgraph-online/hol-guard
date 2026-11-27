@@ -173,7 +173,9 @@ fn render(
         } else {
             (None, false, None)
         };
-        let overlay = if binding_known {
+        let overlay = if native_policy_status == Some("absent") {
+            crate::hook_direct::pi::outage_overlay_without_managed_policy(harness, event)
+        } else if binding_known {
             crate::hook_direct::pi::outage_overlay_with_binding(harness, event, view.as_ref(), true)
         } else {
             crate::hook_direct::pi::outage_overlay(harness, event, view.as_ref())
