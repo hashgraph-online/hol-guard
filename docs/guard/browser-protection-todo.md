@@ -380,14 +380,16 @@ transcript in the pull request (after BP-T052).
 
 ## Phase 2: sessions, sites, grants
 
-- [x] **BP-T040** Browser session model: `browser_sessions` table through the native `ensure_schema`
+- [ ] **BP-T040** Browser session model: `browser_sessions` table through the native `ensure_schema`
   chain, with session digest, harness, driver identity hash, profile mode, first and last seen, known
   debugging ports, current origin. Module `rust/crates/guard-runtime/src/browser_session_store.rs`.
   Sessions expire with the harness session or after an idle bound.
   - Landed: the store and its tables in `browser_session_store.rs` (keyed per harness session).
     Recording a debugging-port launch now drops sessions idle past the two-hour bound, so the table
-    stays bounded without a sweeper. The idempotent schema step runs on every native write and moves
-    into the native `ensure_schema` op when that op exists.
+    stays bounded without a sweeper. The idempotent schema step runs on every native write.
+  - Open: expiry when the harness session ends (`expire_harness_session` has no caller because the
+    runtime receives no session-end event yet), and moving the schema step into the native
+    `ensure_schema` op, which does not exist yet.
 - [ ] **BP-T060** Add targets `site-category`, `site`, `site-group`, `session-site` and duration
   `session` to `rust/crates/guard-runtime/src/temporary_mcp_grant.rs` with the selectors in PRD 5.5.
   Extend `guard_store_temporary_mcp.rs` (`covers`, `covered_request_ids`, `resolve_covered`) with
