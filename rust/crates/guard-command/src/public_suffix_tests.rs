@@ -79,6 +79,9 @@ fn hosts_guard_does_not_group() {
         ".example.test",
         "shop example.test",
         "shöp.example.test",
+        "shop.-example.test",
+        "shop.example-.test",
+        "example.test-",
     ] {
         assert_eq!(group(host), None, "{host:?}");
     }

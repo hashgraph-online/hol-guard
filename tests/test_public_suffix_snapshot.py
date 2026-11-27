@@ -37,6 +37,9 @@ def _list(body: str) -> bytes:
         f"// COMMIT: {'a' * 40}\n"
         "// ===BEGIN ICANN DOMAINS===\n"
         f"{body}\n"
+        "// ===END ICANN DOMAINS===\n"
+        "// ===BEGIN PRIVATE DOMAINS===\n"
+        "example-host.test\n"
         "// ===END PRIVATE DOMAINS===\n"
     ).encode()
 
@@ -53,6 +56,17 @@ def test_a_valid_list_is_described() -> None:
     [
         pytest.param(b"test\n", id="no-license-header"),
         pytest.param(_list("test").replace(b"// ===END PRIVATE DOMAINS===\n", b""), id="no-end-marker"),
+        pytest.param(
+            _list("test").replace(b"// ===BEGIN PRIVATE DOMAINS===\n", b""),
+            id="no-private-section",
+        ),
+        pytest.param(
+            _list("test")
+            .replace(b"// ===END ICANN DOMAINS===\n", b"// ===SWAP===\n")
+            .replace(b"// ===BEGIN PRIVATE DOMAINS===\n", b"// ===END ICANN DOMAINS===\n")
+            .replace(b"// ===SWAP===\n", b"// ===BEGIN PRIVATE DOMAINS===\n"),
+            id="markers-out-of-order",
+        ),
         pytest.param(_list("test").replace(b"// COMMIT: " + b"a" * 40, b""), id="no-commit"),
         pytest.param(_list("test") + b"x" * (4 * 1024 * 1024), id="too-large"),
     ],

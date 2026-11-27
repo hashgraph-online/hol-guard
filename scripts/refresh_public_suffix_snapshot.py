@@ -22,6 +22,12 @@ LIST_NAME = "public_suffix_list.dat"
 SOURCE = "https://publicsuffix.org/list/public_suffix_list.dat"
 MAX_BYTES = 4 * 1024 * 1024
 LICENSE_LINE = "// This Source Code Form is subject to the terms of the Mozilla Public"
+SECTION_MARKERS = (
+    "// ===BEGIN ICANN DOMAINS===",
+    "// ===END ICANN DOMAINS===",
+    "// ===BEGIN PRIVATE DOMAINS===",
+    "// ===END PRIVATE DOMAINS===",
+)
 VERSION_RE = re.compile(r"^// VERSION: (\S+)$", re.MULTILINE)
 COMMIT_RE = re.compile(r"^// COMMIT: ([0-9a-f]{40})$", re.MULTILINE)
 
@@ -33,8 +39,9 @@ def manifest_for(data: bytes) -> dict[str, str]:
     text = data.decode("utf-8")
     if not text.startswith(LICENSE_LINE):
         raise ValueError("public-suffix list is missing its license header")
-    if "// ===BEGIN ICANN DOMAINS===" not in text or "// ===END PRIVATE DOMAINS===" not in text:
-        raise ValueError("public-suffix list is missing a section marker")
+    positions = [text.find(marker) for marker in SECTION_MARKERS]
+    if -1 in positions or positions != sorted(positions):
+        raise ValueError("public-suffix list is missing a section marker or has them out of order")
     version = VERSION_RE.search(text)
     commit = COMMIT_RE.search(text)
     if version is None or commit is None:

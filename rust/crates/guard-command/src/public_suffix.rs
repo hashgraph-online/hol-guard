@@ -78,7 +78,7 @@ const MAX_LABEL_CHARS: usize = 63;
 
 /// The registrable domain (public suffix plus one label) of an ASCII host, lowercase, without a
 /// trailing dot. `None` for an IP literal, a single-label host, a host that is itself a public
-/// suffix, a malformed host (including a label over 63 bytes), or when the snapshot is unavailable.
+/// suffix, a malformed host (an empty label, one over 63 bytes, or one with a hyphen at either end), or when the snapshot is unavailable.
 pub fn registrable_domain(host: &str) -> Option<String> {
     let host = host.strip_suffix('.').unwrap_or(host);
     if host.is_empty()
@@ -93,11 +93,7 @@ pub fn registrable_domain(host: &str) -> Option<String> {
     }
     let host = host.to_ascii_lowercase();
     let labels: Vec<&str> = host.split('.').collect();
-    if labels.len() < 2
-        || labels
-            .iter()
-            .any(|label| label.is_empty() || label.len() > MAX_LABEL_CHARS)
-    {
+    if labels.len() < 2 || labels.iter().any(|label| !is_dns_label(label)) {
         return None;
     }
     let suffix_labels = suffix_label_count(rules()?, &labels);
@@ -105,6 +101,14 @@ pub fn registrable_domain(host: &str) -> Option<String> {
         return None;
     }
     Some(labels[labels.len() - suffix_labels - 1..].join("."))
+}
+
+/// A DNS label: 1 to 63 bytes that neither start nor end with a hyphen.
+fn is_dns_label(label: &str) -> bool {
+    !label.is_empty()
+        && label.len() <= MAX_LABEL_CHARS
+        && !label.starts_with('-')
+        && !label.ends_with('-')
 }
 
 /// Number of labels in the prevailing public-suffix rule for `labels` (the PSL algorithm): an
