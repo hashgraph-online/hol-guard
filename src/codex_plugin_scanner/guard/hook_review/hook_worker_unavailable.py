@@ -84,7 +84,10 @@ def structured_outage_overlay(
             configured = load_config()
             if configured is None or getattr(configured, "managed_policy", None) is None:
                 return {}
-            if not structured_output_view(configured):
+            view = structured_output_view(configured)
+            if view is None:
+                return withhold
+            if not view:
                 return {}
         except Exception:
             return withhold
