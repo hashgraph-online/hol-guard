@@ -74,6 +74,7 @@ from .repeat_cases import REPEAT_ORACLE
 from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASES, configure_github_review_controls
 from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
+from .search_diff_fixtures import LINKED_RG_CASE
 from .session_folder import seed_session_folder, session_cwd
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
@@ -326,6 +327,9 @@ def run_case(
             case["guard_extension_sha256"] = digest_file(extension)
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
             environment.update(approval_persistent_environment(scenario.id))
+            if scenario.id == LINKED_RG_CASE:
+                environment["PWD"] = str(fixture.workspace)
+                environment["GUARD_GAUNTLET_LINKED_CWD"] = str(fixture.workspace)
             if first_contact:
                 environment = realistic_environment(environment, fixture.home)
             if scenario.oracle == "watch-command":

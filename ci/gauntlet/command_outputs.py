@@ -29,6 +29,7 @@ from .realism_fixtures import VITE_BUILD_MARKER
 from .runtime_cases import OUTPUT as RUNTIME_OUTPUT
 from .runtime_cases import QUIET_CASES as RUNTIME_QUIET_CASES
 from .script_cases import REPORT_CASES, report_output
+from .search_diff_fixtures import LINKED_RG_CASE
 from .source_output_fixtures import (
     HELPER_MARKER,
     HELPER_PATH,
@@ -348,6 +349,17 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
     if scenario.id == "omp-native-shell-cd-quoted-route-folder-then-grep":
         # The final head may succeed even when grep found no matching page.
         return len(calls) == 1 and _text(calls[0]) == "1:export default 1;\n"
+    if scenario.id == LINKED_RG_CASE:
+        if len(calls) != 2:
+            return False
+        first, second = (_text(call) for call in calls)
+        return (
+            first is not None
+            and second is not None
+            and "src/rail.ts:1:export const railStage = 1;" in first.replace("\\", "/")
+            and "tests/rail.test.tsx:1:export const railStage = 2;" in first.replace("\\", "/")
+            and "src/rail.ts:1:export const railStage = 1;" in second.replace("\\", "/")
+        )
     if scenario.id == BUSINESS_ORDINARY_READ:
         return len(calls) == 1 and _text(calls[0]) == SOURCE
     if scenario.id in TOKEN_CASES:
