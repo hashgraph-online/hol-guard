@@ -56,27 +56,19 @@ def structured_outage_overlay(
     deadline: float | None,
     load_config: object | None = None,
 ) -> dict[str, object]:
+    # Rust resolves the admitted structured-output view. Keep the callback in
+    # the compatibility signature without invoking Python configuration code.
+    del load_config
     if not withholds_structured_destination(harness=harness, event_name=event_name):
         return {}
     withhold = withhold_structured_destination({})
     if deadline is not None and monotonic() >= deadline:
         return withhold
-    view: dict[str, object] = {}
-    if callable(load_config):
-        try:
-            from ..native_policy_snapshot_direct_lane_structured import structured_output_view
-
-            configured = load_config()
-            view = (structured_output_view(configured) or {}) if configured is not None else {}
-        except Exception:
-            view = {}
-        if not view:
-            return {}
     try:
         rendered = native_render_cli(
             "structured_outage",
             harness,
-            {"event_name": event_name, "view": view},
+            {"event_name": event_name},
             guard_home=guard_home,
             deadline=deadline,
         )
