@@ -1,16 +1,14 @@
-//! The provider integration routes (PRD 6.9, BP-T130) that need no provider call.
+//! The provider integration routes (PRD 6.9, BP-T130).
 //!
 //! The daemon edge authenticates the caller (header token or dashboard session; hosted dashboard
 //! origins are refused because no `/v1/integrations` path is a hosted dashboard API) and hands the
 //! request here. This module answers from the compiled provider set, the provider store, managed
 //! policy and its own one-use proof ledger:
 //!
-//! list, detail, `connect/preview`, `connect`, `settings/preview`, `settings`, `disconnect/preview`
-//! and `disconnect` (the table in PRD 6.9).
-//!
-//! `connect` calls the provider, so it runs in three phases (`prepare_connect`, `verify_connect`,
-//! `finish_connect`) and the caller holds no store lock while the provider answers. `test` belongs
-//! to the lookup side.
+//! list, detail, `connect/preview`, `connect`, `settings/preview`, `settings`, `disconnect/preview`,
+//! `disconnect` and `test`. `connect` calls the provider, so it runs in three phases
+//! (`prepare_connect`, `verify_connect`, `finish_connect`) and the caller holds no store lock while
+//! the provider answers. `test` runs one worker lookup (`run_test`).
 //!
 //! A challenge is bound to the provider, the action and the exact previewed body. It is spent by
 //! the first apply that presents it, whether that apply succeeds or not, and it expires after
@@ -131,6 +129,7 @@ enum Action {
     Settings,
     DisconnectPreview,
     Disconnect,
+    Test,
 }
 
 enum Route<'p> {
@@ -156,6 +155,7 @@ fn route(path: &str) -> Option<Route<'_>> {
         ["settings"] => Action::Settings,
         ["disconnect", "preview"] => Action::DisconnectPreview,
         ["disconnect"] => Action::Disconnect,
+        ["test"] => Action::Test,
         _ => return None,
     };
     Some(Route::Post(parts[0], action))
@@ -273,7 +273,7 @@ fn post(
     let result = match action {
         Action::ConnectPreview => connect_preview(ledger, context, provider, body),
         // The caller runs connect in phases so no store lock is held while the provider answers.
-        Action::Connect => Err(unavailable()),
+        Action::Connect | Action::Test => Err(unavailable()),
         Action::SettingsPreview => settings_preview(ledger, context, provider, body),
         Action::Settings => settings_apply(ledger, context, provider, body),
         Action::DisconnectPreview => disconnect_preview(ledger, context, provider, body),
@@ -485,6 +485,9 @@ pub use connect::{
 #[cfg(test)]
 #[path = "provider_integration_routes_connect_tests.rs"]
 mod connect_tests;
+#[path = "provider_integration_routes_lookup.rs"]
+mod lookup;
+pub use lookup::{is_test, origin_subject, run_test, WithTransport};
 
 #[path = "provider_integration_routes_reads.rs"]
 mod reads;

@@ -181,11 +181,12 @@ fn only_the_local_routes_are_owned() {
         ("POST", path("/disconnect/preview")),
         ("POST", path("/disconnect")),
         ("POST", path("/connect")),
+        ("POST", path("/test")),
     ] {
         assert!(owns(method, &path), "{method} {path}");
     }
     for (method, path) in [
-        ("POST", path("/test")),
+        ("POST", path("/test/extra")),
         ("POST", PREFIX.to_owned()),
         ("GET", path("/settings")),
         ("DELETE", path("")),
