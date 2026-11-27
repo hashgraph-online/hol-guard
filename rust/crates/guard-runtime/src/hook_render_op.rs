@@ -162,6 +162,9 @@ fn render(
             .and_then(Value::as_str)
             .ok_or("native_hook_render_invalid")?;
         let explicit_view = params.get("view").cloned();
+        // A direct-lane binding with no view is unresolved and stays fail-closed.
+        // Only the native managed-policy loader can positively identify the
+        // machine-wide absent-policy case that leaves the destination open.
         let (view, binding_known, native_policy_status) = if explicit_view.is_some() {
             (explicit_view, false, None)
         } else if let Some(store) = store {
