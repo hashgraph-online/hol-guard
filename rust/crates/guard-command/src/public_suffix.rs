@@ -73,9 +73,12 @@ pub fn public_suffix_version() -> &'static str {
     }
 }
 
+/// DNS caps one label at 63 octets (RFC 1035 section 2.3.4).
+const MAX_LABEL_CHARS: usize = 63;
+
 /// The registrable domain (public suffix plus one label) of an ASCII host, lowercase, without a
 /// trailing dot. `None` for an IP literal, a single-label host, a host that is itself a public
-/// suffix, a malformed host, or when the snapshot is unavailable.
+/// suffix, a malformed host (including a label over 63 bytes), or when the snapshot is unavailable.
 pub fn registrable_domain(host: &str) -> Option<String> {
     let host = host.strip_suffix('.').unwrap_or(host);
     if host.is_empty()
@@ -90,7 +93,11 @@ pub fn registrable_domain(host: &str) -> Option<String> {
     }
     let host = host.to_ascii_lowercase();
     let labels: Vec<&str> = host.split('.').collect();
-    if labels.len() < 2 || labels.iter().any(|label| label.is_empty()) {
+    if labels.len() < 2
+        || labels
+            .iter()
+            .any(|label| label.is_empty() || label.len() > MAX_LABEL_CHARS)
+    {
         return None;
     }
     let suffix_labels = suffix_label_count(rules()?, &labels);

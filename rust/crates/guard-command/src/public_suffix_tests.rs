@@ -83,6 +83,12 @@ fn hosts_guard_does_not_group() {
         assert_eq!(group(host), None, "{host:?}");
     }
     assert_eq!(group(&format!("{}.test", "a".repeat(260))), None);
+    assert_eq!(group(&format!("{}.test", "a".repeat(64))), None);
+    let longest_label = "a".repeat(63);
+    assert_eq!(
+        group(&format!("{longest_label}.test")),
+        Some(format!("{longest_label}.test"))
+    );
 }
 
 #[test]
