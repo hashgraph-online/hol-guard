@@ -231,3 +231,38 @@ fn a_literal_rule_matches_exactly_what_the_glob_matcher_matches() {
     assert!(!is_literal(&long));
     assert!(glob_matches(&long, &long).is_err());
 }
+
+#[test]
+fn a_spent_hook_deadline_keeps_review_instead_of_walking_on() {
+    // The walk ran without a clock after the read review had spent part of
+    // the hook's deadline, so a large checkout outlived the hook. Once the
+    // submission has no time left the walk stops and keeps the review.
+    let root = tree(true);
+    let roomy = crate::pretool::search_scope_budget::begin_submission_budget(Some(
+        std::time::Instant::now() + std::time::Duration::from_secs(60),
+    ));
+    assert!(!widens(&["-n", "KEY", "-g", "*.ts"], root.path()));
+    drop(roomy);
+    let _spent = crate::pretool::search_scope_budget::begin_submission_budget(Some(
+        std::time::Instant::now(),
+    ));
+    assert!(widens(&["-n", "KEY", "-g", "*.ts"], root.path()));
+}
+
+#[test]
+fn the_issued_and_shaped_readings_walk_the_tree_once() {
+    let root = tree(true);
+    let _ = crate::pretool::search::take_walks();
+    let answers = crate::pretool::search::with_walk_memo(|| {
+        [
+            widens(&["-n", "KEY", "-g", "*.ts"], root.path()),
+            widens(&["-n", "KEY", "-g", "*.ts"], root.path()),
+        ]
+    });
+    assert_eq!(answers, [false, false]);
+    let walks: Vec<String> = crate::pretool::search::take_walks()
+        .into_iter()
+        .filter(|walk| walk.starts_with("rg-widening-walk"))
+        .collect();
+    assert_eq!(walks.len(), 1, "{walks:?}");
+}

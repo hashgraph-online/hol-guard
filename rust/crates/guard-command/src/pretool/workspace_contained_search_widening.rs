@@ -220,7 +220,48 @@ fn segment_widens(arguments: &[String], cwd: &Path, moved: bool) -> bool {
 /// Whether walking `roots` the way ripgrep does with these inclusion globs
 /// reaches a file its ignore rules would otherwise skip: a hidden file, a file
 /// inside a hidden directory, or a file an ignore file excludes.
+///
+/// The walk is held to its entry count and, inside a hook evaluation, to the
+/// clock every unbounded walk stops on. It runs after the read review has
+/// already spent part of the hook's deadline, once for the command as issued
+/// and once as shaped, and over a large checkout it ran past that deadline:
+/// the hook then failed with no review the user could approve. A walk the
+/// clock stops keeps the review, as one too large to finish does. Both
+/// readings ask the same roots with the same globs, so the answer is
+/// remembered for the submission and the second asks nothing of the disk.
 fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusion]) -> bool {
+    let globs: Vec<String> = inclusions
+        .iter()
+        .map(|inclusion| format!("{}\u{0}{}", inclusion.text, inclusion.ignore_case))
+        .collect();
+    let key = format!("rg-widening-walk\0{roots:?}\0{cwd:?}\0{}", globs.join("\0"));
+    // The memo keeps a widened answer as it keeps a proof: an answer the
+    // clock forced would only be forced again by the next reading.
+    !crate::pretool::search::memoized_keyed(key, || {
+        let stop = crate::pretool::search_scope_budget::submission_walk_stop();
+        #[cfg(test)]
+        crate::pretool::search::count_walk(
+            if stop.is_some() {
+                "rg-widening-walk-clocked"
+            } else {
+                "rg-widening-walk"
+            },
+            cwd,
+        );
+        !walk_brings_back_hidden_entry(roots, cwd, inclusions, stop)
+    })
+}
+
+fn walk_brings_back_hidden_entry(
+    roots: &[PathBuf],
+    cwd: &Path,
+    inclusions: &[Inclusion],
+    stop: Option<std::time::Instant>,
+) -> bool {
+    let out_of_time = || stop.is_some_and(|stop| std::time::Instant::now() >= stop);
+    if out_of_time() {
+        return true;
+    }
     let mut inspected = 0_usize;
     let mut pending = Vec::new();
     for root in roots {
@@ -256,7 +297,7 @@ fn brings_back_hidden_entry(roots: &[PathBuf], cwd: &Path, inclusions: &[Inclusi
         };
         for entry in entries {
             inspected += 1;
-            if inspected > MAX_INSPECTED {
+            if inspected > MAX_INSPECTED || out_of_time() {
                 return true;
             }
             let Ok(entry) = entry else {

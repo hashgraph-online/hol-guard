@@ -78,3 +78,37 @@ fn an_inclusion_glob_naming_a_hidden_directory_keeps_its_review() {
         );
     }
 }
+
+#[test]
+fn the_widening_walk_answers_inside_the_hook_deadline() {
+    // Containment runs after the reading that decided the command has closed
+    // its submission. The widening walk ran there with no clock, twice, and
+    // over a large checkout the hook failed with nothing to approve.
+    let ws = workspace("search-widening-clock", true);
+    let _cleanup = Cleanup(ws.clone());
+    std::fs::create_dir_all(ws.join("src")).unwrap();
+    std::fs::write(ws.join("src/app.ts"), "export const route = 1;\n").unwrap();
+    let controls = crate::pretool::workspace_contained_tests::controls();
+    let _ = crate::pretool::search::take_walks();
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &serde_json::json!({"tool_name": "bash", "tool_input": {"command": "rg -n route --glob 'src/**'"}}),
+        Some(&controls),
+        Some(std::time::Instant::now() + std::time::Duration::from_secs(60)),
+        Some("/Users/nobody"),
+        ws.to_str(),
+    );
+    assert_eq!(result.reason_code, CONTAINED);
+    let walks: Vec<String> = crate::pretool::search::take_walks()
+        .into_iter()
+        .filter(|walk| walk.starts_with("rg-widening-walk"))
+        .collect();
+    assert!(!walks.is_empty());
+    assert!(
+        walks
+            .iter()
+            .all(|walk| walk.starts_with("rg-widening-walk-clocked ")),
+        "{walks:?}"
+    );
+}
