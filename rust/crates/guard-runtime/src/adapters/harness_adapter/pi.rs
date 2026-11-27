@@ -23,8 +23,9 @@ const LEGACY_OMP_NOTE: &str =
 /// Oh My Pi launch flags that start a session without discovered extensions,
 /// so Guard's extension does not load and Guard sees none of its tool calls.
 const OMP_LAUNCH_FLAGS_NOTE: &str =
-    "Oh My Pi skips this extension in sessions started with --no-tools, or with --no-extensions \
-     or --trusted-extension unless the command names it. Guard does not review those sessions.";
+    "Oh My Pi skips this extension in sessions started with --no-tools, with --no-extensions \
+     unless -e or --hook names this file or its folder, or with --trusted-extension unless it \
+     names this file. Guard does not review those sessions.";
 
 struct Family {
     config_dir: &'static str,

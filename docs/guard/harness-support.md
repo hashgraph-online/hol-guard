@@ -147,7 +147,7 @@ Current Guard support in this repo:
   - keeps Pi package install and update flows out of band, so Guard observes configured package surfaces plus the runtime prompt and tool events the managed extension forwards
 - `omp` (Oh My Pi)
   - installs the same managed extension in `~/.omp/agent/extensions/hol-guard.ts` and lists it under `extensions` in `~/.omp/agent/settings.json`
-  - cannot review a session that Oh My Pi starts without that extension: `--no-tools` loads no extensions, and `--no-extensions` or `--trusted-extension` load only the extension files the command names. Guard's install note says so
+  - cannot review a session that Oh My Pi starts without that extension: `--no-tools` loads no extensions, `--no-extensions` loads only the files or folders given with `-e` or `--hook`, and `--trusted-extension` loads only the exact files it names. Guard's install note says so
 - `zcode`
   - detects `~/.zcode/cli/config.json`, configured MCP servers, enabled plugins, the plugin cache under `~/.zcode/cli/plugins/cache/`, plugin manifests and provenance seeds, plugin hooks, skills, commands, and marketplace manifests, plus a project `.zcode/cli/config.json` when present
   - detects a running ZCode app through its non-secret process identity signals when no config file exists yet
