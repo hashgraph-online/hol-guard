@@ -5,7 +5,7 @@
 //! after the prefix, no hidden name other than benign project metadata, and
 //! no links between the screening root and any match.
 #[path = "glob_scope.rs"]
-mod glob_scope;
+pub(super) mod glob_scope;
 
 use super::{
     hidden_allowed, ReadContext, HAZARDS, MAX_GLOB_ENTRIES, MAX_GLOB_MATCHES, MAX_WALK_DEPTH,

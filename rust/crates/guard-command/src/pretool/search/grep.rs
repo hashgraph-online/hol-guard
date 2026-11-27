@@ -446,9 +446,13 @@ fn recursive_file_operand(value: &str, context: ReadContext<'_>) -> bool {
 
 /// A shell glob operand whose every expansion is screened, and whose matched
 /// directories are walked like a recursive search root. This is how a glob
-/// into a sibling repository, such as `~/code/api/src/*.ts`, is proven.
+/// into a sibling repository, such as `~/code/api/src/*.ts`, is proven. A
+/// match whose word starts with `-`, as `*/*.py` gives for `-ve/a.py`, would
+/// reach grep as an option instead.
 fn proven_glob(value: &str, context: ReadContext<'_>) -> bool {
-    value.contains(['*', '?', '[']) && tree::safe_glob_search_operand(value, context)
+    value.contains(['*', '?', '['])
+        && !tree::glob_may_name_an_option(value, context)
+        && tree::safe_glob_search_operand(value, context)
 }
 
 #[cfg(test)]

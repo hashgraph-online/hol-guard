@@ -428,6 +428,7 @@ fn rg_arguments_pass(
             && !tree::safe_recursive_search_target(argument, context)
             && !tree::safe_literal_bracket_search_target(argument, context)
             && (!argument.contains(['*', '?', '['])
+                || tree::glob_may_name_an_option(argument, context)
                 || !tree::safe_glob_search_operand(argument, context))
         {
             unproven_roots.push(argument);

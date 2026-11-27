@@ -54,10 +54,17 @@ pub(super) fn recursive_targets_proven(
 
 /// A bracket class that matches nothing is searched as the literal path it
 /// spells, as in `grep -rn x app/[slug]`, but `nullglob` removes the word
-/// instead. Unless the quote map shows the word quoted, it keeps no root, and
-/// the working directory a bare `grep -r` would walk has to be proven too.
+/// instead. A `*` or `?` glob that matches only under some shell options,
+/// such as `tests/**/.` with only a `tests` directory, which needs
+/// `globstar`, is removed the same way without them. Unless the quote map
+/// shows the word quoted, such a word keeps no root, and the working
+/// directory a bare `grep -r` would walk has to be proven too.
 fn dropped_by_nullglob(target: &str, context: ReadContext<'_>) -> bool {
-    target.contains('[')
-        && !context.literal_words.iter().any(|word| word == target)
-        && tree::inert_bracket_class(target, context)
+    if context.literal_words.iter().any(|word| word == target) {
+        return false;
+    }
+    if target.contains('[') {
+        return tree::inert_bracket_class(target, context);
+    }
+    target.contains(['*', '?']) && !tree::glob_surely_matches(target, context)
 }

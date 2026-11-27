@@ -164,6 +164,10 @@ fn a_glob_that_must_name_a_directory_needs_a_directory_match() {
         "grep -rn \"parse_config\" tests/*.py/ | head -20",
         "grep -rn \"parse_config\" tests/test_*/ | head -20",
         "grep -rn \"parse_config\" tests/*.py/. | head -20",
+        // `src` holds no directory, so `**` names `src` itself only under
+        // `globstar`.
+        "grep -rn \"parse_config\" src/**/. | head -20",
+        "grep -rn \"parse_config\" src/**/ | head -20",
     ] {
         let (action, reason) = action(&fixture, command);
         assert_ne!(action, "allow", "{command}: {reason}");
@@ -191,4 +195,28 @@ fn a_glob_that_expands_to_an_option_word_keeps_the_review() {
     write(tests.join("-v"), "");
     let (action, reason) = action_in(&fixture, &tests, command);
     assert_ne!(action, "allow", "{command}: {reason}");
+}
+
+#[test]
+fn a_glob_led_by_a_wildcard_that_expands_to_an_option_word_keeps_the_review() {
+    let fixture = fixture("option-directory");
+    let tests = fixture.repo.join("tests");
+    let commands = [
+        "grep -rn \"parse_config\" */*.py | head -20",
+        "rg -n \"parse_config\" */*.py | head -20",
+    ];
+    for command in commands {
+        assert_eq!(
+            action_in(&fixture, &tests, command),
+            ("allow".to_owned(), "native_exact_safe_command".to_owned()),
+            "{command}"
+        );
+    }
+    // `-ve/a.py` reaches the search as `-v -e /a.py`, which prints every
+    // line the pattern does not match.
+    write(tests.join("-ve/a.py"), "");
+    for command in commands {
+        let (action, reason) = action_in(&fixture, &tests, command);
+        assert_ne!(action, "allow", "{command}: {reason}");
+    }
 }

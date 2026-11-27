@@ -54,14 +54,17 @@ pub(in crate::pretool) fn safe_glob_search_cleared(
     })
 }
 
-/// Whether a glob with no `/` could expand to a name that starts with `-`.
-/// The search would read that word as an option, and `-v` prints the lines
-/// the pattern does not match. A glob with a `/` expands to words that start
-/// with its literal directory. Any entry that starts with `-`, has no UTF-8
-/// name or lies past the budget answers yes.
+/// Whether a glob could expand to a word that starts with `-`. The search
+/// would read that word as an option, and `-v` prints the lines the pattern
+/// does not match. A glob whose first component is literal expands to words
+/// that start with it, as `tests/*.py` and `/srv/*` do. One whose first
+/// component is a wildcard, as `*` and `*/*.py` are, starts with the name of
+/// an entry of `directory`: any entry that starts with `-`, has no UTF-8 name
+/// or lies past the budget answers yes.
 fn may_name_an_option(directory: &Path, value: &str) -> bool {
-    if value.contains('/') {
-        return false;
+    let first = value.split('/').next().unwrap_or(value);
+    if !first.contains(['*', '?', '[']) {
+        return first.starts_with('-');
     }
     let Ok(entries) = std::fs::read_dir(directory) else {
         return true;
@@ -84,6 +87,22 @@ fn may_name_an_option(directory: &Path, value: &str) -> bool {
         }
     }
     false
+}
+
+/// Whether a glob operand could reach the search as an option word. Every
+/// proof of a glob search asks this, since a match the walk admits still
+/// changes what the search does when its name starts with `-`. A glob whose
+/// literal directory cannot be placed answers yes.
+pub(in crate::pretool) fn glob_may_name_an_option(value: &str, context: ReadContext<'_>) -> bool {
+    super::glob_expand::glob_scope::literal_directory(value, context)
+        .is_none_or(|directory| may_name_an_option(&directory, value))
+}
+
+/// Whether a `*` or `?` glob names an existing entry under the shell options
+/// that match least, so `nullglob` cannot remove it.
+pub(in crate::pretool) fn glob_surely_matches(value: &str, context: ReadContext<'_>) -> bool {
+    super::glob_expand::glob_scope::literal_directory(value, context)
+        .is_some_and(|directory| surely_matches(&directory, value))
 }
 
 /// Whether `value`, whose literal prefix is `directory`, names an existing
