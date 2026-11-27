@@ -533,3 +533,19 @@ def test_the_bun_test_file_case_needs_the_line_only_that_file_prints() -> None:
         assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
     assert not command_outputs_match(scenario, [])
     assert not command_outputs_match(scenario, [ran, ran])
+
+
+def test_quoted_route_grep_requires_the_actual_export(tmp_path: Path) -> None:
+    """The final head can succeed even if grep did not read the route page."""
+    scenario = next(item for item in load_catalog() if item.id == "omp-native-shell-cd-quoted-route-folder-then-grep")
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=scenario.id)
+    command = scenario.commands[0]
+    result = _shell(fixture, command)
+    assert result.returncode == 0 and not result.stderr
+    assert result.stdout == "1:export default 1;\n"
+    ran = _tool_call("bash", {"command": command}, result.stdout)
+    assert command_outputs_match(scenario, [ran])
+    for text in ("", "grep: page.tsx: No such file or directory\n", "1:export const unrelated = 1;\n"):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)])
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [ran, ran])

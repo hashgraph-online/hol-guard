@@ -1,7 +1,7 @@
 //! The verified directory of a `cd <dir> && ...` list, which the steps after
 //! the `cd` are proven against.
 
-use super::super::{directory_targets, executable_basename, safe_reads, PathContext};
+use super::super::{directory_targets, executable_basename, PathContext};
 use super::exact_safe_segment_with_context;
 use crate::CanonicalCommandV1;
 
@@ -90,15 +90,19 @@ fn cwd_list_context(
     let [target] = first.arguments.as_slice() else {
         return None;
     };
-    let cwd = safe_reads::verified_cwd_target(target, context).or_else(|| {
-        climb
-            .then(|| {
-                directory_targets::verified_climb_target(target, context).or_else(|| {
-                    directory_targets::notes::verified_note_directory_target(target, context)
-                })
-            })
-            .flatten()
-    })?;
+    let cwd =
+        directory_targets::quoted_brackets::verified_segment_cwd_target(first, target, context)
+            .or_else(|| {
+                climb
+                    .then(|| {
+                        directory_targets::verified_climb_target(target, context).or_else(|| {
+                            directory_targets::notes::verified_note_directory_target(
+                                target, context,
+                            )
+                        })
+                    })
+                    .flatten()
+            })?;
     // A trailing report says how the run went: `; echo "<label>$?"`,
     // `; echo <label>`, `&& echo <label>`, `|| echo <label>`, or the two-armed
     // `&& echo <label> || echo <label>`. Each runs whatever the `cd` did, but
@@ -170,7 +174,7 @@ pub(in crate::pretool) fn verified_leading_cd_target(
     let [target] = first.arguments.as_slice() else {
         return None;
     };
-    safe_reads::verified_cwd_target(target, context)
+    directory_targets::quoted_brackets::verified_segment_cwd_target(first, target, context)
         .or_else(|| directory_targets::verified_climb_target(target, context))
         .or_else(|| directory_targets::notes::verified_note_directory_target(target, context))
 }
@@ -257,7 +261,7 @@ fn take_cd_chunk(
     if *index > 0 && !std::path::Path::new(target).is_absolute() {
         return None;
     }
-    let cwd = safe_reads::verified_cwd_target(target, context)?;
+    let cwd = directory_targets::quoted_brackets::verified_segment_cwd_target(cd, target, context)?;
     let proved = PathContext {
         cwd: Some(&cwd),
         ..context

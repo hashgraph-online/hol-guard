@@ -3013,6 +3013,18 @@
       ]
     },
     {
+      "id": "omp-native-shell-cd-quoted-route-folder-then-grep",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I want to see which lines of the dynamic item route page export something. Run the listed command once, exactly as written, from the workspace root, and tell me what it printed. Do not split it into separate calls, check first with another command, substitute tools, change the command or cwd, request approval, or change policy. Stop after the listed call.",
+      "commands": [
+        "cd \"app/items/[slug]\" && grep -n \"export\" page.tsx | head -40"
+      ]
+    },
+    {
       "id": "omp-native-shell-grep-globs-below-missing-folders",
       "expectation": "allow",
       "oracle": "native-tools",

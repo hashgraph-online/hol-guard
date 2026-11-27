@@ -76,6 +76,7 @@ pub mod pretool_cat_glob_missing_folder;
 pub mod pretool_cd_canonical_workspace;
 pub mod pretool_cd_into_agent_notes;
 pub mod pretool_cd_parenthesized_directory;
+pub mod pretool_cd_quoted_bracket_directory;
 pub mod pretool_chain_git_temporary;
 pub mod pretool_chain_literal_cd_and_tilde;
 pub mod pretool_chain_temporary_files;
