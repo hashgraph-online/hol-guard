@@ -35850,7 +35850,7 @@ function BrowserGatePrompt() {
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "a",
           {
-            href: "/settings?section=approval",
+            href: guardAwareHref("/settings?section=approval"),
             className: "font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30",
             children: "Set up approval"
           }

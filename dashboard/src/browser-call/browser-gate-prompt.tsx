@@ -1,5 +1,6 @@
 import { HiMiniKey } from "react-icons/hi2";
 import { approvalGateProofReady } from "../approval-proof-inline";
+import { guardAwareHref } from "../guard-api";
 import type { GuardApprovalGatePublicConfig, GuardApprovalRequest, GuardBrowserProfileLineV1 } from "../guard-types";
 import { parseBrowserCard } from "../mcp-call/browser-card";
 
@@ -37,7 +38,7 @@ export function BrowserGatePrompt() {
       <HiMiniKey className="h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
       <span className="min-w-0 flex-1">The agent uses your own browser. Set up approval so only you can approve.</span>
       <a
-        href="/settings?section=approval"
+        href={guardAwareHref("/settings?section=approval")}
         className="font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30"
       >
         Set up approval
