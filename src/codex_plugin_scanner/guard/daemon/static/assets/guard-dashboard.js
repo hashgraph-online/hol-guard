@@ -35829,6 +35829,36 @@ function McpCallFooter({
     item.browser_card ? /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserReportPrompt, { requestId: item.request_id }) : null
   ] });
 }
+const SHARED_PROFILES = /* @__PURE__ */ new Set(["shared", "remote-debugging"]);
+function browserGateNeedsSetup(profile, gate) {
+  return SHARED_PROFILES.has(profile) && gate != null && !isBulkApproveGateReady(gate);
+}
+function browserGatePromptShown(item, gate) {
+  const card = parseBrowserCard(item.browser_card);
+  return card !== null && browserGateNeedsSetup(card.profile_line, gate);
+}
+function BrowserGatePrompt() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "p",
+    {
+      role: "note",
+      "data-browser-gate-prompt": "",
+      className: "flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-slate-100 px-4 py-2.5 text-sm text-brand-dark/80 sm:px-5",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniKey, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 flex-1", children: "The agent uses your own browser. Set up approval so only you can approve." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "a",
+          {
+            href: "/settings?section=approval",
+            className: "font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30",
+            children: "Set up approval"
+          }
+        )
+      ]
+    }
+  );
+}
 function CardRow(props) {
   const Icon = props.icon;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_minmax(4.5rem,auto)_minmax(0,1fr)] items-start gap-x-2.5 py-1.5 text-sm", children: [
@@ -35968,6 +35998,7 @@ function BrowserCallCard(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserInputPreview, { card }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRiskChips, { chips: card.risk_chips })
         ] }),
+        browserGateNeedsSetup(card.profile_line, props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserGatePrompt, {}),
         /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserProviderFindings, { findings: card.provider_findings }),
         explanation.code !== null && explanation.code.collapsed !== true && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) }),
         explanation.code !== null && explanation.code.collapsed === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
@@ -36093,11 +36124,14 @@ function ReviewEmptyState({ runtime: runtime2, resolutionMessage, codexResume, o
     ] })
   ] });
 }
-function PrimaryActionCard({ item }) {
+function PrimaryActionCard({
+  item,
+  approvalGate
+}) {
   const mcpCall = explainMcpCall(item);
   const browserCard = parseBrowserCard(item.browser_card);
   if (mcpCall !== null && browserCard !== null) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserCallCard, { item, card: browserCard, explanation: mcpCall });
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserCallCard, { item, card: browserCard, explanation: mcpCall, approvalGate });
   }
   if (mcpCall !== null) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(McpCallCard, { item, explanation: mcpCall });
@@ -38849,7 +38883,7 @@ function ReviewDecisionCard(props) {
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone, children: badgeLabel })
       ] }),
-      !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
+      !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item, approvalGate }),
       nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, `business-summary:${item.request_id}`),
       resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: retryCannotReuseApprovalHint(item, harnessName) }) : null,
       mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
@@ -38988,7 +39022,7 @@ function ReviewDecisionCard(props) {
           }
         )
       ] }),
-      resolutionBlockReason === null && resolved === null && approvalGateNeedsSetup(approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalGateRecommendationNotice, {})
+      resolutionBlockReason === null && resolved === null && approvalGateNeedsSetup(approvalGate) && !browserGatePromptShown(item, approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalGateRecommendationNotice, {})
     ] }),
     evidenceItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(
