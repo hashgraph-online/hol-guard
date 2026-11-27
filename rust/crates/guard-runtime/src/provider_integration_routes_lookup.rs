@@ -5,7 +5,8 @@
 //! capability declares are shared, a non-public origin never leaves the device, and the call takes
 //! a token from the provider's bucket, which refills at the manifest's `max_requests_per_minute`.
 //! That bucket is the route's rate limit, shared with background lookups, so a test can never send
-//! more than the provider agreed to. The answer is cached like any other.
+//! more than the provider agreed to. The answer is never cached, so a test cannot change a later
+//! decision; the bucket, the circuit and a refused key still count as for any lookup.
 //!
 //! The answer carries codes and the mapped signal only, never provider text, the key, or the
 //! origin itself (the signal names its subject by digest).
@@ -41,11 +42,23 @@ pub fn is_test(method: &str, path: &str) -> bool {
 }
 
 /// The canonical spelling of a public origin and the subject it is cached under, or `None` when
-/// the origin may not be shared (PRD 6.4). Scheme and host are case-insensitive and a trailing
-/// slash is dropped, so one origin always has one digest.
+/// the origin may not be shared (PRD 6.4). Scheme and host are case-insensitive, a trailing slash
+/// is dropped and so is the scheme's default port, so one origin always has one digest.
 pub fn origin_subject(origin: &str) -> Option<(String, ProviderSubjectV1)> {
     let canonical = origin.trim().to_ascii_lowercase();
-    let canonical = canonical.strip_suffix('/').unwrap_or(&canonical).to_owned();
+    let canonical = canonical.strip_suffix('/').unwrap_or(&canonical);
+    let canonical = [("https://", ":443"), ("http://", ":80")]
+        .iter()
+        .find(|(scheme, port)| {
+            canonical
+                .strip_prefix(scheme)
+                .and_then(|rest| rest.strip_suffix(port))
+                .is_some_and(|host| !host.contains(['/', '@', ':']))
+        })
+        .map_or(canonical, |(_, port)| {
+            &canonical[..canonical.len() - port.len()]
+        })
+        .to_owned();
     if !provider_origin_is_shareable(&canonical) {
         return None;
     }
@@ -98,6 +111,7 @@ pub fn run_test(
         subject,
         facts: &facts,
         jitter: context.now_ms as u32,
+        cache: false,
     };
     let mut secrets = EncryptedFileSecretStore::new(context.guard_home);
     with_transport(provider, &mut |transport| match run_lookup(

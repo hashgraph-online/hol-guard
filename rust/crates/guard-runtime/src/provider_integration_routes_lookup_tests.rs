@@ -8,7 +8,8 @@ use crate::provider_integration_managed::ManagedProviderSettings;
 use crate::provider_integration_routes::tests::provider;
 use crate::provider_integration_secret::{store_provider_key, ProviderKey};
 use crate::provider_integration_store::{
-    ensure_provider_integration_schema, provider_connection, put_connection, ProviderConnection,
+    ensure_provider_integration_schema, provider_connection, put_connection, signals_for_subject,
+    ProviderConnection,
 };
 
 const SHIELD: &str = "provider.exampleshield";
@@ -98,6 +99,24 @@ fn an_origin_has_one_subject_and_private_origins_have_none() {
     assert_eq!(subject, origin_subject(ORIGIN).unwrap().1);
     assert_eq!(subject.kind, ProviderSubjectKindV1::Origin);
     assert_eq!(subject.digest.len(), 64);
+    for spelling in [
+        "https://storefront.example-org.com:443",
+        "https://storefront.example-org.com:443/",
+    ] {
+        assert_eq!(
+            origin_subject(spelling).unwrap(),
+            (ORIGIN.to_owned(), subject.clone())
+        );
+    }
+    let plain = origin_subject("http://storefront.example-org.com").unwrap();
+    assert_eq!(
+        origin_subject("http://storefront.example-org.com:80").unwrap(),
+        plain
+    );
+    assert_ne!(
+        origin_subject("https://storefront.example-org.com:8443").map(|o| o.1),
+        Some(subject.clone())
+    );
     for refused in [
         "http://localhost:8080",
         "https://10.0.0.8",
@@ -106,6 +125,8 @@ fn an_origin_has_one_subject_and_private_origins_have_none() {
         "https://storefront.example-org.com/items",
         "https://someone@storefront.example-org.com",
         "ftp://storefront.example-org.com",
+        "https://storefront.example-org.com/:443",
+        "https://someone@storefront.example-org.com:443",
     ] {
         assert_eq!(origin_subject(refused), None, "{refused}");
     }
@@ -138,6 +159,16 @@ fn a_test_sends_one_lookup_and_answers_the_mapped_signal() {
     assert_eq!(requests.len(), 1);
     assert!(requests[0].key_matched);
     assert!(requests[0].body.as_deref().unwrap().contains(ORIGIN));
+    let cached = signals_for_subject(
+        &fixture.connection,
+        signal.capability,
+        &signal.subject.digest,
+    )
+    .unwrap();
+    assert!(
+        cached.is_empty(),
+        "a test answer never reaches the decide cache"
+    );
 }
 
 #[test]

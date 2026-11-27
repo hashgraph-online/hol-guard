@@ -174,6 +174,7 @@ fn lookup(
         subject: subject(),
         facts,
         jitter: 12_345,
+        cache: true,
     };
     run_lookup(
         &mut rig.worker,
@@ -217,7 +218,7 @@ fn an_answer_is_mapped_and_cached_from_only_the_declared_facts() {
     assert_eq!(signal.expires_at_ms, NOW + 120_000);
     assert_eq!(signal.inventory, ProviderInventoryV1::None);
     assert_eq!(signal.state, ProviderSignalStateV1::Fresh);
-    assert!(matches!(stored, PutSignalOutcome::Stored(_)));
+    assert!(matches!(stored, Some(PutSignalOutcome::Stored(_))));
     assert!(refresh_at_ms > NOW && refresh_at_ms < NOW + 120_000);
     assert_eq!(recorded, Recorded::default());
 
@@ -395,6 +396,7 @@ fn nothing_is_sent_without_a_matching_connection_or_a_key() {
         subject: subject(),
         facts: &origin,
         jitter: 0,
+        cache: true,
     };
     let report = run_lookup(
         &mut rig.worker,
@@ -553,6 +555,7 @@ fn a_slow_down_answer_empties_the_budget() {
         },
         facts: &other,
         jitter: 0,
+        cache: true,
     };
     let report = run_lookup(
         &mut rig.worker,

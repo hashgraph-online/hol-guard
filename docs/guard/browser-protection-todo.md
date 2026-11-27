@@ -598,7 +598,8 @@ transcript in the pull request (after BP-T052).
     call takes a token from the provider's bucket (the manifest's `max_requests_per_minute`), which
     is the route's rate limit, shared with background lookups: an empty bucket answers `429`. A
     refused key answers `provider_key_invalid` and stops calls. The answer carries codes and the
-    mapped signal, never the origin, the key or provider text.
+    mapped signal, never the origin, the key or provider text, and is never
+    cached, so a test cannot change a later decision.
   - [ ] The compiled-provider loader (the shipped set is empty until a reviewed pack lands).
 - [ ] **BP-T131** CLI `hol-guard integrations list|status|connect|disconnect|test|settings`. The key is
   read from a prompt or stdin, never an argument, never echoed. Python is glue only, modeled on
