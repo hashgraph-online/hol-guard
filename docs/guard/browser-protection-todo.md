@@ -615,11 +615,15 @@ transcript in the pull request (after BP-T052).
   `/extensions/provider.<slug>`: capability text, "What leaves this device" rendered from `shares`,
   privacy and terms links, publisher verification state, Connect.
   - [x] The provider detail route now carries the publisher, surfaces, hosts and the privacy, terms and
-    key links from the compiled manifest. Connect shows the CLI command until the BP-T133 dialog lands.
+    key links from the compiled manifest. Connect opened the CLI hint until BP-T133 replaced it with the dialog.
     The sponsor label waits for discovery v2 (BP-T140).
-- [ ] **BP-T133** Connect dialog modeled on `dashboard/src/pulse-setup-modal.tsx` and
+- [x] **BP-T133** Connect dialog modeled on `dashboard/src/pulse-setup-modal.tsx` and
   `pulse-connect-step.tsx`: write-only key field, per-fact toggles, one-use proof, verify, state
   display. "Get a key" link with a static referral parameter and no user data.
+  - [x] The dialog replaces the CLI hint on the provider page. A proof near expiry is fetched again
+    before the key is sent, and a replacement that shares different facts or calls different hosts
+    is shown for review instead of being sent. A refused connect spends its proof, so the next try
+    starts from a fresh preview.
 - [x] **BP-T134** Card finding row (PRD 6.8): provider name, capability label, verdict chip, up to
   three reason labels, age. Never reorders or restyles Guard's own findings. Subscribes to a late
   signal on an open card.

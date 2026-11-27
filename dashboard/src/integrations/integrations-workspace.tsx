@@ -13,6 +13,7 @@ import {
   providerStateLabel,
   surfaceLabel,
 } from "./integrations-copy";
+import { ProviderConnectDialog } from "./provider-connect-dialog";
 import { followExtensionsLink, INTEGRATIONS_HREF, navigateExtensions, providerHref, type IntegrationsRoute } from "./integrations-route";
 import {
   fetchProviderDetail,
@@ -140,10 +141,9 @@ function ExternalLink(props: { href: string | null; label: string }) {
   );
 }
 
-export function ProviderDetailView(props: { detail: ProviderDetail; onConnect?: () => void }) {
+export function ProviderDetailView(props: { detail: ProviderDetail; onConnect: () => void }) {
   const { detail } = props;
   const { summary } = detail;
-  const [showCli, setShowCli] = useState(false);
   const optInNote = (fact: string) =>
     !factIsOptIn(fact) ? "" : detail.enabledOptInFacts.includes(fact) ? " (you turned this on)" : " (only if you turn it on)";
   const connectLabel = summary.state === "connected" ? "Replace key" : "Connect";
@@ -162,19 +162,13 @@ export function ProviderDetailView(props: { detail: ProviderDetail; onConnect?: 
           <ProviderStateChip state={summary.state} />
           <button
             type="button"
-            onClick={() => (props.onConnect ? props.onConnect() : setShowCli(true))}
+            onClick={props.onConnect}
             className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white"
           >
             {connectLabel}
           </button>
         </div>
       </header>
-      {showCli && !props.onConnect ? (
-        <div className={EXTENSION_PANEL_CLASS} role="status">
-          <p className="text-sm text-brand-dark/80">Connect from a terminal. Guard asks for the key there and never shows it again.</p>
-          <code className="mt-2 block font-mono text-sm break-all text-brand-dark">hol-guard integrations connect {summary.id}</code>
-        </div>
-      ) : null}
       <section aria-labelledby="provider-checks" className={EXTENSION_PANEL_CLASS}>
         <h2 id="provider-checks" className="text-base font-semibold text-brand-dark">What it checks</h2>
         <ul className="mt-3 space-y-3">
@@ -235,6 +229,7 @@ function IntegrationsListPage() {
 function ProviderDetailPage(props: { providerId: string }) {
   const read = useCallback(() => fetchProviderDetail(props.providerId), [props.providerId]);
   const [state, retry] = useLoad(read);
+  const [connecting, setConnecting] = useState(false);
   if (state.kind === "loading") return <ExtensionsLoadingState label="Loading provider" />;
   if (state.kind === "error" && state.code === "provider_not_found") {
     return (
@@ -248,7 +243,22 @@ function ProviderDetailPage(props: { providerId: string }) {
   if (state.kind === "error") {
     return <ExtensionsLoadError title="Provider unavailable" detail={providerErrorMessage(state.code)} onRetry={retry} />;
   }
-  return <ProviderDetailView detail={state.value} />;
+  return (
+    <>
+      <ProviderDetailView detail={state.value} onConnect={() => setConnecting(true)} />
+      {connecting ? (
+        <ProviderConnectDialog
+          providerId={props.providerId}
+          name={state.value.summary.name}
+          obtainUrl={state.value.obtainUrl}
+          onClose={() => {
+            setConnecting(false);
+            retry();
+          }}
+        />
+      ) : null}
+    </>
+  );
 }
 
 export function IntegrationsWorkspace(props: { route: IntegrationsRoute }) {
