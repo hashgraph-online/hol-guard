@@ -44,6 +44,10 @@ LOCKFILE_UNTRUSTED_INTEGRITY = "sha512-" + base64.b64encode(hashlib.sha512(b"gau
 # for any other reason (a generic command review, a read floor) does not prove
 # the package boundary.
 PACKAGE_REVIEW = "native_package_review"
+# `cargo metadata` without `--no-deps` resolves the whole dependency graph: it reads the registry
+# index, may download crates and may rewrite the lockfile. Guard holds it as a package action, so
+# only the package review proves this case; a generic command review would not.
+CARGO_RESOLVE_CASE = "omp-native-shell-cargo-dependency-resolve-protected"
 PACKAGE_BLOCK_REASONS: dict[str, frozenset[str]] = {
     POSTINSTALL_CASE: frozenset({PACKAGE_REVIEW, "install_script_risk"}),
     SETUP_PY_CASE: frozenset({PACKAGE_REVIEW, "setup_py_exec_risk"}),
