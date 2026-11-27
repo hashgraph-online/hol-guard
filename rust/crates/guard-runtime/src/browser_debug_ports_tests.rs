@@ -420,9 +420,11 @@ fn recording_a_launch_drops_idle_sessions() {
         .unwrap();
     assert_eq!(rows, 1, "the idle session of session-a is pruned");
     let ports: i64 = connection
-        .query_row("select count(*) from guard_browser_session_ports", [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "select count(*) from guard_browser_session_ports",
+            [],
+            |row| row.get(0),
+        )
         .unwrap();
     assert_eq!(ports, 1, "its port rows go with it");
 }
