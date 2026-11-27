@@ -79,6 +79,9 @@ pub enum NotSent {
     ManifestChanged,
     /// The manifest does not declare this capability.
     CapabilityUndeclared,
+    /// The declared request sends no fact (a `GET`, or a `POST` with no body), so the answer
+    /// would not be about this subject and could not be cached under it.
+    SubjectNotCarried,
     /// A fact the request needs was refused (see the module notes) or is missing.
     FactRefused(ProviderShareableFactV1),
     /// The declared body could not be rendered from the facts.
@@ -95,6 +98,7 @@ impl NotSent {
             Self::NotConnected => "provider_not_connected",
             Self::ManifestChanged => "provider_manifest_changed",
             Self::CapabilityUndeclared => "provider_capability_undeclared",
+            Self::SubjectNotCarried => "provider_subject_not_carried",
             Self::FactRefused(_) => "provider_fact_refused",
             Self::BodyInvalid => "provider_body_invalid",
             Self::KeyMissing => "provider_key_missing",
@@ -254,6 +258,10 @@ pub fn run_lookup(
     else {
         return not_sent(NotSent::CapabilityUndeclared);
     };
+    if capability.request.method != ProviderHttpMethodV1::Post || capability.request.body.is_empty()
+    {
+        return not_sent(NotSent::SubjectNotCarried);
+    }
     let facts = match shared_facts(capability, job.facts, &stored.opt_in_facts) {
         Ok(facts) => facts,
         Err(fact) => return not_sent(NotSent::FactRefused(fact)),
@@ -292,7 +300,7 @@ pub fn run_lookup(
         path: capability.request.path.clone(),
         header: manifest.auth.header.clone(),
         key: Zeroizing::new(key.expose().to_owned()),
-        body: (capability.request.method == ProviderHttpMethodV1::Post).then_some(body),
+        body: Some(body),
     };
     let limits = ProviderLimits {
         timeout_ms: manifest.limits.timeout_ms,

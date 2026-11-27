@@ -328,6 +328,34 @@ fn an_opt_in_fact_goes_out_only_when_the_user_turned_it_on() {
 }
 
 #[test]
+fn a_request_that_carries_no_fact_is_never_sent() {
+    let mut rig = connected_rig();
+    let transport = fake();
+    let mut get = manifest(Vec::new());
+    get.capabilities[0].request.method = ProviderHttpMethodV1::Get;
+    for declared in [get, manifest(Vec::new())] {
+        let report = lookup(
+            &mut rig,
+            &transport,
+            &declared,
+            &facts("https://shop.example.com"),
+            NOW,
+        );
+        assert_eq!(report, LookupReport::NotSent(NotSent::SubjectNotCarried));
+        assert_eq!(
+            NotSent::SubjectNotCarried.code(),
+            "provider_subject_not_carried"
+        );
+    }
+    assert!(transport.requests().is_empty());
+    assert!(
+        signals_for_subject(&rig.connection, Cap::OriginReputation, &subject().digest)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn a_missing_fact_stops_the_lookup() {
     let mut rig = connected_rig();
     let transport = fake();
