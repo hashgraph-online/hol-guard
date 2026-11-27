@@ -256,3 +256,122 @@ fn refresh_lands_late_in_the_lifetime_and_before_expiry() {
     assert_eq!(refresh_at(observed, observed - 1, 7), observed);
     assert!(refresh_at(0, u64::MAX, u32::MAX) < u64::MAX);
 }
+
+fn open_circuit(worker: &mut ProviderWorker, connection: &Connection) {
+    for index in 0..CIRCUIT_FAILURES {
+        let subject = format!("open{index}");
+        assert_eq!(admit(worker, 0, &subject), Admission::Send);
+        fail(worker, connection, 0, &subject);
+    }
+}
+
+#[test]
+fn a_half_open_circuit_lets_one_probe_out_at_a_time() {
+    let connection = store();
+    let mut worker = ProviderWorker::new();
+    open_circuit(&mut worker, &connection);
+    assert_eq!(
+        admit(&mut worker, CIRCUIT_OPEN_MS, "probe"),
+        Admission::Send
+    );
+    for index in 0..5 {
+        assert_eq!(
+            admit(&mut worker, CIRCUIT_OPEN_MS + 1, &format!("other{index}")),
+            Admission::CircuitOpen {
+                until_ms: CIRCUIT_OPEN_MS
+            }
+        );
+    }
+    worker
+        .record(
+            &connection,
+            CIRCUIT_OPEN_MS + 2,
+            SHIELD,
+            Cap::OriginReputation,
+            "probe",
+            ExchangeOutcome::Answered,
+        )
+        .unwrap();
+    assert_eq!(
+        admit(&mut worker, CIRCUIT_OPEN_MS + 3, "after-a"),
+        Admission::Send
+    );
+    assert_eq!(
+        admit(&mut worker, CIRCUIT_OPEN_MS + 3, "after-b"),
+        Admission::Send
+    );
+}
+
+#[test]
+fn a_probe_that_never_reports_does_not_hold_the_circuit_shut() {
+    let connection = store();
+    let mut worker = ProviderWorker::new();
+    open_circuit(&mut worker, &connection);
+    assert_eq!(admit(&mut worker, CIRCUIT_OPEN_MS, "lost"), Admission::Send);
+    assert!(matches!(
+        admit(&mut worker, CIRCUIT_OPEN_MS + PROBE_TIMEOUT_MS - 1, "next"),
+        Admission::CircuitOpen { .. }
+    ));
+    assert_eq!(
+        admit(&mut worker, CIRCUIT_OPEN_MS + PROBE_TIMEOUT_MS, "next"),
+        Admission::Send
+    );
+    assert!(matches!(
+        admit(&mut worker, CIRCUIT_OPEN_MS + PROBE_TIMEOUT_MS, "third"),
+        Admission::CircuitOpen { .. }
+    ));
+}
+
+#[test]
+fn several_unauthorized_results_report_one_invalidation_until_a_reconnect() {
+    let connection = store();
+    let mut worker = ProviderWorker::new();
+    let unauthorized = |worker: &mut ProviderWorker, now_ms: u64, subject: &str| {
+        worker
+            .record(
+                &connection,
+                now_ms,
+                SHIELD,
+                Cap::OriginReputation,
+                subject,
+                ExchangeOutcome::Unauthorized,
+            )
+            .unwrap()
+            .key_invalidated
+    };
+    admit(&mut worker, 0, "a");
+    admit(&mut worker, 0, "b");
+    assert!(unauthorized(&mut worker, 5_000, "a"));
+    assert!(!unauthorized(&mut worker, 6_000, "b"));
+    crate::provider_integration_store::set_connection_state(
+        &connection,
+        SHIELD,
+        State::Connected,
+        7_000,
+    )
+    .unwrap();
+    assert!(unauthorized(&mut worker, 8_000, "c"));
+}
+
+#[test]
+fn an_uneven_rate_still_refills_at_the_declared_rate() {
+    let per_minute = 59;
+    let mut worker = ProviderWorker::new();
+    let admit_at = |worker: &mut ProviderWorker, now_ms: u64, subject: String| {
+        worker.admit(
+            now_ms,
+            SHIELD,
+            State::Connected,
+            per_minute,
+            Cap::OriginReputation,
+            &subject,
+        ) == Admission::Send
+    };
+    while admit_at(&mut worker, 0, "drain".to_owned()) {}
+    let sent = (1..=MINUTE_MS_FOR_TESTS)
+        .filter(|now_ms| admit_at(&mut worker, *now_ms, format!("t{now_ms}")))
+        .count();
+    assert!((58..=59).contains(&sent), "{sent}");
+}
+
+const MINUTE_MS_FOR_TESTS: u64 = 60 * 1000;

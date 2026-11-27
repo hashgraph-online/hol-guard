@@ -8,11 +8,14 @@
 //!   most a tenth of a minute's requests, so a burst never runs ahead of the declared rate by more
 //!   than that.
 //! - A failed lookup is not retried for the same subject for [`NEGATIVE_CACHE_MS`].
-//! - Five consecutive failures open the provider's circuit for [`CIRCUIT_OPEN_MS`]. When it closes,
-//!   one lookup is let through; another failure opens it again at once, an answer resets it.
+//! - Five consecutive failures open the provider's circuit for [`CIRCUIT_OPEN_MS`]. When that time
+//!   has passed, one probe lookup is let through and every other lookup still waits until it is
+//!   recorded (or until [`PROBE_TIMEOUT_MS`] passes without a result). A failed probe opens the
+//!   circuit again at once; an answer closes it and resets the count.
 //! - A `401` or `403` moves the stored connection to `key_invalid`. Calls stop until the user
 //!   connects again, which writes `connected` back; the connection state in the store is the
-//!   record, so a restart does not forget it.
+//!   record, so a restart does not forget it. Only the change to `key_invalid` is reported, so
+//!   several `401`s in flight raise one notice.
 //! - A cached answer is refreshed at a jittered point late in its lifetime ([`refresh_at`]), so
 //!   answers cached together do not all refresh in the same instant.
 //!
@@ -23,7 +26,9 @@ use std::collections::BTreeMap;
 use guard_contracts::{ProviderCapabilityV1, ProviderConnectionStateV1};
 use rusqlite::Connection;
 
-use crate::provider_integration_store::{set_connection_state, ProviderStoreResult};
+use crate::provider_integration_store::{
+    provider_connection, set_connection_state, ProviderStoreResult,
+};
 
 /// How long a failed lookup keeps the same subject from being asked again.
 pub const NEGATIVE_CACHE_MS: u64 = 60 * 1000;
@@ -33,6 +38,8 @@ pub const CIRCUIT_FAILURES: u32 = 5;
 pub const CIRCUIT_OPEN_MS: u64 = 5 * 60 * 1000;
 /// Subjects held in one provider's negative cache. A full cache drops its oldest entry first.
 pub const NEGATIVE_CACHE_SUBJECTS: usize = 1024;
+/// How long a half-open circuit waits for its probe's result before it lets another probe out.
+pub const PROBE_TIMEOUT_MS: u64 = 60 * 1000;
 
 const MINUTE_MS: u64 = 60 * 1000;
 
@@ -74,10 +81,13 @@ pub struct Recorded {
     pub circuit_opened: bool,
 }
 
-/// Token bucket in thousandths of a request, so refill needs no floating point.
+/// Token bucket in thousandths of a request, so refill needs no floating point. `remainder` keeps
+/// the part of a thousandth that has accrued but not yet been added, so frequent refills do not
+/// lose it and the bucket refills at the declared rate for any `per_minute`.
 #[derive(Debug, Clone, Copy)]
 struct Bucket {
     milli_tokens: u64,
+    remainder: u64,
     at_ms: u64,
 }
 
@@ -91,21 +101,34 @@ impl Bucket {
     fn full(per_minute: u64, now_ms: u64) -> Self {
         Self {
             milli_tokens: bucket_capacity(per_minute),
+            remainder: 0,
             at_ms: now_ms,
         }
     }
 
     fn refill(&mut self, per_minute: u64, now_ms: u64) {
+        let capacity = bucket_capacity(per_minute);
         let elapsed = now_ms.saturating_sub(self.at_ms);
-        let added = elapsed.saturating_mul(per_minute).saturating_mul(MILLI) / MINUTE_MS;
+        let accrued = elapsed
+            .saturating_mul(per_minute)
+            .saturating_mul(MILLI)
+            .saturating_add(self.remainder);
         self.milli_tokens = self
             .milli_tokens
-            .saturating_add(added)
-            .min(bucket_capacity(per_minute));
-        // Until a whole thousandth has accrued the clock stays put, so frequent calls still add up.
-        if added > 0 || self.milli_tokens == bucket_capacity(per_minute) {
-            self.at_ms = now_ms;
-        }
+            .saturating_add(accrued / MINUTE_MS)
+            .min(capacity);
+        self.remainder = if self.milli_tokens == capacity {
+            0
+        } else {
+            accrued % MINUTE_MS
+        };
+        self.at_ms = self.at_ms.max(now_ms);
+    }
+
+    fn empty(&mut self, now_ms: u64) {
+        self.milli_tokens = 0;
+        self.remainder = 0;
+        self.at_ms = now_ms;
     }
 
     fn take(&mut self) -> bool {
@@ -122,6 +145,8 @@ struct ProviderPace {
     bucket: Bucket,
     consecutive_failures: u32,
     open_until_ms: Option<u64>,
+    /// The half-open circuit's probe: its lookup key and when it was admitted.
+    probe: Option<((ProviderCapabilityV1, String), u64)>,
     failed: BTreeMap<(ProviderCapabilityV1, String), u64>,
 }
 
@@ -131,6 +156,7 @@ impl ProviderPace {
             bucket: Bucket::full(per_minute, now_ms),
             consecutive_failures: 0,
             open_until_ms: None,
+            probe: None,
             failed: BTreeMap::new(),
         }
     }
@@ -183,28 +209,39 @@ impl ProviderWorker {
             .providers
             .entry(provider_id.to_owned())
             .or_insert_with(|| ProviderPace::new(per_minute, now_ms));
-        if let Some(until_ms) = pace.open_until_ms {
-            if now_ms < until_ms {
-                return Admission::CircuitOpen { until_ms };
+        let key = (capability, subject_digest.to_owned());
+        let half_open = match pace.open_until_ms {
+            Some(until_ms) if now_ms < until_ms => return Admission::CircuitOpen { until_ms },
+            Some(until_ms) => {
+                // Half-open: one probe at a time. The failure count stays at the threshold, so a
+                // failed probe opens the circuit again at once.
+                if pace
+                    .probe
+                    .as_ref()
+                    .is_some_and(|(_, at)| now_ms < at.saturating_add(PROBE_TIMEOUT_MS))
+                {
+                    return Admission::CircuitOpen { until_ms };
+                }
+                true
             }
-            // The circuit closes. The failure count stays at the threshold, so the next lookup is
-            // a probe: one more failure opens it again at once.
-            pace.open_until_ms = None;
-        }
+            None => false,
+        };
         if let Some(until_ms) = pace
             .failed
-            .get(&(capability, subject_digest.to_owned()))
+            .get(&key)
             .copied()
             .filter(|until| now_ms < *until)
         {
             return Admission::RecentlyFailed { until_ms };
         }
         pace.bucket.refill(per_minute, now_ms);
-        if pace.bucket.take() {
-            Admission::Send
-        } else {
-            Admission::RateLimited
+        if !pace.bucket.take() {
+            return Admission::RateLimited;
         }
+        if half_open {
+            pace.probe = Some((key, now_ms));
+        }
+        Admission::Send
     }
 
     /// Count how a sent lookup ended. A `401` or `403` writes `key_invalid` to the stored
@@ -219,13 +256,22 @@ impl ProviderWorker {
         outcome: ExchangeOutcome,
     ) -> ProviderStoreResult<Recorded> {
         let mut recorded = Recorded::default();
+        let key = (capability, subject_digest.to_owned());
+        if let Some(pace) = self.providers.get_mut(provider_id) {
+            if pace.probe.as_ref().is_some_and(|(probe, _)| *probe == key) {
+                pace.probe = None;
+            }
+        }
         if outcome == ExchangeOutcome::Unauthorized {
-            recorded.key_invalidated = set_connection_state(
+            let already_invalid = provider_connection(connection, provider_id)?
+                .is_some_and(|stored| stored.state == ProviderConnectionStateV1::KeyInvalid);
+            let written = set_connection_state(
                 connection,
                 provider_id,
                 ProviderConnectionStateV1::KeyInvalid,
                 now_ms,
             )?;
+            recorded.key_invalidated = written && !already_invalid;
             return Ok(recorded);
         }
         let Some(pace) = self.providers.get_mut(provider_id) else {
@@ -234,14 +280,15 @@ impl ProviderWorker {
         match outcome {
             ExchangeOutcome::Answered => {
                 pace.consecutive_failures = 0;
-                pace.failed.remove(&(capability, subject_digest.to_owned()));
+                pace.open_until_ms = None;
+                pace.probe = None;
+                pace.failed.remove(&key);
             }
             ExchangeOutcome::RateLimited | ExchangeOutcome::Failed => {
                 if outcome == ExchangeOutcome::RateLimited {
-                    pace.bucket.milli_tokens = 0;
-                    pace.bucket.at_ms = now_ms;
+                    pace.bucket.empty(now_ms);
                 }
-                pace.remember_failure((capability, subject_digest.to_owned()), now_ms);
+                pace.remember_failure(key, now_ms);
                 pace.consecutive_failures = pace.consecutive_failures.saturating_add(1);
                 if pace.consecutive_failures >= CIRCUIT_FAILURES {
                     pace.open_until_ms = Some(now_ms.saturating_add(CIRCUIT_OPEN_MS));
