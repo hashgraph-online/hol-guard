@@ -66,11 +66,12 @@ def structured_outage_overlay(
             from ..native_policy_snapshot_direct_lane_structured import structured_output_view
 
             configured = load_config()
-            if configured is not None:
-                if getattr(configured, "managed_policy", None) is None:
-                    return {}
-                if structured_output_view(configured) is None:
-                    return withhold
+            if (
+                configured is not None
+                and getattr(configured, "managed_policy", None) is not None
+                and structured_output_view(configured) is None
+            ):
+                return withhold
         except Exception:
             pass
     try:
