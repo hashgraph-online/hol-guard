@@ -550,7 +550,7 @@ Other surfaces:
   in a loop. It keeps the approval link for every profile mode, shared ones included, because the
   approval invariant (`docs/guard/approval-invariant.md`) requires Allow once and Always allow on
   every route and a Codex bridge holds its wait only when the block names the link. R-SURFACE keeps
-  the page itself from opening in a shared session.
+  the page itself from opening in a shared session (BP-T070).
 - **Queue.** `browser_action` queue rows group by session and site.
   (`dashboard/src/queue-state.ts`, `review-queue-item.tsx`.)
 - **Browser area in Protection Center.** New route `/extensions/browser` with: active sessions and

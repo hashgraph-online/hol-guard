@@ -7,8 +7,9 @@
 //! The approval link stays in the reply for every profile mode, shared ones
 //! included: `docs/guard/approval-invariant.md` requires every executable
 //! review to offer Allow once and Always allow on every route, and a Codex
-//! bridge holds its wait only when the block names the link. A shared or
-//! remote-debugging session already keeps the page itself closed (R-SURFACE).
+//! bridge holds its wait only when the block names the link. Keeping the page
+//! itself closed for a shared or remote-debugging session is R-SURFACE
+//! (BP-T070), which is still open; until it lands that page can auto-open.
 
 use serde_json::{Map, Value};
 
