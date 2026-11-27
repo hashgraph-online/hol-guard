@@ -72,6 +72,13 @@ pub(super) fn spawns() -> usize {
     SPAWNS.with(std::cell::Cell::get)
 }
 
+/// Records a Git process started outside [`spawn_output`], such as the
+/// filter proof's attribute queries.
+#[cfg(test)]
+pub(super) fn count_spawn() {
+    SPAWNS.with(|spawns| spawns.set(spawns.get() + 1));
+}
+
 /// Lets every proof within one evaluation share a single probe of each Git
 /// segment, and a single run of each identical metadata query. Both memos are
 /// dropped when `evaluate` returns, so the next evaluation inspects the

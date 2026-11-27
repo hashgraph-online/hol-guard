@@ -141,6 +141,81 @@ fn a_checked_out_gitlink_keeps_status_unproven_when_no_path_has_a_filter() {
     std::fs::remove_dir_all(&root).unwrap();
 }
 
+/// A chain of working-tree diffs asks the filter question once per segment.
+/// Within one evaluation the first answer stands for the rest, and a
+/// different question is still asked.
+#[cfg(unix)]
+#[test]
+fn one_evaluation_asks_each_filter_question_once() {
+    let root = std::env::temp_dir().join(format!("guard-filter-memo-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let (home, repository) = (root.join("home"), root.join("repository"));
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    std::fs::write(
+        home.join(".gitconfig"),
+        "[filter \"demo\"]\n\tclean = cat\n\tsmudge = cat\n",
+    )
+    .unwrap();
+    let git = git_binary();
+    let run = |arguments: &[&str]| {
+        // A repository-location override inherited from the caller, such as
+        // `GIT_WORK_TREE`, would point Git away from the fixture.
+        assert!(std::process::Command::new(&git)
+            .env_clear()
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+            .env("HOME", &home)
+            .arg("-C")
+            .arg(&repository)
+            .args(arguments)
+            .status()
+            .unwrap()
+            .success());
+    };
+    run(&["init", "--quiet"]);
+    std::fs::write(repository.join(".gitattributes"), "*.dat filter=demo\n").unwrap();
+    std::fs::write(repository.join("README.md"), "fixture\n").unwrap();
+    std::fs::write(repository.join("table.dat"), "rows\n").unwrap();
+    run(&["add", ".gitattributes", "README.md", "table.dat"]);
+    // Inspect the same isolated Git configuration used to build the fixture.
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        git_config_no_system: true,
+        ..Default::default()
+    };
+    let inspect = |named: &[&str]| {
+        unused(
+            &git,
+            &[],
+            &repository,
+            &home,
+            Some(&environment),
+            soon(),
+            named,
+            false,
+            true,
+        )
+    };
+    let spawns = super::super::super::git_probe::spawns;
+    super::super::super::git_probe::with_memo(|| {
+        let before = spawns();
+        assert_eq!(inspect(&[]), Some(false));
+        let first = spawns() - before;
+        assert!(first > 0);
+        let before = spawns();
+        assert_eq!(inspect(&[]), Some(false));
+        assert_eq!(spawns(), before);
+        // Another question is its own answer.
+        assert_eq!(inspect(&["README.md"]), Some(true));
+        assert!(spawns() > before);
+    });
+    // Outside an evaluation nothing is remembered.
+    let before = spawns();
+    assert_eq!(inspect(&[]), Some(false));
+    assert!(spawns() > before);
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
 #[test]
 fn only_a_cached_index_comparison_leaves_the_working_tree_alone() {
     let words = |values: &[&str]| {
