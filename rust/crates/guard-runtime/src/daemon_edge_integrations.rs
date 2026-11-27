@@ -40,6 +40,7 @@ use crate::provider_integration_managed::{ManagedProviderSettings, PROVIDER_INTE
 use crate::provider_integration_routes::{
     self as routes, PreparedConnect, ProofLedger, RouteAnswer, RouteContext, WithTransport,
 };
+use crate::provider_integration_shipped::shipped_providers;
 use crate::provider_integration_store::ensure_provider_integration_schema;
 use crate::provider_integration_worker::ProviderWorker;
 use crate::supply_chain_eval_caller::CallerEgressFulfilment;
@@ -62,13 +63,6 @@ fn lock_worker() -> std::sync::MutexGuard<'static, ProviderWorker> {
         .get_or_init(|| Mutex::new(ProviderWorker::new()))
         .lock()
         .unwrap_or_else(|poison| poison.into_inner())
-}
-
-/// The providers this build ships. No reviewed provider pack has been
-/// contributed yet, so the set is empty and every provider route answers for
-/// an empty catalog.
-fn shipped_providers() -> Vec<CompiledProviderIntegrationV1> {
-    Vec::new()
 }
 
 fn now_ms() -> u64 {
@@ -111,7 +105,7 @@ pub(super) fn response(
         &Served {
             enabled: routes::provider_integrations_enabled_now(),
             managed: managed.as_ref(),
-            providers: &shipped_providers(),
+            providers: shipped_providers(),
             now_ms: now_ms(),
             verify: &verify_with_provider,
             with_transport: &with_provider_transport,
