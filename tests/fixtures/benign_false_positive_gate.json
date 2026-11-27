@@ -27141,6 +27141,57 @@
       "expect": "allow"
     },
     {
+      "id": "git-diff-stat-pickaxe-chain-over-the-worktree",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --stat -G\"alpha\" ; git diff --stat -G\"beta\" ; git diff --stat -G\"gamma\" ; echo scan-done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-diff-stat-pickaxe-chain-with-an-external-diff-override",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --stat -G\"alpha\" ; git -c diff.external=./show-diff diff -G\"beta\""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "git-diff-stat-pickaxe-chain-writing-an-output-file",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --stat -G\"alpha\" ; git diff --stat -G\"beta\" --output=report.txt"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "git-routed-diff-stat-filtered-to-nested-sign-in-folder",
       "fix_area": "git",
       "harnesses": [
