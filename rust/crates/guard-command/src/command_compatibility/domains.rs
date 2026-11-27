@@ -456,14 +456,25 @@ pub(super) fn observe(
         // only escapes the next character, as in `'process\.env'`, and never
         // expands into anything. An escaped word that starts with `-` once its
         // backslashes are gone is an option to the search, as `\-f.env` reads
-        // `.env` as a pattern file. A pattern attached to its option, as in
-        // `--regexp=api_token`, keeps its exemption.
+        // `.env` as a pattern file. A word `-e` or `--regexp` consumes is
+        // always a pattern, escaped or not. A pattern attached to its option,
+        // as in `--regexp=api_token`, keeps its exemption.
+        let regexp_value = |pattern: &String| {
+            arguments
+                .iter()
+                .position(|argument| argument == pattern)
+                .and_then(|index| index.checked_sub(1))
+                .and_then(|index| arguments.get(index))
+                .is_some_and(|option| matches!(option.as_str(), "-e" | "--regexp"))
+        };
         let patterns = crate::pretool::search_pattern_words(&executable, arguments)
             .unwrap_or_default()
             .into_iter()
             .filter(|pattern| {
                 !(pattern.contains(['/', '~', '*', '?', '[', '{', '$', '`', '('])
-                    || (pattern.starts_with('\\') && pattern.replace('\\', "").starts_with('-')))
+                    || (pattern.starts_with('\\')
+                        && pattern.replace('\\', "").starts_with('-')
+                        && !regexp_value(pattern)))
                     && arguments
                         .iter()
                         .filter(|argument| *argument == pattern)

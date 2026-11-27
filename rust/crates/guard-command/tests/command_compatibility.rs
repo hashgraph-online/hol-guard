@@ -472,6 +472,10 @@ fn a_search_pattern_beside_a_stderr_redirect_names_no_credential() {
         "grep -rn 'process\\.env' src 2>/dev/null",
         "rg -n \"process\\.env\\.NODE_ENV\" src 2>/dev/null",
         "grep -rnE 'import\\.meta\\.env' src 2>&1",
+        // A word `-e` or `--regexp` consumes is a pattern even when it
+        // starts with an escaped hyphen.
+        "grep -e '\\-f.env' src 2>/dev/null",
+        "rg --regexp '\\-\\-file=.env' src 2>/dev/null",
     ] {
         assert!(!writes_sensitive(command), "{command}");
     }
