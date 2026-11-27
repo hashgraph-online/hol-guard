@@ -83,7 +83,7 @@ fn write_embedded_json(out: &Path, name: &str, env_prefix: &str, value: &Value) 
 fn write_embedded_bytes(out: &Path, name: &str, env_prefix: &str, bytes: &[u8]) {
     println!(
         "cargo:rustc-env={env_prefix}_SHA256={}",
-        hex::encode(Sha256::digest(&bytes))
+        hex::encode(Sha256::digest(bytes))
     );
     println!("cargo:rustc-env={env_prefix}_LEN={}", bytes.len());
     let mut encoder = zstd::stream::read::Encoder::new(bytes, 19).expect("zstd encoder");

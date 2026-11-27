@@ -10,6 +10,9 @@
 # Pinned provider exports are hashed as checkout bytes.
 /contracts/business-policy/providers/*.json text eol=lf
 
+# The public-suffix snapshot is pinned by SHA-256 over its checkout bytes.
+/rust/crates/guard-command-catalog-data/public-suffix/* -text
+
 # Contribution digests must match canonical Git blobs on every checkout.
 /contributions/extensions/*.json text eol=lf
 /contributions/command-sources/*.json text eol=lf
