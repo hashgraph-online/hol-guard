@@ -347,7 +347,7 @@ def test_superseded_watch_snapshot_without_fresh_ack_keeps_recording(
     )
     monkeypatch.setattr(worker, "_review_native_edge_with_snapshot", native)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.hook_review.hook_worker_native_evidence.render_recording_only_pre_tool",
+        "codex_plugin_scanner.guard.hook_review.hook_worker_native_evidence.native_render_recording_only_pre_tool",
         lambda *_args, **_kwargs: {"policy_action": "allow"},
     )
     response = _pre_tool_call(worker, tmp_path, {"generation": 3, "mode": "observe"})

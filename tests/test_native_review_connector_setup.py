@@ -14,7 +14,6 @@ from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard import config as guard_config
 from codex_plugin_scanner.guard import native_package_review_plan as package_review
 from codex_plugin_scanner.guard import native_payload_facts
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
@@ -90,20 +89,39 @@ def _pause(
     queued: list[dict[str, object]] = []
     silent: dict[str, object] = {}
 
-    def silent_block(_harness: str, inputs: dict[str, Any], **_kwargs: object) -> dict[str, object]:
-        # The resident composes the block from these facts; its text is tested in
-        # `hook_decision_review_response_tests.rs`.
-        silent.update(inputs, verdict=inputs["result"])
-        return {"reason": inputs["setup_reason"] or inputs["result"]["reason"]}
-
     def queue(*_args: object, **kwargs: object) -> dict[str, object] | None:
         queued.append(kwargs)
         if queue_fails:
+            silent.update(queued=False, request_id=None, approval_url=None, setup_reason=None, connector_is_local=False)
             return None
         row: dict[str, object] = {"request_id": "abc", "approval_url": _URL}
         if setup is not None:
             row["connector_setup"] = dict(setup)
-        return row if rendered is None else {**row, "hook_response": dict(rendered)}
+        setup_reason = setup.get("setup_reason") if setup is not None else None
+        silent.update(
+            queued=True,
+            request_id="abc",
+            approval_url=_URL,
+            ask=ask,
+            home_dir=str(tmp_path / "home"),
+            setup_reason=setup_reason,
+            connector_is_local=setup is not None and setup.get("is_local") is True,
+            retry_reuses_approval=binding is not None,
+            exact_action_allowable=token is not None,
+            verdict=_native_review(),
+        )
+        response = dict(rendered) if rendered is not None else {
+            "reason": setup_reason or _native_review()["reason"],
+            "approval_center_url": "http://127.0.0.1:4781",
+        }
+        response.setdefault("approval_center_url", "http://127.0.0.1:4781")
+        if ask:
+            response.setdefault("approval_url", _URL)
+        if not ask:
+            response.setdefault("prompted", False)
+        if ask:
+            response["prompted"] = True
+        return {**row, "hook_response": response}
 
     for name, value in {
         "review_evidence_parts": lambda _evidence: (True, binding, token, None),
@@ -118,11 +136,8 @@ def _pause(
         "render_pre_tool_review": lambda _harness, verdict, *, approval, **_k: {
             "reason": f"{verdict['reason']} {approval['approval_url']}"
         },
-        "render_silent_review_block": silent_block,
     }.items():
         monkeypatch.setattr(review, name, value)
-    mode = SimpleNamespace(blocked_request_mode="ask" if ask else "safe-alternative")
-    monkeypatch.setattr(guard_config, "load_guard_config", lambda *_a, **_k: mode)
 
     response = review.pause_native_pre_tool_for_approval(
         object(),
@@ -174,7 +189,7 @@ def test_ask_mode_shows_the_setup_text_the_queue_call_answered(tmp_path: Path, m
 
     assert "has not been set up for `lanectl`" in text
     assert _URL in text
-    assert not silent
+    assert silent["ask"] is True
     assert queued[0]["connector_lookup"] is not None
 
 
@@ -276,13 +291,15 @@ def test_the_queue_call_renders_the_silent_block_with_its_row(tmp_path: Path, mo
         tmp_path, monkeypatch, ask=False, setup=_SETUP, rendered={"reason": "rendered with the row"}
     )
 
-    assert json.loads(text) == {"reason": "rendered with the row"}
+    assert json.loads(text) == {
+        "reason": "rendered with the row",
+        "approval_center_url": "http://127.0.0.1:4781",
+        "prompted": False,
+    }
     # The block's facts ride the queue call; no second render is asked for.
-    assert not silent
+    assert silent["ask"] is False
     respond: Any = queued[0]["respond"]
-    block = respond["silent_review_block"]
-    # The resident derives the binding and setup facts itself.
-    assert block == {"ask": False, "home_dir": str(tmp_path / "home")}
+    assert respond == {"native_review": {}}
 
 
 def test_the_queue_call_renders_the_paused_review_with_its_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -294,4 +311,4 @@ def test_the_queue_call_renders_the_paused_review_with_its_row(tmp_path: Path, m
     assert response["reason"] == "rendered with the row"
     assert response["prompted"] is True
     assert response["approval_center_url"] == "http://127.0.0.1:4781"
-    assert queued[0]["respond"] == {"paused_review": {}}
+    assert queued[0]["respond"] == {"native_review": {}}

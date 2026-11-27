@@ -108,6 +108,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "review_evidence",
         "receipt_recorded",
         "activity_recorded",
+        "transition_hook_observation",
         "exact_command_block",
     }
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
@@ -167,6 +168,9 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         return None
     evidence = payload.get("review_evidence")
     if evidence is not None and (not isinstance(evidence, dict) or review_evidence_parts(evidence) is None):
+        return None
+    observation = payload.get("transition_hook_observation")
+    if observation is not None and not isinstance(observation, dict):
         return None
     return payload
 
