@@ -61,6 +61,18 @@ def structured_outage_overlay(
     withhold = withhold_structured_destination({})
     if deadline is not None and monotonic() >= deadline:
         return withhold
+    if callable(load_config):
+        try:
+            from ..native_policy_snapshot_direct_lane_structured import structured_output_view
+
+            configured = load_config()
+            if configured is not None:
+                if getattr(configured, "managed_policy", None) is None:
+                    return {}
+                if structured_output_view(configured) is None:
+                    return withhold
+        except Exception:
+            pass
     try:
         rendered = native_render_cli(
             "structured_outage",
@@ -80,22 +92,6 @@ def structured_outage_overlay(
         if overlay is not None and overlay != withhold:
             return withhold
         if overlay == withhold:
-            return withhold
-    if callable(load_config):
-        try:
-            from ..native_policy_snapshot_direct_lane_structured import structured_output_view
-
-            configured = load_config()
-            if configured is None:
-                return withhold
-            if getattr(configured, "managed_policy", None) is None:
-                return {}
-            view = structured_output_view(configured)
-            if view is None:
-                return withhold
-            if not view:
-                return {}
-        except Exception:
             return withhold
     return withhold
 
