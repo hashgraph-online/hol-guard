@@ -1189,6 +1189,7 @@ pub mod provider_integration_decide;
 #[cfg(test)]
 mod provider_integration_hot_path_tests;
 pub mod provider_integration_lookup;
+pub mod provider_integration_managed;
 pub mod provider_integration_secret;
 pub mod provider_integration_store;
 pub mod provider_integration_worker;

@@ -22,6 +22,7 @@ use guard_provider_integrations::noise::{BaselineDecision, NoiseLedger};
 use rusqlite::Connection;
 
 use crate::provider_integration_decide::{decide, DecideProvider, DecideRequest};
+use crate::provider_integration_managed::ManagedProviderSettings;
 use crate::provider_integration_store::{
     ensure_provider_integration_schema, put_connection, put_signal, ProviderConnection,
 };
@@ -236,6 +237,7 @@ fn deciding_a_cached_subject_stays_inside_the_latency_budget() {
         subject_digest: &subject,
         providers: &providers,
         now_ms: NOW,
+        managed: &ManagedProviderSettings::none(),
     };
     let mut samples = Vec::with_capacity(400);
     for round in 0..440 {

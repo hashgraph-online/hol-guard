@@ -108,6 +108,7 @@ fn run(
             subject_digest: &digest,
             providers,
             now_ms: NOW,
+            managed: &ManagedProviderSettings::none(),
         },
     )
     .unwrap()

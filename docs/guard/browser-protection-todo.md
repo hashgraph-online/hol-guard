@@ -555,6 +555,12 @@ transcript in the pull request (after BP-T052).
 - [ ] **BP-T125** Settings "Enforce provider blocks" and "Require a fresh check", per provider and
   capability, off by default, protected mutation, settable by managed policy
   (`managed_policy_floor.rs`), never settable by a provider.
+  - Managed policy half done: `provider_integration_managed.rs` reads
+    `settings.provider_integrations` (provider, capability, `effect`, `require_fresh_check`). An
+    unlocked entry is a floor; with `provider_integrations` in `lockedSettings` it replaces the
+    fields it names. A malformed value is an error. `decide` applies the composed setting. Open:
+    the protected local mutation (preview plus one-use proof) lands with the BP-T130 settings
+    route, and the resident loads `ManagedProviderSettings` when it wires `decide`.
 - [ ] **BP-T126** Saved approval interaction: a `danger` signal reviews again and shows the saved
   approval as paused; it does not delete it. With enforcement on, the block wins. Tests for both.
 - [ ] **BP-T127** Grant interaction: `caution` from a verified provider reviews once per subject inside
