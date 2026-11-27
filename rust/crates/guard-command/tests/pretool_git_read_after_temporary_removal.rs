@@ -75,10 +75,14 @@ fn a_temporary_file_removal_before_a_git_read_keeps_its_proof() {
         format!("rm -f {scratch}/notes.txt; git log --oneline -1"),
         format!("rm -f {scratch}/out.patch {absent} 2>/dev/null; git status --short"),
         format!("rm -f {absent} && git diff --stat"),
+        format!("rm -f {absent}; git log --oneline -1"),
     ] {
         let (action, reason) = evaluate(&home, &repository, &command);
         assert_ne!(reason, FLOOR, "{command}");
         assert_eq!(action, "allow", "{command}: {reason}");
+        // The command proof itself admits the chain, not the enabled Git
+        // permission, so default permissions allow it too.
+        assert_eq!(reason, "native_exact_safe_command", "{command}");
     }
 
     for command in [
