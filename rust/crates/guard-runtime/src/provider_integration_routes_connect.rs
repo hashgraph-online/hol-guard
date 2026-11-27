@@ -21,12 +21,12 @@ use zeroize::Zeroizing;
 
 use super::{
     digest_of, error, fact_rank, issue, ok, read_apply, read_body, route, shares, unavailable,
-    Action, ProofAction, ProofLedger, Route, RouteAnswer, RouteContext, INVALID_REQUEST, NOT_FOUND,
-    PROOF_INVALID,
+    Action, ProofAction, ProofLedger, Route, RouteAnswer, RouteContext, CONNECT_SUPERSEDED,
+    INVALID_REQUEST, NOT_FOUND, PROOF_INVALID,
 };
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
 use crate::provider_integration_secret::{
-    check_key_format, delete_provider_key, store_provider_key, ProviderKey,
+    check_key_format, delete_provider_key, load_provider_key, store_provider_key, ProviderKey,
 };
 use crate::provider_integration_store::{
     in_write_savepoint, provider_connection, put_connection, ProviderConnection,
@@ -97,6 +97,8 @@ pub struct PreparedConnect<'p> {
     provider: &'p CompiledProviderIntegrationV1,
     key: ProviderKey,
     opt_in_facts: Vec<ProviderShareableFactV1>,
+    /// The provider's ledger epoch when the proof was spent.
+    epoch: u64,
 }
 
 impl PreparedConnect<'_> {
@@ -138,6 +140,7 @@ pub fn prepare_connect<'p>(
     if !spend_connect_proof(ledger, &request.proof, provider, now_ms) {
         return Err(error(403, PROOF_INVALID));
     }
+    let epoch = ledger.epoch(&provider.id);
     let offered = shares(provider);
     let mut opt_in_facts = request.enabled_opt_in_facts;
     if opt_in_facts
@@ -153,6 +156,7 @@ pub fn prepare_connect<'p>(
         provider,
         key,
         opt_in_facts,
+        epoch,
     })
 }
 
@@ -203,15 +207,24 @@ pub fn verify_connect(
     }
 }
 
-/// Phase three, under the storage gate: store the key, then the connection row bound to the
-/// manifest digest. A row that fails to write takes the key with it.
+/// Phase three, under the storage gate and the proof ledger: store the key, then the connection
+/// row bound to the manifest digest. A disconnect, settings apply or other connect that finished
+/// after this one's proof was spent refuses it with `409 provider_connect_superseded`, and nothing
+/// is written. A row that fails to write puts back the key the provider had before, or removes the
+/// new one when there was none.
 pub fn finish_connect(
+    ledger: &mut ProofLedger,
     context: &RouteContext<'_>,
     prepared: PreparedConnect<'_>,
     verified: bool,
 ) -> RouteAnswer {
     let provider = prepared.provider;
+    if ledger.epoch(&provider.id) != prepared.epoch {
+        return error(409, CONNECT_SUPERSEDED);
+    }
+    ledger.advance(&provider.id);
     let mut secrets = EncryptedFileSecretStore::new(context.guard_home);
+    let previous = load_provider_key(&mut secrets, &provider.id);
     if store_provider_key(&mut secrets, &provider.id, &prepared.key, &provider.auth).is_err() {
         return unavailable();
     }
@@ -233,7 +246,12 @@ pub fn finish_connect(
         )
     };
     if in_write_savepoint(context.connection, write).is_err() {
-        let _ = delete_provider_key(&secrets, &provider.id);
+        let restored = previous.is_some_and(|key| {
+            store_provider_key(&mut secrets, &provider.id, &key, &provider.auth).is_ok()
+        });
+        if !restored {
+            let _ = delete_provider_key(&secrets, &provider.id);
+        }
         return unavailable();
     }
     super::detail(context, &provider.id)

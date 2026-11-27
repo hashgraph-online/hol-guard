@@ -954,7 +954,11 @@ to the SHA-256 digest of the manifest's source bytes. `401` or `403` answers
 `400 provider_key_invalid`, `429` answers `429 provider_rate_limited`, a refused host answers
 `403 provider_host_refused`, an oversized answer `502 provider_response_too_large`, and any other
 failure `502 provider_integration_unavailable`. A managed network policy Guard cannot honour answers
-`503 provider_managed_policy_unavailable` and sends nothing.
+`503 provider_managed_policy_unavailable` and sends nothing. A disconnect, settings apply or other
+connect that finished while the provider was being called wins: the late connect answers
+`409 provider_connect_superseded` and stores nothing. If the connection row cannot be written after
+the key was stored, the provider's previous key is put back. A session opened from an approval link
+for one request cannot read or change provider integrations.
 
 ### 6.10 Sponsors and discovery
 

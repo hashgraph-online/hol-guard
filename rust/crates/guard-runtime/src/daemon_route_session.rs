@@ -155,6 +155,10 @@ fn bound_request_allowed(method: &str, path: &str, bound: &str) -> bool {
     if path == "/v1/swarm" || path.starts_with("/v1/swarm/") {
         return false;
     }
+    // Nor can it read or change the person's provider integrations.
+    if path == "/v1/integrations/providers" || path.starts_with("/v1/integrations/providers/") {
+        return false;
+    }
     if !session_path(method, path) {
         return false;
     }

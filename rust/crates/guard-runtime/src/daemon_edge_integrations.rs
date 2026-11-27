@@ -184,7 +184,7 @@ pub(super) fn serve(
             Err(answer) => return split(answer),
         };
         return with_store(config, served, managed, |context| {
-            routes::finish_connect(context, prepared, verified)
+            routes::finish_connect(&mut lock_ledger(), context, prepared, verified)
         });
     }
     with_store(config, served, managed, |context| {

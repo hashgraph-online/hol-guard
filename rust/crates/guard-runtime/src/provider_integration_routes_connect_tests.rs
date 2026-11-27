@@ -79,7 +79,52 @@ impl Fixture {
             Ok(verified) => verified,
             Err(answer) => return answer,
         };
-        finish_connect(&self.context(), prepared, verified)
+        self.finish(prepared, verified)
+    }
+
+    fn finish(&mut self, prepared: PreparedConnect<'_>, verified: bool) -> RouteAnswer {
+        let mut ledger = std::mem::take(&mut self.ledger);
+        let answer = finish_connect(&mut ledger, &self.context(), prepared, verified);
+        self.ledger = ledger;
+        answer
+    }
+
+    fn prepare<'p>(
+        &mut self,
+        providers: &'p [CompiledProviderIntegrationV1],
+        key: &str,
+    ) -> PreparedConnect<'p> {
+        let proof = self.proof();
+        let path = format!("{PREFIX}/{SHIELD}/connect");
+        let bytes = serde_json::to_vec(&json!({"key": key, "proof": proof})).unwrap();
+        prepare_connect(&mut self.ledger, true, providers, &path, &bytes, NOW)
+            .unwrap_or_else(|answer| panic!("{}", answer.body))
+    }
+
+    fn disconnect(&mut self) -> RouteAnswer {
+        let mut ledger = std::mem::take(&mut self.ledger);
+        let context = self.context();
+        let base = format!("{PREFIX}/{SHIELD}/disconnect");
+        let preview = answer(
+            &mut ledger,
+            &context,
+            "POST",
+            &format!("{base}/preview"),
+            b"",
+        );
+        let proof = preview.unwrap().body["challenge"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let body = serde_json::to_vec(&json!({"proof": proof})).unwrap();
+        let answered = answer(&mut ledger, &context, "POST", &base, &body).unwrap();
+        self.ledger = ledger;
+        answered
+    }
+
+    fn stored_key(&self) -> Option<String> {
+        let mut store = EncryptedFileSecretStore::new(self.home.path());
+        load_provider_key(&mut store, SHIELD).map(|key| key.expose().to_owned())
     }
 
     fn key_stored(&self) -> bool {
@@ -282,4 +327,59 @@ fn a_misshapen_apply_still_spends_the_proof_it_presents() {
         fixture.ledger = ledger;
     }
     assert!(fixture.stored().is_some(), "nothing was disconnected");
+}
+
+#[test]
+fn a_disconnect_during_the_provider_call_wins() {
+    let mut fixture = Fixture::new();
+    let providers = fixture.providers.clone();
+    let first = fixture.prepare(&providers, &key());
+    assert_eq!(fixture.finish(first, true).status, 200);
+
+    let pending = fixture.prepare(&providers, &key());
+    let disconnected = fixture.disconnect();
+    assert_eq!(disconnected.status, 200, "{}", disconnected.body);
+    let late = fixture.finish(pending, true);
+    assert_eq!((late.status, code(&late)), (409, CONNECT_SUPERSEDED));
+    assert_eq!(fixture.stored(), None, "the disconnect stands");
+    assert!(!fixture.key_stored(), "no key comes back");
+}
+
+#[test]
+fn of_two_overlapping_connects_only_the_first_to_finish_is_stored() {
+    let mut fixture = Fixture::new();
+    let providers = fixture.providers.clone();
+    let other = format!("fixture-connect-{}", "e".repeat(24));
+    let first = fixture.prepare(&providers, &key());
+    let second = fixture.prepare(&providers, &other);
+    assert_eq!(fixture.finish(second, true).status, 200);
+    let late = fixture.finish(first, true);
+    assert_eq!((late.status, code(&late)), (409, CONNECT_SUPERSEDED));
+    assert_eq!(fixture.stored_key(), Some(other));
+}
+
+#[test]
+fn a_reconnect_whose_row_fails_keeps_the_previous_key() {
+    let mut fixture = Fixture::new();
+    let providers = fixture.providers.clone();
+    let first = fixture.prepare(&providers, &key());
+    assert_eq!(fixture.finish(first, true).status, 200);
+    fixture
+        .connection
+        .execute_batch(
+            "create trigger refuse_insert before insert on provider_connections \
+             begin select raise(abort, 'refused'); end; \
+             create trigger refuse_update before update on provider_connections \
+             begin select raise(abort, 'refused'); end;",
+        )
+        .unwrap();
+
+    let other = format!("fixture-connect-{}", "e".repeat(24));
+    let failed = fixture.prepare(&providers, &other);
+    assert_eq!(fixture.finish(failed, true).status, 503);
+    assert_eq!(
+        fixture.stored_key(),
+        Some(key()),
+        "the previous key is put back"
+    );
 }

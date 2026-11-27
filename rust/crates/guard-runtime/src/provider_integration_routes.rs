@@ -54,6 +54,7 @@ pub const NOT_FOUND: &str = "provider_not_found";
 pub const NOT_CONNECTED: &str = "provider_not_connected";
 pub const SETTING_MANAGED: &str = "provider_setting_managed";
 pub const INVALID_REQUEST: &str = "invalid_request";
+pub const CONNECT_SUPERSEDED: &str = "provider_connect_superseded";
 
 /// Whether the rollback switch leaves provider integrations on.
 pub fn provider_integrations_enabled(value: Option<&str>) -> bool {
@@ -395,6 +396,7 @@ fn settings_apply(
     ) {
         return Err(error(403, PROOF_INVALID));
     }
+    ledger.advance(&provider.id);
     // Managed policy may have changed since the preview.
     let change = checked_change(context, provider, change)?;
     // The connection read and every write are one change: a failure leaves nothing applied. The
@@ -459,6 +461,7 @@ fn disconnect(
     ) {
         return Err(error(403, PROOF_INVALID));
     }
+    ledger.advance(&provider.id);
     // The key goes first: a connection row without a key is harmless, a key without one is not.
     let secrets = EncryptedFileSecretStore::new(context.guard_home);
     delete_provider_key(&secrets, &provider.id).map_err(|_| unavailable())?;

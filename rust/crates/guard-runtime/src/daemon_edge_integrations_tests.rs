@@ -6,6 +6,7 @@ use super::*;
 use crate::daemon_route_paths::{
     hosted_dashboard_api_path, local_surface_session_allowed, requires_header_token,
 };
+use crate::hook_evidence_store_gate::STORAGE_GATE_FILE_NAME;
 use crate::managed_policy::parse_managed_policy;
 use crate::managed_policy_load::ManagedPolicyStatus;
 use crate::provider_integration_routes::tests::provider;
@@ -244,11 +245,23 @@ fn connect_calls_the_provider_outside_the_store_and_stores_after() {
     let body = json!({"key": key, "proof": preview["challenge"]});
     let gate_free: Verify<'_> = &|prepared| {
         assert_eq!(prepared.provider().id, SHIELD);
-        let probe = crate::hook_evidence_store_gate::hold_storage_gate(
-            edge.home.path(),
-            Duration::from_millis(50),
+        // The gate is a shared lock, so only an exclusive probe shows nobody holds it.
+        let gate = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(edge.home.path().join(STORAGE_GATE_FILE_NAME))
+            .unwrap();
+        assert!(
+            fs2::FileExt::try_lock_exclusive(&gate).is_ok(),
+            "no storage gate hold during the call"
         );
-        assert!(probe.is_ok(), "the storage gate is free during the call");
+        fs2::FileExt::unlock(&gate).unwrap();
+        assert!(
+            ledger().try_lock().is_ok(),
+            "the proof ledger is free during the call"
+        );
         Ok(true)
     };
     let (status, answer) = edge.call_verifying(Some(&none), "POST", &connect, body, gate_free);
@@ -256,4 +269,41 @@ fn connect_calls_the_provider_outside_the_store_and_stores_after() {
     let stored = provider_connection(&edge.store(), SHIELD).unwrap().unwrap();
     assert_eq!(stored.state, State::Connected);
     assert_eq!(stored.last_verified_at_ms, Some(NOW));
+}
+
+#[test]
+fn approval_link_sessions_cannot_reach_provider_routes() {
+    for (method, path) in [
+        ("GET", "/v1/integrations/providers"),
+        ("GET", "/v1/integrations/providers/provider.exampleshield"),
+        (
+            "POST",
+            "/v1/integrations/providers/provider.exampleshield/disconnect",
+        ),
+    ] {
+        for (claims, allowed) in [
+            (json!({"surface": "dashboard"}), true),
+            (
+                json!({"surface": "approval-center", "request_id": "request-1"}),
+                false,
+            ),
+        ] {
+            let frame = json!({"operation": "daemon_route", "request": {
+                "schema": "guard-daemon-route-request.v1", "request_id": "route-providers",
+                "query": {"kind": "session_authorize", "method": method, "path": path,
+                    "claims": claims, "payload": null}}});
+            let output: Value = serde_json::from_slice(
+                &crate::resident_protocol::evaluate_resident_bytes(
+                    frame.to_string().as_bytes(),
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                output["payload"]["allowed"], allowed,
+                "{method} {path} {claims}"
+            );
+        }
+    }
 }
