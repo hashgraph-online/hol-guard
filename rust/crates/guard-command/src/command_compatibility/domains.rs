@@ -462,8 +462,8 @@ pub(super) fn observe(
             .unwrap_or_default()
             .into_iter()
             .filter(|pattern| {
-                !pattern.contains(['/', '~', '*', '?', '[', '{', '$', '`', '('])
-                    && !(pattern.starts_with('\\') && pattern.replace('\\', "").starts_with('-'))
+                !(pattern.contains(['/', '~', '*', '?', '[', '{', '$', '`', '('])
+                    || (pattern.starts_with('\\') && pattern.replace('\\', "").starts_with('-')))
                     && arguments
                         .iter()
                         .filter(|argument| *argument == pattern)
