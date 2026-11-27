@@ -49,6 +49,29 @@ does this on its own. Accepting it sets that reason code to `observe`; the Integ
 every quieted reason with an undo. Quieting lowers only the provider's effect, so it can never take
 a decision below what Guard decides without the provider.
 
+## Check a manifest before you open a pull request
+
+Add recorded responses for the manifest (see the
+[provider integrations README](../../../contributions/provider-integrations/README.md#recorded-responses)),
+then run:
+
+```bash
+hol-guard integrations conformance contributions/provider-integrations/provider.<slug>.json
+```
+
+The five checks are:
+
+1. `compile`: the manifest compiles, including every label.
+2. `recordings`: every recording reads as recorded, and each capability has one for every verdict,
+   for `unknown`, and for a refused key, rate limiting, an oversize body and a malformed body.
+3. `share-set`: the request carries exactly the facts in `shares`.
+4. `no-added-prompt`: with the provider answering `ok`, `unknown` or failing, the benign browser
+   corpus decides exactly as it does with no provider.
+5. `bounded-prompt`: with the provider answering `caution` for everything, the reviews it causes stay
+   inside the noise caps.
+
+CI runs the same checks for every manifest in `contributions/provider-integrations/`.
+
 ## Verified means calibrated
 
 `provider.publisher.verified` is set by maintainers only. A contributed manifest leaves it `false`,

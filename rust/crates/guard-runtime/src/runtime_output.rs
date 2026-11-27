@@ -211,6 +211,7 @@ pub(crate) const KNOWN_SUBCOMMANDS: &[&str] = &[
     "pre-tool",
     "prepare-approval-enrollment",
     "prepare-approval-v4-enrollment",
+    "provider-conformance",
     "provision-verifier-key",
     "resident-client",
     "resident-client-stream",

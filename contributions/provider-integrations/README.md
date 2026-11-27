@@ -20,6 +20,28 @@ see the [provider integration guide](../../docs/guard/extensions/provider-integr
 - The API key travels in a header. Paths cannot carry a query string.
 - Use invented names and hosts in examples and fixtures.
 
+## Recorded responses
+
+Every manifest needs recorded responses at
+`tests/fixtures/provider_integrations/<slug>/recordings.json`, where `<slug>` is the part of the id
+after `provider.`. Record, for each capability, one response for every verdict the map can produce,
+one that maps to `unknown`, and one each for a refused key (`401`), rate limiting (`429`), an oversize
+body and a malformed body. The format is described in
+`rust/crates/guard-provider-integrations/src/conformance_fixtures.rs`, and
+`tests/fixtures/provider_integrations/exampleshield/` is a complete example.
+
+Run the checks on your manifest with the released CLI from a checkout of this repository:
+
+```bash
+hol-guard integrations conformance contributions/provider-integrations/provider.<slug>.json
+```
+
+It exits `0` when all five checks pass and `1` when one fails, and prints each problem.
+`cargo test -p guard-provider-integrations --test conformance_kit` runs the same kit over every
+manifest here in CI: the manifest compiles, every recording reads as recorded, the request carries exactly
+the declared facts, the provider adds no prompt to the benign browser corpus, and `caution` on every
+subject stays inside the noise caps.
+
 ## Trust
 
 Every manifest needs a trust binding in `contracts/extensions/trust/<id>.v1.json`. Run:

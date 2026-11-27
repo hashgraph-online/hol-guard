@@ -28,6 +28,7 @@ pub mod answer;
 pub mod client;
 pub mod compose;
 pub mod conformance;
+pub mod conformance_fixtures;
 pub mod fixture_origin;
 pub mod noise;
 pub mod overrides;

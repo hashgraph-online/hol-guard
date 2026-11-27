@@ -854,6 +854,7 @@ mod mcp_config_discovery_tests;
 mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
+mod provider_conformance_command;
 mod pyyaml_dump;
 mod runtime_output;
 mod runtime_output_directory;
