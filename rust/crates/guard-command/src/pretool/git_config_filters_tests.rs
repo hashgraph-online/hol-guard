@@ -163,6 +163,7 @@ fn one_evaluation_asks_each_filter_question_once() {
         // `GIT_WORK_TREE`, would point Git away from the fixture.
         assert!(std::process::Command::new(&git)
             .env_clear()
+            .env("GIT_CONFIG_NOSYSTEM", "1")
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
             .env("HOME", &home)
             .arg("-C")
@@ -177,13 +178,18 @@ fn one_evaluation_asks_each_filter_question_once() {
     std::fs::write(repository.join("README.md"), "fixture\n").unwrap();
     std::fs::write(repository.join("table.dat"), "rows\n").unwrap();
     run(&["add", ".gitattributes", "README.md", "table.dat"]);
+    // Inspect the same isolated Git configuration used to build the fixture.
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        git_config_no_system: true,
+        ..Default::default()
+    };
     let inspect = |named: &[&str]| {
         unused(
             &git,
             &[],
             &repository,
             &home,
-            None,
+            Some(&environment),
             soon(),
             named,
             false,
