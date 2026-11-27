@@ -245,6 +245,7 @@
           "src/codex_plugin_scanner/guard/cli/extension_builder_browser.py",
           "src/codex_plugin_scanner/guard/cli/cloud_pack_explain_command.py",
           "src/codex_plugin_scanner/guard/cli/browser_explain_command.py",
+          "src/codex_plugin_scanner/guard/cli/integrations_command.py",
           "src/codex_plugin_scanner/guard/cli/extension_catalog_reads.py",
           "src/codex_plugin_scanner/guard/runtime/custom_extension_continuity*.py",
           "src/codex_plugin_scanner/guard/cli/extension_controls_commands.py",
