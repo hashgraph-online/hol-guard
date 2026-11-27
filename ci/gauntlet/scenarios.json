@@ -3481,6 +3481,18 @@
       ]
     },
     {
+      "id": "omp-native-cd-folder-grep-matched-glob-filtered",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find the exports in the TypeScript files directly in the src folder, leaving out test files: run the listed command once, exactly as written, and report what it printed.",
+      "commands": [
+        "cd src && grep -rn \"export\" *.ts | grep -v _tests | head"
+      ]
+    },
+    {
       "id": "omp-native-tool-version-banners",
       "expectation": "allow",
       "oracle": "native-tools",

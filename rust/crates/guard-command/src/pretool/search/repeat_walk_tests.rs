@@ -263,3 +263,52 @@ fn a_submission_expands_each_search_glob_once() {
         distinct.len()
     );
 }
+
+#[test]
+fn a_submission_lists_a_large_glob_directory_once() {
+    let root = tempfile::Builder::new()
+        .prefix("guard-repeat-glob-listing")
+        .tempdir()
+        .expect("temp root");
+    let home = std::fs::canonicalize(root.path()).expect("canonical home");
+    let source = home.join("projects").join("engine").join("src");
+    std::fs::create_dir_all(&source).expect("source directory");
+    // More matches than a glob expansion keeps, so the search is proven
+    // from the named entries of the directory.
+    for index in 0..300 {
+        std::fs::write(
+            source.join(format!("module_{index}.rs")),
+            "pub fn render_intent() {}\n",
+        )
+        .expect("fixture file");
+    }
+    let command = "grep -rn \"render_intent\" *.rs | grep -v _tests | head";
+    take_walks();
+    super::tree::AGENT_STATE_RESOLVED.with(|resolved| resolved.set(0));
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+        "claude-code",
+        "PreToolUse",
+        &serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": source.to_str().expect("cwd text"),
+        }),
+        None,
+        None,
+        home.to_str(),
+        source.to_str(),
+    );
+    let walks = take_walks();
+    assert_eq!(
+        (result.minimum_action.as_str(), result.reason_code.as_str()),
+        ("allow", "native_exact_safe_command"),
+        "walks: {walks:?}"
+    );
+    for kind in ["glob-option-listing ", "glob-sure-match "] {
+        let listings: Vec<_> = walks.iter().filter(|walk| walk.starts_with(kind)).collect();
+        assert_eq!(listings.len(), 1, "{kind}listings: {listings:?}");
+    }
+    // The directory resolves once for its 300 matches, not once per match.
+    let resolved = super::tree::AGENT_STATE_RESOLVED.with(std::cell::Cell::get);
+    assert!(resolved < 100, "resolved {resolved} paths");
+}
