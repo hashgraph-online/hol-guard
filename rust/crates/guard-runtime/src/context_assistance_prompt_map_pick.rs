@@ -1,6 +1,9 @@
 //! Which definitions the map shows: those the prompt names, the functions
 //! left to be written in a file it names, and the types they build on.
 use super::{more, rename, term_form, written_name, Asked, File, Kind, Sought};
+#[path = "context_assistance_prompt_map_protocol.rs"]
+mod protocol;
+pub(super) use protocol::members;
 
 const MAX_NAMED_DEFINITIONS: usize = 6;
 /// The most lines of the definition a file is named for shown whole when the

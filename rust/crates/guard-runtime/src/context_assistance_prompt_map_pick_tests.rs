@@ -155,3 +155,19 @@ base: string): string {\n  return encodePath(base + input);\n}\n";
     );
     assert!(generic.is_none_or(|text| !text.contains("src/utility.ts:")));
 }
+
+#[test]
+fn a_module_constant_the_prompt_names_is_placed() {
+    let parser = "import sys\nfrom typing import Final\n\n# Nesting limit.\n\
+MAX_INLINE_NESTING: Final = sys.getrecursionlimit()\n\nMAX_KEY_PARTS: Final = 100\n\n\
+def parse_inline_table(src, pos, nest_lvl):\n    if nest_lvl > MAX_INLINE_NESTING:\n        \
+raise RecursionError\n    return pos\n";
+    let (home, _project, root) = project(ON, &[("src/tomli/_parser.py", parser)]);
+    let prompt = "Set smaller MAX_INLINE_NESTING to avoid worker thread crash";
+    let text = prompt_map(home.path(), &root, prompt).unwrap_or_default();
+    assert!(text.contains("src/tomli/_parser.py:5"), "{text}");
+    assert!(
+        text.contains("MAX_INLINE_NESTING: Final = sys.getrecursionlimit()"),
+        "{text}"
+    );
+}

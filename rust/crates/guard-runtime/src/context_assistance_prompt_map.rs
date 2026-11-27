@@ -289,7 +289,7 @@ pub(super) fn map(
         .collect();
     let plain_name = |item: &Sought| !asked.changes && !item.common && defined.contains(&item.text);
     // A misspelled or new name means the definition it is near.
-    let names: Vec<(&str, bool)> = (sought.iter())
+    let mut names: Vec<(&str, bool)> = (sought.iter())
         .filter(|item| !item.phrase)
         .filter_map(|item| {
             let near = uses::meant(item, &defined).filter(|_| !asked.changes);
@@ -299,6 +299,7 @@ pub(super) fn map(
             }
         })
         .collect();
+    names.extend(pick::members(&files, sought, &names));
     let mut chosen = named_definitions(&files, &names, asked, false);
     // A name no definition holds, or a renamed one, is looked for where used.
     let placed: BTreeSet<&str> = (chosen.iter())

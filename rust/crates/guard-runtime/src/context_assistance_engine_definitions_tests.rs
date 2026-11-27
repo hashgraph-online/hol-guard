@@ -154,3 +154,39 @@ fn many_const_words_on_one_line_are_read_in_linear_time() {
     assert_eq!(written_name(&line).as_deref(), Some("late"));
     assert!(started.elapsed() < std::time::Duration::from_secs(2));
 }
+
+#[test]
+fn top_level_constants_and_typed_values_are_named_definitions() {
+    for (line, name) in [
+        ("MAX_INLINE_NESTING = 400", "MAX_INLINE_NESTING"),
+        ("MAX_INLINE_NESTING: Final = sys.getrecursionlimit()", "MAX_INLINE_NESTING"),
+        (
+            "_mutable_spec: t.Tuple[t.Tuple[t.Type[t.Any], t.FrozenSet[str]], ...] = (",
+            "_mutable_spec",
+        ),
+        ("DEFAULT_TIMEOUT=30", "DEFAULT_TIMEOUT"),
+        ("static RETRIES: u32 = 3;", "RETRIES"),
+        ("pub static NAMES: [&str; 2] = [\"a\", \"b\"];", "NAMES"),
+        ("HTTP2 = True", "HTTP2"),
+    ] {
+        assert_eq!(named(line).as_deref(), Some(name), "{line}");
+    }
+}
+
+#[test]
+fn assignments_that_are_not_constants_stay_statements() {
+    for line in [
+        "object = make()",
+        "result = run(task)",
+        "    LIMIT = 3",
+        "    limit: int = 3",
+        "else: x = 1",
+        "finally: CLEANUP = 1",
+        "FLAG == other",
+        "name: value",
+        "x::y = 3",
+        "url: http://example.test/?a=b",
+    ] {
+        assert!(!definition(line), "{line}");
+    }
+}
