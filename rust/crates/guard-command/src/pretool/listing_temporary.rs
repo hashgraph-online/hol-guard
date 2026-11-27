@@ -48,6 +48,43 @@ pub(super) fn writable_by_anyone(_directory: &std::path::Path) -> bool {
     false
 }
 
+/// Whether `directory` is a shared temporary root such as `/tmp`: any local
+/// user may add an entry, and the sticky bit keeps each entry its owner's.
+/// The root must belong to the system, so a world-writable directory another
+/// user made below `/tmp` is not one.
+#[cfg(unix)]
+pub(super) fn shared_temporary_root(directory: &std::path::Path) -> bool {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    std::fs::metadata(directory).is_ok_and(|metadata| {
+        metadata.is_dir() && metadata.uid() == 0 && metadata.permissions().mode() & 0o1002 == 0o1002
+    })
+}
+
+#[cfg(not(unix))]
+pub(super) fn shared_temporary_root(_directory: &std::path::Path) -> bool {
+    false
+}
+
+/// `ls /tmp/.s.PGSQL.5432 2>/dev/null` while the server is down: one missing
+/// hidden name directly below a shared temporary root. A hidden name there is
+/// a lock file or a server socket, not a home store, so the probe answers no
+/// account question. The name must still clear the credential store and
+/// secret file screens, so `/tmp/.aws` or `/tmp/.netrc` keeps its review.
+pub(super) fn absent_shared_temporary_leaf(
+    expanded: &std::path::Path,
+    ancestor: &std::path::Path,
+    missing: &[&std::ffi::OsStr],
+) -> bool {
+    let [leaf] = missing else {
+        return false;
+    };
+    let lowered = leaf.to_string_lossy().to_ascii_lowercase();
+    shared_temporary_root(ancestor)
+        && guard_secure_fs::credential_store_names::clears_store_screen(expanded)
+        && !guard_secure_fs::credential_store_names::secret_bearing_file_name(&lowered)
+        && guard_secure_fs::sensitive_path_family(expanded).is_none()
+}
+
 /// Whether canonical `path` is a temporary directory only the home owner can
 /// create an entry in, and not a home tree that merely lives below one.
 ///

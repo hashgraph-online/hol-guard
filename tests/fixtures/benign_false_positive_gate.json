@@ -36484,6 +36484,91 @@
       "expect": "allow"
     },
     {
+      "id": "session-ls-postgres-socket-present",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${PG_RUN}/.s.PGSQL.5432"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-ls-shared-temp-postgres-socket-probe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls /tmp/.s.PGSQL.5432 2>/dev/null"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "session-ls-shared-temp-postgres-lock-probe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la /tmp/.guard-benign-gate-absent.lock 2>/dev/null"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-ls-shared-temp-credential-store",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la /tmp/.aws"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-ls-shared-temp-secret-file",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la /tmp/.netrc 2>/dev/null"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-cat-codex-auth",
       "fix_area": "negative",
       "harnesses": [
