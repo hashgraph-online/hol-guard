@@ -1196,6 +1196,9 @@ pub(super) fn evaluate_pre_tool_with_reported_guard_home(
     // starting one of its own, and the budget ends when the outermost
     // reading returns.
     let _budget = search_scope_budget::begin_submission_budget(deadline);
+    // The removal proof reads the user configuration directory the Git
+    // probe reads: the stamped one when the request carries a stamp.
+    let _git_sources = removal_git_sources::session_scope(execution_environment);
     let decision = evaluate_rewritten(
         request,
         home_dir,

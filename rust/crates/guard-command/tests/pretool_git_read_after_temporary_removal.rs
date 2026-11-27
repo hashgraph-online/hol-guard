@@ -5,6 +5,9 @@
 //! as it was, so the Git read keeps its configuration proof.
 use crate::git_helper_fixture as fixture;
 use fixture::{evaluate_pre_tool_envelope_with_context, github_controls, FixtureCleanup};
+use guard_command::pretool::evaluate_pre_tool_in;
+use guard_command::CommandModelRequestV1;
+use guard_contracts::GuardExecutionEnvironmentV1;
 use serde_json::json;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -135,6 +138,45 @@ fn a_temporary_file_removal_before_a_git_read_keeps_its_proof() {
         let (action, reason) = evaluate(&home, &outside, &command);
         assert_ne!(action, "allow", "{command}: {reason}");
     }
+
+    // A request stamped with the session's shell reads that shell's user
+    // configuration directory, whose `core.attributesFile` here names a
+    // scratch file.
+    let xdg = PathBuf::from(format!("{scratch}/xdg"));
+    std::fs::create_dir_all(xdg.join("git")).unwrap();
+    std::fs::write(
+        xdg.join("git/config"),
+        format!("[core]\n\tattributesFile = {scratch}/stamped.txt\n"),
+    )
+    .unwrap();
+    std::fs::write(format!("{scratch}/stamped.txt"), "draft\n").unwrap();
+    let stamped = GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_names: ["HOME", "PATH", "XDG_CONFIG_HOME"]
+            .map(String::from)
+            .to_vec(),
+        environment_digest: "0".repeat(64),
+        home: home.to_str().map(String::from),
+        xdg_config_home: xdg.to_str().map(String::from),
+        ..Default::default()
+    };
+    let in_shell = |command: String| {
+        let request = CommandModelRequestV1 {
+            command,
+            dialect: "posix".to_owned(),
+            transport: "shell_string".to_owned(),
+            extraction_provenance: "guard-shell".to_owned(),
+        };
+        let decision =
+            evaluate_pre_tool_in(&request, home.to_str(), repository.to_str(), Some(&stamped))
+                .unwrap();
+        (decision.minimum_action, decision.reason_code)
+    };
+    let command = format!("rm -f {scratch}/notes.txt; git log --oneline -1");
+    assert_eq!(in_shell(command.clone()).0, "allow", "{command}");
+    let command = format!("rm -f {scratch}/stamped.txt; git log --oneline -1");
+    let (action, reason) = in_shell(command.clone());
+    assert_ne!(action, "allow", "{command}: {reason}");
 }
 
 #[test]
