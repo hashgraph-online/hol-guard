@@ -366,6 +366,26 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
         return _token_sources_match(scenario, calls)
     if scenario.id == FEATURE_DIRECTORY_CASE:
         return _feature_directory_match(calls)
+    if scenario.id == "omp-native-shell-rg-unmatched-root-glob-after-cd":
+        # Both pipelines may succeed via head even when rg never ran. The
+        # missing-glob diagnostic is legitimate, but the existing source must
+        # still appear in each search, including the two searches after cd.
+        if tuple(call.get("args", {}).get("command") for call in calls) != scenario.commands:
+            return False
+        first, second = (_text(call) for call in calls)
+        if first is None or second is None:
+            return False
+        relative = {"./settings.ts", "settings.ts"}
+        rows = second.splitlines()
+        expected = "1:" + SOURCE_FILES["src/settings.ts"].splitlines()[0]
+        return (
+            any(line.replace("\\", "/") == "src/settings.ts" for line in first.splitlines())
+            and any(line.replace("\\", "/") in relative for line in rows)
+            and any(
+                path.replace("\\", "/") in relative and sep == ":" and rest == expected
+                for path, sep, rest in (line.partition(":") for line in rows)
+            )
+        )
     if scenario.id == WORKSPACE_GREP_CASE:
         return _workspace_search_match(calls)
     if scenario.id in CLONE_SEARCH_CASES:

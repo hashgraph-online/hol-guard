@@ -18,6 +18,8 @@ pub(crate) use pattern_operands::search_patterns;
 mod repeat_walk_tests;
 mod rg;
 mod rg_exclusions;
+#[cfg(test)]
+mod rg_unmatched_glob_tests;
 mod rg_whitelist;
 mod rg_whitelist_file;
 mod roots;

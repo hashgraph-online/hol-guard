@@ -37726,6 +37726,74 @@
       "expect": "not_allow"
     },
     {
+      "id": "rg-unmatched-root-glob-beside-a-real-root",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -ln \"export\" src handlers_*.ts | head"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-unmatched-root-glob-after-a-cd-chain",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd src && rg -n \"export\" . | head -5; rg -ln \"export\" . handlers_*.ts | head"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-rg-unmatched-root-glob-beside-ssh-dir",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -ln \"export\" src handlers_*.ts ~/.ssh | head"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-rg-unmatched-root-glob-beside-missing-ssh-root",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -ln retry src handlers_*.ts ${HOME}/.ssh/missing"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-grep-search-globs-beside-ssh-glob",
       "fix_area": "shell",
       "harnesses": [

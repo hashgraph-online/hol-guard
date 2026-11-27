@@ -23,7 +23,7 @@ pub(super) fn missing_operand(value: &str, context: ReadContext<'_>) -> bool {
 /// proves matches nothing in a real directory, or that sits below a directory
 /// that is not there. A `~` glob counts only while the shell's home is the
 /// declared one.
-fn unmatched_glob(value: &str, context: ReadContext<'_>) -> bool {
+pub(in crate::pretool::search) fn unmatched_glob(value: &str, context: ReadContext<'_>) -> bool {
     value.contains(['*', '?'])
         && !value.contains(['[', ']'])
         && (!value.starts_with('~') || context.shell_home_matches)
