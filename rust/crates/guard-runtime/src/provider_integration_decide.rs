@@ -182,7 +182,15 @@ pub fn decide(
         .iter()
         .map(|candidate| (candidate.provider.provider_id, candidate))
         .collect();
-    let guard_reviews_anyway = request.baseline != BaselineDecision::Allow;
+    let fresh_check_required: Vec<String> = candidates
+        .iter()
+        .filter(|candidate| !candidate.fresh && candidate.setting.require_fresh)
+        .map(|candidate| candidate.provider.provider_id.to_owned())
+        .collect();
+    // A missing fresh check reviews the action whatever the answers say, so a provider row that
+    // joins that review rides on it and is not counted against the caution caps.
+    let guard_reviews_anyway =
+        request.baseline != BaselineDecision::Allow || !fresh_check_required.is_empty();
     let mut noise = Vec::new();
     let mut answers = Vec::new();
     for row in &composition.ordered {
@@ -221,11 +229,6 @@ pub fn decide(
     let unavailable: Vec<String> = candidates
         .iter()
         .filter(|candidate| !candidate.fresh)
-        .map(|candidate| candidate.provider.provider_id.to_owned())
-        .collect();
-    let fresh_check_required: Vec<String> = candidates
-        .iter()
-        .filter(|candidate| !candidate.fresh && candidate.setting.require_fresh)
         .map(|candidate| candidate.provider.provider_id.to_owned())
         .collect();
     let mut decision = apply(request.baseline, outcome.effect);

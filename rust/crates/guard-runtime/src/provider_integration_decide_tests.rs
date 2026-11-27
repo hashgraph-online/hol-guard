@@ -258,6 +258,25 @@ fn require_fresh_reviews_when_no_fresh_answer_is_cached() {
 }
 
 #[test]
+fn a_caution_that_joins_a_fresh_check_review_is_not_counted() {
+    let connection = store(&[SHIELD, OTHER]);
+    cache(&connection, SHIELD, 1, Verdict::Caution, 60_000);
+    set(&connection, OTHER, Level::Tighten, true);
+    let mut ledger = NoiseLedger::new();
+    let decided = run(
+        &connection,
+        &mut ledger,
+        Allow,
+        1,
+        &[verified(SHIELD), verified(OTHER)],
+    );
+    assert_eq!(decided.decision, Review);
+    assert_eq!(decided.effect, ProviderEffect::RidesOnGuardReview);
+    assert_eq!(decided.fresh_check_required, vec![OTHER.to_owned()]);
+    assert_eq!(ledger.caution_reviews(SHIELD), 0);
+}
+
+#[test]
 fn several_cautions_about_one_subject_raise_one_review() {
     let connection = store(&[SHIELD, OTHER]);
     cache(&connection, SHIELD, 1, Verdict::Caution, 60_000);
