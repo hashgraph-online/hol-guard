@@ -77,6 +77,9 @@ fn a_temporary_file_removal_before_a_git_read_keeps_its_proof() {
         repository.join(".git/info/attributes"),
     )
     .unwrap();
+    // A directory outside every checkout to run the routed steps from.
+    let outside = scratch.join("elsewhere");
+    std::fs::create_dir(&outside).unwrap();
     let scratch = scratch.display();
     let absent = format!("/tmp/hg-git-read-removal-absent-{}.txt", std::process::id());
 
@@ -109,8 +112,27 @@ fn a_temporary_file_removal_before_a_git_read_keeps_its_proof() {
         format!("rm -f {absent}; cp package.json {scratch}/copy.json; git log --oneline -1"),
         // One unproven operand keeps the whole step unproven.
         format!("rm -f {scratch}/notes.txt {scratch}/extra.conf; git log --oneline -1"),
+        // A step that sets its own configuration may name the removed file.
+        format!("rm -f {scratch}/notes.txt; git -c core.attributesFile={scratch}/notes.txt log --oneline -1"),
     ] {
         let (action, reason) = evaluate(&home, &repository, &command);
+        assert_ne!(action, "allow", "{command}: {reason}");
+    }
+
+    // A Git step routed with `-C` reads that repository's attributes, so
+    // the removal is checked against them from any working directory.
+    let routed = repository.display();
+    let command = format!("rm -f {scratch}/notes.txt; git -C {routed} log --oneline -1");
+    assert_eq!(
+        evaluate(&home, &outside, &command),
+        ("allow".to_owned(), "native_exact_safe_command".to_owned()),
+        "{command}"
+    );
+    for command in [
+        format!("rm -f {scratch}/quiet.txt; git -C {routed} log --oneline -1"),
+        format!("rm -f {scratch}/quiet.txt && git -C {routed} status --short"),
+    ] {
+        let (action, reason) = evaluate(&home, &outside, &command);
         assert_ne!(action, "allow", "{command}: {reason}");
     }
 }

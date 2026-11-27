@@ -459,6 +459,7 @@ fn evaluate_envelope(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     project_redirects: bool,
 ) -> PreToolResultV1 {
+    let _git_sources = super::removal_git_sources::session_scope(execution_environment);
     let context = super::PathContext {
         guard_home: context.guard_home,
         ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)

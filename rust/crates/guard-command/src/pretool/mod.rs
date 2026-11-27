@@ -271,6 +271,7 @@ mod recursive_copy;
 mod ref_name_words;
 mod restricted_test_commands;
 pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_script_task};
+mod removal_git_sources;
 mod removal_git_state;
 mod rust_toolchain;
 mod rustfmt_writes;
