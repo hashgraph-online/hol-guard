@@ -169,6 +169,28 @@ pub(super) fn walk_scope(
     walk_scope_with(root, filter, ignores, names, &|_| false, home, blocker)
 }
 
+/// [`walk_scope`] for ripgrep's inclusion globs, which also stops at `stop`.
+pub(super) fn walk_rg_glob_scope(
+    root: &Path,
+    filter: &SearchFilter,
+    home: Option<&str>,
+    stop: Option<Instant>,
+) -> Result<(), ScopeUnproven> {
+    walk_scope_inner(
+        root,
+        filter,
+        Ignores::RipgrepGlob,
+        false,
+        &|_| false,
+        None,
+        false,
+        home,
+        &mut None,
+        None,
+        stop,
+    )
+}
+
 /// [`walk_scope`] for a grep include, under the entry count and the wall
 /// clock such a reading is allowed. Nothing is ignored: `grep` reads no
 /// ignore file.

@@ -1193,7 +1193,7 @@ pub(super) fn evaluate_pre_tool_with_reported_guard_home(
     // nesting, so a projection joins the submission already open instead of
     // starting one of its own, and the budget ends when the outermost
     // reading returns.
-    let _budget = search_scope_budget::begin_include_scope_budget();
+    let _budget = search_scope_budget::begin_submission_budget(deadline);
     let decision = evaluate_rewritten(
         request,
         home_dir,
