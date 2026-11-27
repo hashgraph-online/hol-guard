@@ -495,7 +495,10 @@ fn verified_directory_root(
     let candidate = if Path::new(target).is_absolute() {
         PathBuf::from(target)
     } else {
-        Path::new(cwd?).join(target)
+        // The shell already resolved its working directory, so a link in the
+        // spelling the harness reports, such as macOS's `/tmp`, redirects
+        // nothing. Only the target's own components can.
+        std::fs::canonicalize(cwd?).ok()?.join(target)
     };
     if guard_secure_fs::contains_symlink_component(&candidate) {
         return None;

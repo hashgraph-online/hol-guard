@@ -3792,6 +3792,19 @@
       ]
     },
     {
+      "id": "omp-native-rg-include-globs-linked-cwd",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Search the TypeScript sources for one marker with ripgrep include globs. Run each listed command once, in order, from the project directory, and tell me what each one printed. An empty result is a valid answer: report it and carry on to the next command. Do not substitute tools, change the command or the directory, add verification calls, request approval, or change policy. Stop after the listed calls.",
+      "commands": [
+        "rg -n \"railStage\" src tests -g '*.ts*' | head -20",
+        "rg -n \"railStage\" src -g '*.ts' -g '*.tsx' | head -20"
+      ]
+    },
+    {
       "id": "omp-native-workspace-vitest-filter",
       "expectation": "allow",
       "oracle": "native-tools",
