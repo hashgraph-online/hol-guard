@@ -69,7 +69,7 @@ def configure_provider_subcommands(commands: argparse._SubParsersAction[argparse
 
     test = commands.add_parser("test", help="Run one live lookup for a public origin; the answer is not stored")
     test.add_argument("provider", help="Provider id")
-    test.add_argument("origin", help="Public origin, for example https://storefront.example-org.com")
+    test.add_argument("--origin", required=True, help="Public origin, for example https://storefront.example-org.com")
     test.add_argument("--capability", default=DEFAULT_CAPABILITY, help=f"Capability (default: {DEFAULT_CAPABILITY})")
     test.add_argument("--json", action="store_true", help="Print the daemon answer as JSON")
 
@@ -79,15 +79,22 @@ def configure_provider_subcommands(commands: argparse._SubParsersAction[argparse
         "--effect",
         action="append",
         default=[],
-        metavar="CAPABILITY=LEVEL",
+        nargs=2,
+        metavar=("CAPABILITY", "LEVEL"),
         help="Set a capability's effect: observe, tighten or enforce (repeatable)",
     )
     settings.add_argument(
-        "--fresh-check",
+        "--require-fresh",
         action="append",
         default=[],
-        metavar="CAPABILITY=on|off",
+        nargs=2,
+        metavar=("CAPABILITY", "on|off"),
         help="Require a fresh provider answer before the action runs (repeatable)",
+    )
+    settings.add_argument(
+        "--enforce-blocks",
+        choices=("on", "off"),
+        help="on: a danger answer blocks for every capability (enforce); off: lowers enforce to tighten",
     )
     settings.add_argument(
         "--share",
@@ -227,13 +234,23 @@ class _Session:
         calls = self._client()
         detail = calls.get(base, timeout=_READ_TIMEOUT_S)
         settings = _settings_rows(detail)
-        for capability, level in _pairs(self.args.effect, "--effect"):
+        capabilities = _strings(_mapping(detail.get("summary")).get("capabilities"))
+        for row in settings:
+            capabilities.append(str(row.get("capability")))
+        if self.args.enforce_blocks is not None:
+            for capability in dict.fromkeys(capabilities):
+                row = _row(settings, capability)
+                if self.args.enforce_blocks == "on":
+                    row["effect"] = "enforce"
+                elif row.get("effect") == "enforce":
+                    row["effect"] = "tighten"
+        for capability, level in _pairs(self.args.effect):
             if level not in EFFECTS:
                 raise ProviderCommandError("invalid_request", f"{level} is not one of {', '.join(EFFECTS)}.")
             _row(settings, capability)["effect"] = level
-        for capability, flag in _pairs(self.args.fresh_check, "--fresh-check"):
+        for capability, flag in _pairs(self.args.require_fresh):
             if flag not in {"on", "off"}:
-                raise ProviderCommandError("invalid_request", "--fresh-check takes on or off.")
+                raise ProviderCommandError("invalid_request", "--require-fresh takes on or off.")
             _row(settings, capability)["require_fresh_check"] = flag == "on"
         if self.args.no_opt_in:
             facts: list[str] = []
@@ -304,14 +321,12 @@ def _strings(value: object) -> list[str]:
     return [str(item) for item in value] if isinstance(value, list) else []
 
 
-def _pairs(values: list[str], flag: str) -> list[tuple[str, str]]:
-    pairs = []
-    for value in values:
-        name, sep, setting = str(value).partition("=")
-        if not sep or not name.strip() or not setting.strip():
-            raise ProviderCommandError("invalid_request", f"{flag} takes CAPABILITY=VALUE.")
-        pairs.append((name.strip(), setting.strip().lower()))
-    return pairs
+def _pairs(values: list[list[str]]) -> list[tuple[str, str]]:
+    return [(str(name).strip(), str(value).strip().lower()) for name, value in values]
+
+
+def _mapping(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
 
 
 def _settings_rows(detail: dict[str, object]) -> list[dict[str, object]]:

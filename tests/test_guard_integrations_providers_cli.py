@@ -189,7 +189,7 @@ def test_test_prints_the_signal_and_says_it_was_not_stored(
     }
     client = _install(monkeypatch, {f"{BASE}/test": answer}, io.StringIO())
     origin = "https://storefront.example-org.com"
-    assert cli.main(["guard", "integrations", "test", SHIELD, origin]) == 0
+    assert cli.main(["guard", "integrations", "test", SHIELD, "--origin", origin]) == 0
     out = capsys.readouterr().out
     assert "answered danger for browser.origin-reputation (reasons: phishing)" in out
     assert "not stored" in out
@@ -211,9 +211,11 @@ def test_settings_change_one_effect_and_keep_the_rest(
         "settings",
         SHIELD,
         "--effect",
-        "browser.origin-reputation=enforce",
-        "--fresh-check",
-        "browser.origin-reputation=on",
+        "browser.origin-reputation",
+        "enforce",
+        "--require-fresh",
+        "browser.origin-reputation",
+        "on",
         "--yes",
     ]
     assert cli.main(argv) == 0
@@ -235,7 +237,7 @@ def test_settings_change_one_effect_and_keep_the_rest(
 
 def test_settings_refuse_an_unknown_effect(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     client = _install(monkeypatch, {BASE: DETAIL}, io.StringIO())
-    argv = ["guard", "integrations", "settings", SHIELD, "--effect", "browser.origin-reputation=block", "--yes"]
+    argv = ["guard", "integrations", "settings", SHIELD, "--effect", "browser.origin-reputation", "block", "--yes"]
     assert cli.main(argv) == 2
     assert "block is not one of observe, tighten, enforce" in capsys.readouterr().err
     assert len(client.sent) == 1
@@ -259,3 +261,20 @@ def test_a_malformed_provider_id_sends_nothing(
     assert cli.main(["guard", "integrations", "status", "../v1/settings"]) == 2
     assert "not_found" in capsys.readouterr().err
     assert client.sent == []
+
+
+def test_enforce_blocks_sets_and_lowers_every_capability(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answers = {
+        BASE: DETAIL,
+        f"{BASE}/settings/preview": _preview(settings=[], enabled_opt_in_facts=[]),
+        f"{BASE}/settings": {"provider_id": SHIELD, "applied": True},
+    }
+    for flag, effect in (("on", "enforce"), ("off", "tighten")):
+        client = _install(monkeypatch, answers, io.StringIO())
+        assert cli.main(["guard", "integrations", "settings", SHIELD, "--enforce-blocks", flag, "--yes"]) == 0
+        _method, _path, body = client.sent[1]
+        assert body is not None
+        assert [row["effect"] for row in body["settings"]] == [effect]
+    capsys.readouterr()
