@@ -529,9 +529,13 @@ transcript in the pull request (after BP-T052).
     for failures (bounded), a circuit that opens for 5 minutes after five consecutive failures and
     reopens on a failed probe, `401`/`403` written to the stored connection as `key_invalid` with one
     notice, and a jittered refresh point late in an answer's lifetime (`refresh_at`).
-  - [ ] Lookup executor: render the request, send it through the client, map the answer and write
-    the signal to the store (`put_signal`), using the pacing above. Needs the conformance kit's
-    answer-mapping helper from the provider-noise change.
+  - [x] Lookup executor (`provider_integration_lookup.rs`): checks that the stored connection is for
+    the same compiled manifest, refuses an opt-in fact the user did not turn on and a private or
+    loopback origin or site group before a token is taken, loads the key, renders the body, sends it
+    through the transport, maps the answer with `map_answer` and caches it with `put_signal`.
+    `401`/`403`, `429` and every other failure go to `ProviderWorker::record`.
+  - [ ] Daemon scheduling: a background loop that picks subjects from the hook path's queue and runs
+    the executor with the pinned HTTPS client, off the decision path (with BP-T124).
 - [ ] **BP-T123** `provider_integration_decide.rs`: cache read only, applies PRD 6.6. Property test:
   for any signal set the decision is never weaker than the decision with no provider.
 - [ ] **BP-T124** Hot path proof: a test that fails if the hook or relay decision path performs

@@ -1573,6 +1573,7 @@ dependencies = [
  "guard-plugin-telemetry",
  "guard-policy-bundle",
  "guard-policy-snapshot",
+ "guard-provider-integrations",
  "guard-rule-contract",
  "guard-runtime-pyjson",
  "guard-runtime-windows-process",
