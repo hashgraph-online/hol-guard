@@ -579,8 +579,22 @@ transcript in the pull request (after BP-T052).
   - [x] Native route service `provider_integration_routes.rs`: list, detail, connect preview,
     settings preview and apply, disconnect preview and apply, the one-use proof ledger, the managed
     policy check and the rollback switch. Contract tests cover every code these routes answer.
-  - [ ] Edge wiring (route paths, header token plus session, hosted origins refused), the
-    compiled-provider loader, and the `connect` and `test` routes, which call the provider.
+  - [x] Edge wiring `daemon_edge_integrations.rs`: the edge answers the routes itself with the
+    daemon's header token or a local dashboard session, an allowed origin on every `POST`, and
+    hosted dashboard origins refused. It opens the store under the storage gate, keeps one proof
+    ledger for the process, and refuses every route with `503` when managed policy failed closed or
+    its `provider_integrations` value does not parse.
+  - [x] `connect`: the proof is spent and the key format and opt-in facts are checked under the
+    ledger lock, the manifest's `verify` request is sent with no lock or storage gate held, under
+    the managed network policy and the pinned hosts, and the key and connection row are written
+    afterwards. The row is bound to the compiled manifest's digest (SHA-256 of its source bytes),
+    which the lookup executor compares before every call. A refused key, a rate limit, a refused
+    host or an oversized answer stores nothing. A disconnect, settings apply or other connect that
+    finished while the provider was called refuses the late connect with `409
+    provider_connect_superseded`. A row that fails to write puts the previous key back. Approval
+    links opened for one request cannot reach any provider route.
+  - [ ] The compiled-provider loader (the shipped set is empty until a reviewed pack lands), and the
+    rate-limited `test` route.
 - [ ] **BP-T131** CLI `hol-guard integrations list|status|connect|disconnect|test|settings`. The key is
   read from a prompt or stdin, never an argument, never echoed. Python is glue only, modeled on
   `cli/approval_pulse_commands.py` and `cli/approval_pulse_parser.py`.

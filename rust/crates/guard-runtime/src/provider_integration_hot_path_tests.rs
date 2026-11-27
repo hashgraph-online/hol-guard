@@ -47,11 +47,17 @@ const NETWORK_OR_WORKER_ITEMS: &[&str] = &[
 
 /// The modules allowed to name those items: their owners and their tests. `lib.rs` is scanned like
 /// any other file apart from the module declarations in `MODULE_DECLARATIONS`.
-/// The daemon's background scheduler joins this list when it lands, never a hook or relay module.
+/// The connect route checks a key with the provider, so its route module and the daemon edge that
+/// runs it are owners too. The daemon's background scheduler joins this list when it lands, never
+/// a hook or relay module.
 const OWNERS: &[&str] = &[
+    "daemon_edge_integrations.rs",
+    "daemon_edge_integrations_tests.rs",
     "provider_integration_hot_path_tests.rs",
     "provider_integration_lookup.rs",
     "provider_integration_lookup_tests.rs",
+    "provider_integration_routes_connect.rs",
+    "provider_integration_routes_connect_tests.rs",
     "provider_integration_worker.rs",
     "provider_integration_worker_tests.rs",
 ];

@@ -33,6 +33,7 @@ struct PendingProof {
 #[derive(Debug, Default)]
 pub struct ProofLedger {
     pending: BTreeMap<[u8; 32], PendingProof>,
+    epochs: BTreeMap<String, u64>,
 }
 
 impl ProofLedger {
@@ -76,6 +77,26 @@ impl ProofLedger {
             },
         );
         Some((challenge, expires_at_ms))
+    }
+
+    /// Drops a presented proof without honouring it.
+    pub fn discard(&mut self, proof: &str) {
+        let key: [u8; 32] = Sha256::digest(proof.as_bytes()).into();
+        self.pending.remove(&key);
+    }
+
+    /// How many connection changes `provider_id` has had in this process. A connect records it
+    /// when its proof is spent and is refused at finish if it moved, so a disconnect, a settings
+    /// apply or another connect that finished meanwhile is never overwritten.
+    pub fn epoch(&self, provider_id: &str) -> u64 {
+        self.epochs.get(provider_id).copied().unwrap_or(0)
+    }
+
+    /// Records a connection change for `provider_id`. Callers name only compiled providers, so
+    /// the map is bounded by the shipped set.
+    pub fn advance(&mut self, provider_id: &str) {
+        let epoch = self.epochs.entry(provider_id.to_owned()).or_insert(0);
+        *epoch = epoch.wrapping_add(1);
     }
 
     /// Spends `proof`. True only when it was issued for exactly this provider, action and body and

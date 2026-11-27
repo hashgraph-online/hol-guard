@@ -107,4 +107,7 @@ pub struct CompiledProviderIntegrationV1 {
     pub privacy_url: String,
     pub terms_url: String,
     pub icon: Option<String>,
+    /// Hex SHA-256 of the manifest's source bytes. A connection is bound to it, so a changed
+    /// manifest is never called with consent given to the old one.
+    pub manifest_digest: String,
 }

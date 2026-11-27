@@ -941,6 +941,25 @@ that managed policy would change answers `409 provider_setting_managed`; managed
 again at apply time. Other route codes: `404 provider_not_found`, `409 provider_not_connected`,
 `403 provider_proof_invalid`, `400 invalid_request`.
 
+The daemon edge answers these routes itself; they are never relayed. A caller needs the daemon's
+header token or a local dashboard session, and hosted dashboard origins are refused. When managed
+policy failed closed, or its `provider_integrations` value does not parse, every route answers
+`503 provider_managed_policy_unavailable` rather than guess at a floor; a store that cannot be opened
+answers `503 provider_store_unavailable`.
+
+`connect` spends its proof and checks the key format and opt-in facts first, then sends the
+manifest's `verify` request with no store lock held, under the managed network policy and the
+manifest's pinned hosts. Only a `2xx` answer stores the key and the connection row, which is bound
+to the SHA-256 digest of the manifest's source bytes. `401` or `403` answers
+`400 provider_key_invalid`, `429` answers `429 provider_rate_limited`, a refused host answers
+`403 provider_host_refused`, an oversized answer `502 provider_response_too_large`, and any other
+failure `502 provider_integration_unavailable`. A managed network policy Guard cannot honour answers
+`503 provider_managed_policy_unavailable` and sends nothing. A disconnect, settings apply or other
+connect that finished while the provider was being called wins: the late connect answers
+`409 provider_connect_superseded` and stores nothing. If the connection row cannot be written after
+the key was stored, the provider's previous key is put back. A session opened from an approval link
+for one request cannot read or change provider integrations.
+
 ### 6.10 Sponsors and discovery
 
 - Extend the discovery placement id namespace to accept `browser.` and `provider.` in

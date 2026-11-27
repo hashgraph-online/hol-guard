@@ -5,17 +5,20 @@
 //! request here. This module answers from the compiled provider set, the provider store, managed
 //! policy and its own one-use proof ledger:
 //!
-//! list, detail, `connect/preview`, `settings/preview`, `settings`, `disconnect/preview` and
-//! `disconnect` (the table in PRD 6.9).
+//! list, detail, `connect/preview`, `connect`, `settings/preview`, `settings`, `disconnect/preview`
+//! and `disconnect` (the table in PRD 6.9).
 //!
-//! `connect` and `test` send a provider request, so the lookup side answers them; this module does
-//! not own those paths.
+//! `connect` calls the provider, so it runs in three phases (`prepare_connect`, `verify_connect`,
+//! `finish_connect`) and the caller holds no store lock while the provider answers. `test` belongs
+//! to the lookup side.
 //!
 //! A challenge is bound to the provider, the action and the exact previewed body. It is spent by
 //! the first apply that presents it, whether that apply succeeds or not, and it expires after
 //! [`PROOF_TTL_MS`]. Managed policy wins: a requested setting that managed policy would change is
 //! refused rather than silently raised. Rollback: `HOL_GUARD_PROVIDER_INTEGRATIONS=off` answers
 //! every route `provider_capability_unavailable`.
+
+use std::path::Path;
 
 use guard_command::provider_integration_compile::CompiledProviderIntegrationV1;
 use guard_contracts::{
@@ -51,6 +54,7 @@ pub const NOT_FOUND: &str = "provider_not_found";
 pub const NOT_CONNECTED: &str = "provider_not_connected";
 pub const SETTING_MANAGED: &str = "provider_setting_managed";
 pub const INVALID_REQUEST: &str = "invalid_request";
+pub const CONNECT_SUPERSEDED: &str = "provider_connect_superseded";
 
 /// Whether the rollback switch leaves provider integrations on.
 pub fn provider_integrations_enabled(value: Option<&str>) -> bool {
@@ -73,7 +77,8 @@ pub struct RouteContext<'a> {
     pub providers: &'a [CompiledProviderIntegrationV1],
     pub connection: &'a Connection,
     pub managed: &'a ManagedProviderSettings,
-    pub secrets: &'a EncryptedFileSecretStore,
+    /// Guard's home, which holds the encrypted provider keys.
+    pub guard_home: &'a Path,
     pub now_ms: u64,
 }
 
@@ -121,6 +126,7 @@ pub fn owns(method: &str, path: &str) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Action {
     ConnectPreview,
+    Connect,
     SettingsPreview,
     Settings,
     DisconnectPreview,
@@ -145,6 +151,7 @@ fn route(path: &str) -> Option<Route<'_>> {
     let action = match parts[1..] {
         [] => return Some(Route::Detail(parts[0])),
         ["connect", "preview"] => Action::ConnectPreview,
+        ["connect"] => Action::Connect,
         ["settings", "preview"] => Action::SettingsPreview,
         ["settings"] => Action::Settings,
         ["disconnect", "preview"] => Action::DisconnectPreview,
@@ -201,6 +208,22 @@ fn read_body<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, RouteAnsw
     serde_json::from_value(value).map_err(|_| error(400, INVALID_REQUEST))
 }
 
+/// Reads an apply body. A body that is valid JSON and names a `proof` but fails the typed shape
+/// still spends that proof, so a refused first apply always spends its challenge. A body too large
+/// or too malformed to read names no proof.
+fn read_apply<T: serde::de::DeserializeOwned>(
+    ledger: &mut ProofLedger,
+    body: &[u8],
+) -> Result<T, RouteAnswer> {
+    read_body(body).inspect_err(|_| {
+        if let Ok(value) = read_body::<Value>(body) {
+            if let Some(proof) = value.get("proof").and_then(Value::as_str) {
+                ledger.discard(proof);
+            }
+        }
+    })
+}
+
 fn digest_of(label: &str) -> [u8; 32] {
     Sha256::digest(label.as_bytes()).into()
 }
@@ -249,6 +272,8 @@ fn post(
     };
     let result = match action {
         Action::ConnectPreview => connect_preview(ledger, context, provider, body),
+        // The caller runs connect in phases so no store lock is held while the provider answers.
+        Action::Connect => Err(unavailable()),
         Action::SettingsPreview => settings_preview(ledger, context, provider, body),
         Action::Settings => settings_apply(ledger, context, provider, body),
         Action::DisconnectPreview => disconnect_preview(ledger, context, provider, body),
@@ -356,7 +381,7 @@ fn settings_apply(
     provider: &CompiledProviderIntegrationV1,
     body: &[u8],
 ) -> Result<RouteAnswer, RouteAnswer> {
-    let request: ProviderSettingsRequestV1 = read_body(body)?;
+    let request: ProviderSettingsRequestV1 = read_apply(ledger, body)?;
     let change = SettingsChange {
         settings: request.settings,
         enabled_opt_in_facts: request.enabled_opt_in_facts,
@@ -399,6 +424,8 @@ fn settings_apply(
     in_write_savepoint(context.connection, write)
         .map_err(|_| unavailable())?
         .ok_or_else(|| error(409, NOT_CONNECTED))?;
+    // Only a written change supersedes a connect that is still calling the provider.
+    ledger.advance(&provider.id);
     Ok(ok(json!({ "provider_id": provider.id, "applied": true })))
 }
 
@@ -425,7 +452,7 @@ fn disconnect(
     provider: &CompiledProviderIntegrationV1,
     body: &[u8],
 ) -> Result<RouteAnswer, RouteAnswer> {
-    let request: ProviderDisconnectRequestV1 = read_body(body)?;
+    let request: ProviderDisconnectRequestV1 = read_apply(ledger, body)?;
     if !ledger.spend(
         &request.proof,
         &provider.id,
@@ -435,8 +462,10 @@ fn disconnect(
     ) {
         return Err(error(403, PROOF_INVALID));
     }
+    ledger.advance(&provider.id);
     // The key goes first: a connection row without a key is harmless, a key without one is not.
-    delete_provider_key(context.secrets, &provider.id).map_err(|_| unavailable())?;
+    let secrets = EncryptedFileSecretStore::new(context.guard_home);
+    delete_provider_key(&secrets, &provider.id).map_err(|_| unavailable())?;
     let was_connected =
         forget_provider(context.connection, &provider.id).map_err(|_| unavailable())?;
     Ok(ok(json!({
@@ -448,7 +477,14 @@ fn disconnect(
 #[path = "provider_integration_routes_connect.rs"]
 mod connect;
 use connect::connect_preview;
-pub use connect::spend_connect_proof;
+pub use connect::{
+    finish_connect, is_connect, prepare_connect, spend_connect_proof, verify_connect,
+    PreparedConnect,
+};
+
+#[cfg(test)]
+#[path = "provider_integration_routes_connect_tests.rs"]
+mod connect_tests;
 
 #[path = "provider_integration_routes_reads.rs"]
 mod reads;
@@ -456,4 +492,4 @@ use reads::{detail, list, shares};
 
 #[cfg(test)]
 #[path = "provider_integration_routes_tests.rs"]
-mod tests;
+pub(crate) mod tests;
