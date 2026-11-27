@@ -28,6 +28,7 @@ use guard_contracts::{
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 #[path = "provider_integration_compile_error.rs"]
 mod error;
@@ -82,7 +83,9 @@ pub fn compile_provider_integration(
     let mut decoder = serde_json::Deserializer::from_slice(bytes);
     let manifest = RawManifest::deserialize(&mut decoder).map_err(|_| E::JsonInvalid)?;
     decoder.end().map_err(|_| E::JsonInvalid)?;
-    compile_manifest(manifest, verified_providers)
+    let mut compiled = compile_manifest(manifest, verified_providers)?;
+    compiled.manifest_digest = hex::encode(Sha256::digest(bytes));
+    Ok(compiled)
 }
 
 /// Compile a set of manifests and refuse two with the same id.
@@ -196,6 +199,7 @@ fn compile_manifest(
         privacy_url: manifest.privacy_url,
         terms_url: manifest.terms_url,
         icon: manifest.icon,
+        manifest_digest: String::new(),
     })
 }
 

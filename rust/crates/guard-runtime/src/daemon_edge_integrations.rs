@@ -10,24 +10,32 @@
 //! store under the storage gate, reads the installed managed policy, and keeps
 //! the one proof ledger the process holds, so a proof issued by a preview is
 //! spent by the request that follows it on any connection.
+//!
+//! `connect` checks the key with the provider. The proof is spent under the
+//! ledger lock, the provider is called with no lock or storage gate held, and
+//! the key and connection row are written under the gate afterwards. The call
+//! runs under the managed network policy and the manifest's pinned hosts.
 
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use guard_command::provider_integration_compile::CompiledProviderIntegrationV1;
+use guard_provider_integrations::client::HttpProviderTransport;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use super::super::http::Request;
 use super::{authorize_origin, authorize_token, json_response, refusals, NativeReads, ReadConfig};
-use crate::encrypted_secret_store::EncryptedFileSecretStore;
 use crate::hook_evidence_store_gate::hold_storage_gate;
 use crate::managed_policy_floor::effective_managed_policy;
 use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource, ManagedPolicyState};
 use crate::provider_integration_managed::{ManagedProviderSettings, PROVIDER_INTEGRATIONS_SETTING};
-use crate::provider_integration_routes::{self as routes, ProofLedger, RouteContext};
+use crate::provider_integration_routes::{
+    self as routes, PreparedConnect, ProofLedger, RouteAnswer, RouteContext,
+};
 use crate::provider_integration_store::ensure_provider_integration_schema;
+use crate::supply_chain_eval_caller::CallerEgressFulfilment;
 
 pub(super) const MANAGED_POLICY_UNAVAILABLE: &str = "provider_managed_policy_unavailable";
 pub(super) const STORE_UNAVAILABLE: &str = "provider_store_unavailable";
@@ -90,6 +98,7 @@ pub(super) fn response(
             managed: managed.as_ref(),
             providers: &shipped_providers(),
             now_ms: now_ms(),
+            verify: &verify_with_provider,
         },
         request.method,
         request.path,
@@ -114,12 +123,37 @@ pub(super) fn managed_settings(state: &ManagedPolicyState) -> Option<ManagedProv
     ManagedProviderSettings::from_settings(&policy.settings, locked).ok()
 }
 
+/// Checks a prepared connect's key with the provider.
+pub(super) type Verify<'a> = &'a dyn Fn(&PreparedConnect<'_>) -> Result<bool, RouteAnswer>;
+
 /// What a request is answered against, apart from the store.
 pub(super) struct Served<'a> {
     pub(super) enabled: bool,
     pub(super) managed: Option<&'a ManagedProviderSettings>,
     pub(super) providers: &'a [CompiledProviderIntegrationV1],
     pub(super) now_ms: u64,
+    pub(super) verify: Verify<'a>,
+}
+
+/// The verify call over HTTPS, under the managed network policy. A policy
+/// Guard cannot honour refuses the call rather than send it unmanaged.
+fn verify_with_provider(prepared: &PreparedConnect<'_>) -> Result<bool, RouteAnswer> {
+    let Ok(egress) = CallerEgressFulfilment::resolve_policy(&ManagedPolicySource::native()) else {
+        return Err(RouteAnswer {
+            status: 503,
+            body: json!({"error": MANAGED_POLICY_UNAVAILABLE}),
+        });
+    };
+    let transport = HttpProviderTransport::new(prepared.provider().hosts.clone(), &egress);
+    routes::verify_connect(prepared, &transport)
+}
+
+fn split(answer: RouteAnswer) -> (u16, Value) {
+    (answer.status, answer.body)
+}
+
+fn lock_ledger() -> std::sync::MutexGuard<'static, ProofLedger> {
+    ledger().lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
 pub(super) fn serve(
@@ -132,6 +166,42 @@ pub(super) fn serve(
     let Some(managed) = served.managed else {
         return (503, json!({"error": MANAGED_POLICY_UNAVAILABLE}));
     };
+    if routes::is_connect(method, path) {
+        let prepared = routes::prepare_connect(
+            &mut lock_ledger(),
+            served.enabled,
+            served.providers,
+            path,
+            body,
+            served.now_ms,
+        );
+        let prepared = match prepared {
+            Ok(prepared) => prepared,
+            Err(answer) => return split(answer),
+        };
+        let verified = match (served.verify)(&prepared) {
+            Ok(verified) => verified,
+            Err(answer) => return split(answer),
+        };
+        return with_store(config, served, managed, |context| {
+            routes::finish_connect(context, prepared, verified)
+        });
+    }
+    with_store(config, served, managed, |context| {
+        routes::answer(&mut lock_ledger(), context, method, path, body).unwrap_or(RouteAnswer {
+            status: 404,
+            body: json!({"error": "not_found"}),
+        })
+    })
+}
+
+/// Runs `answer` against the daemon store, opened under the storage gate.
+fn with_store(
+    config: &ReadConfig,
+    served: &Served<'_>,
+    managed: &ManagedProviderSettings,
+    answer: impl FnOnce(&RouteContext<'_>) -> RouteAnswer,
+) -> (u16, Value) {
     let unavailable = || (503, json!({"error": STORE_UNAVAILABLE}));
     let wait = Duration::from_millis(config.busy_timeout_ms.max(1));
     let Ok(_gate) = hold_storage_gate(Path::new(&config.guard_home), wait) else {
@@ -145,20 +215,14 @@ pub(super) fn serve(
     {
         return unavailable();
     }
-    let secrets = EncryptedFileSecretStore::new(Path::new(&config.guard_home));
-    let context = RouteContext {
+    split(answer(&RouteContext {
         enabled: served.enabled,
         providers: served.providers,
         connection: &connection,
         managed,
-        secrets: &secrets,
+        guard_home: Path::new(&config.guard_home),
         now_ms: served.now_ms,
-    };
-    let mut ledger = ledger().lock().unwrap_or_else(|poison| poison.into_inner());
-    match routes::answer(&mut ledger, &context, method, path, body) {
-        Some(answer) => (answer.status, answer.body),
-        None => (404, json!({"error": "not_found"})),
-    }
+    }))
 }
 
 #[cfg(all(test, unix))]

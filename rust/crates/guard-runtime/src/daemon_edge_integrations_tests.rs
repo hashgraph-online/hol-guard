@@ -50,6 +50,19 @@ impl Edge {
         path: &str,
         body: Value,
     ) -> (u16, Value) {
+        self.call_verifying(managed, method, path, body, &|_| {
+            panic!("no provider call expected")
+        })
+    }
+
+    fn call_verifying(
+        &self,
+        managed: Option<&ManagedProviderSettings>,
+        method: &str,
+        path: &str,
+        body: Value,
+        verify: Verify<'_>,
+    ) -> (u16, Value) {
         let body = if body.is_null() {
             Vec::new()
         } else {
@@ -62,6 +75,7 @@ impl Edge {
                 managed,
                 providers: &self.providers,
                 now_ms: NOW,
+                verify,
             },
             method,
             path,
@@ -192,4 +206,54 @@ fn managed_settings_fail_closed() {
     );
     let settings = managed_settings(&locked).unwrap();
     assert!(settings.is_locked());
+}
+
+#[test]
+fn connect_calls_the_provider_outside_the_store_and_stores_after() {
+    let edge = Edge::new();
+    let none = ManagedProviderSettings::none();
+    let base = format!("/v1/integrations/providers/{SHIELD}");
+    let (status, preview) = edge.call(
+        Some(&none),
+        "POST",
+        &format!("{base}/connect/preview"),
+        Value::Null,
+    );
+    assert_eq!(status, 200, "{preview}");
+    let key = format!("fixture-edge-{}", "d".repeat(24));
+    let body = json!({"key": key, "proof": preview["challenge"]});
+    let connect = format!("{base}/connect");
+
+    let refused: Verify<'_> = &|_| {
+        Err(crate::provider_integration_routes::RouteAnswer {
+            status: 429,
+            body: json!({"error": "provider_rate_limited"}),
+        })
+    };
+    let (status, _) = edge.call_verifying(Some(&none), "POST", &connect, body.clone(), refused);
+    assert_eq!(status, 429);
+    assert_eq!(provider_connection(&edge.store(), SHIELD).unwrap(), None);
+
+    let (status, preview) = edge.call(
+        Some(&none),
+        "POST",
+        &format!("{base}/connect/preview"),
+        Value::Null,
+    );
+    assert_eq!(status, 200);
+    let body = json!({"key": key, "proof": preview["challenge"]});
+    let gate_free: Verify<'_> = &|prepared| {
+        assert_eq!(prepared.provider().id, SHIELD);
+        let probe = crate::hook_evidence_store_gate::hold_storage_gate(
+            edge.home.path(),
+            Duration::from_millis(50),
+        );
+        assert!(probe.is_ok(), "the storage gate is free during the call");
+        Ok(true)
+    };
+    let (status, answer) = edge.call_verifying(Some(&none), "POST", &connect, body, gate_free);
+    assert_eq!(status, 200, "{answer}");
+    let stored = provider_connection(&edge.store(), SHIELD).unwrap().unwrap();
+    assert_eq!(stored.state, State::Connected);
+    assert_eq!(stored.last_verified_at_ms, Some(NOW));
 }

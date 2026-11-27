@@ -87,6 +87,7 @@ fn manifest(body: Vec<(&str, Fact)>) -> CompiledProviderIntegrationV1 {
         privacy_url: "https://example.net/privacy".to_owned(),
         terms_url: "https://example.net/terms".to_owned(),
         icon: None,
+        manifest_digest: format!("{:064x}", 7),
     }
 }
 

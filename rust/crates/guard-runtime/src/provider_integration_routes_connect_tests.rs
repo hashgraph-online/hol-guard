@@ -1,0 +1,228 @@
+use guard_contracts::{ProviderConnectionStateV1 as State, ProviderShareableFactV1 as Fact};
+use guard_provider_integrations::testkit::FakeProvider;
+use guard_provider_integrations::ProviderClientError;
+use serde_json::json;
+
+use super::tests::provider;
+use super::*;
+use crate::provider_integration_secret::load_provider_key;
+use crate::provider_integration_store::ensure_provider_integration_schema;
+
+const SHIELD: &str = "provider.exampleshield";
+const HOST: &str = "api.exampleshield.example";
+const VERIFY: &str = "/v1/guard/key";
+const NOW: u64 = 60_000_000;
+
+fn key() -> String {
+    format!("fixture-connect-{}", "c".repeat(24))
+}
+
+struct Fixture {
+    home: tempfile::TempDir,
+    connection: Connection,
+    providers: Vec<CompiledProviderIntegrationV1>,
+    managed: ManagedProviderSettings,
+    ledger: ProofLedger,
+}
+
+impl Fixture {
+    fn new() -> Self {
+        let connection = Connection::open_in_memory().unwrap();
+        ensure_provider_integration_schema(&connection).unwrap();
+        Self {
+            home: tempfile::tempdir().unwrap(),
+            connection,
+            providers: vec![provider()],
+            managed: ManagedProviderSettings::none(),
+            ledger: ProofLedger::new(),
+        }
+    }
+
+    fn context(&self) -> RouteContext<'_> {
+        RouteContext {
+            enabled: true,
+            providers: &self.providers,
+            connection: &self.connection,
+            managed: &self.managed,
+            guard_home: self.home.path(),
+            now_ms: NOW,
+        }
+    }
+
+    fn proof(&mut self) -> String {
+        let context = RouteContext {
+            enabled: true,
+            providers: &self.providers,
+            connection: &self.connection,
+            managed: &self.managed,
+            guard_home: self.home.path(),
+            now_ms: NOW,
+        };
+        let path = format!("{PREFIX}/{SHIELD}/connect/preview");
+        let preview = answer(&mut self.ledger, &context, "POST", &path, b"").unwrap();
+        assert_eq!(preview.status, 200, "{}", preview.body);
+        preview.body["challenge"].as_str().unwrap().to_owned()
+    }
+
+    /// Runs the three phases the way the daemon edge does.
+    fn connect(&mut self, body: Value, transport: &FakeProvider) -> RouteAnswer {
+        let path = format!("{PREFIX}/{SHIELD}/connect");
+        assert!(is_connect("POST", &path));
+        let bytes = serde_json::to_vec(&body).unwrap();
+        let providers = self.providers.clone();
+        let prepared = match prepare_connect(&mut self.ledger, true, &providers, &path, &bytes, NOW)
+        {
+            Ok(prepared) => prepared,
+            Err(answer) => return answer,
+        };
+        let verified = match verify_connect(&prepared, transport) {
+            Ok(verified) => verified,
+            Err(answer) => return answer,
+        };
+        finish_connect(&self.context(), prepared, verified)
+    }
+
+    fn key_stored(&self) -> bool {
+        let mut store = EncryptedFileSecretStore::new(self.home.path());
+        load_provider_key(&mut store, SHIELD).is_some()
+    }
+
+    fn stored(&self) -> Option<ProviderConnection> {
+        provider_connection(&self.connection, SHIELD).unwrap()
+    }
+}
+
+fn code(answer: &RouteAnswer) -> &str {
+    answer.body["error"].as_str().unwrap_or_default()
+}
+
+#[test]
+fn connect_checks_the_key_then_stores_it_bound_to_the_manifest() {
+    let mut fixture = Fixture::new();
+    let proof = fixture.proof();
+    let fake = FakeProvider::new(&[HOST], &key());
+    fake.script_json(VERIFY, 200, "{}");
+
+    let answer = fixture.connect(json!({"key": key(), "proof": proof}), &fake);
+    assert_eq!(answer.status, 200, "{}", answer.body);
+    assert_eq!(answer.body["summary"]["id"], SHIELD);
+    assert!(
+        !answer.body.to_string().contains(&key()),
+        "the key never comes back"
+    );
+
+    let requests = fake.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].method, "GET");
+    assert!(requests[0].key_matched);
+    assert_eq!(requests[0].body, None, "verify shares no facts");
+
+    let stored = fixture.stored().unwrap();
+    assert_eq!(stored.state, State::Connected);
+    assert_eq!(stored.manifest_digest, fixture.providers[0].manifest_digest);
+    assert_eq!(stored.manifest_digest.len(), 64);
+    assert_eq!(stored.last_verified_at_ms, Some(NOW));
+    assert!(fixture.key_stored());
+}
+
+#[test]
+fn a_bad_proof_or_key_format_never_reaches_the_provider() {
+    let mut fixture = Fixture::new();
+    let fake = FakeProvider::new(&[HOST], &key());
+    let refused = fixture.connect(json!({"key": key(), "proof": "not-a-proof"}), &fake);
+    assert_eq!((refused.status, code(&refused)), (403, PROOF_INVALID));
+
+    let proof = fixture.proof();
+    let refused = fixture.connect(json!({"key": "short", "proof": proof}), &fake);
+    assert_eq!(
+        (refused.status, code(&refused)),
+        (400, "provider_key_invalid")
+    );
+    let reused = fixture.connect(json!({"key": key(), "proof": proof}), &fake);
+    assert_eq!(code(&reused), PROOF_INVALID, "the proof was spent");
+
+    let proof = fixture.proof();
+    let facts =
+        json!({"key": key(), "proof": proof, "enabled_opt_in_facts": [Fact::TargetPathPrefix]});
+    let refused = fixture.connect(facts, &fake);
+    assert_eq!(
+        (refused.status, code(&refused)),
+        (400, INVALID_REQUEST),
+        "an opt-in fact the provider does not take"
+    );
+
+    assert!(fake.requests().is_empty());
+    assert_eq!(fixture.stored(), None);
+    assert!(!fixture.key_stored());
+}
+
+#[test]
+fn provider_refusals_store_nothing() {
+    let cases: [(Result<u16, ProviderClientError>, u16, &str); 6] = [
+        (Ok(401), 400, "provider_key_invalid"),
+        (Ok(403), 400, "provider_key_invalid"),
+        (Ok(429), 429, "provider_rate_limited"),
+        (Ok(500), 502, "provider_integration_unavailable"),
+        (
+            Err(ProviderClientError::Blocked),
+            403,
+            "provider_host_refused",
+        ),
+        (
+            Err(ProviderClientError::ResponseTooLarge),
+            502,
+            "provider_response_too_large",
+        ),
+    ];
+    for (scripted, status, error_code) in cases {
+        let mut fixture = Fixture::new();
+        let proof = fixture.proof();
+        let fake = FakeProvider::new(&[HOST], &key());
+        match scripted {
+            Ok(provider_status) => fake.script_json(VERIFY, provider_status, "{}"),
+            Err(failure) => fake.script(VERIFY, Err(failure)),
+        }
+        let answer = fixture.connect(json!({"key": key(), "proof": proof}), &fake);
+        assert_eq!((answer.status, code(&answer)), (status, error_code));
+        assert_eq!(fixture.stored(), None, "{error_code}");
+        assert!(!fixture.key_stored(), "{error_code}");
+    }
+}
+
+#[test]
+fn a_host_the_manifest_does_not_pin_is_refused() {
+    let mut fixture = Fixture::new();
+    let proof = fixture.proof();
+    let fake = FakeProvider::new(&["api.otherwatch.example"], &key());
+    let answer = fixture.connect(json!({"key": key(), "proof": proof}), &fake);
+    assert_eq!(
+        (answer.status, code(&answer)),
+        (403, "provider_host_refused")
+    );
+    assert!(!fixture.key_stored());
+}
+
+#[test]
+fn connect_is_never_answered_in_one_step() {
+    let mut fixture = Fixture::new();
+    let proof = fixture.proof();
+    let providers = fixture.providers.clone();
+    let path = format!("{PREFIX}/{SHIELD}/connect");
+    let body = serde_json::to_vec(&json!({"key": key(), "proof": proof})).unwrap();
+    let context = RouteContext {
+        enabled: true,
+        providers: &providers,
+        connection: &fixture.connection,
+        managed: &fixture.managed,
+        guard_home: fixture.home.path(),
+        now_ms: NOW,
+    };
+    let answered = answer(&mut fixture.ledger, &context, "POST", &path, &body).unwrap();
+    assert_eq!(answered.status, 503);
+    assert!(!fixture.key_stored());
+
+    let off = prepare_connect(&mut fixture.ledger, false, &providers, &path, &body, NOW);
+    assert_eq!(off.err().unwrap().status, 503);
+    assert!(!is_connect("GET", &path));
+    assert!(!is_connect("POST", &format!("{path}/preview")));
+}

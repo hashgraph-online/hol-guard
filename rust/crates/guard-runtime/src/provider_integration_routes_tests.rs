@@ -103,13 +103,12 @@ impl Fixture {
     }
 
     fn call(&mut self, method: &str, path: &str, body: Value) -> RouteAnswer {
-        let secrets = EncryptedFileSecretStore::new(self.home.path());
         let context = RouteContext {
             enabled: self.enabled,
             providers: &self.providers,
             connection: &self.connection,
             managed: &self.managed,
-            secrets: &secrets,
+            guard_home: self.home.path(),
             now_ms: self.now_ms,
         };
         let bytes = if body.is_null() {
@@ -181,11 +180,11 @@ fn only_the_local_routes_are_owned() {
         ("POST", path("/settings")),
         ("POST", path("/disconnect/preview")),
         ("POST", path("/disconnect")),
+        ("POST", path("/connect")),
     ] {
         assert!(owns(method, &path), "{method} {path}");
     }
     for (method, path) in [
-        ("POST", path("/connect")),
         ("POST", path("/test")),
         ("POST", PREFIX.to_owned()),
         ("GET", path("/settings")),
@@ -481,13 +480,12 @@ fn the_ledger_stays_bounded() {
 #[test]
 fn an_oversized_body_is_refused_even_when_it_is_only_whitespace() {
     let mut fixture = Fixture::connected();
-    let secrets = EncryptedFileSecretStore::new(fixture.home.path());
     let context = RouteContext {
         enabled: true,
         providers: &fixture.providers,
         connection: &fixture.connection,
         managed: &fixture.managed,
-        secrets: &secrets,
+        guard_home: fixture.home.path(),
         now_ms: NOW,
     };
     let route = path("/disconnect/preview");

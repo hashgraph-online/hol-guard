@@ -584,8 +584,14 @@ transcript in the pull request (after BP-T052).
     hosted dashboard origins refused. It opens the store under the storage gate, keeps one proof
     ledger for the process, and refuses every route with `503` when managed policy failed closed or
     its `provider_integrations` value does not parse.
+  - [x] `connect`: the proof is spent and the key format and opt-in facts are checked under the
+    ledger lock, the manifest's `verify` request is sent with no lock or storage gate held, under
+    the managed network policy and the pinned hosts, and the key and connection row are written
+    afterwards. The row is bound to the compiled manifest's digest (SHA-256 of its source bytes),
+    which the lookup executor compares before every call. A refused key, a rate limit, a refused
+    host or an oversized answer stores nothing.
   - [ ] The compiled-provider loader (the shipped set is empty until a reviewed pack lands), and the
-    `connect` and `test` routes, which call the provider.
+    rate-limited `test` route.
 - [ ] **BP-T131** CLI `hol-guard integrations list|status|connect|disconnect|test|settings`. The key is
   read from a prompt or stdin, never an argument, never echoed. Python is glue only, modeled on
   `cli/approval_pulse_commands.py` and `cli/approval_pulse_parser.py`.

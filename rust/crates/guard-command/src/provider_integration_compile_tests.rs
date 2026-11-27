@@ -111,6 +111,20 @@ fn the_reference_manifest_compiles() {
 }
 
 #[test]
+fn the_compiled_manifest_carries_the_digest_of_its_source_bytes() {
+    let bytes = serde_json::to_vec(&manifest()).unwrap();
+    let compiled = compile_provider_integration(&bytes, &[]).unwrap();
+    assert_eq!(
+        compiled.manifest_digest,
+        hex::encode(Sha256::digest(&bytes))
+    );
+    let mut changed = manifest();
+    changed["summary"] = json!("Checks the sites an agent opens.");
+    let other = compile_provider_integration(&serde_json::to_vec(&changed).unwrap(), &[]).unwrap();
+    assert_ne!(other.manifest_digest, compiled.manifest_digest);
+}
+
+#[test]
 fn bytes_json_and_version_are_checked_first() {
     assert_eq!(
         compile_provider_integration(b"", &[]),
