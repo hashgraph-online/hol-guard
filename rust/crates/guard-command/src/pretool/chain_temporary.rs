@@ -233,7 +233,10 @@ pub(super) fn absent_temporary_read_target(
 /// A read of an absent temporary file relies on the chain not creating a link
 /// at that path first, so it is only proven beside plain peers. `mkdir` makes
 /// directories and never links, and `rm` only removes names, so either may
-/// share such a chain too.
+/// share such a chain too. A [`removal_chain`] that ends in a Git read, as in
+/// `rm -f /tmp/notes.txt; git log`, adds only `touch`, which creates a plain
+/// file, and Git subcommands that never write the work tree, so no peer of
+/// that chain creates a link either.
 pub(super) fn absent_reads_bounded(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
@@ -243,6 +246,11 @@ pub(super) fn absent_reads_bounded(
         || plain_chain(model, &["awk", "mkdir", "rm", "sed"])
         || fetch_then_read(model)
         || directory_hops_bounded(model, context)
+        || (model
+            .segments
+            .iter()
+            .any(|segment| segment.executable.as_deref() == Some("git"))
+            && removal_chain(model, context))
         || !model.segments.iter().any(|segment| {
             segment.arguments.iter().any(|argument| {
                 absent_temporary_read_target(argument, context.home_dir, context.cwd)

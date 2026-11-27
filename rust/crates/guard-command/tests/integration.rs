@@ -182,6 +182,7 @@ pub mod pretool_git_null_hooks;
 pub mod pretool_git_object_reads;
 pub mod pretool_git_outside_cwd;
 pub mod pretool_git_pager_config;
+pub mod pretool_git_read_after_temporary_removal;
 pub mod pretool_git_read_climb;
 pub mod pretool_git_read_sequences;
 pub mod pretool_git_read_spent_deadline;

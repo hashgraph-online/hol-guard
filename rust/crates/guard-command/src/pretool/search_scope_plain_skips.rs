@@ -177,7 +177,7 @@ fn global_excludes_files(home: Option<&str>, unknown: &mut bool) -> Vec<PathBuf>
 
 /// The Git directory a `.git` entry names, and its common directory when
 /// that is a linked worktree's.
-fn git_directories(git: &Path) -> Option<Vec<PathBuf>> {
+pub(super) fn git_directories(git: &Path) -> Option<Vec<PathBuf>> {
     let metadata = std::fs::symlink_metadata(git).ok()?;
     if metadata.is_dir() {
         return Some(vec![git.to_path_buf()]);
@@ -195,7 +195,7 @@ fn git_directories(git: &Path) -> Option<Vec<PathBuf>> {
 }
 
 /// A small file's text; `None` when it does not exist.
-fn read_small(path: &Path) -> Result<Option<String>, ()> {
+pub(super) fn read_small(path: &Path) -> Result<Option<String>, ()> {
     let file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

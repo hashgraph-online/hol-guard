@@ -336,6 +336,8 @@ def build_fixture(root: Path) -> BenignFixture:
     # Private user-owned temp dir (mode 0700, as mktemp -d creates) with one existing file.
     private_tmp = Path(tempfile.mkdtemp(prefix="tmp.", dir=_system_tmp())).resolve()
     _write(private_tmp / "notes.txt", "first draft\n")
+    # A file a Git configuration could include: removing it drops a setting.
+    _write(private_tmp / "pager-settings.conf", "[pager]\n\tlog = false\n")
     _write(private_tmp / "resume-phase1.mjs", "console.log('resume');\n")
     # A probe file an earlier step wrote here: the cases that copy it into the
     # checkout are about where it came from, not about whether it exists.
