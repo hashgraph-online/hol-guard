@@ -127,6 +127,16 @@ fn a_prompted_review_becomes_the_plain_queue_write() {
     assert_eq!(delegated.args["cwd"], "/work");
 }
 
+#[test]
+fn a_review_without_a_policy_snapshot_falls_back_to_a_silent_block() {
+    let delegated = delegate(&args(json!({"respond": {"native_review": {}}}))).unwrap();
+    assert_eq!(
+        delegated.method,
+        "add_silent_native_review_approval_request"
+    );
+    assert_eq!(delegated.args["daemon"], true);
+}
+
 fn paused_with(extensions: Value) -> Value {
     let mut review = query(shell());
     review["result"]["command_extensions"] = extensions;

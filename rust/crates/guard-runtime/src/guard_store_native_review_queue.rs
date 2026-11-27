@@ -222,14 +222,21 @@ pub(crate) fn delegate(
     let mut claude_notice = take_flag(&mut delegated, "claude_notice")?;
     let respond = match respond {
         Some(RespondAsk::NativeReview(NativeAsk {})) => {
-            let ask = owner
+            let mode = owner
                 .and_then(|owner| {
                     owner.effective_blocked_request_mode(query.envelope.workspace.as_deref())
                 })
+                .or_else(|| {
+                    crate::guard_config_load::blocked_request_mode(
+                        Path::new(&query.guard_home),
+                        query.envelope.workspace.as_deref().map(Path::new),
+                    )
+                    .ok()
+                    .flatten()
+                })
                 .or(fallback_mode)
-                .ok_or(INVALID)?
-                .as_str()
-                == ASK_MODE;
+                .unwrap_or_else(|| crate::blocked_request_mode::SAFE_ALTERNATIVE_MODE.to_owned());
+            let ask = mode == ASK_MODE;
             let unbound = query.review_binding.is_none() && query.exact_token.is_none();
             if ask && !unbound {
                 Some(RespondAsk::PausedReview(PausedAsk {}))
