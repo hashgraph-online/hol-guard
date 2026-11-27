@@ -79,7 +79,7 @@ def structured_outage_overlay(
             return {}
         if overlay is not None and overlay != withhold:
             return withhold
-        if overlay == withhold and not callable(load_config):
+        if overlay == withhold:
             return withhold
     if callable(load_config):
         try:
