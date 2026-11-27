@@ -28,3 +28,16 @@ export function navigateExtensions(href: string): void {
   pushExtensionHistory(href);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
+
+/**
+ * Follow an Extensions link in place, unless the person asked the browser for something else:
+ * a modified or non-primary click keeps its default (new tab, new window, download).
+ */
+export function followExtensionsLink(
+  event: { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; preventDefault: () => void },
+  href: string,
+): void {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  navigateExtensions(href);
+}

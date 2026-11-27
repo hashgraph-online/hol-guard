@@ -61,6 +61,13 @@ export function capabilityChecks(capability: string): string | null {
   return CAPABILITIES[capability]?.checks ?? null;
 }
 
+/** Facts a provider may only receive after the person turns them on (PRD 6.4). */
+const OPT_IN_ONLY_FACTS: ReadonlySet<string> = new Set(["target.path_prefix"]);
+
+export function factIsOptIn(fact: string): boolean {
+  return OPT_IN_ONLY_FACTS.has(fact);
+}
+
 export function factDescription(fact: string): string {
   return FACTS[fact] ?? fact;
 }

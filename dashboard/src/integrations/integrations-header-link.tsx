@@ -1,4 +1,4 @@
-import { INTEGRATIONS_HREF, navigateExtensions } from "./integrations-route";
+import { followExtensionsLink, INTEGRATIONS_HREF } from "./integrations-route";
 
 /** The Extensions header's way into the Integrations page. */
 export function IntegrationsHeaderLink() {
@@ -7,10 +7,7 @@ export function IntegrationsHeaderLink() {
       className="guard-extensions-chip"
       data-testid="integrations-action"
       href={INTEGRATIONS_HREF}
-      onClick={(event) => {
-        event.preventDefault();
-        navigateExtensions(INTEGRATIONS_HREF);
-      }}
+      onClick={(event) => followExtensionsLink(event, INTEGRATIONS_HREF)}
     >
       Integrations
     </a>

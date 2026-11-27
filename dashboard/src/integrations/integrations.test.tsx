@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { fetchProviderIntegrationApi } from "../guard-api";
-import { parseIntegrationsRoute } from "./integrations-route";
+import { followExtensionsLink, parseIntegrationsRoute } from "./integrations-route";
 import { ProviderDetailView, ProviderListView } from "./integrations-workspace";
 import { normalizeProviderDetail, normalizeProviderList, safeHttpsUrl } from "./provider-integrations-api";
 
@@ -26,7 +26,7 @@ const rawDetail = {
   terms_url: "javascript:alert(1)",
   obtain_url: null,
   auth_kind: "api-key",
-  shares: ["target.origin"],
+  shares: ["target.origin", "target.path_prefix"],
   enabled_opt_in_facts: ["target.path_prefix"],
   settings: [
     { capability: "browser.origin-reputation", effect: "tighten", require_fresh_check: false, quieted_reason_codes: [] },
@@ -42,6 +42,16 @@ assert.deepEqual(parseIntegrationsRoute(`/extensions/${SHIELD}`), { kind: "provi
 for (const other of ["/extensions", "/extensions/command.git", "/extensions/provider.", "/extensions/provider.-x",
   "/extensions/provider.a/b", "/extensions/provider.%E0%A4%A", "/extensions/add"]) {
   assert.equal(parseIntegrationsRoute(other), null, other);
+}
+
+// A modified or non-primary click keeps the browser's default (new tab, new window).
+for (const modifier of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+  let prevented = false;
+  followExtensionsLink(
+    { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...modifier, preventDefault: () => { prevented = true; } },
+    "/extensions/integrations",
+  );
+  assert.equal(prevented, false, JSON.stringify(modifier));
 }
 
 // The fetch allowlist refuses any path outside the provider routes before a request is made.
@@ -72,6 +82,12 @@ assert.match(page, /known for phishing, malware or scams/);
 assert.match(page, /What leaves this device/);
 assert.match(page, /The website&#x27;s address without a path/);
 assert.match(page, /The first part of the page path \(you turned this on\)/);
+assert.equal(page.match(/The first part of the page path/g)?.length, 1, "a declared opt-in fact is listed once");
+assert.doesNotMatch(page, /keys stay here/, "the key goes to the provider, so the page never says it stays");
+const notEnabled = renderToStaticMarkup(createElement(ProviderDetailView, {
+  detail: normalizeProviderDetail({ ...rawDetail, enabled_opt_in_facts: [] }),
+}));
+assert.match(notEnabled, /The first part of the page path \(only if you turn it on\)/);
 assert.match(page, /api\.exampleshield\.example/);
 assert.match(page, /HOL has not verified this publisher/);
 assert.match(page, /href="https:\/\/publisher\.example\/privacy"[^>]*rel="noopener noreferrer"/);

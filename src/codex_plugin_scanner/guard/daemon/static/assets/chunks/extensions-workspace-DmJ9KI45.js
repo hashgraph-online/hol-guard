@@ -9702,6 +9702,11 @@ function navigateExtensions(href) {
   pushExtensionHistory(href);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
+function followExtensionsLink(event, href) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  navigateExtensions(href);
+}
 function IntegrationsHeaderLink() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "a",
@@ -9709,10 +9714,7 @@ function IntegrationsHeaderLink() {
       className: "guard-extensions-chip",
       "data-testid": "integrations-action",
       href: INTEGRATIONS_HREF,
-      onClick: (event) => {
-        event.preventDefault();
-        navigateExtensions(INTEGRATIONS_HREF);
-      },
+      onClick: (event) => followExtensionsLink(event, INTEGRATIONS_HREF),
       children: "Integrations"
     }
   );
@@ -10696,6 +10698,10 @@ function capabilityLabel(capability) {
 function capabilityChecks(capability) {
   return CAPABILITIES[capability]?.checks ?? null;
 }
+const OPT_IN_ONLY_FACTS = /* @__PURE__ */ new Set(["target.path_prefix"]);
+function factIsOptIn(fact) {
+  return OPT_IN_ONLY_FACTS.has(fact);
+}
 function factDescription(fact) {
   return FACTS[fact] ?? fact;
 }
@@ -10741,10 +10747,7 @@ function BackLink(props) {
     "a",
     {
       href: props.href,
-      onClick: (event) => {
-        event.preventDefault();
-        navigateExtensions(props.href);
-      },
+      onClick: (event) => followExtensionsLink(event, props.href),
       className: "inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-brand-blue",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { className: "size-4", "aria-hidden": "true" }),
@@ -10784,10 +10787,7 @@ function ProviderListView(props) {
         "a",
         {
           href: providerHref(provider.id),
-          onClick: (event) => {
-            event.preventDefault();
-            navigateExtensions(providerHref(provider.id));
-          },
+          onClick: (event) => followExtensionsLink(event, providerHref(provider.id)),
           className: `${EXTENSION_ROW_CLASS} flex min-h-11 flex-wrap items-center justify-between gap-3`,
           children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
@@ -10814,7 +10814,7 @@ function ProviderDetailView(props) {
   const { detail } = props;
   const { summary } = detail;
   const [showCli, setShowCli] = reactExports.useState(false);
-  const optional = detail.enabledOptInFacts.filter((fact) => !detail.shares.includes(fact));
+  const optInNote = (fact) => !factIsOptIn(fact) ? "" : detail.enabledOptInFacts.includes(fact) ? " (you turned this on)" : " (only if you turn it on)";
   const connectLabel = summary.state === "connected" ? "Replace key" : "Connect";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto max-w-4xl space-y-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(BackLink, { href: INTEGRATIONS_HREF, label: "Integrations" }),
@@ -10857,14 +10857,11 @@ function ProviderDetailView(props) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "provider-shares", className: EXTENSION_PANEL_CLASS, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "provider-shares", className: "text-base font-semibold text-brand-dark", children: "What leaves this device" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: "Each lookup sends only these facts. Page contents, form data and keys stay here." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-3 list-disc space-y-1 pl-5 text-sm text-brand-dark", children: [
-        detail.shares.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: factDescription(fact) }, fact)),
-        optional.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-          factDescription(fact),
-          " (you turned this on)"
-        ] }, fact))
-      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: "Each lookup sends only these facts. Page contents and form data stay here. Your API key goes only to the provider's hosts, to authenticate each lookup." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 list-disc space-y-1 pl-5 text-sm text-brand-dark", children: detail.shares.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+        factDescription(fact),
+        optInNote(fact)
+      ] }, fact)) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-sm text-brand-dark/70", children: [
         "Guard calls only ",
         detail.hosts.length === 1 ? "this host" : "these hosts",

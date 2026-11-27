@@ -8,11 +8,12 @@ import {
   capabilityLabel,
   effectLabel,
   factDescription,
+  factIsOptIn,
   providerErrorMessage,
   providerStateLabel,
   surfaceLabel,
 } from "./integrations-copy";
-import { INTEGRATIONS_HREF, navigateExtensions, providerHref, type IntegrationsRoute } from "./integrations-route";
+import { followExtensionsLink, INTEGRATIONS_HREF, navigateExtensions, providerHref, type IntegrationsRoute } from "./integrations-route";
 import {
   fetchProviderDetail,
   fetchProviderList,
@@ -47,10 +48,7 @@ function BackLink(props: { href: string; label: string }) {
   return (
     <a
       href={props.href}
-      onClick={(event) => {
-        event.preventDefault();
-        navigateExtensions(props.href);
-      }}
+      onClick={(event) => followExtensionsLink(event, props.href)}
       className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-brand-blue"
     >
       <HiMiniArrowLeft className="size-4" aria-hidden="true" />
@@ -110,10 +108,7 @@ export function ProviderListView(props: { providers: ProviderSummary[] }) {
               <li key={provider.id}>
                 <a
                   href={providerHref(provider.id)}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    navigateExtensions(providerHref(provider.id));
-                  }}
+                  onClick={(event) => followExtensionsLink(event, providerHref(provider.id))}
                   className={`${EXTENSION_ROW_CLASS} flex min-h-11 flex-wrap items-center justify-between gap-3`}
                 >
                   <span className="min-w-0">
@@ -149,7 +144,8 @@ export function ProviderDetailView(props: { detail: ProviderDetail; onConnect?: 
   const { detail } = props;
   const { summary } = detail;
   const [showCli, setShowCli] = useState(false);
-  const optional = detail.enabledOptInFacts.filter((fact) => !detail.shares.includes(fact));
+  const optInNote = (fact: string) =>
+    !factIsOptIn(fact) ? "" : detail.enabledOptInFacts.includes(fact) ? " (you turned this on)" : " (only if you turn it on)";
   const connectLabel = summary.state === "connected" ? "Replace key" : "Connect";
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -200,13 +196,13 @@ export function ProviderDetailView(props: { detail: ProviderDetail; onConnect?: 
       </section>
       <section aria-labelledby="provider-shares" className={EXTENSION_PANEL_CLASS}>
         <h2 id="provider-shares" className="text-base font-semibold text-brand-dark">What leaves this device</h2>
-        <p className="mt-1 text-sm text-brand-dark/70">Each lookup sends only these facts. Page contents, form data and keys stay here.</p>
+        <p className="mt-1 text-sm text-brand-dark/70">Each lookup sends only these facts. Page contents and form data stay here. Your API key goes only to the provider's hosts, to authenticate each lookup.</p>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-brand-dark">
           {detail.shares.map((fact) => (
-            <li key={fact}>{factDescription(fact)}</li>
-          ))}
-          {optional.map((fact) => (
-            <li key={fact}>{factDescription(fact)} (you turned this on)</li>
+            <li key={fact}>
+              {factDescription(fact)}
+              {optInNote(fact)}
+            </li>
           ))}
         </ul>
         <p className="mt-3 text-sm text-brand-dark/70">
