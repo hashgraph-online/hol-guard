@@ -10,7 +10,7 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use super::*;
-use crate::managed_policy::{parse_managed_policy, POLICY_SCHEMA_VERSION};
+use crate::managed_policy::{parse_managed_policy, ManagedPolicy, POLICY_SCHEMA_VERSION};
 use crate::provider_integration_decide::{decide, DecideProvider, DecideRequest};
 use crate::provider_integration_store::{
     ensure_provider_integration_schema, put_capability_setting, put_connection, put_signal,
@@ -181,7 +181,7 @@ fn an_installed_policy_locks_through_locked_settings() {
         "lockedSettings": ["provider_integrations"],
     }))
     .unwrap();
-    let managed = ManagedProviderSettings::from_policy(&policy).unwrap();
+    let managed = from_policy(&policy).unwrap();
     assert!(managed.is_locked());
     assert_eq!(
         managed.entry(SHIELD, Cap::OriginReputation),
@@ -196,9 +196,15 @@ fn an_installed_policy_locks_through_locked_settings() {
         "settings": {"provider_integrations": []},
     }))
     .unwrap();
-    assert!(!ManagedProviderSettings::from_policy(&unlocked)
-        .unwrap()
-        .is_locked());
+    assert!(!from_policy(&unlocked).unwrap().is_locked());
+}
+
+/// How the resident reads an installed policy: `lockedSettings` names the whole key.
+fn from_policy(policy: &ManagedPolicy) -> ManagedResult<ManagedProviderSettings> {
+    let locked = policy
+        .locked_settings
+        .contains(PROVIDER_INTEGRATIONS_SETTING);
+    ManagedProviderSettings::from_settings(&policy.settings, locked)
 }
 
 fn digest(n: u64) -> String {

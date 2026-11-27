@@ -26,7 +26,6 @@ use std::collections::BTreeMap;
 use guard_contracts::{provider_id_is_valid, ProviderCapabilityV1, ProviderEffectLevelV1};
 use serde_json::{Map, Value};
 
-use crate::managed_policy::ManagedPolicy;
 use crate::provider_integration_store::CapabilitySetting;
 
 /// The managed-policy settings key, and the `lockedSettings` path that locks it.
@@ -73,14 +72,6 @@ impl ManagedProviderSettings {
     /// No managed policy, or one that does not mention provider settings.
     pub fn none() -> Self {
         Self::default()
-    }
-
-    /// Read the settings from a parsed managed policy.
-    pub(crate) fn from_policy(policy: &ManagedPolicy) -> ManagedResult<Self> {
-        let locked = policy
-            .locked_settings
-            .contains(PROVIDER_INTEGRATIONS_SETTING);
-        Self::from_settings(&policy.settings, locked)
     }
 
     /// Read the settings from a managed `settings` mapping. `locked` is whether `lockedSettings`
