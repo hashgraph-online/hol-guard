@@ -924,7 +924,7 @@ refused. Register in `rust/crates/guard-runtime/src/daemon_route_paths.rs` and
 | `/v1/integrations/providers/<id>/settings` | POST | Preview plus proof. Effect level per capability, enforcement and fresh-check toggles, fact toggles. Applies exactly the previewed body. Quieted reason codes are deferred: a non-empty list is refused with `400 invalid_request` until they are stored and read back. |
 | `/v1/integrations/providers/<id>/disconnect/preview` | POST | Returns a proof challenge. |
 | `/v1/integrations/providers/<id>/disconnect` | POST | Proof. Deletes secret and cache. |
-| `/v1/integrations/providers/<id>/test` | POST | One live call for a user-typed public origin. Rate limited. |
+| `/v1/integrations/providers/<id>/test` | POST | One live call for a user-typed public origin, through the lookup executor. Rate limited by the provider's token bucket (`max_requests_per_minute`, shared with background lookups): `429` when empty. A non-public origin answers `400` and is never sent. |
 | `/v1/browser/sessions` | GET | Live sessions and posture. |
 | `/v1/browser/sites` | GET, POST | Site allow, ask, block list. POST is preview plus proof. |
 | `/v1/browser/grants` | GET, POST | Live grants. POST revokes. |

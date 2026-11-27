@@ -15,13 +15,19 @@
 //! ledger lock, the provider is called with no lock or storage gate held, and
 //! the key and connection row are written under the gate afterwards. The call
 //! runs under the managed network policy and the manifest's pinned hosts.
+//!
+//! `test` runs one lookup through the process's one provider worker, whose
+//! per-provider token bucket is the route's rate limit. The lookup reads and
+//! writes the store around its call, so it holds the storage gate (shared) and
+//! the worker for at most the manifest's timeout, which compile caps at two
+//! seconds.
 
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use guard_command::provider_integration_compile::CompiledProviderIntegrationV1;
-use guard_provider_integrations::client::HttpProviderTransport;
+use guard_provider_integrations::client::{HttpProviderTransport, ProviderTransport};
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
@@ -32,9 +38,10 @@ use crate::managed_policy_floor::effective_managed_policy;
 use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource, ManagedPolicyState};
 use crate::provider_integration_managed::{ManagedProviderSettings, PROVIDER_INTEGRATIONS_SETTING};
 use crate::provider_integration_routes::{
-    self as routes, PreparedConnect, ProofLedger, RouteAnswer, RouteContext,
+    self as routes, PreparedConnect, ProofLedger, RouteAnswer, RouteContext, WithTransport,
 };
 use crate::provider_integration_store::ensure_provider_integration_schema;
+use crate::provider_integration_worker::ProviderWorker;
 use crate::supply_chain_eval_caller::CallerEgressFulfilment;
 
 pub(super) const MANAGED_POLICY_UNAVAILABLE: &str = "provider_managed_policy_unavailable";
@@ -47,6 +54,14 @@ pub(super) fn owns(method: &str, path: &str) -> bool {
 fn ledger() -> &'static Mutex<ProofLedger> {
     static LEDGER: OnceLock<Mutex<ProofLedger>> = OnceLock::new();
     LEDGER.get_or_init(|| Mutex::new(ProofLedger::new()))
+}
+
+fn lock_worker() -> std::sync::MutexGuard<'static, ProviderWorker> {
+    static WORKER: OnceLock<Mutex<ProviderWorker>> = OnceLock::new();
+    WORKER
+        .get_or_init(|| Mutex::new(ProviderWorker::new()))
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
 }
 
 /// The providers this build ships. No reviewed provider pack has been
@@ -99,6 +114,7 @@ pub(super) fn response(
             providers: &shipped_providers(),
             now_ms: now_ms(),
             verify: &verify_with_provider,
+            with_transport: &with_provider_transport,
         },
         request.method,
         request.path,
@@ -133,19 +149,42 @@ pub(super) struct Served<'a> {
     pub(super) providers: &'a [CompiledProviderIntegrationV1],
     pub(super) now_ms: u64,
     pub(super) verify: Verify<'a>,
+    pub(super) with_transport: WithTransport<'a>,
 }
 
 /// The verify call over HTTPS, under the managed network policy. A policy
 /// Guard cannot honour refuses the call rather than send it unmanaged.
 fn verify_with_provider(prepared: &PreparedConnect<'_>) -> Result<bool, RouteAnswer> {
+    let mut verified = None;
+    let answer =
+        with_provider_transport(
+            prepared.provider(),
+            &mut |transport| match routes::verify_connect(prepared, transport) {
+                Ok(accepted) => {
+                    verified = Some(accepted);
+                    RouteAnswer {
+                        status: 200,
+                        body: Value::Null,
+                    }
+                }
+                Err(answer) => answer,
+            },
+        );
+    verified.ok_or(answer)
+}
+
+/// Runs `send` with the HTTPS client pinned to the provider's hosts.
+fn with_provider_transport(
+    provider: &CompiledProviderIntegrationV1,
+    send: &mut dyn FnMut(&dyn ProviderTransport) -> RouteAnswer,
+) -> RouteAnswer {
     let Ok(egress) = CallerEgressFulfilment::resolve_policy(&ManagedPolicySource::native()) else {
-        return Err(RouteAnswer {
+        return RouteAnswer {
             status: 503,
             body: json!({"error": MANAGED_POLICY_UNAVAILABLE}),
-        });
+        };
     };
-    let transport = HttpProviderTransport::new(prepared.provider().hosts.clone(), &egress);
-    routes::verify_connect(prepared, &transport)
+    send(&HttpProviderTransport::new(provider.hosts.clone(), &egress))
 }
 
 fn split(answer: RouteAnswer) -> (u16, Value) {
@@ -185,6 +224,17 @@ pub(super) fn serve(
         };
         return with_store(config, served, managed, |context| {
             routes::finish_connect(&mut lock_ledger(), context, prepared, verified)
+        });
+    }
+    if routes::is_test(method, path) {
+        return with_store(config, served, managed, |context| {
+            routes::run_test(
+                &mut lock_worker(),
+                context,
+                path,
+                body,
+                served.with_transport,
+            )
         });
     }
     with_store(config, served, managed, |context| {

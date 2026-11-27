@@ -58,6 +58,8 @@ const OWNERS: &[&str] = &[
     "provider_integration_lookup_tests.rs",
     "provider_integration_routes_connect.rs",
     "provider_integration_routes_connect_tests.rs",
+    "provider_integration_routes_lookup.rs",
+    "provider_integration_routes_lookup_tests.rs",
     "provider_integration_worker.rs",
     "provider_integration_worker_tests.rs",
 ];

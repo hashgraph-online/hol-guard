@@ -64,6 +64,20 @@ impl Edge {
         body: Value,
         verify: Verify<'_>,
     ) -> (u16, Value) {
+        self.call_with(managed, method, path, body, verify, &|_, _| {
+            panic!("no lookup expected")
+        })
+    }
+
+    fn call_with(
+        &self,
+        managed: Option<&ManagedProviderSettings>,
+        method: &str,
+        path: &str,
+        body: Value,
+        verify: Verify<'_>,
+        with_transport: WithTransport<'_>,
+    ) -> (u16, Value) {
         let body = if body.is_null() {
             Vec::new()
         } else {
@@ -77,6 +91,7 @@ impl Edge {
                 providers: &self.providers,
                 now_ms: NOW,
                 verify,
+                with_transport,
             },
             method,
             path,
@@ -306,4 +321,36 @@ fn approval_link_sessions_cannot_reach_provider_routes() {
             );
         }
     }
+}
+
+#[test]
+fn the_test_route_runs_one_lookup_under_the_store() {
+    let edge = Edge::new();
+    let none = ManagedProviderSettings::none();
+    let fake = guard_provider_integrations::testkit::FakeProvider::new(
+        &["api.exampleshield.example"],
+        "fixture-unused-key-value-000000",
+    );
+    let path = format!("/v1/integrations/providers/{SHIELD}/test");
+    let body = json!({"capability": "browser.origin-reputation",
+                      "origin": "https://storefront.example-org.com"});
+    let (status, answer) = edge.call_with(
+        Some(&none),
+        "POST",
+        &path,
+        body,
+        &|_| panic!("no verify expected"),
+        &|provider, send| {
+            assert_eq!(provider.id, SHIELD);
+            send(&fake)
+        },
+    );
+    assert_eq!(
+        (status, &answer["error"]),
+        (409, &json!("provider_not_connected"))
+    );
+    assert!(
+        fake.requests().is_empty(),
+        "an unconnected provider is never called"
+    );
 }

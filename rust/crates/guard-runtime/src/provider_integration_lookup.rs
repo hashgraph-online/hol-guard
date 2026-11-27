@@ -13,8 +13,8 @@
 //! 4. Ask [`ProviderWorker::admit`] for a token, render the body with the provider crate's
 //!    renderer and send the request through the given transport. Tests pass the testkit's fake;
 //!    the daemon passes the pinned HTTPS client.
-//! 5. Map a `2xx` answer through the manifest with the provider crate's `map_answer` and cache it
-//!    with [`put_signal`]. `401` and `403` count as `Unauthorized`, `429` as `RateLimited`, and any
+//! 5. Map a `2xx` answer through the manifest with the provider crate's `map_answer` and, when the
+//!    job caches, store it with [`put_signal`]. `401` and `403` count as `Unauthorized`, `429` as `RateLimited`, and any
 //!    other status, client error or unmappable body as `Failed`.
 //! 6. Report the outcome to [`ProviderWorker::record`], which owns the negative cache, the circuit
 //!    and the `key_invalid` write.
@@ -68,6 +68,9 @@ pub struct LookupJob<'a> {
     pub facts: &'a BTreeMap<ProviderShareableFactV1, Value>,
     /// Any random `u32`; places the refresh point (see [`refresh_at`]).
     pub jitter: u32,
+    /// Whether an answer is cached for the decide step. A manual test answers the person who asked
+    /// and is never cached, so it cannot change a later decision.
+    pub cache: bool,
 }
 
 /// Why a lookup was not sent. None of these counts as a provider failure.
@@ -115,10 +118,10 @@ impl NotSent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LookupReport {
     NotSent(NotSent),
-    /// The provider answered and the answer went to the cache.
+    /// The provider answered. `stored` is the cache write, `None` for a job that does not cache.
     Answered {
         signal: ProviderSignalV1,
-        stored: PutSignalOutcome,
+        stored: Option<PutSignalOutcome>,
         /// When the worker should ask again.
         refresh_at_ms: u64,
         recorded: Recorded,
@@ -368,7 +371,11 @@ pub fn run_lookup(
     };
     // The provider answered, so the circuit closes whether or not the cache keeps this answer.
     let recorded = record(worker, ExchangeOutcome::Answered)?;
-    let stored = put_signal(connection, &signal)?;
+    let stored = if job.cache {
+        Some(put_signal(connection, &signal)?)
+    } else {
+        None
+    };
     Ok(LookupReport::Answered {
         refresh_at_ms: refresh_at(now_ms, expires_at_ms, job.jitter),
         signal,
