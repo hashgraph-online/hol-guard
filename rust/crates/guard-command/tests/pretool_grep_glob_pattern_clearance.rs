@@ -92,6 +92,10 @@ fn fixture(name: &str) -> Fixture {
 }
 
 fn action(fixture: &Fixture, command: &str) -> (String, String) {
+    action_in(fixture, &fixture.repo, command)
+}
+
+fn action_in(fixture: &Fixture, cwd: &Path, command: &str) -> (String, String) {
     let result = evaluate_pre_tool_envelope_with_context(
         "claude-code",
         "PreToolUse",
@@ -99,7 +103,7 @@ fn action(fixture: &Fixture, command: &str) -> (String, String) {
         None,
         None,
         fixture.home.to_str(),
-        fixture.repo.to_str(),
+        cwd.to_str(),
     );
     (result.minimum_action, result.reason_code)
 }
@@ -145,5 +149,46 @@ fn a_glob_the_clearance_cannot_cover_keeps_the_review() {
         .unwrap();
     let command = "grep -rn \"parse_config\" tests/**/*.py | head -20";
     let (action, reason) = action(&fixture, command);
+    assert_ne!(action, "allow", "{command}: {reason}");
+}
+
+#[test]
+fn a_glob_that_must_name_a_directory_needs_a_directory_match() {
+    let fixture = fixture("directory");
+    // The checkout root holds a file the pattern matches, so a search that
+    // falls back to walking the working directory could print it.
+    write(fixture.repo.join(".env"), "parse_config=1\n");
+    // `tests` holds the files `test_*.py` but no directory of that name, so
+    // under `nullglob` these words vanish and `grep -r` walks the checkout.
+    for command in [
+        "grep -rn \"parse_config\" tests/*.py/ | head -20",
+        "grep -rn \"parse_config\" tests/test_*/ | head -20",
+        "grep -rn \"parse_config\" tests/*.py/. | head -20",
+    ] {
+        let (action, reason) = action(&fixture, command);
+        assert_ne!(action, "allow", "{command}: {reason}");
+    }
+    let command = "grep -rn \"parse_config\" tests/*/ | head -20";
+    assert_eq!(
+        action(&fixture, command),
+        ("allow".to_owned(), "native_exact_safe_command".to_owned()),
+        "{command}"
+    );
+}
+
+#[test]
+fn a_glob_that_expands_to_an_option_word_keeps_the_review() {
+    let fixture = fixture("option");
+    let tests = fixture.repo.join("tests");
+    let command = "grep -rn \"parse_config\" * | head -20";
+    assert_eq!(
+        action_in(&fixture, &tests, command),
+        ("allow".to_owned(), "native_exact_safe_command".to_owned()),
+        "{command}"
+    );
+    // A file named `-v` reaches grep as an option, which prints every line
+    // the pattern does not match.
+    write(tests.join("-v"), "");
+    let (action, reason) = action_in(&fixture, &tests, command);
     assert_ne!(action, "allow", "{command}: {reason}");
 }

@@ -41,6 +41,7 @@ pub(in crate::pretool) fn safe_glob_search_cleared(
         literal_spelling_searchable(value, context)
             && search_glob_directory(value, context).is_some_and(|(directory, _)| {
                 !inside_agent_state(&directory, context)
+                    && !may_name_an_option(&directory, value)
                     && surely_matches(&directory, value)
                     && super::super::walk_memo::cleared(
                         directory,
@@ -53,12 +54,45 @@ pub(in crate::pretool) fn safe_glob_search_cleared(
     })
 }
 
+/// Whether a glob with no `/` could expand to a name that starts with `-`.
+/// The search would read that word as an option, and `-v` prints the lines
+/// the pattern does not match. A glob with a `/` expands to words that start
+/// with its literal directory. Any entry that starts with `-`, has no UTF-8
+/// name or lies past the budget answers yes.
+fn may_name_an_option(directory: &Path, value: &str) -> bool {
+    if value.contains('/') {
+        return false;
+    }
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return true;
+    };
+    let mut budget = MAX_SURE_MATCH_ENTRIES;
+    for entry in entries {
+        let Some(left) = budget.checked_sub(1) else {
+            return true;
+        };
+        budget = left;
+        let Ok(entry) = entry else {
+            return true;
+        };
+        if entry
+            .file_name()
+            .to_str()
+            .is_none_or(|name| name.starts_with('-'))
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// Whether `value`, whose literal prefix is `directory`, names an existing
 /// entry under the options that match least: no `dotglob`, no `nocaseglob`,
 /// and `**` read as one `*`. Every other option only adds matches, so the
 /// shell always hands the word on. A bracket, an escape or a budget that
-/// runs out answers no.
+/// runs out answers no. A trailing `/` or `/.` matches only a directory.
 fn surely_matches(directory: &Path, value: &str) -> bool {
+    let directory_only = directories_only(value);
     let components: Vec<&str> = value
         .split('/')
         .filter(|part| !part.is_empty() && *part != ".")
@@ -82,7 +116,7 @@ fn surely_matches(directory: &Path, value: &str) -> bool {
         let Some(component) = pattern.get(index) else {
             return true;
         };
-        let last = index + 1 == pattern.len();
+        let last = index + 1 == pattern.len() && !directory_only;
         if !component.contains(['*', '?']) {
             let next = path.join(component);
             if next
@@ -119,4 +153,11 @@ fn surely_matches(directory: &Path, value: &str) -> bool {
         }
     }
     false
+}
+
+/// Whether a glob ends in `/` or `/.`, which the shell matches only against
+/// directories, whether its last component is a pattern or a literal name.
+pub(super) fn directories_only(pattern: &str) -> bool {
+    let trimmed = pattern.trim_end_matches('/');
+    trimmed.len() < pattern.len() || trimmed.ends_with("/.")
 }
