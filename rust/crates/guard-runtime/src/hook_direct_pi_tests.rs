@@ -3,7 +3,8 @@ use super::{
     run_as, Lane, HOME,
 };
 use crate::hook_direct::pi::{
-    outage_overlay, resolution, source_ref_external_allowed, structured_mediation,
+    outage_overlay, outage_overlay_with_binding, resolution, source_ref_external_allowed,
+    structured_mediation,
 };
 use serde_json::{json, Value};
 
@@ -144,6 +145,16 @@ fn outage_mediation_keeps_only_an_explicitly_unrequired_destination_open() {
     }
     assert!(outage_overlay("codex", "PostToolUse", None).is_empty());
     assert!(outage_overlay("omp", "PreToolUse", None).is_empty());
+}
+
+#[test]
+fn a_bound_optional_structured_destination_stays_open_during_an_outage() {
+    assert!(outage_overlay_with_binding("omp", "PostToolUse", None, true).is_empty());
+    assert_eq!(
+        outage_overlay_with_binding("omp", "PostToolUse", None, false)
+            ["structured_content_mediation"]["action"],
+        "withhold"
+    );
 }
 
 #[test]

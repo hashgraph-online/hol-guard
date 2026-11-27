@@ -122,6 +122,37 @@ pub(crate) fn outage_overlay(
     overlay
 }
 
+/// Render an outage overlay when the resident has a bound policy view.
+///
+/// A bound `None` view is an explicit optional destination and stays open.
+/// An unbound view remains fail-closed through `outage_overlay` above.
+pub(crate) fn outage_overlay_with_binding(
+    harness: &str,
+    event: &str,
+    view: Option<&Value>,
+    binding_known: bool,
+) -> serde_json::Map<String, Value> {
+    if !binding_known {
+        return outage_overlay(harness, event, view);
+    }
+    let mut overlay = serde_json::Map::new();
+    if structured_mediation(harness, event)
+        && view.is_some()
+        && resolution(harness, view)
+            .is_none_or(|resolved| resolved["required"].as_bool() != Some(false))
+    {
+        overlay.insert(
+            "structured_content_mediation".to_owned(),
+            json!({
+                "schema": MEDIATION_SCHEMA,
+                "action": "withhold",
+                "reason_code": "structured_native_edge_unavailable",
+            }),
+        );
+    }
+    overlay
+}
+
 /// The binding a resolution names, as the recheck reads it.
 pub(crate) fn resolved_binding(resolution: &Value) -> Value {
     resolution["binding"].clone()

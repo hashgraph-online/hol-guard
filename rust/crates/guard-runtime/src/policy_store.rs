@@ -245,6 +245,13 @@ impl PolicySnapshotStore {
                 .and_then(|binding| binding.structured_output_config.clone())
         })
     }
+
+    pub(crate) fn has_direct_lane_binding(&self) -> bool {
+        self.direct_lane
+            .lock()
+            .ok()
+            .is_some_and(|binding| binding.is_some())
+    }
     /// The bound blocked-request mode for daemon review rendering.
     pub(crate) fn blocked_request_mode(&self) -> Option<String> {
         self.direct_lane.lock().ok().and_then(|binding| {
