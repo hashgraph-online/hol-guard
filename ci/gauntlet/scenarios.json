@@ -3013,6 +3013,23 @@
       ]
     },
     {
+      "id": "omp-native-shell-grep-globs-below-missing-folders",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I want to know where the TypeScript sources under src export something, and whether helper shell scripts or Python modules sit beside them. Run the two listed commands once each, in order, exactly as written, and tell me what each printed. An error or empty output has answered the question: report that. Do not create folders, check first with another command, substitute tools, change the commands or cwd, request approval, or change policy. Stop after the two listed calls.",
+      "commands": [
+        "grep -rn \"export\" src/*.ts scripts/*io* lib/*.py 2>/dev/null | head",
+        "grep -rn \"export\" src scripts/*.sh"
+      ],
+      "benign_exit_commands": [
+        "grep -rn \"export\" src/*.ts scripts/*io* lib/*.py 2>/dev/null | head",
+        "grep -rn \"export\" src scripts/*.sh"
+      ]
+    },
+    {
       "id": "omp-native-list-two-folders-with-a-brace",
       "expectation": "allow",
       "oracle": "native-tools",
