@@ -228,3 +228,118 @@ fn a_prompt_that_asks_for_no_change_is_told_apart() {
         assert!(!asks_no_change(prompt), "{prompt}");
     }
 }
+
+/// Telling the agent to carry on names no code, even where a project defines
+/// `resume` or `finish`; a version number names a release.
+#[test]
+fn steering_words_and_versions_are_not_search_words() {
+    for prompt in [
+        "Resume where we left off, you decide",
+        "Okay finish it end to end",
+        "continue, then proceed with the release",
+        "okay just make sure we get 3.60 soon, was it there before v3.49.1?",
+        "Did V3.49 ship it?",
+    ] {
+        let found = terms(prompt);
+        for steer in ["resume", "finish", "continue", "proceed", "3", "60", "349"] {
+            assert!(
+                !found.iter().any(|term| term == steer),
+                "{prompt}: {found:?}"
+            );
+        }
+        assert!(
+            spellings(prompt).is_empty(),
+            "{prompt}: {:?}",
+            spellings(prompt)
+        );
+    }
+    assert!(terms("Fix `resume` so it keeps the session").contains(&"resume".to_owned()));
+    assert!(spellings("Make parse_v2 accept 1.5x").contains(&"parse_v2".to_owned()));
+    for name in ["vv3", "v"] {
+        assert!(
+            spellings(&format!("Fix `{name}`")).contains(&name.to_owned()),
+            "{name}"
+        );
+    }
+}
+
+/// "e.g." and an email address are not code: before, "e.g." read as the
+/// dotted name `e.g` and `someone@example.com` as `example.com`, and each
+/// mapped whichever file wrote them. Decorators and import aliases still count.
+#[test]
+fn abbreviations_and_email_addresses_are_not_code() {
+    for prompt in [
+        "what else can we do to improve deliverability, e.g. through an OAuth app?",
+        "keep the list short, i.e. one line per item",
+        "it shows someone@example.com as broken",
+        "send it to first.last@mail.example.org, then retry",
+        "write to support_@example.com",
+        "alerts go to first_last+alerts@example.com",
+    ] {
+        assert!(
+            spellings(prompt).is_empty(),
+            "{prompt}: {:?}",
+            spellings(prompt)
+        );
+        assert!(named(prompt).is_empty(), "{prompt}: {:?}", named(prompt));
+        assert!(
+            !marked_terms(prompt).iter().any(|(_, shaped)| *shaped),
+            "{prompt}: {:?}",
+            marked_terms(prompt)
+        );
+    }
+    assert!(spellings("Why does @app.route drop the slash?").contains(&"app.route".to_owned()));
+    assert_eq!(named("Fix the import in @/lib/api.ts"), ["lib/api.ts"]);
+    assert!(spellings("Call `e.g` on it").contains(&"e.g".to_owned()));
+    // A package and its version are not an address.
+    for (prompt, name) in [
+        ("bump lodash@4.17.21", "lodash"),
+        ("upgrade react-dom@18", "reactdom"),
+    ] {
+        let words = marked_terms(prompt);
+        assert!(
+            words.iter().any(|(word, _)| word == name),
+            "{prompt}: {words:?}"
+        );
+    }
+}
+
+/// A web address names a page, not code: before, a link's host and path read
+/// as dotted names (`github.com`, `web-app`) and a query key such as
+/// `workspaceId` as camelCase, and each mapped whichever file wrote them.
+#[test]
+fn a_web_address_gives_no_search_words() {
+    for prompt in [
+        "Review https://github.com/acme/web-app/pull/12 please",
+        "Page https://example.com/guard/fleet?workspaceId=7&tab=usage looks off",
+        "See [the run](https://ci.example.org/runs/42) and <http://localhost:3000/a_b>.",
+        "Clone git+ssh://git@example.com/acme/tool.git, then retry",
+        "Review **https://example.com/a?workspaceId=7** and _https://example.com/b_c_",
+        "Open http://[::1]:3000/a?workspaceId=7 now",
+    ] {
+        assert!(
+            spellings(prompt).is_empty(),
+            "{prompt}: {:?}",
+            spellings(prompt)
+        );
+        assert!(
+            !marked_terms(prompt).iter().any(|(_, shaped)| *shaped),
+            "{prompt}: {:?}",
+            marked_terms(prompt)
+        );
+    }
+    let found = terms("Review https://github.com/acme/web-app/pull/12, then fix parse_args");
+    for word in ["github", "com", "acme", "webapp", "web", "app", "pull"] {
+        assert!(!found.contains(&word.to_owned()), "{word}: {found:?}");
+    }
+    assert!(found.contains(&"parsearg".to_owned()), "{found:?}");
+    // A word written right after a link stays, and a link to a file still
+    // names it.
+    let found = spellings("Read (https://example.com/docs),render_page next");
+    assert_eq!(found, ["render_page"]);
+    let found = named("Fix https://github.com/acme/app/blob/main/src/cli.py");
+    assert!(
+        found.len() == 1 && found[0].ends_with("src/cli.py"),
+        "{found:?}"
+    );
+}

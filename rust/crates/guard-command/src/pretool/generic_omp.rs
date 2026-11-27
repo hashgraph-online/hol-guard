@@ -7,7 +7,12 @@
 
 #[path = "generic_omp_eval.rs"]
 mod eval;
+#[cfg(test)]
+pub(crate) use eval::loopback_browser_program;
 pub use eval::omp_eval_commit_drafts;
+pub(crate) use eval::{
+    tokenize_browser_eval, BrowserEvalToken, BROWSER_EVAL_MAX_CODE_BYTES, BROWSER_EVAL_OPEN_KEYS,
+};
 #[path = "generic_omp_goal.rs"]
 mod goal;
 #[path = "generic_omp_grep_glob.rs"]

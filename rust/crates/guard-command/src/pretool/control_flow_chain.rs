@@ -30,7 +30,46 @@ const OTHER_CONSTRUCTS: &[&str] = &[
 /// holds, or `None` when the command holds no such conditional or anything
 /// around it is outside the plain list grammar.
 pub(super) fn spliced(command: &str, home_dir: Option<&str>) -> Option<String> {
-    spliced_conditionals(command).or_else(|| loops::spliced_loops(command, home_dir))
+    spliced_conditionals(command)
+        .or_else(|| loops::spliced_loops(command, home_dir))
+        .or_else(|| spliced_wait(command))
+}
+
+/// A `while` or `until` loop written after a plain list, as in
+/// `sleep 20; until grep -q ready server.log; do sleep 5; done; tail server.log`.
+///
+/// `control_flow_flatten` reads the loop and whatever list follows it once
+/// the loop opens the text. The commands in front of it run once, before the
+/// loop, so writing them out ahead of the flattened loop keeps every command
+/// in the order the shell runs it, and a directory or option they change is
+/// the one the flat list reads as well. The list in front stays in the plain
+/// list grammar that `next_construct` reads, with no pipe into the loop and
+/// no background job.
+///
+/// The loop may expand nothing. A `while read line` loop binds `line` from a
+/// file, and its flat list reads `$line`, so a list in front that assigns
+/// `line` would give the flat list a value the loop never reads.
+fn spliced_wait(command: &str) -> Option<String> {
+    if command
+        .chars()
+        .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
+    {
+        return None;
+    }
+    let text = command.trim();
+    // Each scan stops at the other keyword, so run both and take the one
+    // that reaches its construct.
+    let start = match (next_construct(text, "until"), next_construct(text, "while")) {
+        (Some(Some(start)), _) | (_, Some(Some(start))) => start,
+        _ => return None,
+    };
+    let (before, construct) = text.split_at(start);
+    if before.trim().is_empty() || construct.contains(['$', '`']) {
+        return None;
+    }
+    let flat = super::control_flow_flatten::flatten(construct)?;
+    let out = format!("{before}{flat}");
+    (out.len() <= MAX_FLATTENED_BYTES).then_some(out)
 }
 
 fn spliced_conditionals(command: &str) -> Option<String> {

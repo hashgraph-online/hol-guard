@@ -91,13 +91,8 @@ impl Prober<'_> {
         self.execute(arguments, None, true, false, None)
     }
 
-    /// Like [`Prober::run`], with Git's fetches off (see [`OFFLINE_ENVIRONMENT`]).
-    pub(crate) fn run_offline(&self, arguments: &[&str]) -> Option<ProbeOutput> {
-        self.execute(arguments, None, false, true, None)
-    }
-
-    /// Like [`Prober::run_offline`], but stopped at `until` when that comes
-    /// before the probe's own timeout.
+    /// Like [`Prober::run`], with Git's fetches off (see [`OFFLINE_ENVIRONMENT`])
+    /// and stopped at `until` when that comes before the probe's own timeout.
     pub(crate) fn run_offline_until(
         &self,
         arguments: &[&str],

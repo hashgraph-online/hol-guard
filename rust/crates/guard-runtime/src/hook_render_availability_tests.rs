@@ -66,6 +66,42 @@ fn availability_response_uses_the_contract_envelope() {
         "native_pre_tool_unavailable"
     );
 }
+
+#[test]
+fn unavailable_event_projects_aliases_and_permission_passthrough_in_rust() {
+    let mut req = request("unavailable_event");
+    req.harness = "copilot".into();
+    req.cli = Some(json!({
+        "payload": {"hook_event_name": "copilotPermissionRequest"},
+        "record_post_tool_activity": false,
+    }));
+    let response = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    let document = response.payload.expect("payload");
+    assert_eq!(document["outcome"], "document");
+    assert_eq!(document["response"]["event_name"], "PermissionRequest");
+    assert_eq!(
+        document["response"]["response"]["hookSpecificOutput"]["hookEventName"],
+        "PermissionRequest"
+    );
+}
+
+#[test]
+fn unavailable_event_denies_pre_tool_and_preserves_post_tool_activity_marker() {
+    let mut req = request("unavailable_event");
+    req.harness = "cursor".into();
+    req.cli = Some(json!({
+        "payload": {"hook_event_name": "PreToolUse"},
+        "record_post_tool_activity": true,
+    }));
+    let response = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    let document = response.payload.expect("payload")["response"].clone();
+    assert_eq!(document["event_name"], "PreToolUse");
+    assert_eq!(document["activity_recorded"], false);
+    assert_eq!(
+        document["response"]["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+}
 #[test]
 fn fail_closed_verdict_uses_the_rust_contract_envelope() {
     let mut req = request("fail_closed_verdict");

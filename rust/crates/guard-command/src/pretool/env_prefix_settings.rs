@@ -76,7 +76,10 @@ pub(super) fn ordinary_project_setting(
 ) -> bool {
     inert_tool_setting(name, value)
         || (plain_project_value(value) || workspace_path_value(value, context, first_command))
-            && crate::command_compatibility::environment::ordinary_setting_name(name)
+            && (crate::command_compatibility::environment::ordinary_setting_name(name)
+                || crate::command_compatibility::data_file_setting::data_file_path_setting(
+                    name, value,
+                ))
 }
 
 /// A value that spells a location inside the working directory, written in
@@ -123,13 +126,10 @@ fn workspace_path_value(value: &str, context: PathContext<'_>, first_command: bo
     }
     // Without a working directory there is nothing to measure the value
     // against, so a literal or offline context reads no path value here.
-    let Some(workspace) = context
-        .cwd
-        .map(|cwd| cwd.trim_end_matches('/'))
-        .filter(|cwd| cwd.len() > 1 && cwd.starts_with('/'))
-    else {
+    let Some(workspace) = context.cwd.and_then(workspace_root) else {
         return false;
     };
+    let workspace = workspace.as_str();
     let relative = if value.starts_with('/') {
         let Some(rest) = value.strip_prefix(workspace) else {
             return false;
@@ -168,6 +168,33 @@ fn workspace_path_value(value: &str, context: PathContext<'_>, first_command: bo
     // key file's own name.
     !crate::pretool::sensitive_location_text(&resolved)
         && !crate::pretool::sensitive_read_path_argument(&resolved)
+}
+
+/// The working directory as an absolute location [`workspace_path_value`]
+/// can measure a value against: a Unix path below `/`, or a Windows drive
+/// path below its drive root (`C:\work\site`, as a Windows harness reports
+/// it), spelled with `/` so the value joins it the same way.
+///
+/// A drive root, a drive-relative spelling (`C:work`), a UNC or device path
+/// (`\\server\share`, `\\?\C:\work`) and a name carrying a stream
+/// (`C:\work:data`) name no single folder the command is known to run in.
+fn workspace_root(cwd: &str) -> Option<String> {
+    if cwd.starts_with('/') {
+        let trimmed = cwd.trim_end_matches('/');
+        return (trimmed.len() > 1).then(|| trimmed.to_owned());
+    }
+    let bytes = cwd.as_bytes();
+    if !(bytes.len() > 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'\\' | b'/'))
+        || cwd[2..].contains(':')
+    {
+        return None;
+    }
+    let unified = cwd.replace('\\', "/");
+    let trimmed = unified.trim_end_matches('/');
+    (trimmed.len() > 3 && !trimmed[2..].contains("//")).then(|| trimmed.to_owned())
 }
 
 /// [`crate::pretool::generic::inert_tool_settings::inert_tool_setting`], reachable

@@ -38,6 +38,7 @@ from ci.gauntlet.fixtures import (
     ALIAS_ESCAPES_CASE,
     BUN_TEST_FILE_CASE,
     BUN_TEST_SCRIPT_MARKER,
+    HEADER_GITCONFIG_CASE,
     INSTEAD_OF_CASE,
     LARGE_GITCONFIG_CASE,
     LARGE_GITCONFIG_MIN_BYTES,
@@ -100,12 +101,16 @@ def test_gitconfig_variants_are_ordinary_and_sized() -> None:
     assert "insteadOf = acme:" in gitconfig_variant(INSTEAD_OF_CASE)
     large = gitconfig_variant(LARGE_GITCONFIG_CASE)
     assert len(large.encode()) > 256 * 1024 and len(large.encode()) >= LARGE_GITCONFIG_MIN_BYTES
-    for text in (alias, large, gitconfig_variant(INSTEAD_OF_CASE)):
+    header = gitconfig_variant(HEADER_GITCONFIG_CASE)
+    assert "extraHeader = X-Trace: fixture" in header
+    for text in (alias, large, header, gitconfig_variant(INSTEAD_OF_CASE)):
         assert "include" not in text.lower() and "!" not in text and "`" not in text
     assert gitconfig_variant(None) == gitconfig_variant("omp-native-git-compound-reads")
 
 
-@pytest.mark.parametrize("scenario_id", [ALIAS_ESCAPES_CASE, INSTEAD_OF_CASE, LARGE_GITCONFIG_CASE])
+@pytest.mark.parametrize(
+    "scenario_id", [ALIAS_ESCAPES_CASE, INSTEAD_OF_CASE, LARGE_GITCONFIG_CASE, HEADER_GITCONFIG_CASE]
+)
 def test_global_config_fixture_keeps_git_reads_working(tmp_path: Path, scenario_id: str) -> None:
     fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=scenario_id)
     config = (fixture.home / ".gitconfig").read_text(encoding="utf-8")

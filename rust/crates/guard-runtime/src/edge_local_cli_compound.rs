@@ -50,7 +50,7 @@ pub(super) fn lifts(
     step: &Step<'_>,
     deadline: Instant,
 ) -> bool {
-    if !crate::connector_setup::is_non_recognition(
+    if !crate::connector_setup::grant_answers_review(
         result.get("reason_code").and_then(Value::as_str),
     ) || !crate::hook_direct::saved_decision::overridable(result)
     {
@@ -191,7 +191,7 @@ fn granted(
                 store_path: rules.store_path.clone(),
                 guard_home: guard_home.clone(),
                 mode: if reviewed { "review" } else { "allowed" }.to_owned(),
-                payload,
+                payload: super::stamped_payload(envelope, payload),
                 native_result: verdict,
                 workspace: envelope.source.cwd.clone(),
                 home_dir: envelope.source.home_dir.clone(),

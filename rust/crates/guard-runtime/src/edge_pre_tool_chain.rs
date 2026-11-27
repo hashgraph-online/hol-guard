@@ -7,6 +7,25 @@ use guard_contracts::{GuardHookEnvelopeV2, PreToolResultV1};
 use serde_json::{Map, Value};
 use std::time::{Duration, Instant};
 
+/// The most of a hook's budget the native check leaves for its caller.
+const REVIEW_QUEUE_RESERVE_MS: u64 = 500;
+
+/// When the native check must stop. A check that runs out of time settles at
+/// a review, and that review keeps Allow once and Always allow only if the
+/// caller still has time to queue its approval card and render the pause.
+/// A check given the whole budget leaves none, so the caller can only fail
+/// closed with a block no approval can clear. The check therefore stops a
+/// quarter of the budget early, never more than half a second.
+pub(super) fn native_check_deadline(budget_ms: Option<u64>) -> Instant {
+    Instant::now() + Duration::from_millis(native_check_budget_ms(budget_ms))
+}
+
+/// The part of the hook's budget the native check may spend.
+pub(super) fn native_check_budget_ms(budget_ms: Option<u64>) -> u64 {
+    let budget = budget_ms.unwrap_or(9_000).min(9_000);
+    budget - (budget / 4).min(REVIEW_QUEUE_RESERVE_MS)
+}
+
 /// The `PreToolUse` and `UserPromptSubmit` verdict before the per-session
 /// stop: the native review, then every policy layer joined over it. It holds
 /// no session state, so it also judges one step of a chained command alone
@@ -24,10 +43,7 @@ pub(super) fn evaluate_pre_tool_chain(
         event_name,
         &envelope.raw_payload,
         policy_snapshot.and_then(|snapshot| snapshot.command_extensions.as_ref()),
-        Some(
-            Instant::now()
-                + Duration::from_millis(envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000)),
-        ),
+        Some(native_check_deadline(envelope.deadline_budget_ms)),
         // The envelope carries only the roots. Every proof a context
         // holds is set by a caller with the command, so all stay false.
         guard_command::pretool::PathContext {
@@ -57,10 +73,34 @@ pub(super) fn evaluate_pre_tool_chain(
     let evaluated =
         crate::native_exact_action_op::require_bash_owner(envelope, policy_snapshot, evaluated);
     let evaluated = crate::network_protection::apply_to_envelope(envelope, evaluated);
-    let evaluated = runtime_risk::apply_to_envelope(envelope, policy_snapshot, evaluated);
-    let evaluated = git_rules::after_exact_review(envelope, policy_snapshot, evaluated);
+    let evaluated = crate::browser_debug_ports::apply_to_envelope(envelope, harness, evaluated);
+    let evaluated = rule_reviews_then_runtime(
+        envelope,
+        policy_snapshot,
+        evaluated,
+        runtime_risk::apply_to_envelope,
+    );
     let evaluated = crate::policy_enforcement::deferred_prompt_review(evaluated);
     Ok(evaluated)
+}
+
+type Overlay =
+    fn(&GuardHookEnvelopeV2, Option<&AdmittedPolicySnapshot>, PreToolResultV1) -> PreToolResultV1;
+
+/// The saved exact-command and git rule reviews, then the known-vulnerable
+/// runtime overlay. The rule reviews act only on a call nothing holds yet, and
+/// the runtime overlay records a finding over a review that is already there
+/// with a code a script grant cannot lift. In the other order the runtime
+/// finding would hold the call first, the rule reviews would add nothing, and
+/// a script grant that answers the finding would clear the rule's review too.
+fn rule_reviews_then_runtime(
+    envelope: &GuardHookEnvelopeV2,
+    policy_snapshot: Option<&AdmittedPolicySnapshot>,
+    evaluated: PreToolResultV1,
+    runtime: Overlay,
+) -> PreToolResultV1 {
+    let evaluated = git_rules::after_exact_review(envelope, policy_snapshot, evaluated);
+    runtime(envelope, policy_snapshot, evaluated)
 }
 
 /// One step of a chained command, judged as a command of its own: the hook's
@@ -82,3 +122,7 @@ pub(super) fn step(
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "edge_pre_tool_chain_tests.rs"]
+mod tests;

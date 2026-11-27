@@ -6,14 +6,24 @@
 //! of them asks for code. In real sessions the agent opened a file from a note
 //! on these turns about once in a hundred, and every note stays in the
 //! conversation, sent again with each later request. CIGAR leaves them alone.
+//!
+//! Two more kinds read like a person's turn but are not one. A command run in
+//! Claude Code's shell mode (`!`) comes back as its input and output, and no
+//! model reads that turn, so a note on it is only paid for later. A CI
+//! watcher's event wraps GitHub text other people wrote in the watcher's own
+//! fixed wording, so a note on it was ranked on that wording.
 
 /// How each of those messages starts.
-const OPENINGS: [&str; 5] = [
+const OPENINGS: [&str; 9] = [
     "<task-notification>",
     "<system-reminder>",
     "Stop hook feedback:",
     "Goal check-in:",
     "This session is being continued from a previous conversation",
+    "<bash-input>",
+    "<bash-stdout>",
+    "<bash-stderr>",
+    "<ci-monitor-event>",
 ];
 
 /// Whether the app, not a person or agent, wrote this prompt.

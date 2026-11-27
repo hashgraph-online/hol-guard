@@ -1,0 +1,230 @@
+{
+  "schemaVersion": "guard.browser-driver-tools.v1",
+  "driver": "browsermcp",
+  "note": "Tool names and input shapes of Browser MCP, written by hand for Gauntlet fixtures: the single command-script tool of the 2.x series and the per-action tools of the 0.1 series. Descriptions are shortened.",
+  "tools": [
+    {
+      "name": "browser",
+      "description": "Controls the user's Chrome. Runs one command per line, stopping at the first error",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "commands": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "commands"
+        ]
+      }
+    },
+    {
+      "name": "browser_navigate",
+      "description": "Navigate to a URL",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "browser_go_back",
+      "description": "Go back to the previous page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "browser_go_forward",
+      "description": "Go forward to the next page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "browser_snapshot",
+      "description": "Capture accessibility snapshot of the current page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "browser_click",
+      "description": "Perform click on a web page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "element": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "element",
+          "ref"
+        ]
+      }
+    },
+    {
+      "name": "browser_hover",
+      "description": "Hover over element on page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "element": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "element",
+          "ref"
+        ]
+      }
+    },
+    {
+      "name": "browser_drag",
+      "description": "Perform drag and drop between two elements",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "startElement": {
+            "type": "string"
+          },
+          "startRef": {
+            "type": "string"
+          },
+          "endElement": {
+            "type": "string"
+          },
+          "endRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "startElement",
+          "startRef",
+          "endElement",
+          "endRef"
+        ]
+      }
+    },
+    {
+      "name": "browser_type",
+      "description": "Type text into editable element",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "element": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "submit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "element",
+          "ref",
+          "text",
+          "submit"
+        ]
+      }
+    },
+    {
+      "name": "browser_select_option",
+      "description": "Select an option in a dropdown",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "element": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "element",
+          "ref",
+          "values"
+        ]
+      }
+    },
+    {
+      "name": "browser_press_key",
+      "description": "Press a key on the keyboard",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    },
+    {
+      "name": "browser_wait",
+      "description": "Wait for a specified time in seconds",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "time"
+        ]
+      }
+    },
+    {
+      "name": "browser_get_console_logs",
+      "description": "Get the console logs from the browser",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "browser_screenshot",
+      "description": "Take a screenshot of the current page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    }
+  ]
+}

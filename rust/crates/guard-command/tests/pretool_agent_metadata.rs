@@ -73,6 +73,7 @@ fn task_stop_and_skill_are_bounded_host_metadata() {
         json!({"tool_name":"TaskStop", "tool_input":{"task_id":"exec_abc-123"}}),
         json!({"tool_name":"Skill", "tool_input":{"skill":"plugin:review_code-2", "args":"focus on tests"}}),
         json!({"tool_name":"Skill", "tool_input":{"skill":"review"}}),
+        json!({"tool_name":"ReadNotifications", "tool_input":{}}),
     ] {
         let result = evaluate(payload);
         assert_eq!(result.minimum_action, "allow");
@@ -87,6 +88,9 @@ fn task_stop_and_skill_are_bounded_host_metadata() {
         json!({"tool_name":"Skill", "tool_input":{"skill":"ok", "args":{"a":1}}}),
         json!({"tool_name":"Skill", "tool_input":{"skill":"ok", "extra":"x"}}),
         json!({"tool_name":"mcp__external__Skill", "tool_input":{"skill":"ok"}}),
+        json!({"tool_name":"ReadNotifications", "tool_input":{"command":"echo unsafe"}}),
+        json!({"tool_name":"ReadNotifications", "tool_input":{"path":"/etc/hosts"}}),
+        json!({"tool_name":"mcp__external__ReadNotifications", "tool_input":{}}),
     ] {
         assert_ne!(evaluate(payload).minimum_action, "allow");
     }

@@ -37,18 +37,50 @@ jobs:
       SOURCE_REPOSITORY: ${{ github.repository }}
       SOURCE_SERVER_URL: ${{ github.server_url }}
     steps:
+      - name: Mint action repository token
+        id: action_app_token
+        if: vars.HOL_RELEASE_APP_CLIENT_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          owner: hashgraph-online
+          repositories: ai-plugin-scanner-action
+          permission-contents: write
+
+      - name: Mint awesome-codex-plugins token
+        id: awesome_app_token
+        if: vars.HOL_RELEASE_APP_CLIENT_ID != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          owner: hashgraph-online
+          repositories: awesome-codex-plugins
+          permission-contents: write
+
       - name: Validate publication credentials
         env:
-          ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
-          AWESOME_CODEX_PLUGINS_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+          ACTION_APP_TOKEN: ${{ steps.action_app_token.outputs.token }}
+          ACTION_REPO_TOKEN: ${{ steps.action_app_token.outputs.token || secrets.ACTION_REPO_TOKEN }}
+          AWESOME_APP_TOKEN: ${{ steps.awesome_app_token.outputs.token }}
+          AWESOME_CODEX_PLUGINS_TOKEN: ${{ steps.awesome_app_token.outputs.token || secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
         run: |
           if [ -z "$ACTION_REPO_TOKEN" ]; then
-            echo "ACTION_REPO_TOKEN must be configured to publish the GitHub Action repository." >&2
+            echo "Configure the release App or ACTION_REPO_TOKEN to publish the GitHub Action repository." >&2
             exit 1
           fi
           if [ -z "$AWESOME_CODEX_PLUGINS_TOKEN" ]; then
-            echo "AWESOME_CODEX_PLUGINS_TOKEN must be configured to sync the awesome-codex-plugins submission guide." >&2
+            echo "Configure the release App or AWESOME_CODEX_PLUGINS_TOKEN to sync the awesome-codex-plugins submission guide." >&2
             exit 1
+          fi
+          if [ -z "$ACTION_APP_TOKEN" ]; then
+            echo "::warning::Release App token unavailable for ${ACTION_REPOSITORY}; using ACTION_REPO_TOKEN."
+          fi
+          if [ -z "$AWESOME_APP_TOKEN" ]; then
+            echo "::warning::Release App token unavailable for ${AWESOME_CODEX_PLUGINS_REPOSITORY}; using AWESOME_CODEX_PLUGINS_TOKEN."
           fi
 
       - name: Checkout source repository
@@ -117,7 +149,7 @@ jobs:
       - name: Compute next action release tag
         id: version
         env:
-          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          GH_TOKEN: ${{ steps.action_app_token.outputs.token || secrets.ACTION_REPO_TOKEN }}
         run: |
           LAST_TAG=$(gh release list --repo "$ACTION_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName // ""')
 
@@ -140,13 +172,13 @@ jobs:
 
       - name: Clone action repository
         env:
-          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          GH_TOKEN: ${{ steps.action_app_token.outputs.token || secrets.ACTION_REPO_TOKEN }}
         run: gh repo clone "$ACTION_REPOSITORY" action-repo -- --depth 1
 
       - name: Configure authenticated action repository remote
         working-directory: action-repo
         env:
-          ACTION_REPO_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          ACTION_REPO_TOKEN: ${{ steps.action_app_token.outputs.token || secrets.ACTION_REPO_TOKEN }}
         run: |
           git remote set-url origin "https://x-access-token:${ACTION_REPO_TOKEN}@github.com/${ACTION_REPOSITORY}.git"
 
@@ -235,7 +267,7 @@ jobs:
         id: release_state
         working-directory: action-repo
         env:
-          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          GH_TOKEN: ${{ steps.action_app_token.outputs.token || secrets.ACTION_REPO_TOKEN }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
 
@@ -254,7 +286,7 @@ jobs:
       - name: Create action repository release
         if: steps.release_state.outputs.release_exists == 'false' && (steps.diff.outputs.changed == 'true' || steps.release_state.outputs.tag_exists == 'true')
         env:
-          GH_TOKEN: ${{ secrets.ACTION_REPO_TOKEN }}
+          GH_TOKEN: ${{ steps.action_app_token.outputs.token || secrets.ACTION_REPO_TOKEN }}
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           gh release create "${TAG}" \
@@ -265,14 +297,14 @@ jobs:
 
       - name: Clone awesome-codex-plugins repository
         env:
-          AWESOME_CODEX_PLUGINS_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
-          GH_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+          AWESOME_CODEX_PLUGINS_TOKEN: ${{ steps.awesome_app_token.outputs.token || secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+          GH_TOKEN: ${{ steps.awesome_app_token.outputs.token || secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
         run: gh repo clone "$AWESOME_CODEX_PLUGINS_REPOSITORY" awesome-codex-plugins-repo -- --depth 1
 
       - name: Configure authenticated awesome-codex-plugins remote
         working-directory: awesome-codex-plugins-repo
         env:
-          AWESOME_CODEX_PLUGINS_TOKEN: ${{ secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
+          AWESOME_CODEX_PLUGINS_TOKEN: ${{ steps.awesome_app_token.outputs.token || secrets.AWESOME_CODEX_PLUGINS_TOKEN }}
         run: |
           git remote set-url origin "https://x-access-token:${AWESOME_CODEX_PLUGINS_TOKEN}@github.com/${AWESOME_CODEX_PLUGINS_REPOSITORY}.git"
 

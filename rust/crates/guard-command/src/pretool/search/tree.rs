@@ -158,6 +158,7 @@ pub(super) fn safe_recursive_target_cleared(
         )
 }
 
+pub(in crate::pretool) use super::roots::parent_root_inside_repository;
 pub(in crate::pretool) use super::roots::{listing_root_below_home, rg_root_inside_cwd};
 
 pub(super) fn inside_agent_state(path: &std::path::Path, context: ReadContext<'_>) -> bool {
@@ -250,6 +251,22 @@ pub(in crate::pretool) fn safe_glob_operand(
     })
 }
 
+/// Whether a glob operand with no directory part expands to a name that
+/// starts with `-`. The shell hands such a match over as a bare word, so a
+/// file called `--files0-from=x` would reach the command as an option.
+pub(in crate::pretool) fn glob_matches_option_word(value: &str, context: ReadContext<'_>) -> bool {
+    if value.contains('/') {
+        return false;
+    }
+    expand_listing_glob(value, context).is_none_or(|matches| {
+        matches.iter().any(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_none_or(|name| name.starts_with('-'))
+        })
+    })
+}
+
 /// An unquoted bracket operand that matches nothing. Bash passes such a word
 /// through literally, so `ls app/[slug]` lists the Next.js route directory
 /// named `[slug]`; zsh's `nomatch` fails the command instead. The literal
@@ -261,24 +278,63 @@ pub(in crate::pretool) fn safe_glob_operand(
 /// A `*` or `?` operand qualifies when the strict expansion proves that it
 /// matches nothing under any shell option: the program then receives either
 /// the literal word, which names no file, or no operand under `nullglob`. So
-/// `ls ~/code/app/vite.config.*` probes for an optional file.
+/// `ls ~/code/app/vite.config.*` probes for an optional file, and
+/// `grep -rn KEY ../../*/src/*install*` looks for a file in sibling crates.
 pub(in crate::pretool) fn safe_unmatched_glob_operand(
     value: &str,
     context: ReadContext<'_>,
     recursive: bool,
 ) -> bool {
+    unmatched_glob_operand(
+        value,
+        context,
+        recursive,
+        glob_expand::expand_glob_matches_strict,
+    )
+}
+
+/// [`safe_unmatched_glob_operand`] for a listing that prints names and never
+/// contents, such as `ls` or `echo`. A pattern led by a literal `.` there
+/// stands for hidden names `ls -a` already prints, so `ls eslint.config.*
+/// .eslintrc*`, which asks which config file a project keeps, qualifies when
+/// nothing matches the hidden spelling. A hidden directory before the pattern
+/// is still refused, and a recursive listing keeps the content screen.
+pub(in crate::pretool) fn safe_unmatched_listing_glob_operand(
+    value: &str,
+    context: ReadContext<'_>,
+    recursive: bool,
+) -> bool {
+    if recursive {
+        return safe_unmatched_glob_operand(value, context, true);
+    }
+    unmatched_glob_operand(
+        value,
+        context,
+        false,
+        glob_expand::expand_glob_matches_strict_listing,
+    )
+}
+
+fn unmatched_glob_operand(
+    value: &str,
+    context: ReadContext<'_>,
+    recursive: bool,
+    expand: fn(&str, ReadContext<'_>) -> Option<Vec<PathBuf>>,
+) -> bool {
     if !value.contains('[') {
-        // Only the last component may be a pattern, inside a real directory.
-        let directory = value
+        // The literal directory before the first pattern component must be a
+        // real directory, so the expansion below walked it rather than
+        // nothing. A pattern component above the last is fine: the expansion
+        // refuses a link or a hidden name it would descend through.
+        let first_pattern = value.find(['*', '?']).unwrap_or(value.len());
+        let directory = value[..first_pattern]
             .rsplit_once('/')
             .map_or(".", |(directory, _)| directory);
         let directory = if directory.is_empty() { "/" } else { directory };
-        return !directory.contains(['*', '?'])
-            && expanded_operand(directory, context)
-                .and_then(|path| std::fs::symlink_metadata(path).ok())
-                .is_some_and(|metadata| metadata.is_dir())
-            && glob_expand::expand_glob_matches_strict(value, context)
-                .is_some_and(|matches| matches.is_empty());
+        return expanded_operand(directory, context)
+            .and_then(|path| std::fs::symlink_metadata(path).ok())
+            .is_some_and(|metadata| metadata.is_dir())
+            && expand(value, context).is_some_and(|matches| matches.is_empty());
     }
     inert_bracket_class(value, context) && safe_literal_bracket_tree(value, context, recursive)
 }

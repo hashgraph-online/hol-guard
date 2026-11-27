@@ -162,6 +162,7 @@ impl Parser {
                     .all(|token| matches!(token, Token::Punct(';')))
                     .then_some(())
             }
+            Token::Ident(word) if word == "for" => self.draft_path_loop(),
             Token::Ident(word) if word == "console" => {
                 self.pos += 1;
                 self.eat('.')?;
@@ -315,17 +316,22 @@ impl Parser {
         Some(())
     }
 
-    /// `sh(literal)` with one string literal and nothing else, or `sh` tagging
-    /// a template with no interpolation and no escape, whose raw text the
-    /// prelude runs. The `{ cwd, timeout }` options, interpolation and any
+    /// `sh(literal)` with one string literal, optionally followed by
+    /// `{ timeout: N }`, or `sh` tagging a template with no interpolation and
+    /// no escape, whose raw text the prelude runs. The timeout only bounds
+    /// how long the command may run. The `cwd` option, interpolation and any
     /// computed command stay outside the grammar, so the command judged is
-    /// the command run.
+    /// the command run, where it is run.
     fn shell_helper(&mut self) -> Option<()> {
         let command = if self.at('(') {
             self.pos += 1;
             let Token::Str(command) = self.next()? else {
                 return None;
             };
+            if self.at(',') {
+                self.pos += 1;
+                self.shell_timeout()?;
+            }
             self.eat(')')?;
             command
         } else {
@@ -347,6 +353,27 @@ impl Parser {
             shell_helper: true,
         });
         Some(())
+    }
+
+    /// `{ timeout: N }` with a non-negative number of seconds, the one
+    /// `sh` option that leaves the command and its directory as written.
+    fn shell_timeout(&mut self) -> Option<()> {
+        self.eat('{')?;
+        match self.next()? {
+            Token::Ident(key) | Token::Str(key) if key == "timeout" => {}
+            _ => return None,
+        }
+        self.eat(':')?;
+        let Token::Num(seconds) = self.next()? else {
+            return None;
+        };
+        if !seconds.as_f64().is_some_and(|seconds| seconds >= 0.0) {
+            return None;
+        }
+        if self.at(',') {
+            self.pos += 1;
+        }
+        self.eat('}')
     }
 
     fn promise_all(&mut self, depth: usize) -> Option<()> {
@@ -429,9 +456,9 @@ pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {
 /// Windows separators, so spellings the standalone tool would interpret
 /// differently are rejected.
 fn read_helper_call(path: String) -> Option<Call> {
-    // `xd://` names Oh My Pi's own tool documentation; the helper hands any
-    // URL to the `read` tool, whose own proof judges it.
-    let device_doc = path.starts_with("xd://");
+    // `xd://` and `help://` name Oh My Pi's own tool documentation; the
+    // helper hands any URL to the `read` tool, whose own proof judges it.
+    let device_doc = super::super::host_refs::tool_docs_url(&path);
     if path.starts_with('~')
         || (path.contains("://") && !device_doc)
         || path.contains(['\\', '$'])

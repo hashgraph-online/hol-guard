@@ -6,7 +6,7 @@ import {
   type ProtectionCategoryId,
 } from "./protection-categories";
 
-export type CatalogKindFilter = "commands" | "mcp";
+export type CatalogKindFilter = "commands" | "mcp" | "browser";
 
 export type CatalogFilterState = {
   trusts: ExtensionTrustClass[];
@@ -26,7 +26,7 @@ export const CATALOG_TRUST_FILTERS: readonly ExtensionTrustClass[] = [
   "external",
 ];
 
-export const CATALOG_KIND_FILTERS: readonly CatalogKindFilter[] = ["commands", "mcp"];
+export const CATALOG_KIND_FILTERS: readonly CatalogKindFilter[] = ["commands", "mcp", "browser"];
 
 export function catalogFiltersActive(filters: CatalogFilterState): boolean {
   return filters.trusts.length > 0 || filters.kinds.length > 0 || filters.areas.length > 0;
@@ -40,6 +40,7 @@ export function catalogTrustLabel(trust: ExtensionTrustClass): string {
 
 export function catalogKindLabel(kind: CatalogKindFilter): string {
   if (kind === "mcp") return "MCP";
+  if (kind === "browser") return "Browser";
   return "Commands";
 }
 
@@ -48,6 +49,23 @@ export function catalogItemKind(extension: ExtensionCatalogSummary): CatalogKind
   // A surface this dashboard does not know matches no kind filter.
   if (extension.surface === "unsupported") return null;
   return "commands";
+}
+
+/** A browser-capable MCP entry also counts as browser coverage. */
+export function catalogItemCoversBrowser(extension: ExtensionCatalogSummary): boolean {
+  return extension.surfaces?.includes("browser") ?? false;
+}
+
+function catalogItemMatchesKinds(extension: ExtensionCatalogSummary, kinds: readonly CatalogKindFilter[]): boolean {
+  const kind = catalogItemKind(extension);
+  if (kind !== null && kinds.includes(kind)) return true;
+  return kinds.includes("browser") && catalogItemCoversBrowser(extension);
+}
+
+/** Kind options worth offering: commands and MCP always, browser only when an entry covers it. */
+export function availableCatalogKinds(extensions: readonly ExtensionCatalogSummary[]): CatalogKindFilter[] {
+  const browser = extensions.some((extension) => catalogItemCoversBrowser(extension));
+  return CATALOG_KIND_FILTERS.filter((kind) => kind !== "browser" || browser);
 }
 
 export function toggleCatalogFilterValue<T extends string>(selected: readonly T[], value: T): T[] {
@@ -60,10 +78,7 @@ export function catalogItemMatchesFilters(
   filters: CatalogFilterState,
 ): boolean {
   if (filters.trusts.length > 0 && !filters.trusts.includes(extension.trust_class)) return false;
-  if (filters.kinds.length > 0) {
-    const kind = catalogItemKind(extension);
-    if (kind === null || !filters.kinds.includes(kind)) return false;
-  }
+  if (filters.kinds.length > 0 && !catalogItemMatchesKinds(extension, filters.kinds)) return false;
   if (filters.areas.length > 0) {
     const area = protectionCategoryIdForExtension(extension);
     if (!filters.areas.includes(area)) return false;
@@ -115,6 +130,7 @@ export function pruneCatalogFilters(
 ): CatalogFilterState {
   const presentTrusts = new Set(extensions.map((item) => item.trust_class));
   const presentKinds = new Set<CatalogKindFilter | null>(extensions.map((item) => catalogItemKind(item)));
+  if (extensions.some((item) => catalogItemCoversBrowser(item))) presentKinds.add("browser");
   const presentAreas = new Set(populatedCatalogAreas(extensions));
   return {
     trusts: filters.trusts.filter((trust) => presentTrusts.has(trust)),

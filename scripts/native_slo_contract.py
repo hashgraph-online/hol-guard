@@ -41,6 +41,13 @@ MAX_DIRECT_CONCURRENT_P99_MS: Final = 100.0
 MAX_CONCURRENT_P99_MS: Final = MAX_DIRECT_CONCURRENT_P99_MS
 MAX_RSS_GROWTH: Final = 0.12
 MAX_EVIDENCE_BYTES: Final = 256 * 1024
+# Browser decision path (BP-T059).  BP-T008 measured a browser MCP tool
+# decision at 73.7 ms p95 against an ordinary MCP tool decision on the same
+# path.  Browser handling may add at most 5 ms p95 over an ordinary MCP tool
+# call measured in the same run, so the gate is relative and holds on any
+# runner speed.
+BROWSER_DECISION_BASELINE_P95_MS: Final = 73.7
+MAX_BROWSER_ADDED_P95_MS: Final = 5.0
 
 SIZE_CLASSES: Final = ("1k", "250k", "1m", "5m")
 FORBIDDEN_FIELD_PARTS: Final = frozenset(
@@ -343,6 +350,22 @@ def gate_results(
     }
 
 
+def browser_decision_gate(*, browser_p95_ms: float, mcp_p95_ms: float) -> bool:
+    """Return true when browser handling adds at most 5 ms p95 over an ordinary MCP call.
+
+    Both values must come from the same run so runner speed cancels out.  A
+    missing, negative or non-finite measurement fails the gate.
+    """
+
+    values = (browser_p95_ms, mcp_p95_ms)
+    if not all(
+        isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0
+        for value in values
+    ):
+        return False
+    return browser_p95_ms - mcp_p95_ms <= MAX_BROWSER_ADDED_P95_MS
+
+
 def all_gates_pass(gates: Mapping[str, bool]) -> bool:
     """Return true only when every named SLO gate passed."""
 
@@ -350,10 +373,12 @@ def all_gates_pass(gates: Mapping[str, bool]) -> bool:
 
 
 __all__ = [
+    "BROWSER_DECISION_BASELINE_P95_MS",
     "FORBIDDEN_FIELD_PARTS",
     "MAX_1M_P95_MS",
     "MAX_5M_P95_MS",
     "MAX_250K_P95_MS",
+    "MAX_BROWSER_ADDED_P95_MS",
     "MAX_COLD_P95_MS",
     "MAX_CONCURRENT_P99_MS",
     "MAX_DIRECT_CONCURRENT_P99_MS",
@@ -377,6 +402,7 @@ __all__ = [
     "SLO_SCHEMA",
     "all_gates_pass",
     "assert_privacy_safe",
+    "browser_decision_gate",
     "clear_proof_environment",
     "gate_results",
     "percentile",

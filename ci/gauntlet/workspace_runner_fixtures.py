@@ -101,10 +101,21 @@ WORKSPACE_TSC_NAMED_DIRECTORY_CASE = "omp-native-workspace-runner-named-director
 # bounded and the line after it prints the checker's own status, which `$?`
 # cannot reach past the filter and `${PIPESTATUS[0]}` can.
 WORKSPACE_TSC_STATUS_REPORT_CASE = "omp-native-workspace-typecheck-status-report"
+# The same checker run the way an agent keeps a long report out of the
+# conversation: everything it prints goes to a scratch log in the shared
+# temporary directory, and only the label the run ends on comes back.
+WORKSPACE_TSC_SCRATCH_LOG_CASE = "omp-native-workspace-typecheck-scratch-log"
+# The label the scratch-log case prints when the checker exits cleanly.
+TSC_SCRATCH_LOG_LABEL = "TYPES_CLEAN"
 # The same type checker in a workspace pnpm installed. pnpm writes its lockfile
 # in YAML rather than JSON, so the pin the verdict reads is the same fact
 # written in another dialect.
 WORKSPACE_PNPM_TSC_CASE = "omp-native-workspace-pnpm-npx-tsc"
+# The same checker in a workspace npm installed that still commits the pnpm
+# lockfile from before its last upgrade, pinning an older release. `--no-install`
+# forbids fetching anything, so the run either reaches the installed checker or
+# fails; the stale file has no say in what runs.
+WORKSPACE_TSC_STALE_LOCKFILE_CASE = "omp-native-workspace-npx-no-install-tsc-stale-lockfile"
 # The same checker in a workspace whose packages read their type-check settings
 # from a base at the checkout root. The run starts inside the package, so the
 # base the project extends sits one directory above it.
@@ -120,6 +131,14 @@ WORKSPACE_VITEST_SUMMARY_CASE = "omp-native-workspace-runner-summary-line"
 # agent sees, so the runner prints a different number of lines when the
 # single-pass invocation and its quiet reporter flags reach it.
 WORKSPACE_VITEST_LINE_COUNT_CASE = "omp-native-workspace-runner-line-count"
+# A run narrowed to one test by its title, where the title happens to contain a
+# credential word. The title selects among collected tests and opens nothing,
+# so the run is the same contained single pass. The runner prints its line
+# only when the title arrives intact behind `-t`.
+WORKSPACE_VITEST_TITLE_FILTER_CASE = "omp-native-workspace-vitest-title-filter"
+# Two titles joined by the alternation Vitest reads `-t` as. The `|` is
+# quoted, so it reaches the runner as part of the title rather than a pipe.
+WORKSPACE_VITEST_TITLE_ALTERNATION_CASE = "omp-native-workspace-vitest-title-alternation"
 # A bare run through the link npm writes, its tail followed by the word that
 # says how it went. Only the installed runner prints the line the case checks.
 WORKSPACE_VITEST_OUTCOME_REPORT_CASE = "omp-native-workspace-runner-outcome-report"
@@ -171,14 +190,18 @@ WORKSPACE_RUNNER_CASES = frozenset(
         WORKSPACE_TSC_CASE,
         WORKSPACE_TSC_GENERATED_PROJECT_CASE,
         WORKSPACE_TSC_STATUS_REPORT_CASE,
+        WORKSPACE_TSC_SCRATCH_LOG_CASE,
         WORKSPACE_TSC_NAMED_DIRECTORY_CASE,
         WORKSPACE_PNPM_TSC_CASE,
+        WORKSPACE_TSC_STALE_LOCKFILE_CASE,
         WORKSPACE_SHARED_BASE_TSC_CASE,
         WORKSPACE_LINT_STAGED_CASE,
         WORKSPACE_TSX_NODE_TEST_CASE,
         WORKSPACE_VITEST_FILTER_CASE,
         WORKSPACE_VITEST_SUMMARY_CASE,
         WORKSPACE_VITEST_LINE_COUNT_CASE,
+        WORKSPACE_VITEST_TITLE_FILTER_CASE,
+        WORKSPACE_VITEST_TITLE_ALTERNATION_CASE,
         WORKSPACE_VITEST_OUTCOME_REPORT_CASE,
         WORKSPACE_VITEST_BIN_LINK_CASE,
         WORKSPACE_VITEST_BUN_ENTRY_CASE,
@@ -545,6 +568,21 @@ _TYPESCRIPT_FILES = {
     ),
 }
 
+# The scratch-log case reads only the label the `&&` arm prints, so its checker
+# fails outright when the project option is lost: the run then ends on the
+# failure arm instead of printing the clean label over a diagnostic.
+_TSC_SCRATCH_LOG_FILES = {
+    **_TYPESCRIPT_FILES,
+    "node_modules/typescript/bin/tsc": (
+        "#!/usr/bin/env node\n"
+        f"if (!process.argv.slice(2).includes('{TSC_PROJECT_OPTION}')) {{\n"
+        "  console.error('tsc: the project option was not forwarded');\n"
+        "  process.exit(1);\n"
+        "}\n"
+        f"console.log('{TSC_MARKER}');\n"
+    ),
+}
+
 
 # The subdirectory the named-directory case asks the checker to start in.
 TSC_NAMED_DIRECTORY = "app"
@@ -621,6 +659,13 @@ _PNPM_TYPESCRIPT_FILES = {
     name: text for name, text in _TYPESCRIPT_FILES.items() if name != "package-lock.json"
 }
 _PNPM_TYPESCRIPT_FILES["pnpm-lock.yaml"] = _PNPM_LOCK
+
+# The release pnpm pinned before the project moved to npm and upgraded.
+_STALE_TYPESCRIPT_VERSION = "5.4.5"
+_STALE_LOCKFILE_TYPESCRIPT_FILES = {
+    **_TYPESCRIPT_FILES,
+    "pnpm-lock.yaml": _PNPM_LOCK.replace(_TYPESCRIPT_VERSION, _STALE_TYPESCRIPT_VERSION),
+}
 
 
 _VITEST_VERSION = "3.2.4"
@@ -704,6 +749,35 @@ _VITEST_LINE_COUNT_FILES = {
         "const once = argv[0] === 'run' && argv.includes('--reporter=dot') && argv.includes('--silent');\n"
         "console.log(once ? ['.', '', ' Test Files  1 passed (1)', '      Tests  1 passed (1)'].join('\\n')"
         " : 'vitest: line-count invocation was not forwarded');\n"
+    ),
+}
+
+# The title the case filters by and the line the runner prints when it arrives.
+VITEST_TITLE = "masks the secret field"
+VITEST_TITLE_MARKER = f"vitest {_VITEST_VERSION} ran the titled test once"
+_VITEST_TITLE_FILES = {
+    **_VITEST_RUN_FILES,
+    "node_modules/vitest/vitest.mjs": (
+        "#!/usr/bin/env node\n"
+        "const argv = process.argv.slice(2);\n"
+        "const at = argv.indexOf('-t');\n"
+        f"const once = argv[0] === 'run' && at > 0 && argv[at + 1] === '{VITEST_TITLE}';\n"
+        f"console.log(once ? '{VITEST_TITLE_MARKER}' : 'vitest: the titled run was not forwarded');\n"
+    ),
+}
+
+# The alternation the case filters by, and the line the runner prints only when
+# the whole pattern arrives behind `-t` as one word.
+VITEST_TITLE_ALTERNATION = "loads the form|masks the secret field"
+VITEST_TITLE_ALTERNATION_MARKER = f"vitest {_VITEST_VERSION} ran the alternated titles once"
+_VITEST_TITLE_ALTERNATION_FILES = {
+    **_VITEST_RUN_FILES,
+    "node_modules/vitest/vitest.mjs": (
+        "#!/usr/bin/env node\n"
+        "const argv = process.argv.slice(2);\n"
+        "const at = argv.indexOf('-t');\n"
+        f"const once = argv[0] === 'run' && at > 0 && argv[at + 1] === '{VITEST_TITLE_ALTERNATION}';\n"
+        f"console.log(once ? '{VITEST_TITLE_ALTERNATION_MARKER}' : 'vitest: the alternated run was not forwarded');\n"
     ),
 }
 
@@ -874,6 +948,13 @@ _INSTALLS = {
         package="typescript",
         entry="bin/tsc",
     ),
+    WORKSPACE_TSC_SCRATCH_LOG_CASE: _Install(
+        "tsc",
+        _TSC_SCRATCH_LOG_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
     WORKSPACE_TSC_NAMED_DIRECTORY_CASE: _Install(
         "tsc",
         _TSC_DIRECTORY_FILES,
@@ -886,6 +967,13 @@ _INSTALLS = {
     WORKSPACE_PNPM_TSC_CASE: _Install(
         "tsc",
         _PNPM_TYPESCRIPT_FILES,
+        TSC_MARKER,
+        package="typescript",
+        entry="bin/tsc",
+    ),
+    WORKSPACE_TSC_STALE_LOCKFILE_CASE: _Install(
+        "tsc",
+        _STALE_LOCKFILE_TYPESCRIPT_FILES,
         TSC_MARKER,
         package="typescript",
         entry="bin/tsc",
@@ -908,6 +996,18 @@ _INSTALLS = {
         "vitest",
         _VITEST_LINE_COUNT_FILES,
         VITEST_LINE_COUNT_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_TITLE_FILTER_CASE: _Install(
+        "vitest",
+        _VITEST_TITLE_FILES,
+        VITEST_TITLE_MARKER,
+        entry="vitest.mjs",
+    ),
+    WORKSPACE_VITEST_TITLE_ALTERNATION_CASE: _Install(
+        "vitest",
+        _VITEST_TITLE_ALTERNATION_FILES,
+        VITEST_TITLE_ALTERNATION_MARKER,
         entry="vitest.mjs",
     ),
     WORKSPACE_VITEST_OUTCOME_REPORT_CASE: _Install(

@@ -98,16 +98,30 @@ pub(super) fn sought(walk: &Walk, terms: &[(String, bool)], quoted: &[String]) -
 /// The shortest prompt word read as a misspelled name.
 const MIN_MISSPELLED: usize = 5;
 
-/// The one definition a misspelled name means, a letter away from it:
-/// "chunkd" is `chunked`. Only for a word of five letters or more that no
-/// project file holds, and only when one name is that near.
-pub(super) fn misspelled<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<&'a str> {
-    if item.phrase || item.spelled != Some(0) || item.text.chars().count() < MIN_MISSPELLED {
+/// The shortest defined name a new name is read as growing from.
+const MIN_STEM: usize = 6;
+
+/// The one definition a name no project file holds means. A misspelled name
+/// means the definition a letter away from it: "chunkd" is `chunked`, for a
+/// word of five letters or more, and only when one name is that near. A new
+/// name written as code means the longest defined name it starts with: asked
+/// to add `isRelativeURL`, an agent reads `isRelative` first, to reuse it or
+/// to write the new one like it.
+pub(super) fn meant<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<&'a str> {
+    if item.phrase || item.spelled != Some(0) {
         return None;
     }
-    let mut near = (defined.iter()).filter(|name| one_letter_apart(&item.text, name));
-    let first = near.next()?;
-    near.next().is_none().then_some(first.as_str())
+    if item.text.chars().count() >= MIN_MISSPELLED {
+        let mut near = (defined.iter()).filter(|name| one_letter_apart(&item.text, name));
+        if let (Some(first), None) = (near.next(), near.next()) {
+            return Some(first.as_str());
+        }
+    }
+    (defined.iter())
+        .filter(|name| item.name && name.len() >= MIN_STEM && name.len() < item.text.len())
+        .filter(|name| item.text.starts_with(name.as_str()))
+        .max_by_key(|name| name.len())
+        .map(String::as_str)
 }
 
 /// Whether `a` and `b` differ by one letter added, dropped or changed, or
@@ -140,6 +154,10 @@ const MAX_USES: usize = 8;
 const MAX_USE_LINES: usize = 3;
 /// The most lines quoted text wraps over and is still found.
 const WRAPPED_LINES: usize = 3;
+/// The longest definition plain words place. Opening a longer one costs the
+/// agent more than the note saves, and plain words in one are page copy,
+/// data or configuration far more often than the code a prompt is about.
+const MAX_PLAIN_SPAN: usize = 200;
 
 /// The functions in source that hold the prompt's rarer words in code, or
 /// quoted text anywhere, each with the lines that hold them: those holding
@@ -207,6 +225,10 @@ pub(super) fn uses<'a>(
         // For a rename, a name written as code is a lead on a single line
         // too: a call to `_import_common` is where it has to change.
         .filter(|item| item.phrase || (everywhere && item.named) || item.lines.len() >= 2)
+        .filter(|item| {
+            let section = &files[item.file].sections[item.at];
+            item.phrase || item.named || section.end - section.start < MAX_PLAIN_SPAN
+        })
         .collect();
     // With `lone`, a use holding two prompt words outranks many uses of
     // one, so the cut below cannot drop the only match that places the list.
@@ -224,9 +246,15 @@ pub(super) fn uses<'a>(
         .into_iter()
         .map(|word| rare[word].text.as_str())
         .collect();
-    // Then one plain word's uses are a guess: "what did you change in the
-    // last step?" is not about `ProgressBar.make_step`.
-    if lone && used.len() < 2 && kept.iter().all(|item| !item.phrase && !item.named) {
+    // Then plain words that no one definition holds two of are a guess:
+    // "what did you change in the last step?" is not about
+    // `ProgressBar.make_step`, and "pause this and restart it in an hour"
+    // is not about a `pause` here, a `restart` there and an `hour` elsewhere.
+    if lone
+        && kept
+            .iter()
+            .all(|item| !item.phrase && !item.named && item.words.len() < 2)
+    {
         return Some((Vec::new(), Vec::new()));
     }
     let listed = kept

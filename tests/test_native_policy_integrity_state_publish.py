@@ -94,7 +94,10 @@ def test_a_key_the_context_mints_reaches_the_first_binding(tmp_path: Path, monke
         return (SimpleNamespace(), SimpleNamespace(features=()), material[0], {}, {}, None)
 
     def publish(**kwargs: object) -> None:
-        bindings.append(kwargs["direct_lane"])
+        # The patch is module-wide, so a publisher thread an earlier test on
+        # this worker left running can reach it too. Count only this one.
+        if kwargs.get("publisher") is publisher:
+            bindings.append(kwargs["direct_lane"])
         raise NativePolicySnapshotError("captured")
 
     monkeypatch.setattr(publisher, "_publication_context", context)

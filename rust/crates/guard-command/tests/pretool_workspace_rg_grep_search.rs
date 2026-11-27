@@ -181,3 +181,29 @@ fn rg_skips_hidden_files_so_a_root_env_is_not_in_reach_without_hidden_flags() {
         check(&f, cwd, "rg -n foo", true);
     }
 }
+
+#[test]
+fn rg_of_a_parent_folder_inside_the_same_repository_is_allowed() {
+    // From a folder inside a repository, `..` is still that repository, so
+    // the search is the one `rg -n foo .` makes from its root.
+    let f = fixture();
+    for (cwd, c) in [
+        ("app/src", "rg -n foo .."),
+        ("app/src", "rg -n foo ../"),
+        ("app/rust/crates/a", "rg -n foo ../.."),
+        ("app/rust/crates/a/src", "rg -l foo ../../.."),
+    ] {
+        check(&f, cwd, c, true);
+    }
+    // Climbing above the root reaches sibling projects and the home folder,
+    // and a parent inside the repository still owes the ordinary proof: an
+    // ignore file that re-includes `.env` keeps the search at review.
+    for (cwd, c) in [
+        ("app/src", "rg -n foo ../.."),
+        ("app/rust/crates/a", "rg -n foo ../../../.."),
+        ("app", "rg -n foo .."),
+        ("custom/src", "rg -n foo .."),
+    ] {
+        check(&f, cwd, c, false);
+    }
+}

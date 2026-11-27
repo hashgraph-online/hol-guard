@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.resident_evidence_drain import ResidentEvidenceDrain, _decode_batch
 from codex_plugin_scanner.guard.resident_route_counters import (
+    ResidentRouteCounterSnapshot,
     RouteCounterLog,
     bind_route_counter_sink,
     decode_route_counters,
@@ -196,3 +197,9 @@ def test_a_counter_log_binds_the_daemon_diagnostics() -> None:
     log.observe_page(EPOCH, RESIDENT)
     assert log.maybe_log()
     assert sink.lines == [LOGGED]
+
+
+def test_resident_snapshot_preserves_native_counters_for_route_readers() -> None:
+    snapshot = ResidentRouteCounterSnapshot()
+    snapshot.observe_page(EPOCH, RESIDENT)
+    assert snapshot.snapshot() == {"epoch": EPOCH, "resident": RESIDENT["by_harness"]}

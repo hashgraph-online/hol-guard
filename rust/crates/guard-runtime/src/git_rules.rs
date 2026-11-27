@@ -163,7 +163,10 @@ fn raise(mut result: PreToolResultV1, rule: &Rule, observe: bool) -> PreToolResu
     // the review settles it the way any saved grant settles a sandbox route.
     let sandbox = ActionFloor::SandboxRequired;
     let sandboxed = (minimum == sandbox || policy == sandbox) && configured < ActionFloor::Block;
-    if minimum >= configured && !sandboxed {
+    // A review held only because Guard did not recognize the command is one a
+    // script grant answers; the user's rule replaces it so no grant lifts it.
+    let unrecognized = crate::connector_setup::is_non_recognition(Some(&result.reason_code));
+    if minimum >= configured && !sandboxed && !unrecognized {
         return result;
     }
     let lifted = |floor: ActionFloor| {

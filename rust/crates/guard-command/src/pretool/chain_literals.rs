@@ -24,6 +24,10 @@ use launch::{launches_as_judged, reviewed};
 mod home;
 #[path = "chain_literals_pwd.rs"]
 mod pwd;
+#[path = "chain_literals_start.rs"]
+mod start;
+#[path = "chain_literals_unused.rs"]
+mod unused;
 
 const MAX_COMMAND_CHARS: usize = 8192;
 const MAX_VALUE_CHARS: usize = 256;
@@ -111,10 +115,12 @@ pub(super) fn rejudge(
     };
     // A value producer counts only when it would be allowed as a command of
     // its own, so lockdown, managed policy and extension controls on it hold.
-    // A bare `cat` is the exception (`inert::cat_unrefused`).
+    // A bare `cat` or `printf`, the program of a literal commit message, is
+    // the exception (`inert::cat_unrefused`).
     let allowed = |body: &str| {
         let verdict = evaluate(&super::payload_with_command(payload, &command, body));
-        verdict.minimum_action == "allow" || (body == "cat" && inert::cat_unrefused(&verdict))
+        verdict.minimum_action == "allow"
+            || (matches!(body, "cat" | "printf") && inert::cat_unrefused(&verdict))
     };
     let opened = inert::project(&command, allowed);
     // A fresh `mktemp -d` directory expanded later in its `&&` chain is
@@ -153,7 +159,11 @@ pub(super) fn rejudge(
         .filter(|_| context.shell_home_matches)
         .and_then(|home| home::project(base, home));
     let base = homed.as_deref().unwrap_or(base);
-    let Some(substituted) = substitute(base).or(homed).or(directory).or(opened) else {
+    let Some(substituted) = substitute_in(base, Some(context))
+        .or(homed)
+        .or(directory)
+        .or(opened)
+    else {
         return raw;
     };
     let projected_payload = super::payload_with_command(payload, &command, &substituted);
@@ -182,6 +192,15 @@ pub(super) fn rejudge(
 /// when nothing is substituted or the command has any shape outside a plain
 /// `&&` / `;` list of simple commands and pipelines.
 pub(crate) fn substitute(command: &str) -> Option<String> {
+    substitute_in(command, None)
+}
+
+/// [`substitute`], told where the command starts: `f=~/x` then binds the
+/// home path (see [`start::declared_home`]), an assignment after a leading
+/// `cd` that cannot fail (see [`start::enters`]) always runs, and an
+/// assignment every use of which was written out is dropped (see
+/// [`unused::removals`]).
+fn substitute_in(command: &str, context: Option<PathContext<'_>>) -> Option<String> {
     // zsh reads a non-ASCII letter after `$NAME` as part of the name.
     if !command.is_ascii()
         || command.len() > MAX_COMMAND_CHARS
@@ -199,10 +218,13 @@ pub(crate) fn substitute(command: &str) -> Option<String> {
         .flat_map(|(stages, _)| stages.iter().flatten())
         .filter_map(|&(start, end)| assignment(&chars[start..end]).map(|(name, _)| name))
         .collect();
+    let home = start::declared_home(command, context);
+    let layout = unused::Layout::of(&list)?;
+    let mut candidates: Vec<(usize, Vec<String>)> = Vec::new();
     let mut bindings: HashMap<String, Binding> = HashMap::new();
     let mut edits: Vec<(usize, usize, String)> = Vec::new();
     let mut first_in_list = true;
-    for (stages, separator) in list {
+    for (position, (stages, separator)) in list.into_iter().enumerate() {
         if stages
             .iter()
             .flatten()
@@ -211,6 +233,7 @@ pub(crate) fn substitute(command: &str) -> Option<String> {
             return None;
         }
         let piped = stages.len() > 1;
+        let mut assigns_only = false;
         let words = &stages[0];
         let leading = words
             .iter()
@@ -218,9 +241,17 @@ pub(crate) fn substitute(command: &str) -> Option<String> {
             .count();
         if !piped && leading == words.len() {
             // `A=1 B=2` sets shell variables in order.
+            let mut names = Vec::new();
             for &(start, end) in words {
-                let (name, value) = assignment(&chars[start..end])?;
-                bind(&mut bindings, name, value, first_in_list)?;
+                let (name, value) = assignment_in(&chars[start..end], home)?;
+                let known = value.is_some() && ordinary_name(&name);
+                bind(&mut bindings, name.clone(), value, first_in_list)?;
+                names.extend(known.then_some(name));
+            }
+            // A literal value cannot fail to assign.
+            if names.len() == words.len() {
+                candidates.push((position, names));
+                assigns_only = true;
             }
         } else if !piped
             && leading == 0
@@ -282,13 +313,22 @@ pub(crate) fn substitute(command: &str) -> Option<String> {
         if bindings.len() > MAX_BINDINGS {
             return None;
         }
-        first_in_list = separator != Token::And;
+        // A literal assignment always succeeds, so what follows its `&&`
+        // runs whenever the assignment did.
+        first_in_list = separator != Token::And
+            || (first_in_list && assigns_only)
+            || (position == 0 && !piped && start::enters(&chars, words, &bindings, context));
         if separator == Token::Sequence {
             bindings.retain(|_, binding| binding.unconditional);
         }
     }
     if edits.is_empty() {
         return None;
+    }
+    // Only the rejudge projection drops what it no longer needs; other
+    // callers read the substituted text as the command itself.
+    if context.is_some() {
+        layout.drop_unused(&chars, &candidates, &mut edits);
     }
     let mut out = String::with_capacity(command.len());
     let mut cursor = 0usize;
@@ -339,12 +379,20 @@ fn modifies_in_place(word: &[char]) -> bool {
 /// plain literal (bare, or wholly single- or double-quoted). Appends,
 /// subscripts and other near-assignments refuse the command.
 fn assignment(word: &[char]) -> Option<(String, Option<String>)> {
+    assignment_in(word, None)
+}
+
+/// [`assignment`], reading a bare leading `~` as `home`, as the shell does.
+fn assignment_in(word: &[char], home: Option<&str>) -> Option<(String, Option<String>)> {
     let equals = word.iter().position(|&c| c == '=')?;
     let name: String = word[..equals].iter().collect();
     if !identifier(&name) {
         return None;
     }
     let raw = &word[equals + 1..];
+    if raw.first() == Some(&'~') {
+        return Some((name, start::home_value(&raw[1..], home)));
+    }
     let inner = match (raw.first(), raw.last()) {
         (Some(&open @ ('\'' | '"')), Some(&close)) if raw.len() >= 2 && open == close => {
             &raw[1..raw.len() - 1]
@@ -352,14 +400,11 @@ fn assignment(word: &[char]) -> Option<(String, Option<String>)> {
         _ => raw,
     };
     let value: String = inner.iter().collect();
-    let literal = !value.is_empty()
+    let known = !value.is_empty()
         && value.chars().count() <= MAX_VALUE_CHARS
-        && value.chars().all(|c| {
-            c.is_ascii_alphanumeric()
-                || matches!(c, '_' | '.' | '/' | '@' | '%' | '+' | ':' | ',' | '-')
-        })
+        && start::literal(&value)
         && !listed(KEYWORDS, &value);
-    Some((name, literal.then_some(value)))
+    Some((name, known.then_some(value)))
 }
 
 pub(crate) fn ordinary_name(name: &str) -> bool {

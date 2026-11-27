@@ -77,6 +77,9 @@ const RG_OPTIONS: ListingOptions = ListingOptions {
         "--word-regexp",
         "-x",
         "--line-regexp",
+        // `-l` prints names only, so a line-number request changes nothing.
+        "-n",
+        "--line-number",
         "--null",
         "--hidden",
         "--no-ignore",
@@ -99,7 +102,7 @@ const RG_OPTIONS: ListingOptions = ListingOptions {
         "--color",
     ],
     inline_values: &[],
-    cluster: &['l', 'i', 's', 'S', 'F', 'P', 'w', 'x'],
+    cluster: &['l', 'i', 's', 'S', 'F', 'P', 'w', 'x', 'n'],
 };
 
 const GREP_OPTIONS: ListingOptions = ListingOptions {
@@ -124,6 +127,9 @@ const GREP_OPTIONS: ListingOptions = ListingOptions {
         "--line-regexp",
         "-r",
         "--recursive",
+        // `-l` prints names only, so a line-number request changes nothing.
+        "-n",
+        "--line-number",
         "-Z",
         "--null",
         // `--color` carries its value only after an `=`; written alone it is
@@ -139,7 +145,7 @@ const GREP_OPTIONS: ListingOptions = ListingOptions {
         "--exclude-dir",
     ],
     inline_values: &["--color", "--colour"],
-    cluster: &['l', 'i', 's', 'F', 'E', 'G', 'P', 'w', 'x', 'r', 'Z'],
+    cluster: &['l', 'i', 's', 'F', 'E', 'G', 'P', 'w', 'x', 'r', 'Z', 'n'],
 };
 
 /// The tables of the program that will run, under the spelling on the line.
@@ -293,6 +299,20 @@ mod tests {
         assert_eq!(shape("grep", &words).unwrap().patterns, ["*.rs"]);
         assert!(shape("rg", &args(&["--files-with-matches", "TODO", "src"])).is_some());
         assert!(shape("rg", &args(&["-l", "--max-count", "1", "TODO", "src"])).is_some());
+        // `-n` beside `-l` still prints names only.
+        assert_eq!(
+            shape("rg", &args(&["-ln", "TODO", "src"])).unwrap().roots,
+            ["src"]
+        );
+        let words = args(&["-n", "TODO", "--line-number", "-l", "src"]);
+        assert_eq!(shape("rg", &words).unwrap().roots, ["src"]);
+        assert_eq!(
+            shape("grep", &args(&["-rln", "TODO", "src"]))
+                .unwrap()
+                .roots,
+            ["src"]
+        );
+        assert!(shape("grep", &args(&["-rn", "--line-number", "TODO", "src"])).is_none());
         assert!(shape("fd", &args(&["-l", "TODO", "src"])).is_none());
         for case in [
             // No root, so the printed names carry no prefix of their own.

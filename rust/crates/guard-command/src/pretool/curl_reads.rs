@@ -30,7 +30,7 @@ mod bound;
 #[path = "curl_output_targets.rs"]
 pub(in crate::pretool) mod output_targets;
 #[path = "url_secrets.rs"]
-pub(super) mod url_secrets;
+pub(crate) mod url_secrets;
 pub use bound::bound_curl_read_destinations;
 
 pub(crate) const NETWORK_READ_REASON: &str = "native_exact_safe_network_read";
@@ -51,7 +51,7 @@ const RESERVED_SUFFIXES: [&str; 4] = [".test", ".invalid", ".example", ".localho
 /// binds is already unreachable here without being named. It is written out
 /// whole, the kubelet block included, so the list keeps saying what it means
 /// if the dev-server ranges ever widen onto one of these.
-const LOCAL_ADMIN_PORTS: [u16; 23] = [
+pub(crate) const LOCAL_ADMIN_PORTS: [u16; 23] = [
     2019, 2375, 2376, 2379, 2380, 4243, 4646, 6443, 8001, 8200, 8500, 9222, 9229, 10248, 10249,
     10250, 10251, 10252, 10253, 10254, 10255, 10256, 15000,
 ];
@@ -225,13 +225,17 @@ fn option_consumed(
     context: super::PathContext<'_>,
 ) -> Option<usize> {
     let argument = arguments[index].as_str();
+    // Whether curl makes missing directories above an `-o` or `-D` file.
+    let dirs = output_targets::creates_dirs(arguments);
     if let Some(long) = argument.strip_prefix("--") {
         let (name, inline) = match long.split_once('=') {
             Some((name, value)) => (name, Some(value)),
             None => (long, None),
         };
         let option = format!("--{name}");
-        if inline.is_none() && PLAIN_FLAGS.contains(&option.as_str()) {
+        if inline.is_none()
+            && (PLAIN_FLAGS.contains(&option.as_str()) || option == output_targets::CREATE_DIRS)
+        {
             return Some(1);
         }
         let value = match inline {
@@ -239,7 +243,7 @@ fn option_consumed(
             None => arguments.get(index + 1)?.as_str(),
         };
         let consumed = if inline.is_some() { 1 } else { 2 };
-        return long_value_safe(&option, value, context).then_some(consumed);
+        return long_value_safe(&option, value, context, dirs).then_some(consumed);
     }
     let cluster = &argument[1..];
     for (offset, short) in cluster.char_indices() {
@@ -255,13 +259,14 @@ fn option_consumed(
         } else {
             (attached, 1)
         };
-        return short_value_safe(short, value, context).then_some(consumed);
+        return long_value_safe(short_option(short)?, value, context, dirs).then_some(consumed);
     }
     Some(1)
 }
 
-fn short_value_safe(short: char, value: &str, context: super::PathContext<'_>) -> bool {
-    let long = match short {
+/// The long name of a single-letter option that takes a value.
+fn short_option(short: char) -> Option<&'static str> {
+    Some(match short {
         'm' => "--max-time",
         'H' => "--header",
         'X' => "--request",
@@ -269,12 +274,11 @@ fn short_value_safe(short: char, value: &str, context: super::PathContext<'_>) -
         'o' => "--output",
         'D' => "--dump-header",
         'A' => "--user-agent",
-        _ => return false,
-    };
-    long_value_safe(long, value, context)
+        _ => return None,
+    })
 }
 
-fn long_value_safe(option: &str, value: &str, context: super::PathContext<'_>) -> bool {
+fn long_value_safe(option: &str, value: &str, context: super::PathContext<'_>, dirs: bool) -> bool {
     if expands(value) {
         return false;
     }
@@ -284,13 +288,13 @@ fn long_value_safe(option: &str, value: &str, context: super::PathContext<'_>) -
         "--header" => safe_header(value),
         // `%output{...}` makes curl write a file.
         "--write-out" => !value.to_ascii_lowercase().contains("%output"),
-        "--output" => value == "/dev/null" || output_targets::scratch_output_target(value, context),
+        "--output" => value == "/dev/null" || output_targets::output_target(value, context, dirs),
         // Response headers go to stdout (`-`) like the body, or to a file
         // held to the same targets as `--output`.
         "--dump-header" => {
             value == "-"
                 || value == "/dev/null"
-                || output_targets::scratch_output_target(value, context)
+                || output_targets::output_target(value, context, dirs)
         }
         "--user-agent" => !value.is_empty(),
         _ if NUMERIC_OPTIONS.contains(&option) => {

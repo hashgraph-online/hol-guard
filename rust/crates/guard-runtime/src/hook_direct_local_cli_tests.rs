@@ -236,13 +236,17 @@ fn an_invocation_without_package_tokens_reads_the_daemon_shell_model() {
 fn only_a_command_that_launches_a_local_cli_reads_a_grant() {
     let case = Case::new("launches", "");
     let launches = |payload: Value| {
-        launch_for(
-            &object(payload),
-            &case.workspace,
-            &case.workspace,
-            case.launch_env(),
-        )
-        .map(|launch| launch.is_some())
+        let payload = object(payload);
+        let check = RuleCheck {
+            payload: Some(&payload),
+            harness: "codex",
+            workspace: &case.workspace,
+            home_dir: &case.workspace,
+            guard_home: &case.guard_home,
+            recording_only: false,
+            launch_env: case.launch_env(),
+        };
+        launch_for(&payload, &check).map(|launch| launch.is_some())
     };
     assert_eq!(
         launches(json!({ "tool_input": { "command": "npm run build" } })),

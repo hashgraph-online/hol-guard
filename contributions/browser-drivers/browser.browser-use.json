@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "guard.browser-driver.v1",
+  "id": "browser.browser-use",
+  "name": "Browser Use MCP",
+  "publisher": {
+    "name": "HOL Guard",
+    "url": "https://github.com/hashgraph-online/hol-guard",
+    "verified": true
+  },
+  "referenceUrls": [
+    "https://github.com/browser-use/browser-use"
+  ],
+  "referenceVersion": "1.0.8",
+  "match": {
+    "mcpServerNames": [
+      "browser-use"
+    ],
+    "packages": [
+      "browser-use"
+    ],
+    "toolNamespaces": [
+      "mcp__browser-use__"
+    ],
+    "harnessTools": []
+  },
+  "profileMode": {
+    "default": "unknown"
+  },
+  "tools": [
+    {
+      "name": "browser_click",
+      "verb": "Click"
+    },
+    {
+      "name": "browser_close_all",
+      "verb": "TabControl"
+    },
+    {
+      "name": "browser_close_session",
+      "verb": "TabControl"
+    },
+    {
+      "name": "browser_close_tab",
+      "verb": "TabControl"
+    },
+    {
+      "name": "browser_exec",
+      "verb": "Other",
+      "script": [
+        "code"
+      ]
+    },
+    {
+      "name": "browser_extract_content",
+      "verb": "Other",
+      "script": [
+        "query"
+      ]
+    },
+    {
+      "name": "browser_feedback",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_get_html",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_get_state",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_go_back",
+      "verb": "Navigate"
+    },
+    {
+      "name": "browser_list_sessions",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_list_tabs",
+      "verb": "Read"
+    },
+    {
+      "name": "browser_login",
+      "verb": "Other"
+    },
+    {
+      "name": "browser_navigate",
+      "verb": "Navigate",
+      "url": [
+        "url"
+      ]
+    },
+    {
+      "name": "browser_screenshot",
+      "verb": "Screenshot"
+    },
+    {
+      "name": "browser_scroll",
+      "verb": "Scroll"
+    },
+    {
+      "name": "browser_switch_tab",
+      "verb": "TabControl"
+    },
+    {
+      "name": "browser_type",
+      "verb": "Type",
+      "text": [
+        "text"
+      ]
+    },
+    {
+      "name": "retry_with_browser_use_agent",
+      "verb": "Other",
+      "script": [
+        "task"
+      ]
+    }
+  ]
+}

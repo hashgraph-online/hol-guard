@@ -115,6 +115,9 @@ mod http_reads;
 mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
+pub(crate) use loopback_ports::{
+    conventional_dev_port, daemon_env_port, daemon_state_port, GUARD_DAEMON_DEFAULT_PORT,
+};
 mod omp_tool_commands;
 pub(crate) mod port_probes;
 pub(crate) mod rsync_local;
@@ -135,6 +138,7 @@ pub(crate) use directory_targets::safe_directory_target;
 mod archive_listing;
 mod awk_reads;
 mod base64_reads;
+mod brace_operands;
 mod brace_words;
 mod brew_reads;
 mod bun_eval;
@@ -157,10 +161,13 @@ pub(crate) mod git_conditional_include;
 mod git_config;
 pub(crate) mod git_config_reads;
 mod git_config_trust;
+mod git_excludes_file;
 pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
 mod git_init_chain;
 pub(crate) mod git_init_target;
+pub(crate) mod git_merge_file_read;
+mod git_message_text;
 pub(crate) mod git_object_reads;
 mod git_read_floor;
 mod git_reads;
@@ -168,6 +175,7 @@ mod git_ref_listings;
 mod git_rev_list;
 mod git_search_text;
 pub(crate) mod git_side_record_reads;
+mod git_signature_helper;
 pub(crate) mod git_stash_reads;
 pub(crate) mod git_submodule_reads;
 pub(crate) mod git_tag_listing;
@@ -201,6 +209,7 @@ mod guard_diagnostics;
 mod guard_home_option;
 pub use guard_home_option::{guard_approval_inspection_command, guard_safety_guide_read_command};
 mod guard_names;
+mod headless_browser_reads;
 mod helm_usage;
 pub(crate) mod help_probes;
 mod home_program_metadata;
@@ -276,6 +285,7 @@ mod decompress_reads;
 mod dump_filter_options;
 mod name_pattern_text;
 mod search;
+pub(crate) use search::search_pattern_words;
 mod search_pattern_clearance;
 mod search_pattern_text;
 mod search_scope;
@@ -1053,6 +1063,7 @@ fn exact_safe_command_with_context(
         segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context)
             || segment_proof::exact_safe_absolute_cd_chain(model, allow_git_helper_context, context)
             || safe_reads::exact_safe_sequence(model, allow_git_helper_context, context)
+            || safe_reads::nested_cd_proof(model, allow_git_helper_context, context)
     };
     if cd_proof(model) {
         return true;
@@ -1212,6 +1223,7 @@ fn rewritten_command_list_at(command: &str, home_dir: Option<&str>) -> Option<St
         .or_else(|| control_flow_flatten::flatten(command))
         .or_else(|| control_flow_chain::spliced(command, home_dir))
         .or_else(|| list_wrapper::unwrapped(command))
+        .or_else(|| brace_operands::expanded(command))
 }
 
 fn evaluate_rewritten(
@@ -1662,6 +1674,7 @@ fn evaluate_single_command(
         .or_else(|| fanout_reads::whitespace_split_reason(&model))
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
         .or_else(|| search::grep::sensitive_reach_reason(&model, context))
+        .or_else(|| search::rg_sensitive_reach_reason(&model, context))
         .or_else(|| inplace_edit_reason::inplace_edit_reason(&model))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
@@ -1701,6 +1714,9 @@ fn evaluate_single_command(
 mod control_flow_tests;
 #[cfg(test)]
 mod fixed_glob_option_boundary_tests;
+#[cfg(test)]
+#[path = "for_loop_bracket_word_tests.rs"]
+mod for_loop_bracket_word_tests;
 #[cfg(test)]
 #[path = "for_loop_sequence_tests.rs"]
 mod for_loop_sequence_tests;

@@ -31,11 +31,25 @@ pub(crate) const NON_RECOGNITION_REASON_CODES: [&str; 2] = [
 /// a review due only to non-recognition, including the one the workspace
 /// sandbox leaves when the program lives outside its executable roots. The
 /// grant names that program, so it answers the only question either review
-/// asks; every other review keeps its risk signal. The CLI hook names no
+/// asks. A known-vulnerable runtime review over nothing else lifts too: the
+/// user allowed the script under every runtime that runs it. Every other
+/// review keeps its risk signal. The CLI hook names no
 /// reason: it settles the grant against the native floor afterwards, so its
 /// review keeps lifting as before.
 pub(crate) fn grant_lifts(reason_code: Option<&str>) -> bool {
-    reason_code.is_none_or(|code| NON_RECOGNITION_REASON_CODES.contains(&code))
+    reason_code.is_none_or(grant_answers)
+}
+
+/// Whether an allowed grant answers a review with `reason_code`: one due to
+/// non-recognition, or a known-vulnerable runtime held over nothing else
+/// ([`crate::runtime_known_vulnerable::grant_answers`]).
+pub(crate) fn grant_answers_review(reason_code: Option<&str>) -> bool {
+    reason_code.is_some_and(grant_answers)
+}
+
+fn grant_answers(code: &str) -> bool {
+    NON_RECOGNITION_REASON_CODES.contains(&code)
+        || crate::runtime_known_vulnerable::grant_answers(code)
 }
 
 /// The connector field set, only to `true`, when the user allowed an earlier
@@ -70,6 +84,7 @@ pub(crate) fn for_launch(request: &LocalCliHookRequestV1, launch: &Launch) -> Op
         &request.guard_home,
         &launch.cli_id,
         &launch.identity_hash,
+        &launch.source,
     )
     .ok()
     .flatten()
@@ -212,13 +227,23 @@ mod tests {
             "native_workspace_containment_executable_outside_roots"
         )));
         assert!(grant_lifts(None));
+        // A known-vulnerable runtime over nothing else: the user allowed the
+        // script under every runtime that runs it.
+        assert!(grant_lifts(Some("native_runtime_known_vulnerable")));
+        assert!(grant_answers_review(Some(
+            "native_runtime_known_vulnerable"
+        )));
+        assert!(!grant_answers_review(None));
         for code in [
             "native_workspace_containment_required",
             "native_network_review",
             "native_sensitive_access_review",
+            "native_runtime_known_vulnerable_with_review",
+            "native_runtime_known_vulnerable_observed",
             "",
         ] {
             assert!(!grant_lifts(Some(code)), "{code}");
+            assert!(!grant_answers_review(Some(code)), "{code}");
         }
     }
 

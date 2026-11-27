@@ -46,7 +46,13 @@ fn fixture() -> PathBuf {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/grep-unmatched-glob-operand")
         .join(format!("fixture-{}-{nonce}", std::process::id()));
-    for directory in ["work/repo/src/app", "work/repo/docs", ".ssh"] {
+    for directory in [
+        "work/repo/src/app",
+        "work/repo/docs",
+        "work/repo/crates/core/src",
+        "work/repo/crates/cli/src",
+        ".ssh",
+    ] {
         std::fs::create_dir_all(root.join(directory)).unwrap();
     }
     for (file, text) in [
@@ -55,10 +61,28 @@ fn fixture() -> PathBuf {
         ("work/repo/docs/guide.md", "guide\n"),
         ("work/repo/.env.local", "synthetic\n"),
         (".ssh/id_ed25519", "synthetic\n"),
+        ("work/repo/crates/core/src/lib.rs", "pub fn run() {}\n"),
+        ("work/repo/crates/cli/src/main.rs", "fn main() {}\n"),
     ] {
         std::fs::write(root.join(file), text).unwrap();
     }
+    // A link that leads into the key store.
+    std::os::unix::fs::symlink(root.join(".ssh"), root.join("work/repo/vault")).unwrap();
     std::fs::canonicalize(root).unwrap()
+}
+
+/// [`fixture`] with `work/repo` as a git repository, which a glob led by
+/// `../` needs before its expansion is trusted.
+fn repository_fixture() -> PathBuf {
+    let home = fixture();
+    let status = std::process::Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(home.join("work/repo"))
+        .env("HOME", &home)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    home
 }
 
 const HARNESSES: [&str; 3] = ["claude-code", "codex", "omp"];
@@ -137,6 +161,68 @@ fn a_lone_unmatched_glob_in_a_folder_holding_a_secret_keeps_its_review() {
             "grep -rn synthetic *.ts",
             "cd src && grep -rn synthetic *.py; grep -rn synthetic *.ts",
         ] {
+            assert_ne!(
+                action(harness, command, &home),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_glob_with_a_pattern_folder_that_matches_nothing_is_allowed() {
+    // `../../*/src/*install*` names a file in a sibling crate that is not
+    // there. Bash hands the literal word over, zsh fails the command, and
+    // `nullglob` drops it, so nothing is opened.
+    let home = repository_fixture();
+    let crate_src = home.join("work/repo/crates/core/src");
+    for harness in HARNESSES {
+        for command in [
+            "grep -rn FACT ../../*/src/*install*",
+            "grep -rn FACT lib.rs ../../*/src/*install* 2>/dev/null | head -5",
+            "ls ../../*/src/*install*",
+            "ls ../../c*/src/*.toml 2>&1 | head -3",
+        ] {
+            assert_eq!(
+                action_in(harness, command, &home, &crate_src),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+        // From the repository root, with the pattern folder first.
+        let command = r#"grep -rn "FACT" README.md s*/legacy/*.py | head -5"#;
+        assert_eq!(
+            action(harness, command, &home),
+            "allow",
+            "{harness}: {command}"
+        );
+    }
+}
+
+#[test]
+fn a_glob_with_a_pattern_folder_that_could_reach_a_secret_keeps_its_review() {
+    let home = repository_fixture();
+    let crate_src = home.join("work/repo/crates/core/src");
+    for harness in HARNESSES {
+        for command in [
+            // `*` meets the `vault` link into `~/.ssh`.
+            "grep -rn synthetic lib.rs ../../../v*/id*",
+            "grep -rn synthetic lib.rs ../../../*/id*",
+            // `~/*` could match `.ssh` under `dotglob`.
+            "grep -rn synthetic lib.rs ~/*/missing*",
+            // The match exists, so the glob is no longer empty.
+            "grep -rn synthetic lib.rs ../../*/src/*.rs ../../../vault/*",
+        ] {
+            assert_ne!(
+                action_in(harness, command, &home, &crate_src),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+        // Under `nullglob` the lone empty glob vanishes, so the command walks
+        // the repository root, which holds `.env.local` and the `vault` link.
+        for command in ["ls -aR s*/legacy/*.py", "grep -rn synthetic s*/legacy/*.py"] {
             assert_ne!(
                 action(harness, command, &home),
                 "allow",

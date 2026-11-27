@@ -5,6 +5,8 @@
 //! recognizer does not fully understand returns `None`, which keeps the
 //! existing review behavior.
 
+#[path = "for_loop_unroll_arithmetic.rs"]
+mod arithmetic;
 #[path = "for_loop_unroll_body.rs"]
 pub(super) mod body;
 #[path = "for_loop_unroll_conditional.rs"]
@@ -109,13 +111,37 @@ fn unrolled<'a>(
         return None;
     }
     let rest = keyword(rest, "in")?;
-    let (mut words, rest) = header_words(rest, home)?;
+    let (mut words, literal_brackets, rest) = header_words(rest, home)?;
     if words.is_empty() {
         return None;
     }
     let rest = rest.trim_start_matches([' ', '\t', '\n', ';']);
     let rest = keyword(rest, "do")?;
-    let (items, _, after) = body_items(rest, name, &["done"])?;
+    // A body with `$((n+6))` is read once per word, with the value of that
+    // pass written in, so each pass's items are the work that pass runs.
+    let (items, after, passes) = match arithmetic::evaluated_bodies(rest, name, &words)? {
+        None => {
+            let (items, _, after) = body_items(rest, name, &["done"])?;
+            (items, after, None)
+        }
+        Some(bodies) => {
+            let mut passes = Vec::with_capacity(bodies.len());
+            let mut after = None;
+            for body in &bodies {
+                let (items, _, tail) = body_items(body, name, &["done"])?;
+                // The text after `done` must be the loop's own, untouched.
+                let tail = rest
+                    .strip_suffix(tail)
+                    .map(|_| &rest[rest.len() - tail.len()..])?;
+                if after.is_some_and(|after: &str| after != tail) {
+                    return None;
+                }
+                after = Some(tail);
+                passes.push(items);
+            }
+            (passes.first()?.clone(), after?, Some(passes))
+        }
+    };
     let (piped, tail, rest) = match place {
         Place::Alone => {
             // A pipe into text filters after `done` reads the whole loop's
@@ -147,17 +173,22 @@ fn unrolled<'a>(
             let last_negated = items
                 .last()
                 .is_some_and(|(text, _)| text.trim_start().starts_with('!'));
-            let changes_state = !prefix.is_empty()
-                || items
-                    .iter()
-                    .any(|(text, _)| super::control_flow_chain::changes_shell_state(text));
+            let changes_state =
+                !prefix.is_empty() || items.iter().any(|(text, _)| item_changes_state(text));
             if (joined && last_negated) || (gated && changes_state) {
                 return None;
             }
             (None, String::new(), rest)
         }
     };
-    if items.is_empty() || items.iter().any(|(text, _)| rebinds(text, name)) {
+    if items.is_empty()
+        || passes
+            .iter()
+            .flatten()
+            .chain(std::iter::once(&items))
+            .flatten()
+            .any(|(text, _)| rebinds(text, name))
+    {
         return None;
     }
     // A body that never reads the loop variable runs the same text on every
@@ -168,9 +199,10 @@ fn unrolled<'a>(
     // written-out `cd ..` would prove the later commands in the wrong place.
     // A body that reads the variable, or carries shell state from pass to
     // pass, is written out once per word, which the word bound keeps finite.
-    let same_every_pass = !items
-        .iter()
-        .any(|(text, _)| body::reads_the_variable(text) || carries_state(text));
+    let same_every_pass = passes.is_none()
+        && !items
+            .iter()
+            .any(|(text, _)| body::reads_the_variable(text) || carries_state(text));
     if same_every_pass {
         words.truncate(1);
     } else if words.len() > MAX_WORDS {
@@ -185,8 +217,12 @@ fn unrolled<'a>(
     // Taking those quotes off is only faithful while every word is a single
     // field, so a header that mixes a pattern with a word holding separators
     // has no written form that is both and keeps its review.
-    let patterned = words.iter().any(|word| word.contains(['*', '?', '[']));
-    let spaced = words.iter().any(|word| word.contains([' ', '\t']));
+    // A quoted word holding `[` and `]`, such as the `"[slug]"` of a route
+    // directory, is that text and no pattern. It is written back the way a
+    // spaced word is: only where the body quotes every reference, so the
+    // brackets stay as literal in the unrolled text as they were in the loop.
+    let patterned = !literal_brackets && words.iter().any(|word| word.contains(['*', '?', '[']));
+    let spaced = literal_brackets || words.iter().any(|word| word.contains([' ', '\t']));
     if patterned && spaced {
         return None;
     }
@@ -195,7 +231,11 @@ fn unrolled<'a>(
             .into_iter()
             .map(|(text, separator)| (unquote_whole_references(&text), separator))
             .collect();
-        if !items.iter().all(|(text, _)| references_stand_alone(text)) {
+        if !items.iter().all(|(text, _)| {
+            body::grouped_commands(text).into_iter().all(|command| {
+                references_stand_alone(command) || body::prints_quoted_references(command)
+            })
+        }) {
             return None;
         }
         items
@@ -205,13 +245,17 @@ fn unrolled<'a>(
         }
         items
     };
+    if passes.is_some() && (patterned || spaced) {
+        return None;
+    }
     let mut out = prefix;
-    for word in &words {
+    for (pass, word) in words.iter().enumerate() {
+        let items = passes.as_ref().map_or(&items, |passes| &passes[pass]);
         // The unrolled list runs the items the loop ran. A leading `!` only
         // inverts an item's exit status, so it is dropped wherever the
         // separator after it shows nothing reads that outcome. An `if … fi`
         // statement is written out whole as one step.
-        for (step, separator) in conditional::written_steps(&items, word, &tail)? {
+        for (step, separator) in conditional::written_steps(items, word, &tail)? {
             out.push_str(&step);
             out.push_str(separator);
         }
@@ -306,6 +350,27 @@ fn spaced_value(value: &str) -> bool {
             .all(|field| field.is_empty() || safe_value(field))
 }
 
+/// A quoted word that names a directory or file with square brackets in its
+/// name, such as `"[slug]"`, `"[...slug]"` or `"app/items/[id]/page.tsx"`.
+///
+/// Inside quotes the brackets are text, not a pattern. Only the characters a
+/// plain word may hold and the brackets themselves are taken, so the word
+/// written back inside the body's quotes reads as the same text.
+fn bracket_value(value: &str) -> bool {
+    value.len() <= MAX_WORD_BYTES
+        && value.contains('[')
+        && value.contains(']')
+        && !value.starts_with('-')
+        && !value.split('/').any(|segment| segment == "..")
+        && value.chars().all(|c| {
+            c.is_ascii_alphanumeric()
+                || matches!(
+                    c,
+                    '_' | '.' | '/' | '@' | '%' | '+' | '=' | ':' | ',' | '-' | '[' | ']'
+                )
+        })
+}
+
 /// A glob pattern the shell expands against the directory the loop runs in,
 /// such as `*.ts`, `src/*.ts` or `packages/*/`.
 ///
@@ -379,35 +444,55 @@ fn names_a_file_type(value: &str) -> bool {
 /// literal rule: writing it back out unquoted would otherwise hand the body a
 /// pattern the loop never expanded. Its text may hold the separators the
 /// quotes protect, which [`spaced_value`] admits.
-fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &'a str)> {
-    let mut words: Vec<(String, bool)> = Vec::new();
+fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, bool, &'a str)> {
+    // Each word with whether any of it was quoted and whether it is a quoted
+    // bracket word: one whose brackets all stood inside quotes.
+    let mut words: Vec<(String, bool, bool)> = Vec::new();
     let mut current = String::new();
     let mut in_word = false;
     let mut quoted = false;
+    // Whether a pattern character in the word stands outside quotes, as in
+    // `.en[v]""`, where the shell still expands the bare brackets.
+    let mut bare_pattern = false;
     let mut chars = text.char_indices().peekable();
     while let Some((index, c)) = chars.next() {
         match c {
             ' ' | '\t' => {
                 if in_word {
-                    words.push((std::mem::take(&mut current), quoted));
+                    let word = std::mem::take(&mut current);
+                    let brackets = quoted && !bare_pattern && bracket_value(&word);
+                    words.push((word, quoted, brackets));
                     in_word = false;
                     quoted = false;
+                    bare_pattern = false;
                 }
             }
             ';' | '\n' => {
                 if in_word {
-                    words.push((current, quoted));
+                    let brackets = quoted && !bare_pattern && bracket_value(&current);
+                    words.push((current, quoted, brackets));
+                }
+                let literal_brackets = words.iter().any(|(_, _, brackets)| *brackets);
+                // A pattern beside a quoted bracket word has no written form
+                // that keeps one a pattern and the other its text.
+                let patterned = words
+                    .iter()
+                    .any(|(word, quoted, _)| !quoted && pattern_value(word));
+                if literal_brackets && patterned {
+                    return None;
                 }
                 return words
                     .iter()
-                    .all(|(word, quoted)| {
+                    .all(|(word, quoted, brackets)| {
                         safe_value(word)
+                            || *brackets
                             || (*quoted && spaced_value(word))
                             || (!quoted && pattern_value(word))
                     })
                     .then(|| {
                         (
-                            words.into_iter().map(|(word, _)| word).collect(),
+                            words.into_iter().map(|(word, _, _)| word).collect(),
+                            literal_brackets,
                             &text[index..],
                         )
                     });
@@ -442,7 +527,7 @@ fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &
             // writes out as its numbers before the loop runs.
             '{' if !in_word => {
                 let (numbers, length) = sequence(&text[index..])?;
-                words.extend(numbers.into_iter().map(|number| (number, false)));
+                words.extend(numbers.into_iter().map(|number| (number, false, false)));
                 for _ in 1..length {
                     chars.next();
                 }
@@ -452,6 +537,7 @@ fn header_words<'a>(text: &'a str, home: Option<&str>) -> Option<(Vec<String>, &
             }
             other => {
                 in_word = true;
+                bare_pattern |= matches!(other, '*' | '?' | '[' | ']');
                 current.push(other);
             }
         }
@@ -529,5 +615,17 @@ fn carries_state(item: &str) -> bool {
         .into_iter()
         .find_map(|opener| super::control_flow_flatten::keyword(text, opener))
         .unwrap_or(text);
-    super::control_flow_chain::changes_shell_state(command)
+    item_changes_state(command)
+}
+
+/// Whether an item changes shell state, looking inside a `{ …; }` group.
+/// The group runs in the current shell, so a `cd` or `export` it holds moves
+/// every later command just as a bare one would; the state check reads only
+/// the head of each stage, which for a group is the `{`.
+fn item_changes_state(item: &str) -> bool {
+    super::control_flow_chain::changes_shell_state(item)
+        || (item.contains('{')
+            && body::grouped_commands(item)
+                .into_iter()
+                .any(super::control_flow_chain::changes_shell_state))
 }

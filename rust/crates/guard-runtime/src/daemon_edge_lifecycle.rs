@@ -41,10 +41,11 @@ pub(crate) const TERMINAL_EVENTS: [&str; 6] = [
     "unclean_exit_detected",
 ];
 /// Records only a daemon that published its state writes.
-const STARTED_EVENTS: [&str; 6] = [
+const STARTED_EVENTS: [&str; 7] = [
     "published",
     "workers_started",
     "hook_worker_warming",
+    "hook_worker_warmed",
     "ready",
     "reconciled",
     "reconcile_deferred",

@@ -8,8 +8,8 @@
 //! held to the bar the script file meets. A program that needs the network,
 //! names a credential store (itself or through a local module it imports),
 //! declares its own source encoding, is fed to an
-//! interpreter that also runs other code, or is chained to other commands,
-//! keeps its review.
+//! interpreter that also runs other code, or is chained to commands other
+//! than plain readers before or after it, keeps its review.
 
 use crate::git_helper_fixture as fixture;
 use fixture::FixtureCleanup;
@@ -180,9 +180,11 @@ fn a_probe_that_would_not_fit_the_sandbox_keeps_its_review() {
         "python3 -c 'import os' <<'EOF'\nimport pkg\nEOF",
         "python3 -i <<'EOF'\nimport pkg\nEOF",
         "python3 -I -c 'import os' <<'EOF'\nimport json\nEOF",
-        // Chained to other commands, a program that imports keeps its review.
+        // Chained to a command that writes or starts a program, a program
+        // that imports keeps its review. Plain readers after it are covered
+        // by `a_probe_before_plain_readers_runs_in_the_workspace_sandbox`.
         "python3 <<'EOF'\nimport pkg\nEOF\ngit add -A",
-        "python3 - <<'EOF'\nimport subprocess\nEOF\nls",
+        "python3 - <<'EOF'\nimport subprocess\nEOF\nsh run.sh",
         "python3 <<'EOF' | tee out.txt; sh out.txt\nimport pkg\nEOF",
         "python3 <<'EOF' | tee $OUT\nimport pkg\nEOF",
         // A local module that needs what the sandbox withholds counts too.
@@ -299,6 +301,50 @@ fn a_probe_after_plain_readers_runs_in_the_workspace_sandbox() {
     ] {
         let (action, reason) = outcome(&root, &command);
         assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+    }
+}
+
+/// Readers after the program run once it has finished. They start nothing
+/// the program could have written, so the chain earns what the program
+/// earns alone.
+#[test]
+fn a_probe_before_plain_readers_runs_in_the_workspace_sandbox() {
+    let (root, _cleanup) = checkout("tail");
+    let body = "<<'PY'\nimport pkg\nprint(pkg.X)\nPY";
+    for command in [
+        format!("python3 - {body}\nls pkg"),
+        format!("python3 - {body}\nrg -n X pkg"),
+        format!("python3 - {body}\nprintf 'done\\n'"),
+        format!("python3 - {body}\necho ok"),
+        format!("python3 - {body}\nwc -l pkg/__init__.py; head -5 pkg/__init__.py"),
+    ] {
+        let (action, reason) = outcome(&root, &command);
+        assert_eq!((action.as_str(), reason.as_str()), CONTAINED, "{command}");
+    }
+}
+
+#[test]
+fn a_probe_before_git_a_writer_or_a_program_keeps_its_review() {
+    let (root, _cleanup) = checkout("tailwriters");
+    let body = "<<'PY'\nimport pkg\nprint(pkg.X)\nPY";
+    for command in [
+        // Git reads configuration and attributes the program could write.
+        format!("python3 - {body}\ngit status --short"),
+        format!("python3 - {body}\ngit diff"),
+        format!("python3 - {body}\nls > pkg/__init__.py"),
+        format!("python3 - {body}\nbash pkg/run.sh"),
+        format!("python3 - {body}\nrg --pre ./run X pkg"),
+        format!("python3 - {body} || ls"),
+        format!("python3 - {body}\nls $HOME"),
+        // Readers do not admit what the program itself would not.
+        "python3 - <<'PY'\nimport pkg.remote\nPY\nls".to_string(),
+        "python3 - <<'PY'\nimport pkg.stopper\nPY\nls".to_string(),
+    ] {
+        let (action, _) = outcome(&root, &command);
+        assert!(
+            action != "allow" && action != "sandbox-required",
+            "{command}: {action}"
+        );
     }
 }
 

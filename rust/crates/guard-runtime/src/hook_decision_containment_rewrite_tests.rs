@@ -304,3 +304,47 @@ fn cursor_runs_the_runtime_sink_its_shell_check_admits() {
     assert_eq!(argument_after(&argv, "--harness"), "cursor");
     discard(Path::new(argument_after(&argv, "--request-file")));
 }
+
+#[test]
+fn routed_shape_accepts_only_a_command_replacement() {
+    let original = serde_json::from_value::<serde_json::Map<String, Value>>(json!({
+        "command": "make build",
+        "description": "Run the build",
+    }))
+    .expect("original input");
+    let routed = json!({
+        "policy_action": "allow",
+        "reason_code": "native_contained_execution_routed",
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "updatedInput": {
+                "command": "guard execute-contained-test",
+                "description": "Run the build"
+            }
+        }
+    });
+    assert!(super::routed_shape(&routed, &original));
+}
+
+#[test]
+fn routed_shape_rejects_a_non_command_input_change() {
+    let original = serde_json::from_value::<serde_json::Map<String, Value>>(json!({
+        "command": "make build",
+        "description": "Run the build",
+    }))
+    .expect("original input");
+    let routed = json!({
+        "policy_action": "allow",
+        "reason_code": "native_contained_execution_routed",
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
+            "updatedInput": {
+                "command": "guard execute-contained-test",
+                "description": "changed"
+            }
+        }
+    });
+    assert!(!super::routed_shape(&routed, &original));
+}

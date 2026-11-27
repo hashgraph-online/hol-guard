@@ -28,7 +28,20 @@ pub mod attestation_verify;
 mod attestation_verify_tests;
 pub mod bash_approval;
 pub mod benign_request_api;
+pub mod browser_action_project;
+pub(crate) mod browser_action_target;
+pub mod browser_card;
+pub mod browser_driver_compile;
+pub mod browser_driver_enablement;
+pub mod browser_driver_match;
+pub mod browser_driver_observe;
+pub mod browser_first_party_drivers;
+pub mod browser_guard_origin;
+pub(crate) mod browser_launch_args;
+pub(crate) mod browser_loopback_quiet;
 pub mod browser_mcp_intent;
+pub mod browser_omp_eval_action;
+pub mod browser_provider_switches;
 mod bundle_metadata;
 pub mod business_gmail_plain;
 pub mod business_gmail_wire;
@@ -290,6 +303,8 @@ mod protection_health_facts_containment_tests;
 mod protection_health_facts_tests;
 #[cfg(test)]
 mod protection_health_tests;
+pub mod provider_integration_compile;
+pub mod provider_origin_share;
 pub mod pytest_argv;
 #[cfg(test)]
 mod pytest_argv_tests;
@@ -485,6 +500,7 @@ mod shell_secret_read_stdin_search_tests;
 mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
+mod shell_template_reads;
 pub mod source_cli;
 pub mod tool_action_identity;
 #[cfg(test)]
@@ -599,6 +615,8 @@ pub mod false_positive_rules;
 #[cfg(unix)]
 mod forwarded_settings;
 pub mod guard_sync_transport;
+#[path = "adapters/hook/hook_adapter_browser.rs"]
+pub mod hook_adapter_browser;
 #[path = "adapters/hook/hook_adapter_envelope.rs"]
 pub mod hook_adapter_envelope;
 #[path = "adapters/hook/hook_adapter_envelope_tables.rs"]

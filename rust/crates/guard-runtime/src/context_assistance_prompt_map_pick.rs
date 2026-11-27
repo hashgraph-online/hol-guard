@@ -3,6 +3,9 @@
 use super::{more, rename, term_form, written_name, Asked, File, Kind, Sought};
 
 const MAX_NAMED_DEFINITIONS: usize = 6;
+/// The most lines of the definition a file is named for shown whole when the
+/// prompt places nothing else.
+const MAX_STEM_LINES: usize = 30;
 /// Functions left to be written that stand in for a named file's outline.
 const MAX_STUBS: usize = 2;
 /// Definitions shown beside a function left to be written.
@@ -10,7 +13,10 @@ const MAX_HELPERS: usize = 3;
 /// Section names, as `term_form` gives them, of a class's constructor.
 const CONSTRUCTORS: [&str; 3] = ["init", "constructor", "new"];
 /// File stems, as `term_form` gives them, that name no one subject.
-const GENERIC_STEMS: [&str; 6] = ["index", "mod", "main", "lib", "init", "setup"];
+const GENERIC_STEMS: [&str; 12] = [
+    "index", "mod", "main", "lib", "init", "setup", "util", "utility", "helper", "common",
+    "shared", "type",
+];
 
 pub(super) struct Pick {
     pub(super) file: usize,
@@ -292,9 +298,10 @@ fn written_as_code(line: &str) -> impl Iterator<Item = &str> {
 }
 
 /// For a prompt whose words are placed nowhere, the outline of the file it
-/// names, else of the one source file named for a word too common to place:
-/// "add metadata to route" is about `route.go`, though `route` is in every
-/// file of the project.
+/// names, else of the one source file named for one of its words: "add
+/// metadata to route" is about `route.go`, though `route` is in every file of
+/// the project, and "encoding a path gives %2520" about `encoding.ts`, though
+/// no line of code says `encoding`.
 pub(super) fn outlined(
     files: &[File],
     names: &[(&str, bool)],
@@ -314,17 +321,27 @@ pub(super) fn outlined(
         .filter(|(_, file)| {
             let stem = stem(file);
             !GENERIC_STEMS.contains(&stem.as_str())
-                && (sought.iter()).any(|item| item.common && !item.phrase && item.text == stem)
+                && (sought.iter()).any(|item| !item.phrase && item.text == stem)
         });
     match (matching.next(), matching.next()) {
-        (Some((index, file)), None) => more::outline(file)
-            .map(|at| Pick {
-                file: index,
-                at,
-                base: false,
-                whole: false,
-            })
-            .collect(),
+        (Some((index, file)), None) => {
+            // The type the file is named for, `Route` in `route.go`, is what
+            // a request about it changes: short, it is shown whole.
+            let stem = stem(file);
+            let named_for = |at: usize| {
+                let section = &file.sections[at];
+                section.name.as_deref() == Some(stem.as_str())
+                    && section.end + 1 - section.start <= MAX_STEM_LINES
+            };
+            more::outline(file)
+                .map(|at| Pick {
+                    file: index,
+                    at,
+                    base: false,
+                    whole: named_for(at),
+                })
+                .collect()
+        }
         _ => Vec::new(),
     }
 }

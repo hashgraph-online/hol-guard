@@ -158,3 +158,68 @@ fn copy_into_profile_temporary_directory_needs_a_quoted_drive_path() {
     let unquoted = shell(&fixture, &format!("cp notes.txt {destination}"));
     assert_ne!(unquoted.minimum_action, "allow");
 }
+
+/// A Windows profile keeps its temporary directory inside the home. A scratch
+/// probe there for a name that is not present reads nothing, whatever the
+/// name spells, so it runs like the same probe in the macOS private root;
+/// the same probe below an ordinary home folder keeps its review.
+#[test]
+fn missing_hidden_name_probe_in_profile_temporary_directory_is_allowed() {
+    let fixture = fixture("listing");
+    let stage = fixture.temp.join("tmp.abc123");
+    std::fs::create_dir_all(stage.join("signup-funnel")).unwrap();
+    for spelled in [
+        stage.to_str().unwrap().to_owned(),
+        stage.to_str().unwrap().replace('\\', "/"),
+    ] {
+        for command in [
+            format!("ls '{spelled}/signup-funnel/.tmp' 2>/dev/null | head -5"),
+            format!("ls '{spelled}/.tmp' 2>/dev/null | head -5"),
+        ] {
+            let result = shell(&fixture, &command);
+            assert_eq!(
+                result.minimum_action, "allow",
+                "{command}: {}",
+                result.reason_code
+            );
+        }
+    }
+    // Outside the temporary directory the same probe below a home folder
+    // keeps its review, as `ls ~/work/.hidden-missing` does on macOS.
+    std::fs::create_dir_all(Path::new(&fixture.home).join("signup-funnel")).unwrap();
+    let home = fixture.home.replace('\\', "/");
+    let result = shell(
+        &fixture,
+        &format!("ls '{home}/signup-funnel/.tmp' 2>/dev/null | head -5"),
+    );
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+}
+
+/// Every folder from the temporary root down to the probed one must keep
+/// other accounts from adding entries. A folder below the root that grants
+/// everyone write access could gain a junction under the probed hidden name
+/// after the check, so the same probe keeps its review there, and below it.
+#[test]
+fn missing_hidden_name_probe_below_a_loosened_temporary_folder_keeps_its_review() {
+    let fixture = fixture("listing-loose");
+    let loose = fixture.temp.join("tmp.loose");
+    std::fs::create_dir_all(loose.join("signup-funnel")).unwrap();
+    let granted = std::process::Command::new("icacls")
+        .arg(&loose)
+        .args(["/grant", "*S-1-1-0:(OI)(CI)(W)"])
+        .output()
+        .unwrap();
+    assert!(granted.status.success(), "{granted:?}");
+    let spelled = loose.to_str().unwrap().replace('\\', "/");
+    for command in [
+        format!("ls '{spelled}/.tmp' 2>/dev/null | head -5"),
+        format!("ls '{spelled}/signup-funnel/.tmp' 2>/dev/null | head -5"),
+    ] {
+        let result = shell(&fixture, &command);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+}

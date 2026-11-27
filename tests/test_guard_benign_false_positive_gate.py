@@ -86,6 +86,8 @@ _FIXED_TOOLS = {
     "ls": "ls",
     # Claude Code's built-in question prompt reaches Guard only after the user answers.
     "ask_user_question": "AskUserQuestion",
+    # Claude Code's session notification inbox: no arguments, host-queued results only.
+    "read_notifications": "ReadNotifications",
     # A web fetch reaches Guard as its own tool; only the URL decides it.
     "web_fetch": "WebFetch",
     # Claude Code starts a subagent with a written brief; the brief is prompt text.

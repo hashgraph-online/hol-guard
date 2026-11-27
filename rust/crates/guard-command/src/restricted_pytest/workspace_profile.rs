@@ -516,6 +516,44 @@ pub(super) fn compose_with(
     for pattern in patterns() {
         lines.push(regex_rule("file-read* file-write*", &pattern));
     }
+    // The one exception: a committed, secret-free document those patterns
+    // name, which the read review already opens. It is reopened for reading
+    // only, by its exact canonical path, so writing, replacing or renaming it
+    // stays denied by the rule above. Seatbelt matches only the paths an
+    // operation names, so every directory between the workspace and the
+    // document is pinned too: none can be renamed away, removed, or created
+    // anew from another directory, which would put a different file at the
+    // reopened path.
+    let documents = crate::pretool::search_scope_tracked::sandbox_readable_documents(workspace);
+    if let (false, Ok(root)) = (documents.is_empty(), std::fs::canonicalize(workspace)) {
+        let mut pinned: Vec<&Path> = documents
+            .iter()
+            .flat_map(|document| {
+                document
+                    .ancestors()
+                    .skip(1)
+                    .take_while(|directory| *directory != root && directory.starts_with(&root))
+            })
+            .collect();
+        pinned.sort();
+        pinned.dedup();
+        for directory in pinned {
+            if let Some(text) = directory.to_str() {
+                lines.push(format!(
+                    "(deny file-write* (literal {}))",
+                    seatbelt_string(text)
+                ));
+            }
+        }
+        for document in &documents {
+            if let Some(text) = document.to_str() {
+                lines.push(format!(
+                    "(allow file-read* (literal {}))",
+                    seatbelt_string(text)
+                ));
+            }
+        }
+    }
     Ok(lines.join("\n"))
 }
 

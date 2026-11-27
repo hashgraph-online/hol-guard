@@ -2,7 +2,8 @@
 //! prompt names, where a new test goes; the doc sections about it; and the
 //! changelog section an entry for the change belongs in.
 use super::super::sections::{
-    headed_sections, inheriting_test_class, marked_test, members, written_name, Section,
+    headed_sections, inheriting_test_class, marked_test, members, named_test, test_name,
+    written_name, Section,
 };
 use super::super::seen::Span;
 use super::{
@@ -24,7 +25,7 @@ const MAX_OUTLINE: usize = 8;
 /// The most lines of a definition shown whole.
 const MAX_SHOWN_LINES: usize = 80;
 /// The most characters of code one map shows whole for their tests.
-const MAX_SHOWN_CHARS: usize = 1_600;
+const MAX_SHOWN_CHARS: usize = 3_200;
 /// The most characters of named definitions one map shows whole. The agent
 /// opens a named definition before editing it, and that read costs a whole
 /// request, so even a long one is cheaper to show.
@@ -133,9 +134,7 @@ pub(super) fn tests(
     let mut using: Vec<(&File, usize, BTreeSet<&String>)> = Vec::new();
     for file in files.iter().filter(|file| file.kind == Kind::Test) {
         let named_test = |at: &usize| {
-            marked_test(&file.lines, &file.sections[*at])
-                || written_name(file.opening(*at))
-                    .is_some_and(|name| name.to_lowercase().starts_with("test"))
+            marked_test(&file.lines, &file.sections[*at]) || named_test(file.opening(*at))
         };
         let named: Vec<usize> = (0..file.sections.len()).filter(named_test).collect();
         let above = |at: usize| std::iter::successors(file.parent[at], |&outer| file.parent[outer]);
@@ -204,7 +203,7 @@ pub(super) fn tests(
             Some(outer) if outer.starts_with("Test") || outer.ends_with("Tests") => {
                 file.qualified(*at)
             }
-            _ => written_name(file.opening(*at)).unwrap_or_default(),
+            _ => test_name(file.opening(*at)).unwrap_or_default(),
         };
         found.push((
             best,
@@ -222,11 +221,13 @@ pub(super) fn tests(
     } else {
         MAX_SHOWN_CHARS
     };
+    let top = found.first().map_or(0.0, |(best, ..)| *best);
     let mut listed = Vec::new();
     for (_, _, line, near) in found.into_iter().take(MAX_TEST_FILES) {
         let mut entry = Entry::plain(line);
-        for (file, at, _) in near.into_iter().take(MAX_SHOWN_TESTS) {
-            let Some((span, code)) = whole(file, at) else {
+        for (file, at, score) in near.into_iter().take(MAX_SHOWN_TESTS) {
+            // Room left goes to other files' tests that match nearly as well.
+            let Some((span, code)) = whole(file, at).filter(|_| score * 2.0 >= top) else {
                 continue;
             };
             if code.len() <= room && !earlier.contains(&span) {
@@ -243,8 +244,6 @@ pub(super) fn tests(
                 entry.shown.push(span);
             }
         }
-        // Only the best file's tests are shown.
-        room = 0;
         listed.push(entry);
     }
     listed

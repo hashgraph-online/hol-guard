@@ -92,7 +92,11 @@ fn cwd_list_context(
     };
     let cwd = safe_reads::verified_cwd_target(target, context).or_else(|| {
         climb
-            .then(|| directory_targets::verified_climb_target(target, context))
+            .then(|| {
+                directory_targets::verified_climb_target(target, context).or_else(|| {
+                    directory_targets::notes::verified_note_directory_target(target, context)
+                })
+            })
             .flatten()
     })?;
     // A trailing report says how the run went: `; echo "<label>$?"`,
@@ -168,6 +172,7 @@ pub(in crate::pretool) fn verified_leading_cd_target(
     };
     safe_reads::verified_cwd_target(target, context)
         .or_else(|| directory_targets::verified_climb_target(target, context))
+        .or_else(|| directory_targets::notes::verified_note_directory_target(target, context))
 }
 
 /// `cd <dir> && <reads>`, then more of the same, with a read outside a group
@@ -542,6 +547,10 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "base64"
                 | "base32"
                 | "stat"
+                // `file` names the type of the files it is given. Its
+                // argument proof refuses `-C`, `-m` and `-f` and opens each
+                // operand only through the read screen `cat` takes.
+                | "file"
                 | "test"
                 | "["
                 | "find"

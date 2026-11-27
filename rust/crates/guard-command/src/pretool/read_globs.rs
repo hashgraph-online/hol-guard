@@ -242,6 +242,37 @@ pub(in crate::pretool) fn wildcard_matches(pattern: &[u8], name: &[u8]) -> bool 
     previous[name.len()]
 }
 
+/// Every shell expands `pattern` to `name` whatever its options: an ASCII
+/// `*` and `?` pattern that matches with case, and a leading `.` only when
+/// the pattern spells it. [`wildcard_matches`] ignores case, so it is looser.
+pub(in crate::pretool) fn wildcard_sure_match(pattern: &str, name: &str) -> bool {
+    if !pattern.is_ascii()
+        || !name.is_ascii()
+        || pattern.contains(['[', ']'])
+        || (name.starts_with('.') && !pattern.starts_with('.'))
+    {
+        return false;
+    }
+    let (pattern, name) = (pattern.as_bytes(), name.as_bytes());
+    let mut previous = vec![false; name.len() + 1];
+    previous[0] = true;
+    for &token in pattern {
+        let mut current = vec![false; name.len() + 1];
+        if token == b'*' {
+            current[0] = previous[0];
+            for index in 1..=name.len() {
+                current[index] = previous[index] || current[index - 1];
+            }
+        } else {
+            for index in 1..=name.len() {
+                current[index] = previous[index - 1] && (token == b'?' || token == name[index - 1]);
+            }
+        }
+        previous = current;
+    }
+    previous[name.len()]
+}
+
 /// True when `*` and `?` could match `name` under any locale and case
 /// option: a superset of [`wildcard_matches`] for names that are not ASCII.
 ///

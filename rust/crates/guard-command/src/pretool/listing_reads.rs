@@ -115,7 +115,7 @@ pub(super) fn safe_listing_segment(
                 true
             }
             Operand::Glob => {
-                search::safe_unmatched_glob_operand(argument, context, recursive)
+                search::safe_unmatched_listing_glob_operand(argument, context, recursive)
                     || (!recursive && leaf_glob_operand(argument, context))
                     || (!recursive
                         && search::safe_literal_bracket_listing_target(argument, context))
@@ -135,7 +135,7 @@ pub(super) fn safe_listing_segment(
 /// the word takes that listing's proof.
 pub(super) fn listable_glob(value: &str, context: super::PathContext<'_>) -> bool {
     search::safe_glob_operand(value, context, false)
-        || search::safe_unmatched_glob_operand(value, context, false)
+        || search::safe_unmatched_listing_glob_operand(value, context, false)
         || leaf_glob_operand(value, context)
 }
 
@@ -285,12 +285,23 @@ fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::pa
 const MAX_LEAF_ENTRIES: usize = 4096;
 
 /// Screen every leaf glob match below a listable, owner-controlled non-home directory.
-fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
+pub(super) fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
+    leaf_glob_matches(value, context).is_some()
+}
+
+/// As [`leaf_glob_operand`], and the pattern matches at least one name now.
+/// A pattern that matches nothing may vanish under `nullglob`, and a command
+/// such as `du` then reads its working directory instead.
+pub(super) fn matched_leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
+    leaf_glob_matches(value, context).is_some_and(|matched| matched > 0)
+}
+
+/// The number of names the leaf pattern matches, or `None` when any match or
+/// the directory itself fails the listing screen.
+fn leaf_glob_matches(value: &str, context: super::PathContext<'_>) -> Option<usize> {
     // Windows spells the home path with `\`, so there it is a separator.
     let separator = |c: char| c == '/' || (c == '\\' && cfg!(windows));
-    let Some((directory, pattern)) = value.rsplit_once(separator) else {
-        return false;
-    };
+    let (directory, pattern) = value.rsplit_once(separator)?;
     if directory.is_empty()
         || directory.contains(['*', '?', '[', ']'])
         || pattern.is_empty()
@@ -305,7 +316,7 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         || super::sensitive_path_argument(value)
         || super::sensitive_read_path_argument(directory)
     {
-        return false;
+        return None;
     }
     // A superset of every match. A pattern of only `*` and `?` is matched
     // as the shell matches it, without case, so `*pr7519*` is judged by the
@@ -331,51 +342,45 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     };
     // A shell matches `.` and `..` (the directory, its parent) only by a `.`-led pattern.
     if pattern.starts_with(['.', '[']) && (candidate(".") || candidate("..")) {
-        return false;
+        return None;
     }
-    let Some(base) = expanded_path(directory, context) else {
-        return false;
-    };
+    let base = expanded_path(directory, context)?;
     let Ok(canonical_base) = std::fs::canonicalize(&base) else {
-        return false;
+        return None;
     };
     if context
         .home_dir
         .is_some_and(|h| !std::fs::canonicalize(h).is_ok_and(|home| home != canonical_base))
     {
-        return false;
+        return None;
     }
     // Shell expansion races are unsafe in world-writable directories.
     if super::listing_temporary::writable_by_anyone(&base) {
-        return false;
+        return None;
     }
     if !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
         && !super::listing_temporary::temporary_glob_directory(&base, context)
     {
-        return false;
+        return None;
     }
     let Ok(entries) = std::fs::read_dir(&base) else {
-        return false;
+        return None;
     };
     let mut seen = 0_usize;
+    let mut matched = 0_usize;
     for entry in entries {
         seen += 1;
-        let Some(name) = entry
+        let name = entry
             .ok()
-            .and_then(|entry| entry.file_name().into_string().ok())
-        else {
-            return false;
-        };
+            .and_then(|entry| entry.file_name().into_string().ok())?;
         if seen > MAX_LEAF_ENTRIES {
-            return false;
+            return None;
         }
         if !candidate(&name) {
             continue;
         }
         let path = base.join(&name);
-        let Some(text) = path.to_str() else {
-            return false;
-        };
+        let text = path.to_str()?;
         // Never a hidden directory (`.config`) or a key file (`server.pem`), as in `ls -R`.
         let listed = if std::fs::metadata(&path).is_ok_and(|metadata| metadata.is_dir()) {
             !name.starts_with('.')
@@ -397,10 +402,13 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
                 })
         };
         if !listed {
-            return false;
+            return None;
+        }
+        if safe_reads::wildcard_sure_match(pattern, &name) {
+            matched += 1;
         }
     }
-    true
+    Some(matched)
 }
 
 /// `..` may only lead a relative operand (`../sibling/missing`). A parent

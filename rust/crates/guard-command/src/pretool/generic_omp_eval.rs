@@ -26,6 +26,12 @@ use serde_json::{json, Map, Value};
 
 #[path = "generic_omp_eval_browser.rs"]
 mod browser;
+#[cfg(test)]
+pub(crate) use browser::loopback_browser_program;
+pub(crate) use browser::{
+    tokenize as tokenize_browser_eval, Token as BrowserEvalToken,
+    MAX_CODE_BYTES as BROWSER_EVAL_MAX_CODE_BYTES, OPEN_KEYS as BROWSER_EVAL_OPEN_KEYS,
+};
 #[path = "generic_omp_eval_parser.rs"]
 mod parser;
 #[path = "generic_omp_eval_pure.rs"]
@@ -73,7 +79,10 @@ fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
                 input.insert(key.clone(), Value::String(text.clone()));
             }
             Lit::Str(text) if allowed_string.contains(&key.as_str()) => {
-                if call.sdk_read_helper && text.contains(':') && !text.starts_with("xd://") {
+                if call.sdk_read_helper
+                    && text.contains(':')
+                    && !super::host_refs::tool_docs_url(text)
+                {
                     let path = std::path::Path::new(text);
                     let candidate = if path.is_absolute() {
                         path.to_path_buf()

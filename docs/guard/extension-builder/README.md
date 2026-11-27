@@ -272,6 +272,62 @@ match the previous response's `nextCursor`, and the final response has no
 `nextCursor`. Missing, repeated, or out-of-order pages are rejected. Tool
 schemas are validated locally; external schema references are rejected.
 
+## Draft a browser driver profile
+
+A browser automation MCP server needs a browser driver profile under
+`contributions/browser-drivers/` as well as its MCP profile. The profile maps
+each tool to one of Guard's closed browser verbs. Draft one from the server's
+`tools/list` result:
+
+```sh
+hol-guard extensions generate --browser \
+  --from mcp \
+  --input example-pilot-tools.json \
+  --slug example-pilot \
+  --server example-pilot \
+  --name 'Example Pilot' \
+  --publisher-name 'Example Maintainer' \
+  --output browser.example-pilot.json
+
+hol-guard extensions validate --browser browser.example-pilot.json \
+  --gate-rows browser.example-pilot.gate-rows.json
+```
+
+The input may be a `tools/list` result, a JSON-RPC response that contains one,
+or a bare array of tools. The native runtime proposes a verb from each tool
+name and reads argument pointers (`url`, `element`, `text`, `script`, `file`)
+from known input schema property names. The draft is strict:
+
+- A tool whose name says nothing about what it does gets the `Other` verb, which
+  Guard reviews as privileged. The summary lists these tools.
+- `profileMode.default` is `unknown`. Set it, and add `profileMode.flags`, only
+  when you know how the driver launches its browser.
+- `publisher.verified` is `false`. Only maintainers mark a publisher verified.
+- Tool names that are not lowercase slugs are skipped with a note.
+
+The command also writes draft benign gate rows next to the profile
+(`<stem>.gate-rows.json`, or `--gate-output`). Every tool gets a protect row,
+whose id starts `neg-`, and its benign pair, an `allow` row for the same server
+and tool:
+
+- A routine tool (`Navigate`, `Read`, `Screenshot`, `Scroll`, `Click`, `Type`,
+  `Key`, `Select`) is paused with no grant and allowed under a `site-grant`.
+- Any other tool stays paused under a `site-grant`, and its benign pair is an
+  exact saved approval (`saved-exact`).
+
+The arguments are synthetic placeholders. Replace them with a realistic call on
+a synthetic page before the rows go into
+`tests/fixtures/benign_false_positive_gate.json`.
+
+`validate --browser` compiles the file with the same rules Guard applies to a
+contributed profile at runtime and reports the verb counts, the `Other` tools
+and any shipped first-party profile that already matches the same server.
+It also needs `--gate-rows`: a row array or the whole gate fixture. Validation
+fails when a tool of the profile has no row, when a row names a tool the profile
+does not map, or when a protect row has no benign pair. A
+shipped profile wins over a contributed one for the same identity. A profile
+cannot claim generic names such as `browser`, `chrome` or `playwright`.
+
 ## Review and recompile
 
 Read `report.json` and compare each operation with upstream behavior. Copy

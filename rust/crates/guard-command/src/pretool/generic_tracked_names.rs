@@ -65,8 +65,24 @@ impl GenericSignals {
         paths_proven && {
             let moves = moves_directory(model);
             let refs = crate::pretool::ref_name_words::ref_names(model, cwd, moves);
-            without_tracked_words(command, command_words(model), cwd, moves, &refs)
-                .is_some_and(|rest| !sensitive_command_input(&rest))
+            // A chain of plain readers may name a committed `.env.example`;
+            // the same template proof the path values pass clears its word.
+            let templates = crate::shell_template_reads::chain_reads_only(
+                command,
+                cwd.map(std::path::Path::new),
+                None,
+            );
+            let listing = crate::pretool::search_scope_tracked::listing::listing_only(model);
+            without_tracked_words(
+                command,
+                command_words(model),
+                cwd,
+                moves,
+                &refs,
+                templates,
+                listing,
+            )
+            .is_some_and(|rest| !sensitive_command_input(&rest))
         }
     }
 }

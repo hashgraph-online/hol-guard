@@ -388,6 +388,23 @@ fn a_posture_sandbox_route_does_not_stand_in_for_a_set_rule() {
 }
 
 #[test]
+fn a_set_rule_replaces_a_review_held_only_for_non_recognition() {
+    for code in crate::connector_setup::NON_RECOGNITION_REASON_CODES {
+        for (floor, configured, kept) in [
+            ("review", "review", "review"),
+            ("review", "require-reapproval", "require-reapproval"),
+            ("require-reapproval", "review", "require-reapproval"),
+        ] {
+            let mut unrecognized = result(floor);
+            unrecognized.reason_code = code.into();
+            let raised = raise(unrecognized, &rule(configured), false);
+            assert_eq!(raised.minimum_action, kept, "{code} {floor} {configured}");
+            assert_eq!(raised.reason_code, STAGE_ALL, "{code} {floor} {configured}");
+        }
+    }
+}
+
+#[test]
 fn a_stronger_verdict_is_kept() {
     for kept in ["review", "require-reapproval"] {
         let raised = raise(result(kept), &rule("review"), false);

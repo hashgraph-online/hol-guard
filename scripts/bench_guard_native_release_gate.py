@@ -6,7 +6,9 @@ user commands, file contents, secrets, and machine paths.
 
 The enforced warm measurement covers the production adapter-to-decision path over
 a warm resident; direct resident IPC is reported as a diagnostic. Cold one-shot
-and resident readiness are held to absolute ceilings.
+and resident readiness are held to absolute ceilings. The browser decision path
+is measured against an ordinary MCP tool call over the same resident, and may add
+at most a fixed p95 margin.
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ from codex_plugin_scanner.guard.native_resident_client import (  # noqa: E402
 from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, reset_native_hook_route  # noqa: E402
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status  # noqa: E402
 from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS  # noqa: E402
+from scripts.native_slo_contract import MAX_BROWSER_ADDED_P95_MS, browser_decision_gate  # noqa: E402
 
 
 def _load_ci_module(name: str) -> ModuleType:
@@ -155,6 +158,52 @@ def _wire_request(
     return json.dumps(request, separators=(",", ":"))
 
 
+# A browser driver call and an ordinary MCP call of the same shape. Both use
+# synthetic names; the browser call exercises driver matching, the session store
+# and the browser overlays that an ordinary MCP call skips.
+_BROWSER_TOOL = ("mcp__playwright__browser_navigate", {"url": "https://shop.example.test/"})
+_PLAIN_MCP_TOOL = ("mcp__example-docs__search_docs", {"query": "release notes"})
+_BENCH_SESSION = "native-benchmark-session"
+
+
+def _pretool_wire_request(
+    *,
+    workspace: Path,
+    guard_home: Path,
+    request_id: str,
+    tool: tuple[str, Mapping[str, object]],
+    policy_snapshot: Mapping[str, object],
+) -> str:
+    tool_name, tool_input = tool
+    generation = policy_snapshot.get("generation")
+    request = {
+        "schema": "guard-hook-envelope.v2",
+        "request_id": request_id,
+        "harness": "claude-code",
+        "event": "PreToolUse",
+        "raw_payload": {
+            "session_id": _BENCH_SESSION,
+            "hook_event_name": "PreToolUse",
+            "tool_name": tool_name,
+            "tool_input": dict(tool_input),
+        },
+        "deadline_budget_ms": 5_000,
+        "policy_generation": generation,
+        "policy_snapshot": {
+            "generation": generation,
+            "policy_digest": policy_snapshot.get("policy_digest"),
+            "runtime_identity": policy_snapshot.get("runtime_identity"),
+        },
+        "source": {
+            "cwd": str(workspace),
+            "home_dir": str(workspace),
+            "guard_home": str(guard_home),
+            "source_ref_external_allowed": False,
+        },
+    }
+    return json.dumps(request, separators=(",", ":"))
+
+
 def _native_environment(workspace: Path) -> dict[str, str]:
     environment = {"HOME": str(workspace), "TMPDIR": tempfile.gettempdir()}
     for key in ("LANG", "LC_ALL"):
@@ -223,6 +272,55 @@ def _bench_native_warm(
                 f"sample={index} response={response!r}"
             )
     return values
+
+
+def _bench_browser_path(
+    *,
+    workspace: Path,
+    guard_home: Path,
+    iterations: int,
+    policy_snapshot: Mapping[str, object],
+) -> tuple[list[float], list[float]]:
+    """Measure browser and ordinary MCP PreToolUse decisions over resident IPC.
+
+    Samples alternate, and the order inside each pair flips every round, so
+    runner noise lands on both series alike. Only the authority envelope is
+    checked: a browser step may be held for review, and the cost of reaching
+    that decision is what is measured.
+    """
+    status = native_runtime_status()
+    if status.identity is None:
+        raise RuntimeError("Native resident runtime identity is unavailable")
+    environment = _native_environment(workspace)
+    series: dict[str, list[float]] = {"browser": [], "mcp": []}
+    tools = {"browser": _BROWSER_TOOL, "mcp": _PLAIN_MCP_TOOL}
+    for index in range(iterations):
+        order = ("browser", "mcp") if index % 2 == 0 else ("mcp", "browser")
+        for kind in order:
+            request = _pretool_wire_request(
+                workspace=workspace,
+                guard_home=guard_home,
+                request_id=f"native-{kind}-{index}",
+                tool=tools[kind],
+                policy_snapshot=policy_snapshot,
+            )
+            started = time.perf_counter()
+            response_bytes = native_resident_client_request(
+                executable=status.identity.path,
+                guard_home=guard_home,
+                environment=environment,
+                payload=request.encode("utf-8"),
+                timeout_seconds=5.0,
+            )
+            series[kind].append((time.perf_counter() - started) * 1_000.0)
+            if response_bytes is None:
+                raise RuntimeError(f"Native resident IPC request failed: kind={kind} sample={index}")
+            envelope = json.loads(response_bytes)
+            if envelope.get("schema") != "guard-hook-edge-result.v2" or envelope.get("authority") != "rust":
+                raise RuntimeError(f"Native resident IPC returned an invalid authority envelope: kind={kind}")
+            if not isinstance(envelope.get("result"), dict):
+                raise RuntimeError(f"Native resident IPC returned no decision: kind={kind} sample={index}")
+    return series["browser"], series["mcp"]
 
 
 def _bench_native_warm_production(
@@ -321,7 +419,7 @@ def _readiness_failure(response: object) -> RuntimeError:
 
 def _run_benchmarks(
     *, runtime: Path, warm_iterations: int, cold_iterations: int
-) -> tuple[list[float], list[float], list[float], float]:
+) -> tuple[list[float], list[float], list[float], float, list[float], list[float]]:
     short_temp_root = "/tmp" if os.name != "nt" and Path("/tmp").is_dir() else None
     with tempfile.TemporaryDirectory(prefix="hg-native-bench-", dir=short_temp_root) as temp_dir:
         workspace = Path(temp_dir)
@@ -359,6 +457,12 @@ def _run_benchmarks(
                     iterations=warm_iterations,
                     policy_snapshot=snapshot,
                 )
+                browser_path, plain_mcp_path = _bench_browser_path(
+                    workspace=workspace,
+                    guard_home=guard_home,
+                    iterations=warm_iterations,
+                    policy_snapshot=snapshot,
+                )
         finally:
             _stop_native_resident(runtime, guard_home / "native-runtime", workspace)
             close_native_residents()
@@ -369,7 +473,7 @@ def _run_benchmarks(
             guard_home=guard_home,
             iterations=cold_iterations,
         )
-    return native_warm, native_warm_ipc, native_oneshot, native_readiness_ms
+    return native_warm, native_warm_ipc, native_oneshot, native_readiness_ms, browser_path, plain_mcp_path
 
 
 def main() -> int:
@@ -383,7 +487,14 @@ def main() -> int:
     if args.warm_iterations < 10 or args.cold_iterations < 2:
         parser.error("benchmark iteration counts are too small")
     runtime = _validated_runtime(args.runtime)
-    native_warm, native_warm_ipc, native_oneshot, native_readiness_ms = _run_benchmarks(
+    (
+        native_warm,
+        native_warm_ipc,
+        native_oneshot,
+        native_readiness_ms,
+        browser_path,
+        plain_mcp_path,
+    ) = _run_benchmarks(
         runtime=runtime,
         warm_iterations=args.warm_iterations,
         cold_iterations=args.cold_iterations,
@@ -391,6 +502,9 @@ def main() -> int:
     native_warm_summary = _summary(native_warm)
     native_warm_ipc_summary = _summary(native_warm_ipc)
     native_oneshot_summary = _summary(native_oneshot)
+    browser_summary = _summary(browser_path)
+    plain_mcp_summary = _summary(plain_mcp_path)
+    browser_added_p95_ms = round(browser_summary["p95_ms"] - plain_mcp_summary["p95_ms"], 3)
     result = {
         "schema": "hol-guard-native-performance.v1",
         "warm": {
@@ -401,10 +515,16 @@ def main() -> int:
             "native_oneshot": native_oneshot_summary,
         },
         "native_readiness_ms": round(native_readiness_ms, 3),
+        "browser_decision": {
+            "browser_mcp": browser_summary,
+            "plain_mcp": plain_mcp_summary,
+            "added_p95_ms": browser_added_p95_ms,
+        },
         "gates": {
             "maximum_warm_p95_ms": _MAX_WARM_P95_MS,
             "maximum_cold_p95_ms": _MAX_COLD_P95_MS,
             "maximum_native_readiness_ms": _MAX_NATIVE_READINESS_MS,
+            "maximum_browser_added_p95_ms": MAX_BROWSER_ADDED_P95_MS,
         },
     }
     rendered = json.dumps(result, indent=2, sort_keys=True)
@@ -422,6 +542,11 @@ def main() -> int:
         failures.append(f"cold native one-shot p95 exceeds {_MAX_COLD_P95_MS:.0f}ms")
     if native_readiness_ms > _MAX_NATIVE_READINESS_MS:
         failures.append(f"native resident readiness exceeds {_MAX_NATIVE_READINESS_MS:.0f}ms")
+    if not browser_decision_gate(
+        browser_p95_ms=browser_summary["p95_ms"],
+        mcp_p95_ms=plain_mcp_summary["p95_ms"],
+    ):
+        failures.append(f"browser decision adds more than {MAX_BROWSER_ADDED_P95_MS:.0f}ms p95 over an MCP call")
     if failures:
         for failure in failures:
             print(f"PERFORMANCE GATE: {failure}", file=sys.stderr)

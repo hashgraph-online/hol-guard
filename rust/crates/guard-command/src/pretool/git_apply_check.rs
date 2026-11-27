@@ -94,6 +94,13 @@ pub(crate) fn patch_targets(arguments: &[String]) -> Option<Vec<&str>> {
 /// here: the caller sends every target through the ordinary read screen,
 /// which resolves the path and refuses a link to a private file.
 fn patch_target(value: &str) -> bool {
+    plain_path(value)
+}
+
+/// A file the caller names as a plain path: no option, no glob, no `..`
+/// segment and no empty or `.` component. Whether it may be read is decided
+/// by the caller's read screen.
+pub(crate) fn plain_path(value: &str) -> bool {
     let relative = value
         .strip_prefix('/')
         .or_else(|| drive_root(value))

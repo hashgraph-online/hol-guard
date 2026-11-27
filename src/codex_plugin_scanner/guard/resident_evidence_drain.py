@@ -13,6 +13,11 @@ from typing import Protocol, cast
 EVIDENCE_BATCH_FEATURE = "hook-direct-evidence-batch-v1"
 _DRAIN_SCHEMA = "guard-hook-direct-evidence-batch.v1"
 _DRAIN_INTERVAL_SECONDS = 0.25
+# While the queue stays empty the poll interval doubles up to this. Each poll
+# is a resident request, and on a loaded host a steady four a second keeps a
+# resident client busy that hooks then wait for. The resident queue holds far
+# more than hooks produce in this long.
+_IDLE_INTERVAL_MAX_SECONDS = 2.0
 _DRAIN_TIMEOUT_SECONDS = 2.0
 
 
@@ -198,12 +203,27 @@ class ResidentEvidenceDrain:
         return cast("tuple[Path, Callable[..., bytes | None]] | None", transport())
 
     def _run(self) -> None:
-        while not self._stop.is_set():
-            more = False
-            with suppress(Exception):
-                more = self.drain_once()
-            if not more:
-                self._stop.wait(self._interval_seconds)
+        from .native_resident_client_pool import background_resident_lane
+
+        with background_resident_lane():
+            wait_seconds = self._interval_seconds
+            while not self._stop.is_set():
+                more = False
+                records = self.records
+                with suppress(Exception):
+                    more = self.drain_once()
+                if more:
+                    wait_seconds = self._interval_seconds
+                    continue
+                wait_seconds = self._next_wait_seconds(wait_seconds, drained=self.records != records)
+                self._stop.wait(wait_seconds)
+
+    def _next_wait_seconds(self, previous: float, *, drained: bool) -> float:
+        """Poll at the base interval after records arrive; back off while idle."""
+
+        if drained:
+            return self._interval_seconds
+        return min(max(previous * 2, self._interval_seconds), max(_IDLE_INTERVAL_MAX_SECONDS, self._interval_seconds))
 
 
 __all__ = ["EVIDENCE_BATCH_FEATURE", "ResidentEvidenceDrain"]

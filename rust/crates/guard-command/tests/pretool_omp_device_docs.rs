@@ -83,8 +83,53 @@ fn device_doc_references_are_reads_of_the_hosts_tool_docs() {
         assert_ne!(result.reason_code, "native_omp_device_docs_read", "{tool}");
     }
     assert_ne!(
+        f.run("codex", "read", json!({"path": "help://eval"}))
+            .reason_code,
+        "native_omp_device_docs_read"
+    );
+    assert_ne!(
         f.run("codex", "read", json!({"path": "xd://eval"}))
             .reason_code,
         "native_omp_device_docs_read"
     );
+}
+
+/// Oh My Pi 19 serves tool docs under `help://<tool>[/<topic>]`, read-only
+/// and from memory. The eval prelude's own `read` hands such a URL to the
+/// read tool with `:raw` appended, and may add a line window.
+#[test]
+fn help_doc_references_are_reads_of_the_hosts_tool_docs() {
+    let f = Fixture::new();
+    for path in [
+        "help://eval",
+        "help://eval/commit",
+        "help://eval/commit:raw",
+        "help://eval/commit:raw:1-1",
+        "help://read/urls:10-40",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_device_docs_read", "{path}");
+    }
+    for path in [
+        "help://",
+        "help:///etc/passwd",
+        "help://../.ssh/id_rsa",
+        "help://eval/../../x",
+        "help://eval/commit/more",
+        "help://.hidden",
+        "help://eval/",
+        "help://~",
+        "help://a%2e%2e",
+        "help://eval/commit:raw:raw",
+        "help://eval/commit:conflicts",
+        "HELP://eval",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert_ne!(result.reason_code, "native_omp_device_docs_read", "{path}");
+    }
+    for tool in ["write", "edit"] {
+        let result = omp(&f, tool, json!({"path": "help://eval", "content": "{}"}));
+        assert_ne!(result.reason_code, "native_omp_device_docs_read", "{tool}");
+    }
 }

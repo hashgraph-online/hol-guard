@@ -389,7 +389,6 @@ def _ordered_call_names(node: ast.AST) -> list[str]:
 
 _CONTAINMENT_ADAPTER = Path("src/codex_plugin_scanner/guard/contained_sink_command.py")
 _CONTAINMENT_DAEMON = Path("src/codex_plugin_scanner/guard/hook_review/hook_worker_native.py")
-_CONTAINMENT_TRANSPORT = Path("src/codex_plugin_scanner/guard/native_hook_containment_route.py")
 # The routing tables the resident's ``containment_route``/``containment_sink`` replaced.
 _RETIRED_CONTAINMENT_TABLES = frozenset(
     {"_PROFILES", "_ROUTED_HARNESSES", "_SINK_HARNESSES", "_WINDOWS_PROFILES", "_WINDOWS_SINK_HARNESSES"}
@@ -450,16 +449,6 @@ def _assert_containment_routed_by_resident() -> None:
         raise RuntimeError("daemon sink routing does not answer an unmarked edge with the outage")
     if "route_zcode_containment" in daemon or "native_containment_rewrite(" in daemon:
         raise RuntimeError("daemon sink routing asks the resident for a second rewrite")
-    transport = ast.parse(_read(_CONTAINMENT_TRANSPORT), filename=str(_CONTAINMENT_TRANSPORT))
-    retired = {
-        "native_containment_route",
-        "edge_containment_route",
-        "native_containment_sink",
-        "native_containment_rewrite",
-    }
-    defined = {node.name for node in transport.body if isinstance(node, ast.FunctionDef)}
-    if defined & retired:
-        raise RuntimeError(f"the containment transport asks the resident again: {sorted(defined & retired)}")
 
 
 def _cli_gate() -> None:

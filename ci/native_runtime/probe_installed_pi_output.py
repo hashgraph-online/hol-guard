@@ -92,6 +92,17 @@ def _daemon_cleanup_timeout_seconds() -> float:
     return NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS
 
 
+# One `resident-stop` must fit the runtime's own stop deadline (two seconds,
+# counted after the executable has started and hashed itself) plus that start.
+# Under x64 emulation on Windows ARM64 the start alone takes about a second, so
+# a two-second cap killed every stop partway through.
+_NATIVE_STOP_ATTEMPT_SECONDS = 6.0
+
+
+def _native_stop_attempt_seconds() -> float:
+    return _NATIVE_STOP_ATTEMPT_SECONDS
+
+
 def _native_cleanup_retry_interval_seconds() -> float:
     from codex_plugin_scanner.guard.native_resident_client import NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS
 
@@ -691,6 +702,9 @@ def _start_installed_daemon(
         if register_workspace_policy and callable(register_workspace):
             _ = register_workspace(workspace)
         daemon.start()
+        # The agent starts next and its hooks keep a short deadline of their
+        # own; an installed daemon has its hook worker built long before then.
+        daemon.wait_for_hook_worker()
     except BaseException as startup_error:
         cleanup_failure: BaseException | None = None
         cleanup_unsafe = False
@@ -815,46 +829,66 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
         stop_native_resident,
     )
 
+    started = time.perf_counter()
     deadline = time.monotonic() + _daemon_cleanup_timeout_seconds()
     last_error: OSError | RuntimeError | None = None
     stop_confirmed = True
+    # Per-attempt timings and results, no paths: the traceback that carries
+    # them goes only to the private cleanup diagnostic.
+    attempts: list[str] = []
     while True:
         contained = False
         cleanup_error: OSError | RuntimeError | None = None
+        close_started = time.perf_counter()
         try:
             contained = close_native_residents(guard_home, deadline_monotonic=deadline)
         except (OSError, RuntimeError) as exc:
             cleanup_error = exc
+        attempt = f"close={'ok' if contained else type(cleanup_error).__name__ if cleanup_error else 'open'}"
+        attempt += f"@{time.perf_counter() - close_started:.2f}s"
         state_files = _native_state_files(guard_home)
         if state_files or not stop_confirmed:
             remaining = deadline - time.monotonic()
             if remaining > 0:
                 stop_confirmed = False
+                # The launcher takes a supplied deadline as authoritative and
+                # ignores the timeout beside it, so the attempt's own cap is a
+                # deadline too, never past the cleanup's.
+                attempt_deadline = min(deadline, time.monotonic() + _native_stop_attempt_seconds())
+                stop_started = time.perf_counter()
+                stop_result = "failed"
                 try:
                     if not stop_native_resident(
                         executable=identity.path,
                         state_dir=guard_home / "native-runtime",
                         environment=_native_cleanup_environment(),
-                        timeout_seconds=min(2.0, remaining),
+                        timeout_seconds=min(_native_stop_attempt_seconds(), remaining),
                         # This isolated probe owns the fixture Guard home. Retire
                         # its verified clients too, so a retry can authenticate
                         # idempotent containment after the generation disappears.
                         retire_clients=True,
-                        deadline_monotonic=deadline,
+                        deadline_monotonic=attempt_deadline,
                     ):
                         cleanup_error = RuntimeError("native resident stop did not complete")
                     else:
                         stop_confirmed = True
+                        stop_result = "ok"
                 except (OSError, RuntimeError) as exc:
                     cleanup_error = exc
+                    stop_result = type(exc).__name__
+                attempt += f" stop={stop_result}@{time.perf_counter() - stop_started:.2f}s"
                 state_files = _native_state_files(guard_home)
+        attempts.append(f"{attempt} generations={len(state_files)}")
         if cleanup_error is None and contained and not state_files and stop_confirmed:
             return
         last_error = cleanup_error or last_error
         if time.monotonic() >= deadline:
             if last_error is None:
                 last_error = RuntimeError("native resident containment did not complete")
-            raise ProbeError(f"authenticated native cleanup failed: {type(last_error).__name__}") from last_error
+            raise ProbeError(
+                f"authenticated native cleanup failed: {type(last_error).__name__} "
+                f"after {time.perf_counter() - started:.2f}s; attempts: {'; '.join(attempts[-8:])}"
+            ) from last_error
         time.sleep(min(_native_cleanup_retry_interval_seconds(), max(0.0, deadline - time.monotonic())))
 
 

@@ -406,3 +406,25 @@ fn a_metric_name_carrying_a_window_is_not_a_secret() {
         assert!(holds_literal_secret(&text), "{text}");
     }
 }
+
+/// A Git signing key named by its OpenPGP key ID or fingerprint is a public
+/// identifier. The same hex value under any other name, or a longer value under
+/// the Git name, keeps the screen.
+#[test]
+fn a_git_signing_key_id_is_not_a_secret() {
+    for text in [
+        "git -c user.signingkey=5D2E8B41C06F7A93 commit -S -m x",
+        "git -c user.signingKey=5d2e8b41c06f7a93 commit -m x",
+        "git -c user.signingkey=0x5D2E8B41C06F7A93! commit -m x",
+        "git -c user.signingkey=4F3A9B2C1D0E8F7A6B5C4D3E2F1A0B9C8D7E6F5A commit -m x",
+    ] {
+        assert!(!holds_literal_secret(text), "{text}");
+    }
+    for text in [
+        "const signingKey = '5D2E8B41C06F7A934F3A9B2C1D0E8F7A';",
+        "git -c user.signingkey=5D2E8B41C06F7A934F3A9B2C1D0E8F7A6B5C4D3E2F1A0B9C8D7E commit -m x",
+        "git -c user.signingkey=Xq7vR2mK9pL4wT8nB3cZ6hJ1 commit -m x",
+    ] {
+        assert!(holds_literal_secret(text), "{text}");
+    }
+}

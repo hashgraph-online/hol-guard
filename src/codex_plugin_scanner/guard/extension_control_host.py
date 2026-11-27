@@ -128,7 +128,10 @@ def migrate_installed_authority(
                         on_busy()
                 return False
             report("turn_held")
-            store.migrate_installed_command_pack_authority()
+            from .catalog_delivery.installed_upgrade import reporting_migration_steps
+
+            with reporting_migration_steps(report):
+                store.migrate_installed_command_pack_authority()
     except Exception as error:
         elapsed_ms = round((time.monotonic() - started) * 1000)
         # Every new library process retries this, so an unchanged failure is

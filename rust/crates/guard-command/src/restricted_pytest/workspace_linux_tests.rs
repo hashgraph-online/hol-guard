@@ -303,3 +303,37 @@ fn a_linked_worktree_reads_its_checkout_and_overlays_the_shared_git() {
     assert!(workspace_argv(&request).is_err());
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_committed_key_named_page_is_bound_over_itself_read_only() {
+    use crate::pretool::search_scope_tracked::sandbox_documents_tests::{populate, HIDDEN, PAGE};
+    let root = root("documents");
+    let ws = root.join("ws");
+    populate(&ws);
+    let argv = workspace_argv(&input(&root, &["/bin/sh", "-c", "rg TODO"])).unwrap();
+    let page = ws.join(PAGE).to_string_lossy().into_owned();
+    let bind = argv
+        .windows(3)
+        .position(|triple| triple == ["--ro-bind", page.as_str(), page.as_str()])
+        .expect("the committed page is bound over itself");
+    assert!(!after(&argv, "/dev/null", &page));
+    let overlay = argv.iter().position(|value| value == "--overlay").unwrap();
+    let last_mask = argv.iter().rposition(|value| value == "/dev/null").unwrap();
+    assert!(
+        overlay < bind && last_mask < bind,
+        "the page mounts over the overlay"
+    );
+    // The walk masks files, not links; the committed link reaches only the
+    // page itself.
+    for name in HIDDEN.into_iter().filter(|name| *name != HIDDEN[2]) {
+        let path = ws.join(name).to_string_lossy().into_owned();
+        assert!(after(&argv, "/dev/null", &path), "{name} stays hidden");
+    }
+    assert_eq!(
+        argv.iter().filter(|value| value.as_str() == page).count(),
+        2,
+        "only the page's own bind names it"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

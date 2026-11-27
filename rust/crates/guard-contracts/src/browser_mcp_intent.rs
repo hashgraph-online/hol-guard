@@ -118,6 +118,9 @@ pub enum BrowserMcpRequestV1 {
     Display {
         intent: BrowserMcpDisplayIntentV1,
         arguments: BrowserMcpArgumentsV1,
+        /// Asks for the native approval card of a projected action as well.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        card: Option<Box<crate::BrowserCardRequestV1>>,
     },
 }
 
@@ -135,5 +138,8 @@ pub enum BrowserMcpResultV1 {
     },
     Display {
         target: String,
+        /// The native approval card, present when the request asked for one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        card: Option<Box<crate::BrowserCardV1>>,
     },
 }

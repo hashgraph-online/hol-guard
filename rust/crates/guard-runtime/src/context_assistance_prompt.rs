@@ -8,12 +8,12 @@
 //! `hookSpecificOutput.additionalContext` to the model: Claude Code and Codex
 //! always, Pi and oh-my-pi when their Guard extension says it passes it on.
 use crate::context_assistance_engine::{project_context_on, quick_excerpts};
-use crate::context_assistance_prompt_files::{named, phrases, project_root, walk_exact};
-use crate::context_assistance_prompt_words::{marked_terms, spellings};
+use crate::context_assistance_prompt_files::{named, phrases, project_root};
+use crate::context_assistance_prompt_words::marked_terms;
 use crate::context_assistance_savings as savings;
 use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::GuardHookEnvelopeV2;
-use lookup::{anchored, lookup, truncated, Miss, Request};
+use lookup::{anchored, lookup, points_nowhere, quote_unshown, truncated, Miss, Request};
 use names::held_names;
 use seen::{Session, Span};
 use serde_json::Value;
@@ -50,6 +50,10 @@ pub(crate) mod seen;
 const MAX_WAIT: Duration = Duration::from_millis(2_500);
 const DEFAULT_WAIT: Duration = Duration::from_millis(2_000);
 const HOOK_MARGIN: Duration = Duration::from_millis(250);
+/// The longest a prompt hook waits for its note, margin included. A bridge
+/// asking a resident about a prompt gives it this long, so the note gets the
+/// wait it was built for rather than a shorter one and then a second try.
+pub(crate) const PROMPT_HOOK_WAIT: Duration = MAX_WAIT.saturating_add(HOOK_MARGIN);
 const MIN_WAIT: Duration = Duration::from_millis(300);
 const MIN_PROMPT_CHARS: usize = 8;
 const MAX_QUERY_BYTES: usize = 4_096;
@@ -333,8 +337,7 @@ fn attach(
         changes::used::add_tests(response, at, changed, &earlier, budget, context_on, shown);
         return;
     }
-    let (names, exact) = (named(prompt), spellings(prompt));
-    let searched = walk_exact(&root, &words, &quoted, &names, &exact, budget);
+    let searched = changes::grep::walk(home, &root, prompt, (&words, &quoted), budget, &context_on);
     let found = searched.found(&words);
     let held = held_names(prompt, &words, &searched.spelled);
     if found.is_empty() {
@@ -376,11 +379,11 @@ fn attach(
     // With nothing mapped, excerpts ranked on plain words alone ("keep
     // going", "so is it fixed?") are a guess: mostly a README or changelog.
     // They need the prompt to name a file, a quoted phrase or code by name.
-    if !anchored(prompt) {
+    if !anchored(prompt) || points_nowhere(prompt, &root, &searched.quoting, searched.complete) {
         return;
     }
     // An excerpt holding only the quoted text is still about the request.
-    words.extend(quoted);
+    words.extend(quoted.iter().cloned());
     let request = Request {
         root: root.clone(),
         app: harness.to_owned(),
@@ -407,7 +410,10 @@ fn attach(
     // of the hook, and project context or CIGAR may be turned off meanwhile.
     let context = answered(lookup(service, home, request, deadline), own_read)
         .filter(|_| service.prompt_context_chosen() && project_context_on(home, &root, harness));
-    let Some(context) = context else {
+    let shown_quote = |context: &Rendered| {
+        !quote_unshown(prompt, &root, (&quoted, &searched.quoting), &context.text)
+    };
+    let Some(context) = context.filter(shown_quote) else {
         return;
     };
     seen::keep(session.as_ref(), &context.shown, shown);

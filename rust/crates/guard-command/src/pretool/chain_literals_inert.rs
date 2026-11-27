@@ -29,6 +29,9 @@
 //! word, where the value is neither split nor matched, and only when the body
 //! spells nothing that could reopen the shell. An apostrophe is literal there,
 //! so `it's` in a message is message text.
+//! `git commit -m "$(printf 'Subject\n\nBody')"` is read the same way, in
+//! that slot only, when the format is one single-quoted literal whose only
+//! escapes are `\n` and `%%`.
 //!
 //! A line break between commands separates them as `;` does. A heredoc body
 //! is not shell text: one with a quoted delimiter (`<<'EOF'`, `<<"EOF"`) is
@@ -51,6 +54,8 @@ pub(super) const TEMPORARY_VALUE: &str = "/hol-guard-substituted/temporary-path"
 pub(super) const DATE_VALUE: &str = "hol-guard-substituted-date";
 
 const MAX_SUBSTITUTIONS: usize = 8;
+/// The most standalone assignments of a substitution read out of one chain.
+const MAX_ASSIGNMENTS: usize = 4;
 const MAX_BODY_CHARS: usize = 128;
 /// The longest heredoc a `cat` substitution may print. A commit message runs
 /// to a few paragraphs; anything longer is not the form this models.
@@ -65,6 +70,35 @@ const DATE_CONVERSIONS: &str = "FHMSTYdjmsuwy";
 /// refuses its text as a command of its own, or a temporary path could be
 /// steered (`TMPDIR`) or climbed out of (`..`).
 pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<String> {
+    project_with(command, &allowed, MAX_ASSIGNMENTS)
+}
+
+/// [`project`], reading up to `budget` standalone assignments of a
+/// substitution out of the chain when the chain does not project as written
+/// (see the `assigned` module).
+fn project_with(command: &str, allowed: &dyn Fn(&str) -> bool, budget: usize) -> Option<String> {
+    if let Some(projected) = project_direct(command, allowed) {
+        return Some(projected);
+    }
+    if budget == 0
+        || command.len() > MAX_COMMAND_CHARS
+        || command
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\t' | '\n'))
+    {
+        return None;
+    }
+    let inlined = assigned::inline_one(command)?;
+    if !allowed(&inlined.judged) {
+        return None;
+    }
+    match substitution_spans(&inlined.text) {
+        Some((spans, _)) if spans.is_empty() => Some(inlined.text),
+        _ => project_with(&inlined.text, allowed, budget - 1),
+    }
+}
+
+fn project_direct(command: &str, allowed: &dyn Fn(&str) -> bool) -> Option<String> {
     if command.len() > MAX_COMMAND_CHARS
         || command
             .chars()
@@ -82,8 +116,9 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         .iter()
         .map(|substitution| commit_message::message_slot(&masked, &substitutions, substitution))
         .collect();
-    // Text outside ASCII may stand only in a commit message, which the
-    // projection writes without it.
+    // Text outside ASCII stands in a commit message, which the projection
+    // writes without it, or outside every substitution as plain text the
+    // shell passes through as is.
     let in_message = |at: usize| {
         substitutions
             .iter()
@@ -92,11 +127,12 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                 *message && substitution.body_start <= at && at < substitution.body_end
             })
     };
-    if chars
-        .iter()
-        .enumerate()
-        .any(|(at, character)| !character.is_ascii() && !in_message(at))
-    {
+    if chars.iter().enumerate().any(|(at, character)| {
+        !character.is_ascii()
+            && !in_message(at)
+            && (substitutions.iter().any(|s| s.start <= at && at < s.end)
+                || !super::lex::plain_non_ascii(&chars, at))
+    }) {
         return None;
     }
     // Each substitution's own text, replaced by a character that is neither a
@@ -114,9 +150,10 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         }
     }
     let mut out = String::with_capacity(command.len());
-    // The command as it runs when every Git lookup prints nothing.
-    let mut unfound = String::with_capacity(command.len());
-    let mut looked_up = false;
+    // The command with every word each Git lookup can print: its hash,
+    // nothing (outside a repository), or for a bare `rev-parse` that misses,
+    // its operand.
+    let mut readings = git_value::Readings::default();
     // The projection's shell text, heredoc bodies still blanked.
     let mut shell = String::with_capacity(command.len());
     let mut cursor = 0usize;
@@ -135,25 +172,60 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
                 // The heredoc is the whole of what the `cat` reads, so judging
                 // the bare `cat` is judging the command the shell runs.
                 Some(value) => (value, "cat".to_owned(), true),
-                // A message the heredoc form does not read is never a stand-in.
-                None if !substitution.body.is_ascii() => return None,
-                None => {
-                    let text: String = chars
-                        .get(substitution.start..substitution.end)?
-                        .iter()
-                        .collect();
-                    let inner = text
-                        .strip_prefix(open)
-                        .and_then(|rest| rest.strip_suffix(close))?;
-                    if inner.trim() != substitution.body {
-                        return None;
+                None => match printf_value(&chars, &masked, substitution, message) {
+                    // The format is the whole of what `printf` reads, so the
+                    // bare `printf` is the command the shell runs.
+                    Some(value) => (value, "printf".to_owned(), true),
+                    // A message neither form reads is never a stand-in.
+                    None if !substitution.body.is_ascii() => return None,
+                    None => {
+                        let text: String = chars
+                            .get(substitution.start..substitution.end)?
+                            .iter()
+                            .collect();
+                        let inner = text
+                            .strip_prefix(open)
+                            .and_then(|rest| rest.strip_suffix(close))?;
+                        if inner.trim() != substitution.body {
+                            return None;
+                        }
+                        let value = match stand_in(&substitution.body) {
+                            // A lookup can print nothing; only a Git command reads
+                            // a missing revision as the same kind of operation.
+                            Some(value)
+                                if (value != git_value::COMMIT_VALUE
+                                    || (git_value::in_git_command(
+                                        &masked,
+                                        &substitutions,
+                                        substitution.start,
+                                    ) && git_value::standalone(&masked, substitution)))
+                                    && (value != line_number::LINE_VALUE
+                                        || line_number::opens_sed_range(
+                                            &masked,
+                                            &substitutions,
+                                            substitution,
+                                        )) =>
+                            {
+                                value
+                            }
+                            // A value that is only printed needs no stand-in of its
+                            // own shape (`display`).
+                            // So does a value that is only compared as a string
+                            // (`display::compared`).
+                            _ if display::display_slot(&masked, &substitutions, substitution)
+                                || display::compared::compared(
+                                    &masked,
+                                    &substitutions,
+                                    substitution,
+                                ) =>
+                            {
+                                display::DISPLAY_VALUE
+                            }
+                            _ => return None,
+                        };
+                        (value.to_owned(), substitution.body.clone(), false)
                     }
-                    (
-                        stand_in(&substitution.body)?.to_owned(),
-                        substitution.body.clone(),
-                        false,
-                    )
-                }
+                },
             };
         // A lookup can print nothing; only a Git command reads a missing
         // revision as the same kind of operation.
@@ -175,23 +247,26 @@ pub(crate) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
             judged.push(judged_text);
         }
         temporary |= value == TEMPORARY_VALUE;
-        looked_up |= value == git_value::COMMIT_VALUE;
         out.extend(&chars[cursor..substitution.start]);
-        unfound.extend(&chars[cursor..substitution.start]);
+        readings.text(chars[cursor..substitution.start].iter().copied());
         out.push_str(&value);
-        if value != git_value::COMMIT_VALUE {
-            unfound.push_str(&value);
+        if value == git_value::COMMIT_VALUE {
+            let mut printed = vec![value.clone(), String::new()];
+            printed.extend(git_value::echoed_in(&masked, substitution));
+            readings.lookup(printed);
+        } else {
+            readings.literal(&value);
         }
         shell.extend(&masked[cursor..substitution.start]);
         cursor = substitution.end;
     }
     out.extend(&chars[cursor..]);
-    unfound.extend(&chars[cursor..]);
+    readings.text(chars[cursor..].iter().copied());
     shell.extend(&masked[cursor..]);
-    // An empty lookup shifts the words after it, so that command must pass too.
-    if looked_up {
-        judged.push(unfound);
-    }
+    // An empty lookup shifts the words after it, so that command must pass
+    // too; so must the one a bare `rev-parse` that misses prints into, in
+    // every combination with the other lookups.
+    judged.extend(readings.others()?);
     // A substitution the scan did not delimit is still in the text.
     if shell.contains("$(") || shell.contains('`') {
         return None;
@@ -301,6 +376,70 @@ fn heredoc_value(
         return None;
     }
     let value = commit_message::projected(body, message_character);
+    // A substitution drops every line break at the end of what it read.
+    Some(value.trim_end_matches('\n').to_owned())
+}
+
+/// The text `printf 'FORMAT'` prints, when that is the whole of the
+/// double-quoted value of `git commit -m`.
+///
+/// It is the other shape an agent writes to hand a multi-line message to
+/// `git commit -m`: `"$(printf 'Subject\n\nCo-Authored-By: ...')"`. A
+/// single-quoted format is literal to the shell, and with no arguments the
+/// only things `printf` reads in it are its escapes and conversions. This
+/// reads exactly one single-quoted format and nothing after it, and accepts
+/// only `\n` and `%%` there: any other escape (`\x41`, `\0101`, `\c`) or
+/// conversion (`%s`, `%b`) prints something this would have to compute, so
+/// the substitution stays opaque. A format that starts with `-` would be read
+/// as an option.
+///
+/// The value is then written as the heredoc form writes it: each character
+/// the message may not carry becomes `_` (`commit_message`).
+fn printf_value(
+    chars: &[char],
+    quote_scan: &[char],
+    substitution: &ShellCommandSubstitution,
+    message: bool,
+) -> Option<String> {
+    if !message || substitution.kind != "dollar" || !double_quoted_word(quote_scan, substitution) {
+        return None;
+    }
+    let inner: String = chars
+        .get(substitution.body_start..substitution.body_end)?
+        .iter()
+        .collect();
+    // Only the shell's own blanks may surround the command: a no-break space
+    // after the closing quote is part of the word and `printf` prints it.
+    let format = inner
+        .trim_matches([' ', '\t', '\n'])
+        .strip_prefix("printf")?
+        // Only blanks: a newline here ends `printf` and starts a command.
+        .strip_prefix([' ', '\t'])?
+        .trim_start_matches([' ', '\t'])
+        .strip_prefix('\'')?
+        .strip_suffix('\'')?;
+    if format.contains('\'')
+        || format.starts_with('-')
+        || format.chars().count() > MAX_HEREDOC_VALUE_CHARS
+    {
+        return None;
+    }
+    let mut value = String::with_capacity(format.len());
+    let mut characters = format.chars();
+    while let Some(character) = characters.next() {
+        match character {
+            '\\' => match characters.next()? {
+                'n' => value.push('\n'),
+                _ => return None,
+            },
+            '%' => match characters.next()? {
+                '%' => value.push('%'),
+                _ => return None,
+            },
+            other => value.push(other),
+        }
+    }
+    let value = commit_message::projected(&value, message_character);
     // A substitution drops every line break at the end of what it read.
     Some(value.trim_end_matches('\n').to_owned())
 }
@@ -496,8 +635,14 @@ fn date_arguments(arguments: &[&str]) -> bool {
     true
 }
 
+#[path = "chain_literals_assigned.rs"]
+pub(crate) mod assigned;
+
 #[path = "chain_literals_commit_message.rs"]
 mod commit_message;
+
+#[path = "chain_literals_display.rs"]
+mod display;
 
 #[path = "chain_literals_git_value.rs"]
 mod git_value;

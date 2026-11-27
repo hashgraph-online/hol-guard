@@ -11,6 +11,8 @@ use std::time::Instant;
 
 #[path = "command_compatibility/catalog.rs"]
 mod catalog;
+#[path = "command_compatibility/data_file_setting.rs"]
+pub(crate) mod data_file_setting;
 #[path = "command_compatibility/domains.rs"]
 mod domains;
 #[path = "command_compatibility/environment.rs"]
@@ -55,6 +57,15 @@ pub(crate) fn git_inspection_arguments<'a>(
     context: crate::pretool::PathContext<'_>,
 ) -> Option<&'a [String]> {
     git::inspection_arguments(arguments, context)
+}
+
+/// The directory Git resolves a bare pathspec against: the last `-C` an
+/// admitted read routes through, or the shell's own working directory.
+pub(crate) fn git_operand_directory(
+    arguments: &[String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    git::read_operand_directory(arguments, context)
 }
 
 /// Whether a `symbolic-ref` form only prints where a symbolic ref points. A
@@ -217,10 +228,13 @@ pub(crate) fn basename(segment: &CommandSegmentV1) -> String {
 /// name swaps whose authority it runs with, as `env NAME=` already does.
 /// Neither is a reviewable steer of that program.
 fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
+    use crate::pretool::generic::inert_tool_settings::inert_tool_setting;
+    use data_file_setting::data_file_path_setting;
     segment.environment_names.iter().any(|name| {
         environment::credential_routing_environment_name(name)
             || (environment::code_loading_environment_name(name)
-                && !screened_build_setting(segment, name))
+                && !prefix_values_pass(segment, name, inert_tool_setting)
+                && !prefix_values_pass(segment, name, data_file_path_setting))
     })
 }
 
@@ -243,7 +257,14 @@ fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
 /// reading either as the screened one would clear
 /// `GOFLAGS=-v GOFLAGS=-toolexec=./x go test ./...` on the strength of a value
 /// the run never sees.
-fn screened_build_setting(segment: &CommandSegmentV1, name: &str) -> bool {
+///
+/// A `*_PATH` setting naming one data file passes the same way; see
+/// [`data_file_setting`].
+fn prefix_values_pass(
+    segment: &CommandSegmentV1,
+    name: &str,
+    pass: fn(&str, &str) -> bool,
+) -> bool {
     let prefix = crate::command_tokens::leading_environment(&segment.tokens).1;
     let mut values = segment.tokens[..prefix.min(segment.tokens.len())]
         .iter()
@@ -253,10 +274,7 @@ fn screened_build_setting(segment: &CommandSegmentV1, name: &str) -> bool {
                 .and_then(|rest| rest.strip_prefix('='))
         })
         .peekable();
-    values.peek().is_some()
-        && values.all(|value| {
-            crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value)
-        })
+    values.peek().is_some() && values.all(|value| pass(name, value))
 }
 
 /// A list item such as `OUT=build/report.json` only sets shell variables, so
@@ -438,9 +456,17 @@ pub(crate) fn compatibility_observations_in(
     // Git never reads (`dir=`, `out_dir=`). Git's own settings, the proxy
     // names curl reads and the names a shell ties to its state stay steering.
     let mut git_blind = true;
+    // The same, also counting a plain capitalised name (`REF=`). One the
+    // session already exported reaches every hook and credential helper Git
+    // starts, which read any name they like, so it is ignored only before a
+    // Git read that starts neither.
+    let mut read_blind = true;
     for (index, segment) in command.segments.iter().enumerate() {
         deadline_check(deadline)?;
-        if assigned && !(git_blind && basename(segment) == "git") {
+        if assigned
+            && !(basename(segment) == "git"
+                && (git_blind || read_blind && git::starts_no_user_program(&segment.arguments)))
+        {
             steered.push(index);
         }
         if (segment.executable.is_none()
@@ -480,6 +506,10 @@ pub(crate) fn compatibility_observations_in(
                     .environment_names
                     .iter()
                     .all(|name| git_ignores_shell_variable(name));
+                read_blind &= segment
+                    .environment_names
+                    .iter()
+                    .all(|name| git_read_ignores_shell_variable(name));
             }
         }
         // A trailing `2>&1` only joins stderr to the segment's own stdout. It
@@ -526,8 +556,14 @@ pub(crate) fn compatibility_observations_in(
     Ok(result)
 }
 
-/// A lowercase shell variable such as `dir` or `out_dir` is not one Git, or a
-/// program Git starts, reads from its environment. Git's own settings are
+/// Whether `git ARGUMENTS` is a read that starts no hook or helper, which
+/// read whatever environment names they like.
+pub(crate) fn git_read_starts_no_user_program(arguments: &[String]) -> bool {
+    git::starts_no_user_program(arguments)
+}
+
+/// A lowercase shell variable such as `dir` or `out_dir` is not one Git, or
+/// a program Git starts, reads from its environment. Git's own settings are
 /// uppercase (`GIT_DIR`, `PAGER`, `EDITOR`), and
 /// [`crate::pretool::generic::chain_literals::ordinary_name`] refuses the lowercase
 /// names that still steer: the proxy names curl reads (`http_proxy`) and the
@@ -537,4 +573,19 @@ fn git_ignores_shell_variable(name: &str) -> bool {
         .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
         && name.bytes().any(|byte| byte.is_ascii_lowercase())
         && crate::pretool::generic::chain_literals::ordinary_name(name)
+}
+
+/// [`git_ignores_shell_variable`], or a capitalised name such as `REF` that
+/// [`plain_name`](crate::pretool::generic::chain_literals::inert::assigned::plain_name)
+/// accepts: no Git setting, no name the shell or a pager reads, and no part
+/// of a name a program reads to choose what it runs (`*_COMMAND`, `*_DIR`,
+/// `*_CONFIG`). Git itself reads none of these, so it holds before a Git
+/// read that starts no hook or helper.
+fn git_read_ignores_shell_variable(name: &str) -> bool {
+    git_ignores_shell_variable(name)
+        || name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+            && name.bytes().any(|byte| byte.is_ascii_alphabetic())
+            && crate::pretool::generic::chain_literals::inert::assigned::plain_name(name)
 }

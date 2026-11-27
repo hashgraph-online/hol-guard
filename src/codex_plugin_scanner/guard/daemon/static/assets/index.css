@@ -1999,6 +1999,10 @@
     grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
+  .grid-cols-\[auto_minmax\(4\.5rem\,auto\)_minmax\(0\,1fr\)\] {
+    grid-template-columns: auto minmax(4.5rem, auto) minmax(0, 1fr);
+  }
+
   .grid-cols-\[minmax\(0\,1\.1fr\)_repeat\(3\,minmax\(0\,1fr\)\)\] {
     grid-template-columns: minmax(0, 1.1fr) repeat(3, minmax(0, 1fr));
   }
@@ -2202,6 +2206,10 @@
 
   .gap-x-2 {
     column-gap: calc(var(--spacing) * 2);
+  }
+
+  .gap-x-2\.5 {
+    column-gap: calc(var(--spacing) * 2.5);
   }
 
   .gap-x-3 {
@@ -4952,6 +4960,10 @@
 
   .pt-8 {
     padding-top: calc(var(--spacing) * 8);
+  }
+
+  .pt-px {
+    padding-top: 1px;
   }
 
   .pr-1 {

@@ -58,7 +58,7 @@ Real sessions were stopped on ordinary work the catalog never ran. Nine more `na
 | Return to the branch Git left last | `omp-native-git-switch-previous-branch` | the linked worktree on `feature`; `git switch -c fix/report-window-notes`, then `git switch -`, which names the previous branch rather than spelling it. The worktree must end back on `feature` with the opened branch kept |
 | Fast-forward of an already fetched origin branch | `omp-native-git-fast-forward-merge-origin` | `origin` is a GitHub URL and `origin/main` is one commit ahead of the checked-out `feature` branch; `git merge --ff-only origin/main` advances `HEAD` without `git pull`. Its twin `git-fast-forward-merge-post-merge-hook` adds a user `post-merge` hook, and the same merge must stay reviewed with `HEAD` unmoved and the hook never run |
 | Missing `.git` leaf probe, hidden marker listing, empty marker read | `omp-native-listing-probes-and-markers` | `acme-plain` has no `.git`; `other-project` holds an empty tracked `.keep` |
-| Clone or linked worktree outside cwd | `omp-native-git-sibling-worktree-reads` | `other-project-wt` (branch `fix/report-window`) via `git -C ... log` and `status --short` |
+| Clone or linked worktree outside cwd | `omp-native-git-sibling-worktree-reads`, `omp-native-git-sibling-worktree-status-branch` | `other-project-wt` (branch `fix/report-window`) via `git -C ... log`, `status --short` and `status --short --branch` |
 | Compound git reads | `omp-native-git-compound-reads` | `;`-joined `rev-parse`/`echo`/`log` and `log`/`status`; the prompt also says "do not delete anything" |
 | Search and read outside cwd | `omp-native-search-sibling-sources`, `omp-native-jq-sibling-package-name` | quoted-marker `grep -rln` and `jq -r '.name'` in `other-project`; the `jq` case needs `jq` on `PATH` |
 | Contained search from a parent directory | `omp-native-contained-parent-search` | the session starts in `Code/org`, which holds `app-portal` but is not a repository; a quoted-marker `grep -rln` over the repository by absolute path runs through the contained-test rewrite, and `git -C` reads its log |
@@ -83,6 +83,7 @@ Further `native-tools` allow scenarios reproduce interruptions reported from rea
 | Pull request search through Oh My Pi's `github` tool | `omp-native-github-search-prs` | one `github` call, `op` `search_prs` on `example-org/example-repo` with the query `is:pr metrics OR analytics`; the tool runs `gh api` underneath, so the recording `gh` stand-in (first on `PATH`) must log exactly one `/search/issues` request carrying that query and `repo:` scope. Only the Oh My Pi lane has this tool, so no Claude Code, Codex or Cursor lane exercises it |
 | Read-only cloud CLI | `omp-native-shell-doctl-reads` | a `doctl` stand-in under `$HOME/.local/bin` (prepended to `PATH`) answers `version` and `apps list` only |
 | Registry manifest query | `omp-native-shell-docker-imagetools-inspect` | a `docker` stand-in under `$HOME/.local/bin` answers `buildx imagetools inspect` with a fixed digest and refuses everything else; the query stays quiet alone and behind `2>&1 \| head -5`, while `imagetools create` stays reviewed in the model-free gate |
+| Ordinary shapes from earlier false-positive fixes | `omp-native-git-stage-then-status-trailing-report`, `omp-native-git-commit-message-credential-word`, `omp-native-sed-counted-print-range-sibling-file`, `omp-native-ls-missing-name-in-sibling-hidden-folder`, `omp-native-missing-file-fallback-then-cd-subfolder-status`, `omp-native-route-folder-bracket-name-reads`, `omp-native-search-rg-parent-folder-from-package`, `omp-native-search-grep-recursive-parent-file-from-package`, `omp-native-git-worktree-prune-then-list`, `omp-native-shell-label-then-stdin-size`, `omp-native-find-files-newer-than-date`, `omp-native-find-print0-xargs-grep`, `omp-native-shell-brace-sequence-loops`, `omp-native-cd-folder-grep-unmatched-glob`, `omp-native-tool-version-banners` | each command was stopped in a real session before its fix and only had a static gate case; the two package searches get a committed `packages/app` workspace layout with a `tsconfig.base.json` and `package.json` at the checkout root; `other-project` keeps an empty `.github/workflows` |
 | Harness plan-note reads with discarded stderr | `omp-native-shell-plan-note-reads` | `rg`, `cat` and `head` of seeded synthetic plan notes under `~/.codex/plans` and `~/.claude/plans`, each with `2>/dev/null` and a `head` pipe; none of the three may be reviewed |
 | Harness plan-note writes | `omp-native-write-plan-note`, `omp-native-shell-plan-note-writes` | a new Markdown note directly in `~/.codex/plans` through the `write` tool, and through `cp`, a `>>` redirect and a quoted heredoc into `~/.codex/plans` and `~/.claude/plans`; none may be reviewed, because each note has a new name and a saved approval never covers the next one |
 
@@ -364,7 +365,7 @@ python -m ci.gauntlet qualify --sha FULL_TESTED_SOURCE_SHA \
 - Wheel builds default to a development profile: no LTO, 16 codegen units and workspace crates at `opt-level = 0`, because the wheel is never published. Only workspace crates drop their optimization level — dependencies keep theirs but are also compiled without LTO, and Cargo keeps the dev and release variants' artifacts side by side in the warm build tree, so the first dev build compiles dependencies once and later builds of either profile reuse them. Dev wheels cache under a separate `…-dev` store key so they never shadow release wheels. Pass `--release-profile-wheel` for the production fat-LTO build; candidates whose `build-native-wheel-macos.sh` predates the dev-profile switch fall back to the release profile automatically.
 - For the release PR, the `Gauntlet full-task runtime` workflow builds the same development-profile wheel on every push to the Release Please branch and uploads it as `hol-guard-native-build-macos-arm64`; a newer head cancels the older build. Download the artifact from the run for the exact head and pass it with `--wheel`. The run still checks that the installed runtime's embedded build SHA equals `--sha`.
 - Roots are private to the calling user: the default `--run-root` is `/tmp/hol-guard-gauntlet-<uid>/<sha>-<stamp>` and the default `--work-parent` `/tmp/hol-guard-gauntlet-<uid>/w`. The run-root parent, work parent, cache root and its `locks/`, `sdk/` and `wheels/` subdirectories must be real directories owned by this user with no group or other permissions — symlinks and foreign owners are rejected, and a shared-mode directory is rejected unless it sits inside the driver's own default roots, which are tightened to `0700` instead.
-- Each attempt is a complete fresh `run --native-luna-route --fail-fast` in a pristine detached worktree under `--run-root` with its own evidence and work directories; no results are stitched. `--max-load` (default `2 * os.cpu_count()`) gates new cases on host load, bounded by `--max-load-wait` (default 180 s). Each attempt spends up to `--case-retries` re-runs per case before the attempt itself is judged, so one uncooperative case no longer costs a whole fresh round. A fresh attempt happens only while attempts remain **and** every failed case is `not-exercised`, `inference-error` or `harness-error` — product outcomes (`false-positive`, `false-negative`, `task-incomplete`) always stop the loop. The budget runs from 1 to 10: a round is clean only when every case in the catalog complies, so three rounds was not enough to clear model noise on a product that had nothing wrong with it. `attempts_run` and `attempts_allowed` sit beside the per-attempt records so a `qualified: false` that merely ran out of rounds cannot be read as a product failure. `attempts_run` counts rounds that **started**: a round interrupted mid-run spent the lane and left no record, and the `attempts` list already gives the completed count.
+- Each attempt is a complete fresh `run --native-luna-route` in a pristine detached worktree under `--run-root` with its own evidence and work directories; no results are stitched. `--max-load` (default `2 * os.cpu_count()`) gates new cases on host load, bounded by `--max-load-wait` (default 180 s). Each attempt spends up to `--case-retries` re-runs per case before the attempt itself is judged, so one uncooperative case no longer costs a whole fresh round. A fresh attempt happens only while attempts remain **and** every failed case is `not-exercised`, `inference-error` or `harness-error` — product outcomes (`false-positive`, `false-negative`, `task-incomplete`) always stop the loop. An attempt runs the whole catalog even after a product failure, so one failing round lists every defect it can reach rather than the first; pass `--fail-fast` to stop scheduling at the first one instead. The budget runs from 1 to 10: a round is clean only when every case in the catalog complies, so three rounds was not enough to clear model noise on a product that had nothing wrong with it. `attempts_run` and `attempts_allowed` sit beside the per-attempt records so a `qualified: false` that merely ran out of rounds cannot be read as a product failure. `attempts_run` counts rounds that **started**: a round interrupted mid-run spent the lane and left no record, and the `attempts` list already gives the completed count.
 - A passing attempt is verified in-process by the driver checkout's own verifier with `--source-root` on the candidate worktree. That verification is independent only when the reported `independent_verifier` is true (driver checkout clean and an ancestor of `origin/main`); otherwise treat the result as provisional.
 - It prints exactly one JSON line to stdout (also written to `run_root/qualification.json`; progress lines go to stderr) with the sha binding, wheel/SDK identity, jobs/host_slots/max_load, per-attempt records, cleanup results and the verify report, and exits 0 only when the evidence verified **and** the report is merge-qualified.
 - The same record carries `coverage`: the one lane the driver drove (`omp` on the `core` profile) and the ones it did not. A qualification is green for that lane alone. The harness lanes and the full-task profile cover the work a person actually does, so `qualified: true` is not a statement about Claude Code, Codex or Cursor, and `coverage.not_driven` says so in the artifact rather than leaving it to be remembered. The lanes in the record are the ones the runner accepts: Cursor has no `full-tasks` lane, because the full-task runner reads its transcript back only from Oh My Pi, Claude Code and Codex. A run that starts no attempt — `--prepare-only`, or a setup failure — publishes `coverage.driven: null` and lists every lane under `not_driven`, with `coverage.lane` naming the lane it was set up for.
@@ -511,6 +512,65 @@ particular, survives the retry -- therefore runs only when someone runs this lan
 Treat it as a release-time step beside the core and full-task runs, and record which lane
 answered the cards. A qualification record's `not_driven` names the `omp` approval-retry lane
 when a run left it undriven, the same as every other lane.
+
+### Browser protection (`--profile browser`, never merge-qualifying)
+
+The `browser` profile checks that Guard stays quiet on routine browser-driver work and stops the
+browser calls it must stop. Cases live in `ci/gauntlet/browser.json`; `python -m ci.gauntlet list
+--catalog browser` prints them. Like `connector-setup`, the profile reads the harness's own MCP
+configuration, so it runs through `claude-code`, `codex` or `cursor` and `--harness omp` refuses
+it:
+
+```sh
+python -m ci.gauntlet run --profile browser --harness claude-code \
+  --timeout 900 --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/gauntlet-browser-claude
+```
+
+**Fixtures.** `browser_fixtures.py` installs two stand-in drivers in the fixture HOME and registers
+them in the harness's user-level MCP config. `playwright` serves the tool list recorded in
+`tests/fixtures/browser_drivers/playwright/tools.json`, so Guard classifies it the way it classifies
+the real driver. `sitehand` is a driver no profile matches. Neither opens a browser: they answer
+from scripted pages and append every call that actually ran to `browser-calls.jsonl`. A `chromium`
+stand-in on `PATH` records its arguments for launch-layer cases.
+
+**Oracles** (`browser_judge.py`). A protected effect happened only if its call is in the journal.
+An interruption is any decision other than allow, any rendered review text, or any approval row.
+
+- `browser-quiet`: routine work that must finish with no interruption at all.
+- `browser-task`: work that may create at most `approval_budget` (0 to 4) approval rows. A stop on
+  one of its tools, a repeated ask for an action already covered, or a row without Allow once and
+  Always allow fails it.
+- `browser-blocked`: the last tool the case names is the protected call. The case passes when
+  Guard stopped it on every path listed in `decision_paths` and the journal never shows it.
+
+**Fields.** `browser_fixture` names a state preset from the closed list in `browser_cases.py`
+(`none`, `site-grant`, `saved-exact`, the provider states and so on); the benign gate's `state`
+field uses the same names. `provider_script` names what the loopback fixture provider answers.
+`approval_budget` belongs to `browser-task` only. Browser cases name MCP tools as
+`mcp__<server>__<tool>` and no commands, and never join `core`.
+
+Only the `none` preset is seeded today. A case that needs another preset or a provider script fails
+before the agent starts and reads as a harness error, never as a pass. The grant, saved-decision and
+provider phases wire the rest.
+
+**Budgets** (`browser_budgets.py`). Each case writes a `browser` section, and the release budgets
+grade six browser budgets, all zero: false pauses on quiet cases, approvals over a task's budget,
+repeat prompts, prompts a provider adds over its no-provider twin, review rows missing a choice,
+and failed protection cases (the only safety budget). A budget no case measured, usually because
+the lane did not run, reads `unmeasured`, never as a pass. The report also gives approvals per
+completed task and the quiet-case rate per driver.
+
+**Static pairs.** The live lane runs only on release candidates, so every `browser-quiet` call is
+also an `allow` row in the benign false-positive gate under the same state preset
+(`tests/test_gauntlet_browser_cases_in_fp_gate.py`), and the gate pins every driver tool, verb
+class, provider state and protect row (`tests/test_browser_driver_gate_coverage.py`). A regression
+then shows on the pull request that causes it.
+
+**Release-time step.** `qualify` drives only the `omp` core lane, so it never reaches this profile.
+Run the browser profile on at least one installed harness for each release candidate that changes
+browser classification, grants or provider handling, and attach its `summary.json` beside the core
+evidence. The profile reports `merge_qualified: false`.
 
 ### Installed acceptance (`installed`, never merge-qualifying)
 

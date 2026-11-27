@@ -53,6 +53,7 @@ fn bound_curl_read_refuses_unbound_transport_and_file_effects() {
         vec!["-q", "--url", "http://example.com/"],
         vec!["-q", "https://127.0.0.1:3001/"],
         vec!["-q", "--ssl-reqd", "http://127.0.0.1:3001/"],
+        vec!["-q", "--create-dirs", "http://127.0.0.1:3001/"],
         vec!["-q", "http://localhost:3001/"],
         vec!["-q", "http://2130706433:3001/"],
         vec!["-q", "http://127.0.0.1:03001/"],

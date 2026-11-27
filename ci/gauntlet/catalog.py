@@ -17,6 +17,8 @@ from .approval_retry_bash import (
     targets_script,
 )
 from .approval_retry_relay import RELAY_ORACLE
+from .browser_cases import BLOCKED_ORACLE, BROWSER_FIELDS, BROWSER_ORACLES, validate_browser_case
+from .eval_browser import EVAL_BROWSER_ORACLE
 from .extension_adapters import extension_adapter
 from .file_write_cases import FILE_WRITE_ORACLE
 from .task_brief_cases import TASK_BRIEF_ORACLE
@@ -30,7 +32,7 @@ CATALOG = Path(__file__).with_name("scenarios.json")
 # The catalog's own bound. A run writes one case file per scenario, so `bundle`
 # derives the evidence inventory's bound from this one: raising it here raises
 # what an export and an import will carry.
-MAX_SCENARIOS = 480
+MAX_SCENARIOS = 640
 # Connector setup cases: an additive catalog, like the approve-then-retry lane's, so the omp
 # runner and the installed lane never meet an oracle they cannot judge.
 CONNECTOR_CATALOG = Path(__file__).with_name("connector_setup.json")
@@ -81,6 +83,11 @@ class Scenario:
     # A case that would otherwise pass without reaching one is reported as not-exercised, which
     # is how a model that spelled its way around the shape stops reading as proof Guard is quiet.
     decision_paths: tuple[str, ...] = ()
+    # Browser profile fields (``browser_cases.py``): the state preset the case home is seeded with,
+    # the fixture provider's script, and the approval rows a ``browser-task`` case may create.
+    browser_fixture: str | None = None
+    provider_script: str | None = None
+    approval_budget: int | None = None
 
     def render(self, values: dict[str, str]) -> Scenario:
         """Expand fixture placeholders without evaluating code."""
@@ -106,6 +113,9 @@ class Scenario:
             tuple(expand(c, command=True) for c in self.benign_exit_commands),
             self.contained_ok,
             self.decision_paths,
+            self.browser_fixture,
+            self.provider_script,
+            self.approval_budget,
         )
 
 
@@ -136,9 +146,15 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "benign_exit_commands",
             "contained_ok",
             "decision_paths",
+            *BROWSER_FIELDS,
         }
         if not required <= row.keys() or row.keys() - allowed:
             raise ValueError("scenario has missing or unknown fields")
+        for name in ("browser_fixture", "provider_script"):
+            if name in row and (not isinstance(row[name], str) or not row[name]):
+                raise ValueError(f"scenario {name} must be a nonempty string")
+        if "approval_budget" in row and type(row["approval_budget"]) is not int:
+            raise ValueError("scenario approval_budget must be an integer")
         if any(not isinstance(row[name], str) or not row[name] for name in required):
             raise ValueError("scenario scalar fields must be nonempty strings")
         if row.get("path") is not None and (not isinstance(row["path"], str) or not row["path"]):
@@ -179,6 +195,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "blocked-package",
             "blocked-memory-note",
             "blocked-eval-shell",
+            EVAL_BROWSER_ORACLE,
             FILE_WRITE_ORACLE,
             OUTPUT_ORACLE,
             TASK_BRIEF_ORACLE,
@@ -191,6 +208,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "connector-setup",
             "connector-setup-ask",
             "connector-tool",
+            *BROWSER_ORACLES,
         }:
             raise ValueError(f"unknown oracle: {scenario.oracle}")
         if scenario.benign_exit_commands and (
@@ -212,6 +230,10 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("memory-note protection cases drive the learn tool alone")
         if scenario.oracle == "blocked-eval-shell" and (scenario.commands or scenario.required_tools != ("eval",)):
             raise ValueError("eval shell protection cases drive the eval tool alone")
+        if scenario.oracle == EVAL_BROWSER_ORACLE and (
+            scenario.expectation != "block" or scenario.commands or scenario.required_tools != ("eval",)
+        ):
+            raise ValueError("eval browser protection cases drive one blocked eval call alone")
         if scenario.oracle == TASK_BRIEF_ORACLE and (
             scenario.expectation != "block" or scenario.commands or scenario.required_tools != ("task",)
         ):
@@ -269,6 +291,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
                 "a relayed approval link case holds one bash command and runs only in the approval-retry profile"
             )
         _validate_connector(scenario)
+        validate_browser_case(scenario)
         if scenario.oracle == "blocked-extension":
             extension_adapter(scenario.commands[0])
         if (scenario.oracle == "blocked-package") != (scenario.id in PACKAGE_BLOCK_REASONS):
@@ -286,7 +309,8 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
         if scenario.oracle == "blocked-read" and not scenario.path:
             raise ValueError("blocked reads require one exact target")
         lifecycle_block = scenario.oracle == BASH_LIFECYCLE_ORACLE and scenario.id in {MUTATION_CASE, DENIAL_CASE}
-        if scenario.oracle.startswith("blocked-") != (scenario.expectation == "block" and not lifecycle_block):
+        blocking_oracle = scenario.oracle.startswith("blocked-") or scenario.oracle == BLOCKED_ORACLE
+        if blocking_oracle != (scenario.expectation == "block" and not lifecycle_block):
             raise ValueError("oracle and expectation disagree")
         if not scenario.prompt or not scenario.profiles:
             raise ValueError("scenario prompt and profiles are required")

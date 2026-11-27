@@ -39,19 +39,42 @@ pub(super) fn none_named(query: &GitQuery<'_>, deadline: Instant) -> bool {
 }
 
 fn named_nowhere(query: &GitQuery<'_>, deadline: Instant) -> Option<bool> {
-    let locations = text(query(
-        &[
-            "rev-parse",
-            "--path-format=absolute",
-            "--git-dir",
-            "--git-common-dir",
-            "--show-toplevel",
-        ],
-        None,
-        None,
-    )?)?;
+    // These answers do not depend on one another. Each is a separate Git
+    // process, and on a busy machine starting one takes long enough that
+    // asking them one after another spent most of a hook's budget before the
+    // first attributes file was read, so they run side by side. The index
+    // listing waits until the checks that can settle without it have
+    // passed: when one of them sends the command to the full proof, that
+    // proof lists the index itself under the same deadline. It is listed
+    // from the root, so a command run from a subfolder still sees every
+    // tracked path. (A pathspec naming the top instead would turn literal
+    // under a caller's `--literal-pathspecs` and list nothing.)
+    let [locations, attributes_file, attr_tree, global, system] = std::thread::scope(|scope| {
+        let questions: [&[&str]; 5] = [
+            &[
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-dir",
+                "--git-common-dir",
+                "--show-toplevel",
+                "--show-prefix",
+            ],
+            &["config", "--default=", "--get", "core.attributesfile"],
+            &["config", "--default=", "--get", "attr.tree"],
+            &["var", "GIT_ATTR_GLOBAL"],
+            &["var", "GIT_ATTR_SYSTEM"],
+        ];
+        let answers = questions.map(|arguments| scope.spawn(move || query(arguments, None, None)));
+        answers.map(|answer| answer.join().ok().flatten())
+    });
+    let [locations, attributes_file, attr_tree, global, system] =
+        [locations, attributes_file, attr_tree, global, system].map(|answer| answer.and_then(text));
+    let locations = locations?;
     let mut lines = locations.lines();
     let (git_dir, common_dir, root) = (lines.next()?, lines.next()?, lines.next()?);
+    // The prefix line must be present even though the listing below is
+    // taken from the root.
+    lines.next()?;
     if lines.next().is_some() {
         return None;
     }
@@ -59,29 +82,18 @@ fn named_nowhere(query: &GitQuery<'_>, deadline: Instant) -> Option<bool> {
     // A user-set attributes path can contain symlinks and ".." segments.
     // Git's variable output may normalize them differently from its reader;
     // keep the full per-path proof rather than guess at the effective file.
-    if text(query(
-        &["config", "--default=", "--get", "core.attributesfile"],
-        None,
-        None,
-    )?)? != "\n"
-    {
+    if attributes_file? != "\n" {
         return None;
     }
     // `attr.tree` reads attributes out of a tree instead of these files.
-    if text(query(
-        &["config", "--default=", "--get", "attr.tree"],
-        None,
-        None,
-    )?)? != "\n"
-    {
+    if attr_tree? != "\n" {
         return Some(false);
     }
     let mut outside = vec![
         Path::new(git_dir).join("info/attributes"),
         Path::new(common_dir).join("info/attributes"),
     ];
-    for variable in ["GIT_ATTR_GLOBAL", "GIT_ATTR_SYSTEM"] {
-        let path = text(query(&["var", variable], None, None)?)?;
+    for path in [global?, system?] {
         let path = path.strip_suffix('\n')?;
         if !path.is_empty() {
             let external = PathBuf::from(path);

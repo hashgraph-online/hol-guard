@@ -20,11 +20,15 @@ test run or a commit nobody asked for costs another turn each.";
 /// test in separate turns; each turn re-sends the whole conversation. The
 /// edit and the test go out as two tool calls from one exec script: a shell
 /// command that writes files and then runs tests is one Guard cannot match to
-/// the project's controls, so it is held and the turn is spent anyway.
+/// the project's controls, so it is held and the turn is spent anyway. They
+/// also run the whole suite, and print `git diff` of edits apply_patch already
+/// reported, after the focused check has passed, unasked.
 const ACT_ON_IT: &str = "The code and diffs in this note are what the files hold now: \
 work from them instead of reading those lines again. When you can, make the edit and run its check \
 in the same turn: one exec script can call apply_patch and then run the test command, as two tool \
-calls. Make edits with apply_patch, not with a shell or Python script that writes files.";
+calls. Make edits with apply_patch, not with a shell or Python script that writes files. Run the \
+test that covers the change before you finish. Once it passes, the change is done: a full test run, \
+or a diff of your own edits, that nobody asked for costs another turn.";
 
 /// Oh My Pi models open a todo list for most steps, often in a turn of its
 /// own, and read again lines a note already shows. Oh My Pi drops a note when

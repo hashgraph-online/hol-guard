@@ -65,3 +65,58 @@ fn a_cut_capture_is_noted_after_the_chain_not_in_its_input() {
     shaping.show(b"", cut);
     assert_eq!(shaping.leave().0, TRUNCATED.as_bytes());
 }
+
+#[test]
+fn output_a_log_could_not_hold_reaches_the_terminal_as_display_text() {
+    let shaping = Shaping::default();
+    // A merged frame takes standard error, so the test can read what it got.
+    assert!(shaping.enter(true, true));
+    shaping.show_err(b"\x1b[0mend\r\n", false);
+    assert_eq!(shaping.leave().0, "\u{fffd}[0mend\n".as_bytes());
+    assert!(shaping.enter(true, true));
+    shaping.show_err(&b"y".repeat(OUTPUT_LIMIT + 1), false);
+    let (shown, _) = shaping.leave();
+    assert_eq!(shown.len(), OUTPUT_LIMIT + TRUNCATED.len());
+    assert!(shown.ends_with(TRUNCATED.as_bytes()));
+    // A capture already cut keeps its notice.
+    assert!(shaping.enter(true, true));
+    shaping.show_err(b"part\n", true);
+    assert!(shaping.leave().0.ends_with(TRUNCATED.as_bytes()));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_scratch_log_is_written_only_to_a_plain_file_of_this_user() {
+    let directory = tempfile::tempdir().unwrap();
+    let log = directory.path().join("check.log");
+    // A missing log is created, and a held one is emptied before the run.
+    write_log(open_log(&log).unwrap(), b"first\n", false).unwrap();
+    assert_eq!(std::fs::read(&log).unwrap(), b"first\n");
+    write_log(open_log(&log).unwrap(), b"second\n", true).unwrap();
+    let written = std::fs::read_to_string(&log).unwrap();
+    assert!(
+        written.starts_with("second\n") && written.ends_with(TRUNCATED),
+        "{written}"
+    );
+    // A link planted at the name never carries the write to its target.
+    let target = directory.path().join("target.txt");
+    std::fs::write(&target, b"kept\n").unwrap();
+    let symbolic = directory.path().join("linked.log");
+    std::os::unix::fs::symlink(&target, &symbolic).unwrap();
+    assert!(open_log(&symbolic).is_none());
+    let hard = directory.path().join("hard.log");
+    std::fs::hard_link(&target, &hard).unwrap();
+    assert!(open_log(&hard).is_none());
+    assert_eq!(std::fs::read(&target).unwrap(), b"kept\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_scratch_log_that_cannot_be_written_reports_the_failure() {
+    // `/dev/full` fails every write with ENOSPC, as a full disk does.
+    let full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+    assert!(write_log(full, b"report\n", false).is_err());
+}

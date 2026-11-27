@@ -177,6 +177,8 @@ class BenignFixture:
             "home_project": self.home / "project",
             "home_sibling": self.home / "other-project",
             "org_app": self.org / "app-portal",
+            # The docs folder of a sibling checkout whose design folder commits a design tool's dot-folder.
+            "docs_site_docs": self.org / "docs-site" / "docs",
             "org_wt": self.org.parent / "app-portal-fix",
             "org_clone": self.org.parent / "app-portal-clone",
             **hooked_cwds(self.org),

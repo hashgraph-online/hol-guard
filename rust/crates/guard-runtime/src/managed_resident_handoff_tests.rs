@@ -1,8 +1,9 @@
 use super::{
-    refuses_handoff, refuses_shutdown, rejects_runtime_request,
-    retire_foreign_resident_rejecting_request, retire_orphaned_foreign_resident,
-    shutdown_acknowledged, shutdown_intent, wait_for_resident_stop_containment, ShutdownIntent,
-    HANDOFF_SHUTDOWN_REQUEST, SHUTDOWN_REFUSED_IN_USE, STOP_SHUTDOWN_REQUEST,
+    refuses_handoff, refuses_shutdown, rejects_runtime_request, requires_own_runtime,
+    retire_foreign_resident_for_request, retire_foreign_resident_rejecting_request,
+    retire_orphaned_foreign_resident, shutdown_acknowledged, shutdown_intent,
+    wait_for_resident_stop_containment, ShutdownIntent, HANDOFF_SHUTDOWN_REQUEST,
+    SHUTDOWN_REFUSED_IN_USE, STOP_SHUTDOWN_REQUEST,
 };
 use crate::resident_protocol::ResidentOperationV1;
 use crate::resident_state::{
@@ -194,6 +195,57 @@ fn a_request_rejection_retires_only_an_acknowledging_foreign_resident() {
         &state(&"f".repeat(64)),
         &digest,
         rejection,
+        deadline
+    ));
+    fs::remove_dir_all(root).unwrap();
+}
+
+const MIGRATE: &[u8] =
+    br#"{"operation":"extension_control_authority","request":{"schema":"s","op":"migrate"}}"#;
+
+#[test]
+fn only_an_authority_migration_must_be_answered_by_this_runtime() {
+    assert!(requires_own_runtime(MIGRATE));
+    for other in [
+        &br#"{"operation":"extension_control_authority","request":{"op":"read"}}"#[..],
+        &br#"{"operation":"extension_control_authority","request":{"op":"write_private_state"}}"#[..],
+        &br#"{"operation":"guard_store","request":{"op":"migrate"}}"#[..],
+        &br#"{"operation":"extension_control_authority"}"#[..],
+        &br#"{"operation":"extension_control_authority","request":{"op":7}}"#[..],
+        &b"not json"[..],
+    ] {
+        assert!(!requires_own_runtime(other));
+    }
+}
+
+#[test]
+fn regression_a_migration_never_reaches_a_foreign_resident_that_keeps_the_home() {
+    let root = test_root("runtime-bound");
+    let digest = runtime_digest().unwrap();
+    let deadline = Instant::now() + Duration::from_millis(200);
+    // A resident of this runtime answers the migration itself.
+    assert!(!retire_foreign_resident_for_request(
+        &root,
+        &state(&digest),
+        &digest,
+        MIGRATE,
+        deadline
+    ));
+    // A foreign resident keeps answering everything else, as before.
+    assert!(!retire_foreign_resident_for_request(
+        &root,
+        &state(&"f".repeat(64)),
+        &digest,
+        br#"{"operation":"extension_control_authority","request":{"op":"read"}}"#,
+        deadline
+    ));
+    // A foreign resident that does not make way is not retired, and the
+    // client then refuses to send it the migration at all.
+    assert!(!retire_foreign_resident_for_request(
+        &root,
+        &state(&"f".repeat(64)),
+        &digest,
+        MIGRATE,
         deadline
     ));
     fs::remove_dir_all(root).unwrap();

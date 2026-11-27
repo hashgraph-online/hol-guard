@@ -224,11 +224,14 @@ fn checked(
         store_path: rules.store_path.clone(),
         guard_home: envelope.source.guard_home.clone(),
         mode: mode.to_owned(),
-        payload: envelope
-            .raw_payload
-            .as_object()
-            .cloned()
-            .unwrap_or_default(),
+        payload: stamped_payload(
+            envelope,
+            envelope
+                .raw_payload
+                .as_object()
+                .cloned()
+                .unwrap_or_default(),
+        ),
         native_result: result.clone(),
         workspace: envelope.source.cwd.clone(),
         home_dir: envelope.source.home_dir.clone(),
@@ -254,6 +257,27 @@ fn checked(
         })
         .ok()?;
     receiver.recv_timeout(wait).ok()
+}
+
+/// `payload` with the execution environment the hook stamped, which the
+/// envelope carries apart from the harness payload. The rule check resolves
+/// the launch with its `PATH`, the one the agent runs the command under.
+fn stamped_payload(
+    envelope: &GuardHookEnvelopeV2,
+    mut payload: Map<String, Value>,
+) -> Map<String, Value> {
+    if let Some(stamp) = envelope
+        .source
+        .execution_environment
+        .as_ref()
+        .and_then(|stamp| serde_json::to_value(stamp).ok())
+    {
+        payload.insert(
+            crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD.to_owned(),
+            stamp,
+        );
+    }
+    payload
 }
 
 #[path = "edge_local_cli_compound.rs"]

@@ -1,0 +1,210 @@
+{
+  "schemaVersion": "guard.browser-driver-tools.v1",
+  "driver": "browserbase",
+  "note": "Tool names and input shapes of the Browserbase MCP server (Stagehand) 2.x and 3.x, written by hand for Gauntlet fixtures. Descriptions are shortened.",
+  "tools": [
+    {
+      "name": "act",
+      "description": "Perform one action on the page from a natural-language instruction",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action to perform"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "browserbase_screenshot",
+      "description": "Take a screenshot of the current page",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the screenshot"
+          }
+        }
+      }
+    },
+    {
+      "name": "browserbase_session_close",
+      "description": "Close the current Browserbase session",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "browserbase_session_create",
+      "description": "Create or reuse a hosted Browserbase browser session",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session ID to reuse"
+          }
+        }
+      }
+    },
+    {
+      "name": "browserbase_stagehand_act",
+      "description": "Perform one action on the page from a natural-language instruction",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Action to perform"
+          },
+          "variables": {
+            "type": "object",
+            "description": "Variables substituted into the action"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "browserbase_stagehand_agent",
+      "description": "Run an autonomous sub-agent on a task prompt",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Task for the sub-agent"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      }
+    },
+    {
+      "name": "browserbase_stagehand_extract",
+      "description": "Extract information from the page from an instruction",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "description": "What to extract"
+          }
+        },
+        "required": [
+          "instruction"
+        ]
+      }
+    },
+    {
+      "name": "browserbase_stagehand_get_url",
+      "description": "Return the current page URL",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "browserbase_stagehand_navigate",
+      "description": "Navigate to a URL",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to navigate to"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "browserbase_stagehand_observe",
+      "description": "Find actionable elements on the page from an instruction",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "description": "What to observe"
+          }
+        },
+        "required": [
+          "instruction"
+        ]
+      }
+    },
+    {
+      "name": "end",
+      "description": "End the hosted browser session",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "extract",
+      "description": "Extract information from the page from an optional instruction",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "description": "What to extract"
+          }
+        }
+      }
+    },
+    {
+      "name": "navigate",
+      "description": "Navigate to a URL",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to navigate to"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "observe",
+      "description": "Find actionable elements on the page from an instruction",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instruction": {
+            "type": "string",
+            "description": "What to observe"
+          }
+        },
+        "required": [
+          "instruction"
+        ]
+      }
+    },
+    {
+      "name": "start",
+      "description": "Start a hosted browser session",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ]
+}

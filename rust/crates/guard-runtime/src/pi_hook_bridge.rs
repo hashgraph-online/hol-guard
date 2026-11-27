@@ -31,6 +31,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use guard_command::pretool::contained_wrapper_plan;
 use serde_json::{json, Value};
 
 use crate::bounded_hook_bridge::{daemon_target, read_hook_input, Input};
@@ -40,6 +41,7 @@ use crate::codex_hook_bridge_direct::{
 };
 use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use crate::hook_direct::contained::{native_sink, unprojected_sink_command, NativeSink};
+use crate::hook_env_stamp::with_remaining_hint;
 use crate::hook_watch_posture::harness_in_watch;
 
 pub(crate) const BRIDGE_COMMAND: &str = "pi-hook-bridge";
@@ -134,7 +136,13 @@ pub(crate) fn reply(
         return watch_monitor_fallback(config, data);
     };
     let path = format!("/v1/hooks/{}?{}", config.harness.name, config.query);
-    let Some((status, body)) = target.post_status(&path, data, deadline, miss) else {
+    // The extension stamped its whole budget, but the resident attempt has
+    // used part of it. The daemon times the hook from its own arrival, so
+    // tell it how long this bridge will still wait; it must answer before
+    // then.
+    let hinted = with_remaining_hint(data, remaining(deadline).as_millis())
+        .unwrap_or_else(|_| data.to_owned());
+    let Some((status, body)) = target.post_status(&path, &hinted, deadline, miss) else {
         return watch_monitor_fallback(config, data);
     };
     // `fetch` decodes the body as UTF-8, replacing malformed bytes, and
@@ -146,6 +154,11 @@ pub(crate) fn reply(
             return Some(fallback);
         }
     }
+    let text = if status == 200 {
+        daemon_marked(&config.query, data, text, native_sink)
+    } else {
+        text
+    };
     Some((status, mark_watch_readiness_answer(config, data, text)))
 }
 
@@ -251,6 +264,33 @@ fn marked(query: &str, data: &str, answer: String, native: NativeSink) -> String
         serde_json::to_string(&response).ok()
     };
     mark().unwrap_or(answer)
+}
+
+/// A daemon `answer` marked for the runtime's own sink only when the call
+/// writes a scratch log (`... > "$log" 2>&1`), which only that sink writes.
+/// The resident defers some calls to the daemon (a transition probe, a cold
+/// policy), and an unmarked answer goes to the Python launcher, which refuses
+/// a log-carrying plan. The sink asks the resident, then the daemon, for its
+/// own receipt before it runs anything, so the mark grants nothing by itself.
+/// Every other daemon answer is relayed as sent.
+fn daemon_marked(query: &str, data: &str, answer: String, native: NativeSink) -> String {
+    let writes_log = || {
+        let payload: Value = serde_json::from_str(data).ok()?;
+        let command = payload.get("tool_input")?.get("command")?.as_str()?;
+        let query = parse_hook_query(query)?;
+        let workspace = query.workspace?;
+        let home = match query.home {
+            Some(home) => home,
+            None => std::env::var("HOME").ok()?,
+        };
+        let plan = contained_wrapper_plan(command, &workspace, None, Some(&home), None);
+        Some(plan.refusal.is_none() && plan.plan?.output?.file.is_some())
+    };
+    if writes_log() == Some(true) {
+        marked(query, data, answer, native)
+    } else {
+        answer
+    }
 }
 
 /// The line the extension reads for a reply.

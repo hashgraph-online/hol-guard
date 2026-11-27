@@ -16,6 +16,14 @@
 //! and an allow lifts only one the caller may override. That lane blocks
 //! nothing it could not check, so a failed identity or grant read leaves the
 //! review standing instead of deferring.
+//!
+//! Both lanes resolve the launch with the `PATH` the hook stamped from the
+//! agent's shell, which is the `PATH` the command runs under. The daemon's own
+//! `PATH` is often the bare system one a login item starts with, where an
+//! interpreter installed under the home directory (`~/.bun/bin/bun`) is not
+//! found at all. Guard's package shim directory is dropped from that `PATH`
+//! first: a shim only hands the launch on to the next program of its name, so
+//! the program that runs the script is the one past it.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -73,8 +81,7 @@ pub(super) fn custom_rule_response(
     {
         return Ok(None);
     }
-    let Some(launched) = launch_for(payload, check.workspace, check.home_dir, check.launch_env)?
-    else {
+    let Some(launched) = launch_for(payload, check)? else {
         return Ok(None);
     };
     match grant(&launched, check.home_dir, check.guard_home)? {
@@ -126,23 +133,65 @@ impl Launched<'_> {
 /// names no command or launch directory or the command launches none.
 fn launch_for<'a>(
     payload: &'a Map<String, Value>,
-    workspace: &str,
-    home_dir: &str,
-    launch_env: Option<LaunchEnv<'_>>,
+    check: &RuleCheck<'_>,
 ) -> Result<Option<Launched<'a>>, ()> {
     let Some(command) = pre_tool_command(payload)? else {
         return Ok(None);
     };
-    let Some(cwd) = launch_cwd(payload, workspace)? else {
+    let Some(cwd) = launch_cwd(payload, check.workspace)? else {
         return Ok(None);
     };
+    let env = agent_launch_env(payload, check.launch_env, check.guard_home, &cwd);
+    let launch_env = check
+        .launch_env
+        .zip(env.as_ref())
+        .map(|(daemon, env)| LaunchEnv {
+            user_home: daemon.user_home,
+            env,
+        });
     Ok(
-        local_launch(command, &cwd, home_dir, launch_env)?.map(|launch| Launched {
+        local_launch(command, &cwd, check.home_dir, launch_env)?.map(|launch| Launched {
             launch,
             command,
             cwd,
         }),
     )
+}
+
+/// The daemon's environment with the agent's `PATH`, when the hook stamped
+/// one into `payload`, less Guard's package shim directory. `None` without a
+/// daemon environment, which no launch past a package script resolves
+/// against. A stamped `PATH` keeps its empty entries and is used even when
+/// empty, so the launch resolves the way the agent's shell resolves it.
+fn agent_launch_env(
+    payload: &Map<String, Value>,
+    launch_env: Option<LaunchEnv<'_>>,
+    guard_home: &str,
+    cwd: &str,
+) -> Option<BTreeMap<String, String>> {
+    let launch_env = launch_env?;
+    let mut env = launch_env.env.clone();
+    if let Some(path) = stamped_path(payload) {
+        let path = crate::package_manager_launch_path::without_package_shim_entries(
+            Path::new(guard_home),
+            path,
+            if cfg!(windows) { ";" } else { ":" },
+            Path::new(cwd),
+            Some(Path::new(launch_env.user_home)),
+        );
+        env.insert("PATH".to_owned(), path);
+    }
+    Some(env)
+}
+
+/// The `PATH` the hook stamped from the agent's shell, empty or not.
+fn stamped_path(payload: &Map<String, Value>) -> Option<&str> {
+    payload
+        .get(crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD)
+        .and_then(Value::as_object)
+        .and_then(|environment| environment.get("path"))
+        .and_then(Value::as_str)
+        .filter(|path| !path.contains('\0'))
 }
 
 /// The launch identity the daemon derives: the package script's, else the
@@ -222,9 +271,42 @@ fn grant(launched: &Launched<'_>, home_dir: &str, guard_home: &str) -> Result<Ve
 /// leaves the review standing here, as the daemon's own lane does.
 pub(super) fn review_grant(check: &RuleCheck<'_>) -> Option<ReviewVerdict> {
     let payload = check.payload?;
-    let launched =
-        launch_for(payload, check.workspace, check.home_dir, check.launch_env).ok()??;
-    let answer = grant_answer(&launched, "review", check.home_dir, check.guard_home).ok()?;
+    match launch_for(payload, check).ok()? {
+        Some(launched) => review_read(&launched, check),
+        None => review_after_cd(payload, check),
+    }
+}
+
+/// `cd DIR && CLI ...` read as `CLI ...` launched from `DIR`, so a script
+/// the user allowed is not reviewed again only because the agent changed
+/// into its repository first. Any other compound shape launches nothing
+/// here, and the review stands.
+fn review_after_cd(payload: &Map<String, Value>, check: &RuleCheck<'_>) -> Option<ReviewVerdict> {
+    let command = pre_tool_command(payload).ok()??;
+    let cwd = launch_cwd(payload, check.workspace).ok()??;
+    let daemon = check.launch_env?;
+    let (command, cwd) =
+        crate::local_cli_hook_op::cd_then_launch(command, &cwd, Some(check.home_dir), daemon.env)?;
+    // A relative `PATH` entry names a directory under the one the command
+    // runs in, so the shim directory is matched from there.
+    let env = agent_launch_env(payload, Some(daemon), check.guard_home, &cwd)?;
+    let launch_env = LaunchEnv {
+        user_home: daemon.user_home,
+        env: &env,
+    };
+    let launch = local_launch(&command, &cwd, check.home_dir, Some(launch_env)).ok()??;
+    review_read(
+        &Launched {
+            launch,
+            command: &command,
+            cwd,
+        },
+        check,
+    )
+}
+
+fn review_read(launched: &Launched<'_>, check: &RuleCheck<'_>) -> Option<ReviewVerdict> {
+    let answer = grant_answer(launched, "review", check.home_dir, check.guard_home).ok()?;
     match block::review_verdict(&launched.launch, answer.as_ref()) {
         ReviewVerdict::Unchanged => None,
         verdict => Some(verdict),

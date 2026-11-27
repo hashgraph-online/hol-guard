@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -69,6 +70,47 @@ def contribution_ids() -> list[str]:
     return sorted(_detector().contribution_ids(include_legacy=False))
 
 
+# Browser driver profiles and provider integrations are contributions too, but they are not
+# command extensions: they never enter the command catalog or make command regeneration pending.
+# They only need an authored trust binding, which starts as external (opt-in).
+INTEGRATION_CONTRIBUTIONS = {"browser-drivers": "browser", "provider-integrations": "provider"}
+_INTEGRATION_SLUG = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
+# Reserved for the loopback provider fixture origin used by live runs. A shipped manifest under this
+# prefix could be routed to it, so the native compiler and this listing both refuse it.
+_FIXTURE_PROVIDER_PREFIX = "provider.fixture-"
+
+
+def integration_contribution_ids() -> list[str]:
+    """Ids of browser driver profiles and provider integrations, named ``<id>.json``."""
+    ids: list[str] = []
+    for directory, prefix in INTEGRATION_CONTRIBUTIONS.items():
+        for path in sorted((ROOT / "contributions" / directory).glob("*.json")):
+            try:
+                identity = json.loads(path.read_text(encoding="utf-8")).get("id")
+            except (OSError, ValueError, AttributeError) as exc:
+                raise SystemExit(f"contributions/{directory}/{path.name} is not a JSON object") from exc
+            slug = identity.removeprefix(f"{prefix}.") if isinstance(identity, str) else ""
+            if (
+                not isinstance(identity, str)
+                or not identity.startswith(f"{prefix}.")
+                or not _INTEGRATION_SLUG.match(slug)
+                or path.name != f"{identity}.json"
+                or identity.startswith(_FIXTURE_PROVIDER_PREFIX)
+            ):
+                raise SystemExit(
+                    f"contributions/{directory}/{path.name} must declare an id of the form "
+                    f"{prefix}.<slug>, be named <id>.json and not use the reserved "
+                    f"{_FIXTURE_PROVIDER_PREFIX} prefix"
+                )
+            ids.append(identity)
+    return sorted(ids)
+
+
+def trust_inventory_ids() -> list[str]:
+    """Every canonical contribution that needs an authored trust binding."""
+    return sorted(set(contribution_ids()) | set(integration_contribution_ids()))
+
+
 def catalog_ids() -> set[str]:
     return _detector().catalog_ids()
 
@@ -78,10 +120,11 @@ def pending_contribution_ids() -> list[str]:
 
 
 TRUST_BINDINGS = ROOT / "contracts/extensions/trust"
+TRUST_BINDING_PREFIXES = ("command.", *(f"{prefix}." for prefix in INTEGRATION_CONTRIBUTIONS.values()))
 
 
 def _trust_binding_path(extension_id: str) -> Path:
-    if not extension_id.startswith("command.") or "/" in extension_id or "\\" in extension_id:
+    if not extension_id.startswith(TRUST_BINDING_PREFIXES) or "/" in extension_id or "\\" in extension_id:
         raise ValueError(f"invalid extension trust binding id {extension_id}")
     return TRUST_BINDINGS / f"{extension_id}.v1.json"
 
@@ -143,7 +186,7 @@ def _sync_aggregate_map() -> bool:
 
 def check_authored_trust() -> None:
     """Check canonical ownership before CI can create missing defaults."""
-    missing = sorted(set(contribution_ids()) - _read_binding_ids())
+    missing = sorted(set(trust_inventory_ids()) - _read_binding_ids())
     if missing:
         raise SystemExit(
             "canonical contributions lack authored trust bindings: "
@@ -159,7 +202,7 @@ def sync_trust_map() -> bool:
     Authored bindings are the authority. Legacy aggregate copies can be stale
     after merges; regenerate them without admitting their values into policy.
     """
-    missing = sorted(set(contribution_ids()) - _read_binding_ids())
+    missing = sorted(set(trust_inventory_ids()) - _read_binding_ids())
     changed = False
     for extension_id in missing:
         if _write_binding(extension_id, "external"):

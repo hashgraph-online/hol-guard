@@ -111,3 +111,23 @@ def test_pull_request_validation_cannot_dispatch_downstream() -> None:
 
     assert "github.event_name != 'pull_request'" in dispatch["if"]
     assert "needs.resolve_publication.outputs.published == 'true'" in dispatch["if"]
+
+
+def test_dispatch_prefers_release_app_token() -> None:
+    workflow = _workflow()
+    dispatch = workflow["jobs"]["dispatch_plugin_sync"]
+    steps = dispatch["steps"]
+    names = [step.get("name") for step in steps]
+    mint = _step(dispatch, "Mint plugin repository token")
+
+    assert mint["id"] == "plugin_app_token"
+    assert mint["uses"].startswith("actions/create-github-app-token@")
+    assert mint["continue-on-error"] is True
+    assert mint["with"]["owner"] == "hashgraph-online"
+    assert mint["with"]["repositories"] == "hol-guard-plugin"
+    assert mint["with"]["permission-contents"] == "write"
+    assert names.index("Mint plugin repository token") < names.index("Validate dispatch credential")
+
+    expected = "${{ steps.plugin_app_token.outputs.token || secrets.ACTION_REPO_TOKEN }}"
+    assert _step(dispatch, "Validate dispatch credential")["env"]["GH_TOKEN"] == expected
+    assert _step(dispatch, "Dispatch exact published version")["env"]["GH_TOKEN"] == expected

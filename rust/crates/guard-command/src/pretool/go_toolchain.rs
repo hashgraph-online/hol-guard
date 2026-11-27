@@ -46,7 +46,8 @@
 //!   is read from.
 //! - `GOENV`, `XDG_CONFIG_HOME` on the platforms that use it, and `APPDATA`
 //!   on Windows, move the file below, so a redirected one is a second place
-//!   every setting above could come from.
+//!   every setting above could come from. An `XDG_CONFIG_HOME` whose value
+//!   spells out `~/.config` names a file read below, so it is not screened.
 //!
 //! The same settings have a stored spelling: `go env -w` writes them to the
 //! go environment file under the user configuration directory, which the
@@ -218,7 +219,8 @@ fn no_workspace_toolchain_override(cwd: Option<&str>) -> bool {
 ///
 /// `GOENV` would move the file and `XDG_CONFIG_HOME`, or `APPDATA` on
 /// Windows, would move the directory holding it; all are screened in the
-/// environment, so the defaults below are the only places left. Both Unix spellings are read on
+/// environment (an `XDG_CONFIG_HOME` passes only when it names
+/// `~/.config`), so the defaults below are the only places left. Both Unix spellings are read on
 /// every host rather than behind a target switch, because a file at either
 /// path is a file the go command on that host would read.
 fn go_env_files(home: &Path) -> Vec<PathBuf> {

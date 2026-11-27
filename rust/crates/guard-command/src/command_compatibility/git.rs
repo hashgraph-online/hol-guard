@@ -50,6 +50,49 @@ pub(crate) fn canonical_subcommand(word: &str) -> &str {
     }
 }
 
+/// Subcommands that only read the repository: Git runs no hook, credential
+/// helper or transport for them. A pager or an external diff tool is chosen
+/// by Git's own settings and `GIT_*` names, which assignments ahead of the
+/// read never count as plain.
+///
+/// `status`, `diff` and `describe --dirty` are left out: they refresh the
+/// index and may write it back, which runs the `post-index-change` hook, and
+/// they can start `core.fsmonitor` and clean filters on changed files.
+const USER_PROGRAM_FREE_READS: &[&str] = &[
+    "blame",
+    "cat-file",
+    "for-each-ref",
+    "grep",
+    "log",
+    "ls-files",
+    "ls-tree",
+    "merge-base",
+    "name-rev",
+    "rev-list",
+    "rev-parse",
+    "shortlog",
+    "show",
+    "show-ref",
+];
+
+/// Whether `git ARGUMENTS` is a read that starts no hook or helper, which
+/// read whatever environment names they like. `branch --show-current` only
+/// prints the name HEAD points at; any other `branch` form can move a ref,
+/// which the reference-transaction hook sees.
+pub(super) fn starts_no_user_program(arguments: &[String]) -> bool {
+    let Some(index) = command_index(arguments) else {
+        return false;
+    };
+    let Some(word) = arguments.get(index).map(|word| canonical_subcommand(word)) else {
+        return false;
+    };
+    USER_PROGRAM_FREE_READS.contains(&word)
+        || (word == "branch"
+            && arguments
+                .get(index + 1..)
+                .is_some_and(|rest| rest == ["--show-current"]))
+}
+
 pub(crate) fn command_index(arguments: &[String]) -> Option<usize> {
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
@@ -102,6 +145,8 @@ fn bounded_inspection(arguments: &[String]) -> bool {
     // read and workspace proofs remain the responsibility of the ordinary
     // command decision, not this classifier.
     (command == "apply" && crate::pretool::git_apply_check::is_check_only(rest))
+        // A printing three-way merge writes none of the files it reads.
+        || (command == "merge-file" && crate::pretool::git_merge_file_read::is_read_only(rest))
         // A stash listing and a `show` of one entry print; every other
         // stash spelling moves work and keeps its workspace attribution.
         || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
@@ -171,15 +216,43 @@ fn bounded_cached_diff_pathspec(operand: &str, directory: Option<&std::path::Pat
 /// it there, so an operand that is present beside the shell's own working
 /// directory proves nothing about the repository git actually reads; a relative
 /// route needs that working directory to resolve at all.
-fn operand_directory(cwd: Option<&str>, route: Option<&str>) -> Option<std::path::PathBuf> {
+fn operand_directory(
+    cwd: Option<&str>,
+    route: Option<&str>,
+    home_dir: Option<&str>,
+) -> Option<std::path::PathBuf> {
     let Some(route) = route else {
         return cwd.map(std::path::PathBuf::from);
     };
-    let route = std::path::PathBuf::from(route);
+    let route = if route == "~" {
+        std::path::PathBuf::from(home_dir?)
+    } else if let Some(relative) = route.strip_prefix("~/") {
+        std::path::Path::new(home_dir?).join(relative)
+    } else {
+        std::path::PathBuf::from(route)
+    };
     if route.is_absolute() {
         return Some(route);
     }
     cwd.map(|cwd| std::path::Path::new(cwd).join(route))
+}
+
+/// Where an admitted read's bare operands resolve. A `--git-dir` route
+/// reads a repository that need not be the one around that directory, so it
+/// has no operand directory a pathspec proof can rely on.
+pub(super) fn read_operand_directory(
+    arguments: &[String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    let (rest, route) = routed_with_route(arguments, context, true)?;
+    let global = &arguments[..arguments.len() - rest.len()];
+    if global
+        .iter()
+        .any(|argument| argument == "--git-dir" || argument.starts_with("--git-dir="))
+    {
+        return None;
+    }
+    operand_directory(context.cwd, route.as_deref(), context.home_dir)
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -343,6 +416,9 @@ pub(super) fn inspection_arguments<'a>(
         Some("tag") => crate::pretool::git_tag_listing::is_listing(&remaining[1..]),
         Some("clean") => crate::pretool::git_clean_preview::is_dry_run(&remaining[1..]),
         Some("apply") => crate::pretool::git_apply_check::is_check_only(&remaining[1..]),
+        // Without `-p` a three-way merge writes over its first file, so only
+        // the printing spelling is admitted.
+        Some("merge-file") => crate::pretool::git_merge_file_read::is_read_only(&remaining[1..]),
         // `stash` reaches the worktree in every spelling but the two that
         // print: a listing and a `show` of one entry.
         Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
@@ -714,7 +790,8 @@ pub(super) fn observe_with_contexts(
             let route = routed_with_route(arguments, context, true).and_then(|(_, route)| route);
             bounded_cached_diff(
                 &remaining[1..],
-                operand_directory(proof_context.cwd, route.as_deref()).as_deref(),
+                operand_directory(proof_context.cwd, route.as_deref(), proof_context.home_dir)
+                    .as_deref(),
             )
         })
     {

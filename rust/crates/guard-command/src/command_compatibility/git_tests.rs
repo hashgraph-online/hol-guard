@@ -767,11 +767,12 @@ fn status_uncertain(command: &str) -> bool {
 
 /// Agents name a folder once and reuse it: `out_dir=/tmp/report; git status`.
 /// A lowercase shell variable is not one Git or a program it starts reads, so
-/// the later Git read is not steered by it. Git's own settings, curl's proxy
+/// the later Git read is not steered by it, nor by a capitalised name no
+/// program reads to choose what it runs. Git's own settings, curl's proxy
 /// names and the names a shell ties to its state still steer it, and any
 /// non-Git program after the assignment stays steered.
 #[test]
-fn a_lowercase_shell_variable_does_not_steer_a_later_git_read() {
+fn a_plain_shell_variable_does_not_steer_a_later_git_read() {
     for command in [
         "out_dir=/tmp/report; git status --short",
         "work_dir=\"$HOME/projects\"; git status --short",
@@ -780,12 +781,46 @@ fn a_lowercase_shell_variable_does_not_steer_a_later_git_read() {
         assert!(!status_uncertain(command), "{command}");
     }
     for command in [
+        // `git status` can write the index and run the `post-index-change`
+        // or fsmonitor hook, which reads any name the session exported.
+        "REF=HEAD; git status --short",
+        "N=3; X=1; git status --short",
         "PAGER=/tmp/x; git status --short",
         "GIT_DIR=/tmp/elsewhere; git status --short",
         "http_proxy=http://127.0.0.1:9; git status --short",
         "cdpath=/tmp; git status --short",
         "out_dir=/tmp/r; EDITOR=/tmp/x; git status --short",
+        "LESS=-R; git status --short",
+        "MANPAGER=/tmp/x; git status --short",
+        "GNUPGHOME=/tmp/x; git status --short",
+        "FZF_DEFAULT_COMMAND=/tmp/x; git status --short",
+        "MALLOC_CONF=x; git status --short",
+        "USERPROFILE=/tmp/x; git status --short",
+        "PERL5LIB=/tmp/x; git status --short",
+        "SSL_CERT_FILE=/tmp/x; git status --short",
+        "NO_PROXY=x; git status --short",
     ] {
         assert!(status_uncertain(command), "{command}");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_home_relative_route_resolves_operands_under_home() {
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("~/project"), Some("/home/dev")),
+        Some(std::path::PathBuf::from("/home/dev/project"))
+    );
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("~"), Some("/home/dev")),
+        Some(std::path::PathBuf::from("/home/dev"))
+    );
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("~/project"), None),
+        None
+    );
+    assert_eq!(
+        super::operand_directory(Some("/work/cwd"), Some("sub"), Some("/home/dev")),
+        Some(std::path::PathBuf::from("/work/cwd/sub"))
+    );
 }

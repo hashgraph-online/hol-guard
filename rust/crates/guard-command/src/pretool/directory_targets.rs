@@ -7,6 +7,8 @@
 
 #[path = "directory_targets_home_variable.rs"]
 pub(crate) mod home_variable;
+#[path = "directory_targets_notes.rs"]
+pub(crate) mod notes;
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
 #[path = "directory_targets_tmp_alias.rs"]
@@ -465,8 +467,20 @@ impl<'a> super::PathContext<'a> {
                 .then(|| std::fs::canonicalize(path).ok())
                 .flatten()
         };
+        // The shell's own spelling is the text `~` expands to. A spelling
+        // the shell would split or glob once a variable holding it is used
+        // unquoted (`/work/alias extra`) names other paths than the declared
+        // home, even when the directory it resolves to is the same, so only a
+        // plain literal spelling counts.
+        let plain = |path: &str| {
+            path.chars().all(|c| {
+                c.is_ascii_alphanumeric()
+                    || matches!(c, '_' | '.' | '/' | '@' | '%' | '+' | ':' | ',' | '-')
+            })
+        };
         home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
-            canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
+            plain(&shell)
+                && canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
         })
     }
 
@@ -542,17 +556,32 @@ impl<'a> super::PathContext<'a> {
         // rest move where a release it would download comes from, whether it
         // is checked on arrival, and which module cache an already-fetched
         // one is taken from.
+        //
+        // `XDG_CONFIG_HOME` only moves the stored go environment file, so a
+        // value that spells out `~/.config` names the file the proof reads
+        // anyway. Its value is stamped rather than only named; a name with no
+        // value, or any other directory, keeps the review.
         let go_toolchain_inert = match execution_environment {
             Some(environment) => {
                 environment.has_valid_shape()
-                    && !environment
-                        .environment_names
-                        .iter()
-                        .any(|name| super::go_toolchain::go_toolchain_selector(name))
+                    && !environment.environment_names.iter().any(|name| {
+                        super::go_toolchain::go_toolchain_selector(name)
+                            && !(name.eq_ignore_ascii_case("XDG_CONFIG_HOME")
+                                && go_config_home_is_default(
+                                    environment.xdg_config_home.as_deref(),
+                                    environment.home.as_deref(),
+                                ))
+                    })
             }
             None => !std::env::vars_os().any(|(name, value)| {
+                let name = name.to_string_lossy();
                 !value.is_empty()
-                    && super::go_toolchain::go_toolchain_selector(&name.to_string_lossy())
+                    && super::go_toolchain::go_toolchain_selector(&name)
+                    && !(name.eq_ignore_ascii_case("XDG_CONFIG_HOME")
+                        && go_config_home_is_default(
+                            value.to_str(),
+                            std::env::var("HOME").ok().as_deref(),
+                        ))
             }),
         };
         // Cargo reads its configuration from the environment too, including
@@ -801,6 +830,16 @@ fn xdg_config_is_default(value: Option<&str>, home: Option<&str>) -> bool {
             .ok()
             .zip(std::fs::canonicalize(&default).ok())
             .is_some_and(|(value, default)| value == default)
+}
+
+/// Whether a set `XDG_CONFIG_HOME` names `~/.config`, where
+/// [`super::go_toolchain`] already reads the stored go environment file.
+///
+/// Unlike [`xdg_config_is_default`], an absent value does not count: the
+/// variable is known to be set, so a value this proof cannot see could name
+/// any directory.
+fn go_config_home_is_default(value: Option<&str>, home: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.is_empty()) && xdg_config_is_default(value, home)
 }
 
 fn rustup_selector(name: &str) -> bool {
@@ -1075,6 +1114,10 @@ mod tests_relative_cd;
 #[cfg(test)]
 #[path = "tests_relative_cd_windows.rs"]
 mod tests_relative_cd_windows;
+
+#[cfg(all(test, unix))]
+#[path = "tests_shell_home_spelling.rs"]
+mod tests_shell_home_spelling;
 
 /// The runtime's own environment, read once for every command one batch
 /// evaluates.

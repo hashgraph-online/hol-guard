@@ -29,10 +29,36 @@ pub(super) fn maskable_filter_segment(segment: &CommandSegmentV1) -> bool {
         && segment.wrapper_chain.is_empty()
         && !segment.path_overridden
         && segment.tokens.len() == segment.arguments.len() + 1
-        && !segment
+        && (!segment
             .tokens
             .iter()
             .any(|token| token.contains(EXPANDABLE))
+            || shell_syntax_quoted(&segment.text))
+}
+
+/// Whether every character of `text` the shell would act on sits inside
+/// quotes. The words reach the program with their quotes removed, so
+/// `grep -E "^\+.*api\.base"` hands over a `*` that never globbed; reading the
+/// written text tells that apart from `grep -v .env*`. A redirect, a brace,
+/// an unquoted glob or backslash, and any `$` or backtick inside double
+/// quotes still refuse.
+fn shell_syntax_quoted(text: &str) -> bool {
+    let mut quote: Option<char> = None;
+    let mut characters = text.chars();
+    while let Some(character) = characters.next() {
+        match quote {
+            Some(open) if character == open => quote = None,
+            Some('"') if matches!(character, '$' | '`') => return false,
+            Some('"') if character == '\\' => {
+                characters.next();
+            }
+            Some(_) => {}
+            None if matches!(character, '\'' | '"') => quote = Some(character),
+            None if character == '\\' || EXPANDABLE.contains(&character) => return false,
+            None => {}
+        }
+    }
+    quote.is_none()
 }
 
 /// One segment's program name alone, when the segment is a later pipeline

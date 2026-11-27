@@ -75,5 +75,24 @@ fn hidden_listing_globs_answer_like_the_literal_spelling() {
         );
     }
 
+    // A hidden spelling that matches nothing prints only an error, so a probe
+    // for which config file a project keeps answers like the visible one.
+    for command in [
+        "ls .eslintrc*",
+        "ls eslint.config.* .eslintrc*",
+        "ls one.* .eslintrc* 2>&1 | head",
+        "ls -la .prettierrc*",
+    ] {
+        assert_eq!(verdict(command, &root).0, "allow", "unmatched {command}");
+    }
+
+    // A hidden directory before the pattern is still refused, even when the
+    // pattern itself matches nothing.
+    std::fs::create_dir_all(root.join(".ssh")).unwrap();
+    std::fs::write(root.join(".ssh/id_ed25519"), "key\n").unwrap();
+    for command in ["ls .ssh/.keys*", "ls .ssh/.id*"] {
+        assert_ne!(verdict(command, &root).0, "allow", "kept review {command}");
+    }
+
     std::fs::remove_dir_all(root).unwrap();
 }

@@ -60,7 +60,7 @@ pub struct McpToolRiskInputV1 {
     /// resident to extract them from the artifact and arguments.
     #[serde(deserialize_with = "required")]
     pub risk_categories: Option<Vec<String>>,
-    /// `no_risk`, `risk`, or `configuration_stricter` from the native policy
+    /// `no_risk`, `risk`, `configuration_stricter`, `guard_origin` or `loopback_dev` from the native policy
     /// verdict. `null` renders the plain risk summary from the signals.
     #[serde(deserialize_with = "required")]
     pub summary_code: Option<String>,

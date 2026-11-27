@@ -1,4 +1,5 @@
-//! Narrow changed-script connector lookup for compound shell commands.
+//! Compound shell commands that launch one local CLI: the grant read after a
+//! `cd`, and the changed-script connector lookup.
 use super::*;
 
 /// `refined` naming the changed script a reviewed compound command waits on.
@@ -34,11 +35,6 @@ fn changed_connector(request: &LocalCliHookRequestV1) -> Option<Value> {
         return None;
     }
     let records = unlisted(request, true).ok()?;
-    let records = if records.is_empty() {
-        relative_script_after_cd(request)?
-    } else {
-        records
-    };
     let first = records.first()?;
     if records.iter().any(|record| record.cli_id != first.cli_id) {
         return None;
@@ -55,18 +51,72 @@ fn changed_connector(request: &LocalCliHookRequestV1) -> Option<Value> {
     crate::connector_setup::for_changed_launch(request, &launch)
 }
 
-/// Only recognize a literal `cd DIR && ./script` with two exact segments.
-/// This supplies a card for an already-reviewing command, never an Allow
-/// verdict. Uncertain parsing, redirects, substitutions and extra commands
-/// retain their normal review card.
-fn relative_script_after_cd(request: &LocalCliHookRequestV1) -> Option<Vec<UnlistedCliV1>> {
-    if request.command.trim().is_empty() {
+/// The grant answer for `cd DIR && COMMAND`, read as COMMAND launched in DIR.
+///
+/// `cd` only selects the directory the next command starts in, and `&&` runs
+/// nothing after a failed change, so the pair launches exactly what COMMAND
+/// launches from DIR. The user's decision on that CLI answers the compound the
+/// way it answers COMMAND alone: an allowed CLI runs, a blocked one is blocked,
+/// and an undecided one names its connector. Without this an allowed script
+/// run as `cd repo && script -m "..."` was an ordinary review whose Always
+/// allow saved only that exact text, so every new argument asked again.
+///
+/// Only an action that already runs, or a review due to non-recognition, is
+/// read this way. Any other review keeps its own risk signal, and a command
+/// the workspace sandbox bounds keeps its single-invocation route.
+pub(super) fn grant_after_cd(request: &LocalCliHookRequestV1) -> Option<contained::Answer> {
+    if !matches!(request.current_action.as_str(), "allow" | "warn" | "review")
+        || !crate::connector_setup::grant_lifts(request.current_reason_code.as_deref())
+    {
+        return None;
+    }
+    let launched = after_cd(request)?;
+    let package = checked_package(&launched).ok()?;
+    match grant(&launched, &package) {
+        answer @ Ok((_, Some(_), _)) => Some(answer),
+        _ => None,
+    }
+}
+
+/// `cd DIR && COMMAND` as the request COMMAND alone makes from DIR.
+///
+/// The shell model must prove the pair: two exact segments joined by `&&`, a
+/// plain `cd` with one operand the shell cannot redirect, and no redirect,
+/// substitution, wrapper or environment prefix on either side. Uncertain
+/// parsing, a semicolon and extra commands keep their normal review.
+fn after_cd(request: &LocalCliHookRequestV1) -> Option<LocalCliHookRequestV1> {
+    let (command, cwd) = cd_then_launch(
+        &request.command,
+        &request.cwd,
+        request.home_dir.as_deref(),
+        &request.env,
+    )?;
+    let mut alone = request.clone();
+    alone.command = command;
+    alone.cwd = cwd;
+    Some(alone)
+}
+
+/// `cd DIR && COMMAND` read as `COMMAND` launched from `DIR`: the command
+/// text and the canonical directory, or `None` for any other shape. Only two
+/// plain segments joined by `&&` qualify, with no redirect, substitution,
+/// wrapper or environment prefix, so the launch is exactly what the shell
+/// runs. A `cd` operand the shell could resolve elsewhere (an option, a `..`
+/// part, a searched name without the caller's environment or with `CDPATH`)
+/// names no directory.
+pub(crate) fn cd_then_launch(
+    text: &str,
+    cwd: &str,
+    home_dir: Option<&str>,
+    env: &std::collections::BTreeMap<String, String>,
+) -> Option<(String, String)> {
+    if text.trim().is_empty() {
         return None;
     }
     let model = parse_shell_command(
-        &request.command,
-        Some(std::path::Path::new(&request.cwd)),
-        request.home_dir.as_deref().map(std::path::Path::new),
+        text,
+        Some(std::path::Path::new(cwd)),
+        home_dir.map(std::path::Path::new),
         "posix",
         "shell_string",
         "guard-shell",
@@ -81,15 +131,16 @@ fn relative_script_after_cd(request: &LocalCliHookRequestV1) -> Option<Vec<Unlis
         return None;
     }
     let first = &model.segments[0];
-    let script = &model.segments[1];
+    let launched = &model.segments[1];
     if first.executable.as_deref() != Some("cd")
         || first.arguments.len() != 1
         || first.path_overridden
         || !first.wrapper_chain.is_empty()
         || !first.environment_names.is_empty()
-        || script.path_overridden
-        || !script.wrapper_chain.is_empty()
-        || !script.environment_names.is_empty()
+        || launched.executable.is_none()
+        || launched.path_overridden
+        || !launched.wrapper_chain.is_empty()
+        || !launched.environment_names.is_empty()
     {
         return None;
     }
@@ -97,54 +148,44 @@ fn relative_script_after_cd(request: &LocalCliHookRequestV1) -> Option<Vec<Unlis
         .normalized_text
         .chars()
         .skip(first.end)
-        .take(script.start.checked_sub(first.end)?)
+        .take(launched.start.checked_sub(first.end)?)
         .collect();
     if separator.trim() != "&&" {
         return None;
     }
-    let executable = script.executable.as_deref()?;
-    if !executable.starts_with("./")
-        || !executable
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '.' | '_' | '-'))
-    {
-        return None;
-    }
-    // Do not infer a script identity when the shell could select a different
-    // working directory than the one canonicalized here. Logical cd handles
-    // '..' before symlinks; searched operands can be redirected by CDPATH.
+    // Do not infer the directory when the shell could select a different one
+    // than the one canonicalized here. Logical cd handles '..' before
+    // symlinks; searched operands can be redirected by CDPATH.
+    // The shell model keeps parameter expansions, globs, braces and tildes
+    // as written and drops quoting, so an operand that the shell could
+    // expand would be resolved here as a literal directory of that name.
     let operand = first.arguments[0].as_str();
-    if operand.starts_with('-') || operand.split('/').any(|part| part == "..") {
+    if operand.starts_with('-')
+        || operand.split('/').any(|part| part == "..")
+        || operand.chars().any(|character| {
+            matches!(
+                character,
+                '$' | '`' | '*' | '?' | '[' | '{' | '~' | '\\' | '\'' | '"'
+            )
+        })
+    {
         return None;
     }
     let searched = !operand.starts_with('/') && operand.split('/').next() != Some(".");
     // Without the caller's environment, CDPATH cannot be ruled out.
-    if searched
-        && (request.env.is_empty()
-            || request
-                .env
-                .keys()
-                .any(|name| name.eq_ignore_ascii_case("CDPATH")))
-    {
+    if searched && (env.is_empty() || env.keys().any(|name| name.eq_ignore_ascii_case("CDPATH"))) {
         return None;
     }
-    let directory = std::fs::canonicalize(std::path::Path::new(&request.cwd).join(operand)).ok()?;
+    let directory = std::fs::canonicalize(std::path::Path::new(cwd).join(operand)).ok()?;
     if !directory.is_dir() {
         return None;
     }
-    let cwd = directory.to_str()?;
-    let records = identify(&Request {
-        command_text: executable,
-        cwd,
-        home_dir: request.home_dir.as_deref(),
-        user_home: &request.user_home,
-        compound: false,
-        env: &request.env,
-        budget_ms: IDENTIFY_BUDGET_MS,
-    })
-    .ok()?;
-    if records.len() != 1 || !records.iter().all(valid_unlisted) {
+    // Without a wrapper chain the normalized text is the trimmed command, so
+    // the second segment runs from its start to the end of the text.
+    let command: String = model.normalized_text.chars().skip(launched.start).collect();
+    let command = command.trim();
+    if command.is_empty() {
         return None;
     }
-    Some(records)
+    Some((command.to_owned(), directory.to_str()?.to_owned()))
 }

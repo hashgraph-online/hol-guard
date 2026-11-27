@@ -1,158 +1,6 @@
-// Existing browser operation, surface, and redaction tables.
+// Generic browser operation, surface, and redaction tables. The Chrome DevTools MCP and
+// Playwright MCP tool lists and launch flags live in first-party driver profiles.
 // Regex whitespace includes CPython's additional U+001C–U+001F characters.
-
-const CHROME_DEVTOOLS_NAVIGATION: &[&str] = &[
-    "close_page",
-    "go_back",
-    "go_forward",
-    "list_pages",
-    "navigate_page",
-    "new_page",
-    "reload_page",
-    "select_page",
-    "wait_for",
-];
-
-const CHROME_DEVTOOLS_INSPECT: &[&str] = &[
-    "accessibility_snapshot",
-    "get_console",
-    "get_console_message",
-    "get_dom",
-    "get_html",
-    "get_network",
-    "get_performance",
-    "get_snapshot",
-    "lighthouse_audit",
-    "list_console_messages",
-    "list_network_requests",
-    "list_resources",
-    "performance_analyze_insight",
-    "performance_start_trace",
-    "performance_stop_trace",
-    "performance_trace",
-    "read_console",
-    "read_network",
-    "take_screenshot",
-    "take_snapshot",
-];
-
-const CHROME_DEVTOOLS_INTERACT: &[&str] = &[
-    "accept_dialog",
-    "click",
-    "dismiss_dialog",
-    "drag",
-    "emulate",
-    "fill_form",
-    "fill_input",
-    "focus_element",
-    "handle_dialog",
-    "hover",
-    "press_key",
-    "resize_page",
-    "scroll",
-    "select_dropdown",
-    "submit_form",
-    "type_text",
-];
-
-const CHROME_DEVTOOLS_TRANSFER: &[&str] = &[
-    "download_file",
-    "drag_drop_file",
-    "read_clipboard",
-    "save_file",
-    "upload_file",
-    "write_clipboard",
-];
-
-const CHROME_DEVTOOLS_PRIVILEGED: &[&str] = &[
-    "clear_storage",
-    "evaluate_script",
-    "get_auth_headers",
-    "get_cookies",
-    "get_network_request",
-    "get_storage",
-    "manage_extension",
-    "manage_profile",
-    "manage_session",
-    "mock_network",
-    "network_intercept",
-    "raw_cdp",
-    "read_cookies",
-    "read_storage",
-    "set_cookies",
-    "set_network_intercept",
-    "set_storage",
-];
-
-const PLAYWRIGHT_NAVIGATION: &[&str] = &[
-    "browser_close",
-    "browser_close_context",
-    "browser_close_page",
-    "browser_list_pages",
-    "browser_navigate",
-    "browser_navigate_back",
-    "browser_navigate_forward",
-    "browser_new_context",
-    "browser_new_page",
-    "browser_reload",
-    "browser_select_page",
-    "browser_wait_for_load_state",
-    "browser_wait_for_url",
-];
-
-const PLAYWRIGHT_INSPECT: &[&str] = &[
-    "browser_accessibility_snapshot",
-    "browser_console_messages",
-    "browser_get_dom",
-    "browser_get_html",
-    "browser_network_requests",
-    "browser_performance",
-    "browser_screenshot",
-    "browser_snapshot",
-];
-
-const PLAYWRIGHT_INTERACT: &[&str] = &[
-    "browser_click",
-    "browser_dialog_accept",
-    "browser_dialog_dismiss",
-    "browser_drag",
-    "browser_fill",
-    "browser_focus",
-    "browser_hover",
-    "browser_press_key",
-    "browser_scroll",
-    "browser_select_option",
-    "browser_select_text",
-    "browser_submit_form",
-    "browser_type",
-];
-
-const PLAYWRIGHT_TRANSFER: &[&str] = &[
-    "browser_clipboard_read",
-    "browser_clipboard_write",
-    "browser_download",
-    "browser_drag_and_drop_file",
-    "browser_file_upload",
-    "browser_pdf_save",
-];
-
-const PLAYWRIGHT_PRIVILEGED: &[&str] = &[
-    "browser_auth_headers",
-    "browser_context_manage",
-    "browser_cookies_clear",
-    "browser_cookies_get",
-    "browser_cookies_set",
-    "browser_evaluate",
-    "browser_execute_script",
-    "browser_network_intercept",
-    "browser_profile_manage",
-    "browser_raw_cdp",
-    "browser_route_intercept",
-    "browser_session_manage",
-    "browser_storage_clear",
-    "browser_storage_get",
-    "browser_storage_set",
-];
 
 const NAVIGATION_PATTERNS: &[&str] = &[
     "^navigate_",
@@ -260,6 +108,17 @@ const SENSITIVE_AUTH_PATTERNS: &[&str] =
 
 const SENSITIVE_CDP_PATTERNS: &[&str] = &["cdp", "chrome_devtools_protocol", "raw_cdp"];
 
+/// Arguments that relaunch the browser with caller-chosen options, such as Puppeteer MCP's
+/// `launchOptions` and `allowDangerous` on navigate. A relaunch can add remote debugging, another
+/// executable or another profile, so it is reviewed like raw protocol access. A schema that only
+/// lists them does not count; the call has to pass one.
+const SENSITIVE_LAUNCH_PATTERNS: &[&str] = &[
+    "launchoptions",
+    "launch_options",
+    "allowdangerous",
+    "allow_dangerous",
+];
+
 const SENSITIVE_SCRIPT_EVAL_PATTERNS: &[&str] = &["eval", "script", "javascript", "expression"];
 
 const SENSITIVE_UPLOAD_PATTERNS: &[&str] = &["upload", "file_input", "file_path", "filepath"];
@@ -315,6 +174,8 @@ const BROWSER_SERVER_NAME_PATTERNS: &[&str] = &[
     "browser[\\-_\\s\\x{001c}-\\x{001f}]?tools",
     "browser[\\-_\\s\\x{001c}-\\x{001f}]?mcp",
     "puppeteer[\\-_\\s\\x{001c}-\\x{001f}]?mcp",
+    // A server registered under the bare name the Puppeteer MCP profile claims.
+    "^puppeteer\\s",
     "web[\\-_\\s\\x{001c}-\\x{001f}]?browser",
 ];
 
@@ -323,19 +184,4 @@ const BROWSER_PACKAGE_PATTERNS: &[&str] = &[
     "@playwright/mcp",
     "puppeteer",
     "playwright",
-];
-
-const ISOLATED_FLAGS: &[&str] = &["--isolated", "--isolated-context"];
-
-const PROFILE_DIR_FLAGS: &[&str] = &[
-    "--user-data-dir",
-    "--persistent",
-    "--profile-dir",
-    "--storage-state",
-];
-
-const REMOTE_DEBUG_FLAGS: &[&str] = &[
-    "--remote-debugging-port",
-    "--remote-debugging-pipe",
-    "--ws-endpoint",
 ];

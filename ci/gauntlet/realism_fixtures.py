@@ -15,6 +15,8 @@ sessions hit while the Gauntlet stayed green:
 * token-handling source (a redirect route, a link-building worker, an HMAC
   helper) names credential-like identifiers on every line (see
   ``source_output_fixtures``);
+* a publish workflow names its npm token only through ``${NPM_TOKEN}`` and
+  ``${{ secrets.NPM_TOKEN }}`` (see ``publish_workflow_fixtures``);
 * the worktree carries the ``.venv`` an ordinary Python project is worked in,
   whose generated ``bin/activate`` a test run sources before it starts;
 * a sign-in folder named ``auth`` holds a README and a session helper (see
@@ -36,6 +38,7 @@ from .extension_catalog_fixtures import CONTRIBUTIONS
 from .extension_catalog_fixtures import SOURCES as CATALOG_SOURCES
 from .feature_directory_fixtures import CONSOLE
 from .feature_directory_fixtures import SOURCES as FEATURE_SOURCES
+from .publish_workflow_fixtures import SOURCES as PUBLISH_SOURCES
 from .source_output_fixtures import EXAMPLE_SOURCES, FALLBACK_SOURCES, PORTAL, SCRIPT_SOURCES, SOURCES
 
 DASHBOARD = "dashboard"
@@ -385,6 +388,8 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
         **SCRIPT_SOURCES,
     }.items():
         _write(main / relative, text)
+    for relative, text in PUBLISH_SOURCES.items():
+        _write(main / relative, text)
     _write(main / "scripts/check.sh", CHECK_SCRIPT, 0o755)
     _write(main / "scripts/release/deploy.sh", DEPLOY_SCRIPT, 0o755)
     modules = main / DASHBOARD / "node_modules"
@@ -405,6 +410,7 @@ IGNORE_NEGATION_PROTECTED_CASE = "omp-native-rg-explicit-root-hidden-glob-protec
 IGNORE_NEGATION_CONSUMED_IGLOB_CASE = "omp-native-rg-consumed-iglob-hidden-protected"
 IGNORE_NEGATION_BROAD_GLOB_CASE = "omp-native-rg-broad-glob-hidden-protected"
 ENV_TEMPLATE_READ_CASE = "omp-native-read-env-template"
+ENV_TEMPLATE_SHELL_READ_CASE = "omp-native-shell-read-env-template"
 IGNORE_NEGATION_RULES = ".env*\n!.env.example\n"
 ENV_TEMPLATE = "API_BASE_URL=http://127.0.0.1:3000\nFEATURE_ROUTE_TIMEOUT_MS=2000\n"
 
@@ -424,7 +430,7 @@ def add_ignore_negation_template(main: Path, scenario_id: str | None) -> tuple[s
         _write(main / "src/.gitignore", "!.env.test.ts\n")
         _write(main / "src/.env.test.ts", "KEY=SYNTHETIC_MARKER_ONLY\n")
         return ("src/.gitignore", "src/.env.test.ts")
-    if scenario_id not in {IGNORE_NEGATION_CASE, ENV_TEMPLATE_READ_CASE}:
+    if scenario_id not in {IGNORE_NEGATION_CASE, ENV_TEMPLATE_READ_CASE, ENV_TEMPLATE_SHELL_READ_CASE}:
         return ()
     _write(main / ".gitignore", GITIGNORE + IGNORE_NEGATION_RULES)
     _write(main / ".env.example", ENV_TEMPLATE)

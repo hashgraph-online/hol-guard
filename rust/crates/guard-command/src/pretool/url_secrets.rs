@@ -15,14 +15,35 @@ static JWT_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// Shortest run of token characters treated as an opaque blob.
 const MIN_BLOB_CHARS: usize = 40;
 
-pub(super) fn carries_secret(url: &url::Url) -> bool {
+pub(crate) fn carries_secret(url: &url::Url) -> bool {
     let mut tail = url.path().to_owned();
     for part in [url.query(), url.fragment()].into_iter().flatten() {
         tail.push('?');
         tail.push_str(part);
     }
-    text_carries_secret(&tail)
+    if text_carries_secret(&tail) {
+        return true;
+    }
+    // `%61%62...` hides a token from the splitter at every `%`; screen each decoded layer too.
+    let mut layer = tail;
+    for _ in 0..MAX_DECODE_LAYERS {
+        let decoded = percent_encoding::percent_decode_str(&layer)
+            .decode_utf8_lossy()
+            .into_owned();
+        if decoded == layer {
+            return false;
+        }
+        if text_carries_secret(&decoded) {
+            return true;
+        }
+        layer = decoded;
+    }
+    // Still encoded after every layer Guard reads: treat it as hiding something.
+    true
 }
+
+/// How many layers of percent-encoding [`carries_secret`] removes before it gives up.
+const MAX_DECODE_LAYERS: usize = 3;
 
 /// Whether `text` holds a known credential shape (the redaction patterns),
 /// a JWT, a PEM block or a long opaque token. Text a command sends to a

@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CRKVu82y.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-dhHEpEoW.js","assets/chunks/home-protection-module-DFZ1vkRC.js","assets/chunks/supply-chain-protection-stats-BVtc2w17.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-BCM0x-g-.js","assets/chunks/harness-version-label-JURowldM.js","assets/chunks/connect-guard-cloud-button-CzWHGND8.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-CL9k2vqu.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-BWBn1bK0.js","assets/chunks/app-detail-workspace-B0vkFxxc.js","assets/chunks/harness-action-errors-D4J9GNrk.js","assets/chunks/supply-chain-hub-workspace-DYqi92V0.js","assets/chunks/policy-workspace-page-BKSgx2UE.js","assets/chunks/about-workspace-Bd0-K7Pl.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CdVksrz9.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-aUrRL07j.js","assets/chunks/home-protection-module-2ljOU6I5.js","assets/chunks/supply-chain-protection-stats-BfWBBkPj.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-D6aqOZsz.js","assets/chunks/harness-version-label-BurcXmYS.js","assets/chunks/connect-guard-cloud-button-Cc2GZ_t7.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-C7_KJc3T.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-B9m9ICz8.js","assets/chunks/app-detail-workspace-WVe37kGf.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-BAc95i7H.js","assets/chunks/policy-workspace-page-B3mQX5sw.js","assets/chunks/about-workspace-CuJmJCRM.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -437,8 +437,8 @@ function requireReact_production() {
   react_production.use = function(usable) {
     return ReactSharedInternals.H.use(usable);
   };
-  react_production.useActionState = function(action2, initialState, permalink) {
-    return ReactSharedInternals.H.useActionState(action2, initialState, permalink);
+  react_production.useActionState = function(action, initialState, permalink) {
+    return ReactSharedInternals.H.useActionState(action, initialState, permalink);
   };
   react_production.useCallback = function(callback, deps) {
     return ReactSharedInternals.H.useCallback(callback, deps);
@@ -916,8 +916,8 @@ function requireReactDom_production() {
   reactDom_production.unstable_batchedUpdates = function(fn, a) {
     return fn(a);
   };
-  reactDom_production.useFormState = function(action2, initialState, permalink) {
-    return ReactSharedInternals.H.useFormState(action2, initialState, permalink);
+  reactDom_production.useFormState = function(action, initialState, permalink) {
+    return ReactSharedInternals.H.useFormState(action, initialState, permalink);
   };
   reactDom_production.useFormStatus = function() {
     return ReactSharedInternals.H.useHostTransitionStatus();
@@ -4162,8 +4162,8 @@ function requireReactDomClient_production() {
     memoCache.index++;
     return updateQueue;
   }
-  function basicStateReducer(state, action2) {
-    return "function" === typeof action2 ? action2(state) : action2;
+  function basicStateReducer(state, action) {
+    return "function" === typeof action ? action(state) : action;
   }
   function updateReducer(reducer) {
     var hook = updateWorkInProgressHook();
@@ -4380,12 +4380,12 @@ function requireReactDomClient_production() {
     }
   }
   function runActionStateAction(actionQueue, node) {
-    var action2 = node.action, payload = node.payload, prevState = actionQueue.state;
+    var action = node.action, payload = node.payload, prevState = actionQueue.state;
     if (node.isTransition) {
       var prevTransition = ReactSharedInternals.T, currentTransition = {};
       ReactSharedInternals.T = currentTransition;
       try {
-        var returnValue = action2(prevState, payload), onStartTransitionFinish = ReactSharedInternals.S;
+        var returnValue = action(prevState, payload), onStartTransitionFinish = ReactSharedInternals.S;
         null !== onStartTransitionFinish && onStartTransitionFinish(currentTransition, returnValue);
         handleActionReturnValue(actionQueue, node, returnValue);
       } catch (error) {
@@ -4395,7 +4395,7 @@ function requireReactDomClient_production() {
       }
     } else
       try {
-        prevTransition = action2(prevState, payload), handleActionReturnValue(actionQueue, node, prevTransition);
+        prevTransition = action(prevState, payload), handleActionReturnValue(actionQueue, node, prevTransition);
       } catch (error$66) {
         onActionError(actionQueue, node, error$66);
       }
@@ -4436,7 +4436,7 @@ function requireReactDomClient_production() {
   function actionStateReducer(oldState, newState) {
     return newState;
   }
-  function mountActionState(action2, initialStateProp) {
+  function mountActionState(action, initialStateProp) {
     if (isHydrating) {
       var ssrFormState = workInProgressRoot.formState;
       if (null !== ssrFormState) {
@@ -4504,7 +4504,7 @@ function requireReactDomClient_production() {
     JSCompiler_inline_result$jscomp$0 = {
       state: initialStateProp,
       dispatch: null,
-      action: action2,
+      action,
       pending: null
     };
     JSCompiler_inline_result.queue = JSCompiler_inline_result$jscomp$0;
@@ -4516,14 +4516,14 @@ function requireReactDomClient_production() {
       ssrFormState
     );
     JSCompiler_inline_result$jscomp$0.dispatch = ssrFormState;
-    JSCompiler_inline_result.memoizedState = action2;
+    JSCompiler_inline_result.memoizedState = action;
     return [initialStateProp, ssrFormState, false];
   }
-  function updateActionState(action2) {
+  function updateActionState(action) {
     var stateHook = updateWorkInProgressHook();
-    return updateActionStateImpl(stateHook, currentHook, action2);
+    return updateActionStateImpl(stateHook, currentHook, action);
   }
-  function updateActionStateImpl(stateHook, currentStateHook, action2) {
+  function updateActionStateImpl(stateHook, currentStateHook, action) {
     currentStateHook = updateReducerImpl(
       stateHook,
       currentStateHook,
@@ -4540,26 +4540,26 @@ function requireReactDomClient_production() {
     else state = currentStateHook;
     currentStateHook = updateWorkInProgressHook();
     var actionQueue = currentStateHook.queue, dispatch = actionQueue.dispatch;
-    action2 !== currentStateHook.memoizedState && (currentlyRenderingFiber.flags |= 2048, pushSimpleEffect(
+    action !== currentStateHook.memoizedState && (currentlyRenderingFiber.flags |= 2048, pushSimpleEffect(
       9,
       { destroy: void 0 },
-      actionStateActionEffect.bind(null, actionQueue, action2),
+      actionStateActionEffect.bind(null, actionQueue, action),
       null
     ));
     return [state, dispatch, stateHook];
   }
-  function actionStateActionEffect(actionQueue, action2) {
-    actionQueue.action = action2;
+  function actionStateActionEffect(actionQueue, action) {
+    actionQueue.action = action;
   }
-  function rerenderActionState(action2) {
+  function rerenderActionState(action) {
     var stateHook = updateWorkInProgressHook(), currentStateHook = currentHook;
     if (null !== currentStateHook)
-      return updateActionStateImpl(stateHook, currentStateHook, action2);
+      return updateActionStateImpl(stateHook, currentStateHook, action);
     updateWorkInProgressHook();
     stateHook = stateHook.memoizedState;
     currentStateHook = updateWorkInProgressHook();
     var dispatch = currentStateHook.queue.dispatch;
-    currentStateHook.memoizedState = action2;
+    currentStateHook.memoizedState = action;
     return [stateHook, dispatch, false];
   }
   function pushSimpleEffect(tag, inst, create, deps) {
@@ -4731,7 +4731,7 @@ function requireReactDomClient_production() {
   }
   function noop() {
   }
-  function startHostTransition(formFiber, pendingState, action2, formData) {
+  function startHostTransition(formFiber, pendingState, action, formData) {
     if (5 !== formFiber.tag) throw Error(formatProdErrorMessage(476));
     var queue = ensureFormComponentIsStateful(formFiber).queue;
     startTransition(
@@ -4739,9 +4739,9 @@ function requireReactDomClient_production() {
       queue,
       pendingState,
       sharedNotPendingObject,
-      null === action2 ? noop : function() {
+      null === action ? noop : function() {
         requestFormReset$1(formFiber);
-        return action2(formData);
+        return action(formData);
       }
     );
   }
@@ -4815,29 +4815,29 @@ function requireReactDomClient_production() {
       provider = provider.return;
     }
   }
-  function dispatchReducerAction(fiber, queue, action2) {
+  function dispatchReducerAction(fiber, queue, action) {
     var lane = requestUpdateLane();
-    action2 = {
+    action = {
       lane,
       revertLane: 0,
       gesture: null,
-      action: action2,
+      action,
       hasEagerState: false,
       eagerState: null,
       next: null
     };
-    isRenderPhaseUpdate(fiber) ? enqueueRenderPhaseUpdate(queue, action2) : (action2 = enqueueConcurrentHookUpdate(fiber, queue, action2, lane), null !== action2 && (scheduleUpdateOnFiber(action2, fiber, lane), entangleTransitionUpdate(action2, queue, lane)));
+    isRenderPhaseUpdate(fiber) ? enqueueRenderPhaseUpdate(queue, action) : (action = enqueueConcurrentHookUpdate(fiber, queue, action, lane), null !== action && (scheduleUpdateOnFiber(action, fiber, lane), entangleTransitionUpdate(action, queue, lane)));
   }
-  function dispatchSetState(fiber, queue, action2) {
+  function dispatchSetState(fiber, queue, action) {
     var lane = requestUpdateLane();
-    dispatchSetStateInternal(fiber, queue, action2, lane);
+    dispatchSetStateInternal(fiber, queue, action, lane);
   }
-  function dispatchSetStateInternal(fiber, queue, action2, lane) {
+  function dispatchSetStateInternal(fiber, queue, action, lane) {
     var update = {
       lane,
       revertLane: 0,
       gesture: null,
-      action: action2,
+      action,
       hasEagerState: false,
       eagerState: null,
       next: null
@@ -4847,7 +4847,7 @@ function requireReactDomClient_production() {
       var alternate = fiber.alternate;
       if (0 === fiber.lanes && (null === alternate || 0 === alternate.lanes) && (alternate = queue.lastRenderedReducer, null !== alternate))
         try {
-          var currentState = queue.lastRenderedState, eagerState = alternate(currentState, action2);
+          var currentState = queue.lastRenderedState, eagerState = alternate(currentState, action);
           update.hasEagerState = true;
           update.eagerState = eagerState;
           if (objectIs(eagerState, currentState))
@@ -4855,18 +4855,18 @@ function requireReactDomClient_production() {
         } catch (error) {
         } finally {
         }
-      action2 = enqueueConcurrentHookUpdate(fiber, queue, update, lane);
-      if (null !== action2)
-        return scheduleUpdateOnFiber(action2, fiber, lane), entangleTransitionUpdate(action2, queue, lane), true;
+      action = enqueueConcurrentHookUpdate(fiber, queue, update, lane);
+      if (null !== action)
+        return scheduleUpdateOnFiber(action, fiber, lane), entangleTransitionUpdate(action, queue, lane), true;
     }
     return false;
   }
-  function dispatchOptimisticSetState(fiber, throwIfDuringRender, queue, action2) {
-    action2 = {
+  function dispatchOptimisticSetState(fiber, throwIfDuringRender, queue, action) {
+    action = {
       lane: 2,
       revertLane: requestTransitionLane(),
       gesture: null,
-      action: action2,
+      action,
       hasEagerState: false,
       eagerState: null,
       next: null
@@ -4877,7 +4877,7 @@ function requireReactDomClient_production() {
       throwIfDuringRender = enqueueConcurrentHookUpdate(
         fiber,
         queue,
-        action2,
+        action,
         2
       ), null !== throwIfDuringRender && scheduleUpdateOnFiber(throwIfDuringRender, fiber, 2);
   }
@@ -9608,10 +9608,10 @@ function requireReactDomClient_production() {
   }
   function extractEvents$1(dispatchQueue, domEventName, maybeTargetInst, nativeEvent, nativeEventTarget) {
     if ("submit" === domEventName && maybeTargetInst && maybeTargetInst.stateNode === nativeEventTarget) {
-      var action2 = coerceFormActionProp(
+      var action = coerceFormActionProp(
         (nativeEventTarget[internalPropsKey] || null).action
       ), submitter = nativeEvent.submitter;
-      submitter && (domEventName = (domEventName = submitter[internalPropsKey] || null) ? coerceFormActionProp(domEventName.formAction) : submitter.getAttribute("formAction"), null !== domEventName && (action2 = domEventName, submitter = null));
+      submitter && (domEventName = (domEventName = submitter[internalPropsKey] || null) ? coerceFormActionProp(domEventName.formAction) : submitter.getAttribute("formAction"), null !== domEventName && (action = domEventName, submitter = null));
       var event = new SyntheticEvent(
         "action",
         "action",
@@ -9634,22 +9634,22 @@ function requireReactDomClient_production() {
                       pending: true,
                       data: formData,
                       method: nativeEventTarget.method,
-                      action: action2
+                      action
                     },
                     null,
                     formData
                   );
                 }
               } else
-                "function" === typeof action2 && (event.preventDefault(), formData = submitter ? createFormDataWithSubmitter(nativeEventTarget, submitter) : new FormData(nativeEventTarget), startHostTransition(
+                "function" === typeof action && (event.preventDefault(), formData = submitter ? createFormDataWithSubmitter(nativeEventTarget, submitter) : new FormData(nativeEventTarget), startHostTransition(
                   maybeTargetInst,
                   {
                     pending: true,
                     data: formData,
                     method: nativeEventTarget.method,
-                    action: action2
+                    action
                   },
-                  action2,
+                  action,
                   formData
                 ));
             },
@@ -12280,15 +12280,15 @@ function requireReactDomClient_production() {
         if ("function" === typeof submitterOrAction)
           formProps || scheduleReplayQueueIfNeeded(i);
         else if (formProps) {
-          var action2 = null;
+          var action = null;
           if (submitterOrAction && submitterOrAction.hasAttribute("formAction"))
             if (form = submitterOrAction, formProps = submitterOrAction[internalPropsKey] || null)
-              action2 = formProps.formAction;
+              action = formProps.formAction;
             else {
               if (null !== findInstanceBlockingTarget(form)) continue;
             }
-          else action2 = formProps.action;
-          "function" === typeof action2 ? i[queuedTarget + 1] = action2 : (i.splice(queuedTarget, 3), queuedTarget -= 3);
+          else action = formProps.action;
+          "function" === typeof action ? i[queuedTarget + 1] = action : (i.splice(queuedTarget, 3), queuedTarget -= 3);
           scheduleReplayQueueIfNeeded(i);
         }
       }
@@ -12773,6 +12773,9 @@ function HiMiniWrench(props) {
 }
 function HiMiniWrenchScrewdriver(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M14.5 10a4.5 4.5 0 0 0 4.284-5.882c-.105-.324-.51-.391-.752-.15L15.34 6.66a.454.454 0 0 1-.493.11 3.01 3.01 0 0 1-1.618-1.616.455.455 0 0 1 .11-.494l2.694-2.692c.24-.241.174-.647-.15-.752a4.5 4.5 0 0 0-5.873 4.575c.055.873-.128 1.808-.8 2.368l-7.23 6.024a2.724 2.724 0 1 0 3.837 3.837l6.024-7.23c.56-.672 1.495-.855 2.368-.8.096.007.193.01.291.01ZM5 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M14.5 11.5c.173 0 .345-.007.514-.022l3.754 3.754a2.5 2.5 0 0 1-3.536 3.536l-4.41-4.41 2.172-2.607c.052-.063.147-.138.342-.196.202-.06.469-.087.777-.067.128.008.257.012.387.012ZM6 4.586l2.33 2.33a.452.452 0 0 1-.08.09L6.8 8.214 4.586 6H3.309a.5.5 0 0 1-.447-.276l-1.7-3.402a.5.5 0 0 1 .093-.577l.49-.49a.5.5 0 0 1 .577-.094l3.402 1.7A.5.5 0 0 1 6 3.31v1.277Z" }, "child": [] }] })(props);
+}
+function HiMiniWindow(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 2A2.25 2.25 0 0 0 2 4.25v11.5A2.25 2.25 0 0 0 4.25 18h11.5A2.25 2.25 0 0 0 18 15.75V4.25A2.25 2.25 0 0 0 15.75 2H4.25ZM3.5 8v7.75c0 .414.336.75.75.75h11.5a.75.75 0 0 0 .75-.75V8h-13ZM5 4.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V5a.75.75 0 0 0-.75-.75H5ZM7.25 5A.75.75 0 0 1 8 4.25h.01a.75.75 0 0 1 .75.75v.01a.75.75 0 0 1-.75.75H8a.75.75 0 0 1-.75-.75V5ZM11 4.25a.75.75 0 0 0-.75.75v.01c0 .414.336.75.75.75h.01a.75.75 0 0 0 .75-.75V5a.75.75 0 0 0-.75-.75H11Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniUsers(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M7 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM14.5 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM1.615 16.428a1.224 1.224 0 0 1-.569-1.175 6.002 6.002 0 0 1 11.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 0 1 7 18a9.953 9.953 0 0 1-5.385-1.572ZM14.5 16h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 0 0-1.588-3.755 4.502 4.502 0 0 1 5.874 2.636.818.818 0 0 1-.36.98A7.465 7.465 0 0 1 14.5 16Z" }, "child": [] }] })(props);
@@ -13336,71 +13339,71 @@ function hasScopeContractMetadata(item) {
 function hasCompleteScopeContractBinding(item) {
   return typeof item.scope_contract_version === "string" && item.scope_contract_version.length > 0 && typeof item.scope_contract_digest === "string" && item.scope_contract_digest.length > 0;
 }
-function declaredScopesForAction(item, action2) {
-  if (action2 === "allow" && item.once_only_reason === "script_execution_binding_unavailable") {
+function declaredScopesForAction(item, action) {
+  if (action === "allow" && item.once_only_reason === "script_execution_binding_unavailable") {
     return [];
   }
-  if (action2 === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && item.exact_action_persistence_eligible !== true) {
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && item.exact_action_persistence_eligible !== true) {
     return [];
   }
   if (hasScopeContractMetadata(item) && !hasCompleteScopeContractBinding(item)) {
     return [];
   }
-  const actionScopes = item.allowed_scopes_by_action?.[action2];
+  const actionScopes = item.allowed_scopes_by_action?.[action];
   if (Array.isArray(actionScopes)) {
     return actionScopes;
   }
-  if (action2 === "allow" && Array.isArray(item.allowed_scopes)) {
+  if (action === "allow" && Array.isArray(item.allowed_scopes)) {
     return item.allowed_scopes;
   }
   return null;
 }
-function requestSupportsScope(item, action2, scope) {
-  if (action2 === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && scope !== "artifact") {
+function requestSupportsScope(item, action, scope) {
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && scope !== "artifact") {
     return false;
   }
-  const declaredScopes = declaredScopesForAction(item, action2);
+  const declaredScopes = declaredScopesForAction(item, action);
   if (declaredScopes !== null) {
     return declaredScopes.includes(scope);
   }
   return scope === "artifact";
 }
-function filterScopeChoicesForRequest(item, action2, choices) {
-  return choices.filter((choice) => requestSupportsScope(item, action2, choice.value));
+function filterScopeChoicesForRequest(item, action, choices) {
+  return choices.filter((choice) => requestSupportsScope(item, action, choice.value));
 }
-function scopeChoicesForRequest(item, action2 = "allow") {
+function scopeChoicesForRequest(item, action = "allow") {
   return filterScopeChoicesForRequest(
     item,
-    action2,
-    action2 === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES
-  ).map((choice) => action2 === "allow" && choice.value === "artifact" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") ? { ...choice, label: "Exact reviewed action", description: "Choose a duration below. This request requires persistent consent." } : choice);
+    action,
+    action === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES
+  ).map((choice) => action === "allow" && choice.value === "artifact" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") ? { ...choice, label: "Exact reviewed action", description: "Choose a duration below. This request requires persistent consent." } : choice);
 }
 const ADVANCED_SCOPE_VALUES = /* @__PURE__ */ new Set(["global"]);
-function advancedScopeChoicesForRequest(item, action2 = "allow") {
-  return scopeChoicesForRequest(item, action2).filter(
+function advancedScopeChoicesForRequest(item, action = "allow") {
+  return scopeChoicesForRequest(item, action).filter(
     (choice) => ADVANCED_SCOPE_VALUES.has(choice.value)
   );
 }
-function standardScopeChoicesForRequest(item, action2 = "allow") {
-  return scopeChoicesForRequest(item, action2).filter(
+function standardScopeChoicesForRequest(item, action = "allow") {
+  return scopeChoicesForRequest(item, action).filter(
     (choice) => !ADVANCED_SCOPE_VALUES.has(choice.value)
   );
 }
-function recommendedScopeForAction(item, action2) {
-  const actionRecommendation = item.recommended_scope_by_action?.[action2] ?? null;
-  if (actionRecommendation !== null && requestSupportsScope(item, action2, actionRecommendation)) {
+function recommendedScopeForAction(item, action) {
+  const actionRecommendation = item.recommended_scope_by_action?.[action] ?? null;
+  if (actionRecommendation !== null && requestSupportsScope(item, action, actionRecommendation)) {
     return actionRecommendation;
   }
-  if (action2 === "allow" && item.recommended_scope !== null && requestSupportsScope(item, action2, item.recommended_scope)) {
+  if (action === "allow" && item.recommended_scope !== null && requestSupportsScope(item, action, item.recommended_scope)) {
     return item.recommended_scope;
   }
-  return scopeChoicesForRequest(item, action2)[0]?.value ?? null;
+  return scopeChoicesForRequest(item, action)[0]?.value ?? null;
 }
-function normalizeDecisionScope(item, action2, scope) {
-  if (requestSupportsScope(item, action2, scope)) {
+function normalizeDecisionScope(item, action, scope) {
+  if (requestSupportsScope(item, action, scope)) {
     return scope;
   }
-  return recommendedScopeForAction(item, action2);
+  return recommendedScopeForAction(item, action);
 }
 const ONCE_ONLY_REASON_COPY = {
   no_command_identity: "Always allow is unavailable: this tool call has no stable command or file to remember. You can allow it once.",
@@ -13497,8 +13500,8 @@ function buildDecisionPayload(input) {
     } : {}
   };
 }
-function willPersistExactAction(item, action2, scope, requested) {
-  return requested && normalizeDecisionScope(item, action2, scope) === "artifact" && item.exact_action_persistence_eligible === true;
+function willPersistExactAction(item, action, scope, requested) {
+  return requested && normalizeDecisionScope(item, action, scope) === "artifact" && item.exact_action_persistence_eligible === true;
 }
 const MCP_EFFECT_COPY = {
   // Only a built-in agent-app tool gets this; no name is read as in-app on its own.
@@ -13945,11 +13948,11 @@ function splitToolSlug(slug) {
   if (split <= 0) {
     return { app: null, action: sentenceCase(slug) };
   }
-  const action2 = words.slice(split);
-  action2[0] = PLAIN_VERBS.get(action2[0]) ?? action2[0];
+  const action = words.slice(split);
+  action[0] = PLAIN_VERBS.get(action[0]) ?? action[0];
   return {
     app: serviceDisplayName(words.slice(0, split).join("_")),
-    action: capitalize(action2.join(" "))
+    action: capitalize(action.join(" "))
   };
 }
 const PLAIN_VERBS = /* @__PURE__ */ new Map([
@@ -14241,12 +14244,12 @@ function readComposioCode(code) {
     const start = at + match[0].length;
     const { args, unknown } = literalArguments(scan, quoted, start, callEnd(scan, quoted, start));
     const tool = slug.toUpperCase();
-    const { app, action: action2 } = splitToolSlug(tool);
+    const { app, action } = splitToolSlug(tool);
     const { facts, hidden } = scalarFacts(args, { max: 4, tool });
     steps.push({
       id: `code-${steps.length}-${slug}`,
       app,
-      action: action2,
+      action,
       effect: classifyMcpEffect(slug),
       details: facts,
       hiddenDetails: hidden + unknown
@@ -14506,12 +14509,12 @@ function batchTitle(first, count2, apps) {
 }
 function toStep(tool, index) {
   const slug = textOf(tool?.tool_slug, 120) ?? "";
-  const { app, action: action2 } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
+  const { app, action } = slug.length > 0 ? splitToolSlug(slug) : { app: null, action: "Unnamed action" };
   const { facts, hidden } = scalarFacts(recordOf(tool?.arguments), { max: 5, tool: slug });
   return {
     id: `${index}-${slug}`,
     app,
-    action: action2,
+    action,
     effect: slug.length > 0 ? classifyMcpEffect(slug) : "unknown",
     details: facts,
     hiddenDetails: hidden
@@ -14569,188 +14572,141 @@ function remoteCode(context, title, field, label) {
   };
 }
 function slugLabel(slug) {
-  const { app, action: action2 } = splitToolSlug(slug);
-  return app !== null ? `${app} · ${action2}` : action2;
+  const { app, action } = splitToolSlug(slug);
+  return app !== null ? `${app} · ${action}` : action;
 }
-const BROWSER_WORDS = ["browser", "playwright", "puppeteer", "chrome", "selenium", "webdriver", "stagehand"];
-const SCREEN_WORDS = ["computeruse", "computer", "desktop"];
-const AGENT_TEXT_KEYS$1 = ["thought", "use_case"];
-const POINTER_KEYS = ["tabid", "tab_id", "coordinate", "coordinates", "start_coordinate", "ref", "element_ref", "uid", "node_id"];
-function surfaceOf(server) {
-  const key = server.toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (BROWSER_WORDS.some((word) => key.includes(word))) return "page";
-  if (SCREEN_WORDS.some((word) => key.includes(word))) return "screen";
-  return null;
+const VERBS = {
+  navigate: { title: "Open a web page", effect: "act-as-you" },
+  read: { title: "Read the page", effect: "read" },
+  click: { title: "Click on the page", effect: "act-as-you" },
+  type: { title: "Type on the page", effect: "act-as-you" },
+  key: { title: "Press a key", effect: "act-as-you" },
+  select: { title: "Choose an option", effect: "act-as-you" },
+  scroll: { title: "Move around the page", effect: "act-as-you" },
+  screenshot: { title: "Take a picture of the page", effect: "read" },
+  upload: { title: "Upload a file to a website", effect: "send" },
+  download: { title: "Download a file", effect: "write" },
+  evaluate: { title: "Run code on the page", effect: "run-code" },
+  cookie_read: { title: "Read the site's cookies", effect: "read" },
+  cookie_write: { title: "Change the site's cookies", effect: "act-as-you" },
+  storage_read: { title: "Read the site's stored data", effect: "read" },
+  storage_write: { title: "Change the site's stored data", effect: "act-as-you" },
+  intercept: { title: "Watch or change network traffic", effect: "act-as-you" },
+  permission: { title: "Change site permissions", effect: "act-as-you" },
+  tab_control: { title: "Manage browser tabs", effect: "act-as-you" },
+  attach: { title: "Attach to a browser", effect: "act-as-you" },
+  other: { title: "Control the browser", effect: "unknown" }
+};
+const PROFILES = {
+  shared: "Your own browser profile",
+  dedicated: "A separate automation profile",
+  isolated: "A throwaway browser",
+  "remote-debugging": "A browser attached over remote debugging",
+  unknown: "A browser Guard could not identify"
+};
+const SURFACES = {
+  cookies: "Cookies",
+  storage: "Site storage",
+  auth_headers: "Sign-in headers",
+  cdp: "Browser debugging protocol",
+  script_eval: "Runs page code",
+  upload: "File upload",
+  download: "File download",
+  clipboard: "Clipboard",
+  network_intercept: "Network traffic",
+  password_field: "Password field"
+};
+const INPUT_NOUNS = { text: "text", key: "keys", file: "file path", script: "code" };
+const CODE_KEYS = ["function", "script", "expression", "code", "text"];
+const BASIS = "Read from Guard's browser driver profile for this tool.";
+function isRecord$d(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function action(title, phrase, effect) {
-  return { title, phrase, effect };
+function stringOrNull(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
-function actionFor(name, surface) {
-  const on = surface === "page" ? "the page" : "the screen";
-  const word = name.toLowerCase().replace(/^(browser|page|mouse|computer)_/, "");
-  switch (word) {
-    case "navigate":
-    case "navigate_page":
-    case "goto":
-    case "go_to":
-    case "open":
-    case "open_url":
-    case "open_page":
-    case "new_page":
-    case "new_tab":
-    case "tab_new":
-    case "tabs_create":
-    case "tabs_create_mcp":
-    case "preview_start":
-      return action("Open a web page", "open a web page", "act-as-you");
-    case "navigate_back":
-    case "go_back":
-    case "back":
-      return action("Go back a page", "go back a page", "act-as-you");
-    case "click":
-    case "left_click":
-    case "right_click":
-    case "middle_click":
-    case "double_click":
-    case "triple_click":
-    case "tap":
-      return action(`Click on ${on}`, `click on ${on}`, "act-as-you");
-    case "left_click_drag":
-    case "drag":
-    case "drag_and_drop":
-      return action(`Drag on ${on}`, `drag something on ${on}`, "act-as-you");
-    case "type":
-    case "type_text":
-    case "fill":
-    case "fill_form":
-    case "form_input":
-    case "input_text":
-    case "select_option":
-      return action(`Type on ${on}`, `type on ${on}`, "act-as-you");
-    case "key":
-    case "press":
-    case "press_key":
-    case "keyboard":
-      return action("Press a key", `press a key on ${on}`, "act-as-you");
-    case "scroll":
-    case "scroll_to":
-    case "hover":
-    case "mouse_move":
-      return action(`Move around ${on}`, `move around ${on}`, "act-as-you");
-    case "screenshot":
-    case "take_screenshot":
-    case "zoom":
-      return action(surface === "page" ? "Take a picture of the page" : "Take a picture of your screen", "take a screenshot", "read");
-    case "snapshot":
-    case "read_page":
-    case "get_page_text":
-    case "get_text":
-    case "get_content":
-    case "extract":
-      return action("Read the page", "read the page", "read");
-    case "find":
-    case "find_element":
-      return action("Find something on the page", "find something on the page", "read");
-    case "tabs_context":
-    case "tabs_context_mcp":
-    case "tabs":
-    case "list_tabs":
-    case "tab_list":
-      return action("See which tabs are open", "see which tabs are open", "read");
-    case "read_console_messages":
-    case "console_messages":
-      return action("Read the page's developer messages", "read the page's developer messages", "read");
-    case "read_network_requests":
-    case "network_requests":
-      return action("See what the page loaded", "see what the page loaded", "read");
-    case "wait":
-    case "wait_for":
-      return action("Wait for the page", "wait for the page", "read");
-    case "resize_window":
-    case "resize":
-      return action("Resize the window", "resize the window", "act-as-you");
-    case "close":
-    case "close_tab":
-    case "tab_close":
-    case "tabs_close":
-      return action("Close a tab", "close a tab", "act-as-you");
-    case "file_upload":
-    case "upload_file":
-    case "upload_image":
-      return action("Upload a file to a website", "upload a file to a website", "send");
-    case "evaluate":
-    case "javascript":
-    case "javascript_tool":
-    case "execute_script":
-    case "run_script":
-      return action("Run code on the page", "run code on the page", "run-code");
-    case "open_application":
-    case "open_app":
-      return action("Open an app", "open an app on your computer", "act-as-you");
-    default:
-      return null;
-  }
+function lengthOrNull(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
+}
+function parseBrowserCard(value) {
+  if (!isRecord$d(value) || typeof value.headline !== "string" || value.headline.trim().length === 0) return null;
+  const verb = value.verb;
+  if (typeof verb !== "string" || !(verb in VERBS)) return null;
+  const profile = value.profile_line;
+  if (typeof profile !== "string" || !(profile in PROFILES)) return null;
+  const site = isRecord$d(value.site) ? value.site : {};
+  const detail = isRecord$d(value.detail) ? value.detail : {};
+  const inputKind = detail.input_kind;
+  const chips = Array.isArray(value.risk_chips) ? value.risk_chips.filter((chip) => typeof chip === "string" && Object.hasOwn(SURFACES, chip)) : [];
+  return {
+    headline: value.headline.trim(),
+    verb,
+    site: {
+      origin: stringOrNull(site.origin),
+      first_visit_in_task: site.first_visit_in_task === true,
+      left_granted_site: site.left_granted_site === true
+    },
+    profile_line: profile,
+    detail: {
+      element_preview: stringOrNull(detail.element_preview),
+      input_kind: typeof inputKind === "string" && inputKind in INPUT_NOUNS ? inputKind : null,
+      input_length: lengthOrNull(detail.input_length),
+      input_masked: detail.input_masked === true
+    },
+    risk_chips: [...new Set(chips)],
+    provider_findings: [],
+    choices: Array.isArray(value.choices) ? value.choices.filter((choice) => typeof choice === "string") : [],
+    steps: []
+  };
+}
+function browserSurfaceLabel(surface) {
+  return SURFACES[surface];
+}
+function browserProfileLabel(profile) {
+  return PROFILES[profile];
+}
+function browserInputSummary(card) {
+  const { input_kind: kind, input_length: length, input_masked: masked } = card.detail;
+  if (kind === null) return null;
+  const size = length === null ? null : `${length} ${length === 1 ? "character" : "characters"}`;
+  if (masked) return size === null ? "Hidden" : `Hidden · ${size}`;
+  return size === null ? INPUT_NOUNS[kind] : `${size} of ${INPUT_NOUNS[kind]}`;
 }
 function fact$1(label, value, key, kind = "text") {
   return value !== null && value.length > 0 ? [{ label, value, key, kind }] : [];
 }
-function firstKey(input, keys2) {
-  if (input === null) return null;
-  return keys2.find((key) => typeof input[key] === "string" && input[key].trim().length > 0) ?? null;
+function browserSiteLabel(origin) {
+  if (origin === null) return null;
+  const host = origin.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").replace(/\/+$/, "");
+  return host.length > 0 ? host : null;
 }
-const URL_KEYS = ["url", "href", "link"];
-const TEXT_KEYS = ["text", "value", "values"];
-const KEY_KEYS = ["key", "keys"];
-const TARGET_KEYS = ["element", "description", "target", "selector"];
-const QUERY_KEYS = ["query"];
-const CODE_KEYS = ["function", "script", "expression", "code"];
-function browserFacts(input, act) {
-  const urlKey = firstKey(input, URL_KEYS);
-  const textKey = act.effect === "run-code" ? null : firstKey(input, TEXT_KEYS);
-  const keyKey = firstKey(input, KEY_KEYS);
-  const targetKey = firstKey(input, TARGET_KEYS);
-  const queryKey = firstKey(input, QUERY_KEYS);
+function explainBrowserCard(card, context) {
+  const { title, effect } = VERBS[card.verb];
+  const { input } = context;
   const facts = [
-    ...urlKey !== null ? fact$1("Web page", textOf(input?.[urlKey]), urlKey, "url") : [],
-    ...targetKey !== null ? fact$1("On", textOf(input?.[targetKey], 160), targetKey) : [],
-    ...textKey !== null ? fact$1("What it types", textOf(input?.[textKey]), textKey, "long") : [],
-    ...keyKey !== null ? fact$1("Key", textOf(input?.[keyKey], 60), keyKey) : [],
-    ...queryKey !== null ? fact$1("Looking for", textOf(input?.[queryKey], 160), queryKey) : []
+    ...fact$1("Web page", card.site.origin, "browser_site", "url"),
+    ...fact$1("On", card.detail.element_preview, "browser_element"),
+    ...fact$1(card.detail.input_kind === "script" ? "Code" : "What it types", browserInputSummary(card), "browser_input"),
+    ...fact$1("Browser", PROFILES[card.profile_line], "browser_profile"),
+    ...fact$1("Touches", card.risk_chips.map((chip) => SURFACES[chip]).join(", "), "browser_surfaces")
   ];
-  return { facts, used: [urlKey, textKey, keyKey, targetKey, queryKey].filter((key) => key !== null) };
-}
-function hostOf(facts) {
-  const url = facts.find((item) => item.kind === "url")?.value;
-  return url !== void 0 ? linkParts(url)?.host ?? null : null;
-}
-function explainBrowserTool(server, shortTool, context) {
-  const surface = surfaceOf(server);
-  if (surface === null) return null;
-  const { harness, connector, input } = context;
-  const stepName = shortTool.toLowerCase() === "computer" ? textOf(input?.action, 40) ?? "" : shortTool;
-  const act = actionFor(stepName, surface);
-  if (act === null) return null;
-  const { facts: named, used } = browserFacts(input, act);
-  const codeKey = act.effect === "run-code" ? firstKey(input, [...CODE_KEYS, "text"]) : null;
+  const codeKey = card.verb === "evaluate" && input !== null && card.detail.input_masked !== true ? CODE_KEYS.find((key) => typeof input[key] === "string" && input[key].trim().length > 0) ?? null : null;
   const code = codeKey !== null ? codeOf(input?.[codeKey]) : null;
-  const skip = [...AGENT_TEXT_KEYS$1, ...used, ...codeKey !== null ? [codeKey] : [], "action", ...POINTER_KEYS];
-  const { facts: rest } = scalarFacts(input, { skip, max: Math.max(0, 6 - named.length) });
-  const facts = [...named, ...rest];
-  const host = act.title === "Open a web page" ? hostOf(facts) : null;
-  const phrase = host !== null ? `open ${host}` : act.phrase;
   const thought = textOf(input?.thought, 300);
+  const site = browserSiteLabel(card.site.origin);
+  const rowTitle = card.verb === "navigate" && site !== null ? `Open ${site}` : title;
   return {
-    headline: `${harness} wants to ${phrase} in ${connector}`,
-    title: act.title,
+    headline: card.headline,
+    title,
     aside: null,
-    effect: act.effect,
-    effectBasis: "Read from the tool's name. Guard has not checked what it does.",
+    effect,
+    effectBasis: BASIS,
     facts,
     steps: [],
     quotes: thought !== null ? { caption: THOUGHT_CAPTION, items: [thought] } : null,
     code: code !== null ? { label: "Code", text: code } : null,
-    queueTitle: `${connector} · ${host !== null ? `Open ${host}` : act.title}`,
-    queueDetail: host === null ? facts[0]?.value ?? null : null
+    queueTitle: `${context.connector} · ${rowTitle}`,
+    queueDetail: card.verb === "navigate" ? null : facts[0]?.value ?? null
   };
 }
 const CLAUDE_APP = "the Claude app";
@@ -14764,7 +14720,7 @@ function fact(label, value, key, kind = "text") {
   return value !== null && value.length > 0 ? [{ label, value, key, kind }] : [];
 }
 function summaryFacts(input) {
-  const buttons = recordList(input?.actions, 4).map((action2) => textOf(action2.label, 40)).filter((label) => label !== null && label.length > 0);
+  const buttons = recordList(input?.actions, 4).map((action) => textOf(action.label, 40)).filter((label) => label !== null && label.length > 0);
   return [
     ...fact("Summary", textOf(input?.recap, 400), "recap", "long"),
     ...fact("Question", textOf(input?.ask, 160), "ask"),
@@ -14889,7 +14845,8 @@ function explainMcpCall(item) {
   const host = hostAppTool(ref.server, shortTool, { harness: item.harness, raw });
   const harness = host?.requester ?? harnessDisplayName(item.harness);
   const connector = host?.app ?? (ref.server.length > 0 ? serviceDisplayName(ref.server) : UNKNOWN_SERVER);
-  const body = (host !== null ? explainHostAppTool(host, input) : null) ?? (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? (host === null ? explainBrowserTool(ref.server, shortTool, { harness, connector, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
+  const browserCard = parseBrowserCard(item.browser_card);
+  const body = (browserCard !== null ? explainBrowserCard(browserCard, { connector, input }) : null) ?? (host !== null ? explainHostAppTool(host, input) : null) ?? (ref.server.toLowerCase() === "composio" ? explainComposioTool(shortTool, { harness, input }) : null) ?? explainGenericTool({ harness, connector, shortTool, input });
   return {
     ...body,
     consequence: consequenceFor(body.effect, whereItActs(body, connector)),
@@ -16510,7 +16467,7 @@ const ACTION_PRESENTATIONS = {
   }
 };
 function isGuardAction(value) {
-  return typeof value === "string" && GUARD_ACTIONS$1.some((action2) => action2 === value);
+  return typeof value === "string" && GUARD_ACTIONS$1.some((action) => action === value);
 }
 function isRecognizedGuardActionInput(value) {
   return value === "ask" || isGuardAction(value);
@@ -16529,7 +16486,7 @@ function guardActionPresentation(value) {
 }
 function mostRestrictiveGuardAction(...values) {
   if (values.length === 0) return "review";
-  const rank = new Map(GUARD_ACTIONS$1.map((action2, index) => [action2, index]));
+  const rank = new Map(GUARD_ACTIONS$1.map((action, index) => [action, index]));
   return values.map(normalizeGuardAction).reduce(
     (strongest, candidate) => (rank.get(candidate) ?? 0) > (rank.get(strongest) ?? 0) ? candidate : strongest
   );
@@ -16744,16 +16701,16 @@ function plainEnglishDescription(receipt) {
     const outcome = `You approved it once, but a one-time approval could not let ${app} run it, so it stayed stopped.`;
     return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${formatSubtitle(subtitle)}${outcome}` : `${app} tried to ${infinitiveVerb(type)} ${title}. ${outcome}`;
   }
-  const action2 = guardActionPresentation(receipt.policy_decision);
-  if (action2.disposition === "allowed") {
-    const outcome = action2.action === "warn" ? "allowed it with a warning" : "allowed it";
+  const action = guardActionPresentation(receipt.policy_decision);
+  if (action.disposition === "allowed") {
+    const outcome = action.action === "warn" ? "allowed it with a warning" : "allowed it";
     if (receipt.user_override !== null) {
       return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} You reviewed and ${outcome}.` : `${app} ${pastTenseVerb(type)} ${title}. You reviewed and ${outcome}.`;
     }
-    const automaticOutcome = action2.action === "warn" ? "Guard allowed it automatically with a warning." : "Guard allowed it automatically.";
+    const automaticOutcome = action.action === "warn" ? "Guard allowed it automatically with a warning." : "Guard allowed it automatically.";
     return subtitle ? `${app} ${pastTenseVerb(type)} ${title}. ${formatSubtitle(subtitle)} ${automaticOutcome}` : `${app} ${pastTenseVerb(type)} ${title}. ${automaticOutcome}`;
   }
-  const enforcementCopy = `${guardActionActivityCopy(action2.action, "Guard", "it")}.`;
+  const enforcementCopy = `${guardActionActivityCopy(action.action, "Guard", "it")}.`;
   return subtitle ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy} ${formatSubtitle(subtitle)}` : `${app} tried to ${infinitiveVerb(type)} ${title}. ${enforcementCopy}`;
 }
 function pastTenseVerb(type) {
@@ -17164,16 +17121,16 @@ function resolveDataFlowSinkLabel(signal) {
   }
   return "External sink";
 }
-function buildRetryAfterApprovalCopy(item, action2, persistedExactAction = false) {
+function buildRetryAfterApprovalCopy(item, action, persistedExactAction = false) {
   const harness = harnessDisplayName(item.harness);
   if (isWatchOnlyObservation(item)) {
-    if (persistedExactAction && action2 === "allow") {
+    if (persistedExactAction && action === "allow") {
       return "Saved. Guard will allow this exact action next time when the remembered option is selected.";
     }
     if (persistedExactAction) return "Saved. Guard will stop this exact action next time.";
     return "Reviewed. Watch already allowed this action to run; no future rule was saved.";
   }
-  if (action2 === "allow") {
+  if (action === "allow") {
     if (persistedExactAction) {
       return `Saved. Return to ${harness} to retry. Guard will allow this exact action next time; changed commands still need review.`;
     }
@@ -17296,8 +17253,8 @@ function scopeLabel(scope, variant = "review") {
       return scope;
   }
 }
-function policyActionLabel(action2) {
-  return guardActionPresentation(action2).label;
+function policyActionLabel(action) {
+  return guardActionPresentation(action).label;
 }
 function requestResolutionBlockReason(item) {
   if (item.native_business_review_display_only) {
@@ -17767,11 +17724,11 @@ function computePeriodComparison(receipts, days, now2) {
 function nonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function isRecord$b(value) {
+function isRecord$c(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeOperatorHealth(raw) {
-  if (!isRecord$b(raw)) {
+  if (!isRecord$c(raw)) {
     return void 0;
   }
   const state = raw["state"];
@@ -17881,7 +17838,7 @@ const PROTECTION_CHECK_IDS = [
 ];
 const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
 const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-function isRecord$a(value) {
+function isRecord$b(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function copyForState(state) {
@@ -17914,7 +17871,7 @@ function deriveState(checks) {
   return byId.get("decision_stream")?.status === "pass" ? "protected" : "partial";
 }
 function normalizeCheck(value) {
-  if (!isRecord$a(value)) return null;
+  if (!isRecord$b(value)) return null;
   const checkId = value.check_id;
   const status = value.status;
   const reasonCode = value.reason_code;
@@ -18005,7 +17962,7 @@ function useProtectionPresentationState(health) {
   });
 }
 function normalizeApp(value) {
-  if (!isRecord$a(value)) return null;
+  if (!isRecord$b(value)) return null;
   const harness = value.harness;
   if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
   const checks = normalizeChecks(value.checks);
@@ -18013,7 +17970,7 @@ function normalizeApp(value) {
   return { harness, ...healthFromChecks(checks) };
 }
 function normalizeProtectionHealth(value) {
-  if (!isRecord$a(value) || value.schema_version !== "guard.protection-health.v1") {
+  if (!isRecord$b(value) || value.schema_version !== "guard.protection-health.v1") {
     return unavailableProtectionHealth();
   }
   const checks = normalizeChecks(value.checks);
@@ -18111,12 +18068,12 @@ function remainingProtectionRepairMessage(health, displayName) {
     message: `${remaining} Open the repair details below for the exact check.`
   };
 }
-function isRecord$9(value) {
+function isRecord$a(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 const REASON_CODE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 function checkReasonMapValue(value) {
-  if (!isRecord$9(value)) return {};
+  if (!isRecord$a(value)) return {};
   const reasons2 = {};
   for (const [checkId, reason] of Object.entries(value)) {
     if (!REASON_CODE_ID.test(checkId) || checkId.length > 96) continue;
@@ -18125,7 +18082,7 @@ function checkReasonMapValue(value) {
   }
   return reasons2;
 }
-function isRecord$8(value) {
+function isRecord$9(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function stringValue$2(value) {
@@ -18134,9 +18091,9 @@ function stringValue$2(value) {
 function remainingStep(candidate) {
   const step = stringValue$2(candidate.step);
   const message = stringValue$2(candidate.message);
-  const action2 = stringValue$2(candidate.action);
-  if ((step === "intelligence_sync" && action2 === "connect" || step === "package_shims" && action2 === "check_access") && message !== null) {
-    return { step, message, action: action2 };
+  const action = stringValue$2(candidate.action);
+  if ((step === "intelligence_sync" && action === "connect" || step === "package_shims" && action === "check_access") && message !== null) {
+    return { step, message, action };
   }
   return null;
 }
@@ -18152,7 +18109,7 @@ function normalizeSupplyChainRepairResult(result) {
   const failures = [];
   if (Array.isArray(result.failed_steps)) {
     for (const candidate of result.failed_steps) {
-      if (!isRecord$8(candidate)) continue;
+      if (!isRecord$9(candidate)) continue;
       const parsed = failedStep(candidate);
       if (parsed !== null) failures.push(parsed);
     }
@@ -18160,7 +18117,7 @@ function normalizeSupplyChainRepairResult(result) {
   const remaining = [];
   if (Array.isArray(result.remaining_steps)) {
     for (const candidate of result.remaining_steps) {
-      if (!isRecord$8(candidate)) continue;
+      if (!isRecord$9(candidate)) continue;
       const parsed = remainingStep(candidate);
       if (parsed !== null) remaining.push(parsed);
     }
@@ -18329,7 +18286,7 @@ const MAX_SEGMENT_INDEX = 255;
 const CATALOG_ID$1 = /^command\.[A-Za-z0-9._-]{1,248}$/;
 const DIGEST$4 = /^[0-9a-f]{64}$/;
 const EXECUTABLE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
-function isRecord$7(value) {
+function isRecord$8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function boundedText$1(value, limit) {
@@ -18341,7 +18298,7 @@ function catalogId$1(value) {
   return typeof value === "string" && CATALOG_ID$1.test(value) ? value : null;
 }
 function normalizeExtension(raw) {
-  if (!isRecord$7(raw)) return null;
+  if (!isRecord$8(raw)) return null;
   const extensionId = catalogId$1(raw.extension_id);
   const name = boundedText$1(raw.name, 120);
   if (extensionId === null || name === null) return null;
@@ -18352,7 +18309,7 @@ function normalizeExtension(raw) {
 const MAX_RULE_TEXT = 240;
 const MAX_SAFER_ALTERNATIVES = 2;
 function normalizeRule(raw) {
-  if (!isRecord$7(raw)) return null;
+  if (!isRecord$8(raw)) return null;
   const ruleId = catalogId$1(raw.rule_id);
   const title = raw.title === null || raw.title === void 0 ? null : boundedText$1(raw.title, 120);
   const severity = boundedText$1(raw.severity, 32);
@@ -18372,7 +18329,7 @@ function normalizeRule(raw) {
   return rule2;
 }
 function normalizePermission$1(raw) {
-  if (!isRecord$7(raw)) return null;
+  if (!isRecord$8(raw)) return null;
   const permissionId = catalogId$1(raw.permission_id);
   const label = boundedText$1(raw.label, 120);
   if (permissionId === null || label === null || typeof raw.configurable !== "boolean") return null;
@@ -18385,7 +18342,7 @@ function normalizeList(raw, normalize) {
   return items.slice(0, MAX_PER_SEGMENT);
 }
 function normalizeSegment(raw) {
-  if (!isRecord$7(raw)) return null;
+  if (!isRecord$8(raw)) return null;
   const { index } = raw;
   if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index > MAX_SEGMENT_INDEX) return null;
   const executable = raw.executable === null || raw.executable === void 0 ? null : typeof raw.executable === "string" && EXECUTABLE.test(raw.executable) ? raw.executable : void 0;
@@ -18397,7 +18354,7 @@ function normalizeSegment(raw) {
   return { index, executable, extensions, rules, permissions };
 }
 function normalizeApprovalExtensionCoverage(raw) {
-  if (!isRecord$7(raw) || raw.schema !== APPROVAL_EXTENSION_COVERAGE_SCHEMA) return null;
+  if (!isRecord$8(raw) || raw.schema !== APPROVAL_EXTENSION_COVERAGE_SCHEMA) return null;
   if (typeof raw.catalog_digest !== "string" || !DIGEST$4.test(raw.catalog_digest)) return null;
   if (typeof raw.compound !== "boolean" || !Array.isArray(raw.segments)) return null;
   if (raw.segments.length === 0) return null;
@@ -18448,7 +18405,7 @@ const MAX_PERMISSIONS$1 = 3;
 const CATALOG_ID = /^command\.[A-Za-z0-9._-]{1,248}$/;
 const DIGEST$3 = /^[0-9a-f]{64}$/;
 const CAUTION_REASONS = /* @__PURE__ */ new Set(["critical", "destructive", "sensitive"]);
-function isRecord$6(value) {
+function isRecord$7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function boundedText(value, limit) {
@@ -18460,7 +18417,7 @@ function catalogId(value) {
   return typeof value === "string" && CATALOG_ID.test(value) ? value : null;
 }
 function normalizePermission(raw) {
-  if (!isRecord$6(raw)) return null;
+  if (!isRecord$7(raw)) return null;
   const permissionId = catalogId(raw.permission_id);
   const extensionId = catalogId(raw.extension_id);
   const label = boundedText(raw.label, 120);
@@ -18487,7 +18444,7 @@ function normalizePermission(raw) {
   };
 }
 function normalizeApprovalExtensionRecommendation(raw) {
-  if (!isRecord$6(raw) || raw.schema !== RECOMMENDATION_SCHEMA) return null;
+  if (!isRecord$7(raw) || raw.schema !== RECOMMENDATION_SCHEMA) return null;
   if (raw.status !== "available" && raw.status !== "authority_unavailable") return null;
   if (!Array.isArray(raw.permissions) || raw.permissions.length === 0 || raw.permissions.length > MAX_PERMISSIONS$1) {
     return null;
@@ -18551,6 +18508,53 @@ function approvalExtensionRecommendationCopy(recommendation) {
     cautionLines,
     successMessage: `Approved. ${owner} now allows ${commandText} automatically.`
   };
+}
+const RUNTIME_UPGRADE_ADVICE_SCHEMA = "guard.runtime-upgrade-advice.v1";
+function isRecord$6(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function text$4(value) {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+const MANAGERS = ["nvm", "homebrew", "other"];
+const NODE_DOWNLOAD_URL = "https://nodejs.org/en/download";
+function normalizeRuntimeUpgradeAdvice(raw) {
+  if (!isRecord$6(raw) || raw.schema !== RUNTIME_UPGRADE_ADVICE_SCHEMA || raw.family !== "node") return null;
+  const currentVersion = text$4(raw.current_version);
+  const currentPath = text$4(raw.current_path);
+  const advisoryId = text$4(raw.advisory_id);
+  const severity = text$4(raw.severity);
+  if (currentVersion === null || currentPath === null || advisoryId === null || severity === null) return null;
+  const manager = MANAGERS.find((candidate) => candidate === raw.manager) ?? "other";
+  return {
+    current_version: currentVersion,
+    current_path: currentPath,
+    advisory_id: advisoryId,
+    severity,
+    known_exploited: raw.known_exploited === true,
+    manager,
+    patched_version: text$4(raw.patched_version),
+    installed_version: text$4(raw.installed_version),
+    switch_version: manager === "nvm" ? text$4(raw.switch_version) : null,
+    switched: raw.switched === true,
+    command: text$4(raw.command),
+    download_url: NODE_DOWNLOAD_URL
+  };
+}
+function runtimeUpgradeTarget(advice) {
+  if (advice.installed_version !== null) {
+    return `Node.js ${advice.installed_version} is already installed and is not affected.`;
+  }
+  if (advice.patched_version !== null) {
+    return `Node.js ${advice.patched_version} fixes it.`;
+  }
+  return null;
+}
+function currentRuntimeUpgradeAdvice(latest, reply) {
+  return reply !== null && reply.answered === latest ? reply.advice : latest;
+}
+function finishedSwitchVersion(latest, done) {
+  return done !== null && done.answered === latest ? done.version : null;
 }
 const CHUNK_RELOAD_STORAGE_KEY = "hol-guard-dashboard-chunk-reload";
 const CHUNK_RELOAD_DELAY_MS = 400;
@@ -20594,7 +20598,7 @@ function parseDecisionV2(raw) {
     return null;
   }
   const guardAction = raw["guard_action"];
-  const action2 = raw["action"];
+  const action = raw["action"];
   const reason = raw["reason"];
   const userTitle = raw["user_title"];
   const userBody = raw["user_body"];
@@ -20604,12 +20608,12 @@ function parseDecisionV2(raw) {
   const retryInstruction = raw["retry_instruction"];
   const signals = raw["signals"];
   const confidence = raw["confidence"];
-  if (!isGuardAction(guardAction) || !isDecisionV2Action(action2) || action2 !== guardDecisionV2Action(guardAction) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
+  if (!isGuardAction(guardAction) || !isDecisionV2Action(action) || action !== guardDecisionV2Action(guardAction) || !isNonEmptyString(reason) || !isNonEmptyString(userTitle) || !isNonEmptyString(userBody) || !isNonEmptyString(harnessMessage) || !isNonEmptyString(dashboardPrimaryDetail) || !isStringArray(approvalScopes) || !isStringOrNull(retryInstruction) || !isRiskSignalV2Array(signals) || !isDecisionV2Confidence(confidence)) {
     return null;
   }
   return {
     guard_action: guardAction,
-    action: action2,
+    action,
     reason,
     user_title: userTitle,
     user_body: userBody,
@@ -20628,8 +20632,8 @@ function parseLegacyPackageActionMetadata(raw) {
   if (Object.keys(raw).some((key) => isActionBearingKey(key) && key !== "policy_action")) {
     return { recognized: false, action: null };
   }
-  const action2 = raw["policy_action"];
-  return { recognized: true, action: isRecognizedGuardActionInput(action2) ? normalizeGuardAction(action2) : null };
+  const action = raw["policy_action"];
+  return { recognized: true, action: isRecognizedGuardActionInput(action) ? normalizeGuardAction(action) : null };
 }
 const DECISION_SCOPE_VALUES = /* @__PURE__ */ new Set([
   "artifact",
@@ -20661,8 +20665,10 @@ function normalizeApprovalRequest(item) {
     decision_contract_error: rawContractError,
     extension_recommendation: rawExtensionRecommendation,
     extension_coverage: rawExtensionCoverage,
+    runtime_upgrade: rawRuntimeUpgrade,
     ...baseItem
   } = item;
+  const runtimeUpgrade = normalizeRuntimeUpgradeAdvice(rawRuntimeUpgrade);
   const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
   const extensionCoverage = normalizeApprovalExtensionCoverage(rawExtensionCoverage);
   const policyAction = normalizeGuardAction(item.policy_action);
@@ -20672,7 +20678,7 @@ function normalizeApprovalRequest(item) {
   const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_action);
   const hasMalformedActionEnvelope = item.action_envelope_json !== void 0 && item.action_envelope_json !== null && actionEnvelope === null && !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
   const hasContradictoryActionEnvelope = actionEnvelope !== null && [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
-    (action2) => action2 !== void 0 && action2 !== null && action2 !== policyAction
+    (action) => action !== void 0 && action !== null && action !== policyAction
   ) || legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction;
   const hasDecisionContractError = rawContractError !== void 0 || hasUnknownPolicyAction || hasMalformedActionEnvelope || hasContradictoryActionEnvelope || item.decision_v2_json !== void 0 && item.decision_v2_json !== null && decisionV2 === null || decisionV2 !== null && (decisionV2.guard_action !== policyAction || decisionV2.action !== guardDecisionV2Action(policyAction));
   const failClosedPolicyAction = hasDecisionContractError ? mostRestrictiveGuardAction(
@@ -20726,6 +20732,7 @@ function normalizeApprovalRequest(item) {
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...extensionRecommendation !== null && !hasDecisionContractError ? { extension_recommendation: extensionRecommendation } : {},
     ...extensionCoverage !== null && !hasDecisionContractError ? { extension_coverage: extensionCoverage } : {},
+    ...runtimeUpgrade !== null ? { runtime_upgrade: runtimeUpgrade } : {},
     ...hasDecisionContractError ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT } : {}
   };
 }
@@ -21418,7 +21425,7 @@ function normalizeReceipt(item) {
   const hasUnknownPolicyAction = !isRecognizedGuardActionInput(item.policy_decision);
   const hasMalformedActionEnvelope = item.action_envelope_json !== void 0 && item.action_envelope_json !== null && actionEnvelope === null && !(legacyActionMetadata.recognized && legacyActionMetadata.action !== null);
   const hasContradictoryActionEnvelope = actionEnvelope !== null && [actionEnvelope.pre_execution_result, actionEnvelope.policy_action].some(
-    (action2) => action2 !== void 0 && action2 !== null && action2 !== policyAction
+    (action) => action !== void 0 && action !== null && action !== policyAction
   ) || legacyActionMetadata.recognized && legacyActionMetadata.action !== policyAction;
   const hasDecisionContractError = item.decision_contract_error !== void 0 || hasUnknownPolicyAction || hasMalformedActionEnvelope || hasContradictoryActionEnvelope;
   const failClosedPolicyAction = hasDecisionContractError ? mostRestrictiveGuardAction(
@@ -22619,14 +22626,14 @@ async function fetchSupplyChainBundle() {
   }
   return bundle;
 }
-async function runPackageFirewallAction(action2, manager, credentials) {
+async function runPackageFirewallAction(action, manager, credentials) {
   const payload = {
     ...manager !== null ? { managers: [manager] } : {},
     ...credentials?.approval_password !== void 0 ? { approval_password: credentials.approval_password } : {},
     ...credentials?.approval_totp_code !== void 0 ? { approval_totp_code: credentials.approval_totp_code } : {}
   };
   const { response, payload: payloadBody } = await fetchLocalProtectionJson(
-    `/v1/supply-chain/package-shims/${action2}`,
+    `/v1/supply-chain/package-shims/${action}`,
     {
       method: "POST",
       headers: {
@@ -23825,8 +23832,8 @@ function approvalGateLockRemainingSeconds(gate, nowMs = Date.now()) {
 function approvalGateIsLocked(gate, nowMs = Date.now()) {
   return approvalGateLockRemainingSeconds(gate, nowMs) > 0;
 }
-function approvalGateRequiredForResolution(gate, action2, scope) {
-  return gate?.enabled === true && (action2 === "allow" || scope === "global" || gate.strict_all_decisions === true);
+function approvalGateRequiredForResolution(gate, action, scope) {
+  return gate?.enabled === true && (action === "allow" || scope === "global" || gate.strict_all_decisions === true);
 }
 function approvalGateCooldownLabel(seconds) {
   if (seconds === 0) return "Every approval";
@@ -27159,7 +27166,7 @@ function waitForStatusRetry(signal) {
     signal.addEventListener("abort", onAbort, { once: true });
   });
 }
-async function request$1(path, action2, signal) {
+async function request$1(path, action, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context assistance setup requires a local Guard installation.");
   const timeout = AbortSignal.timeout(1e4);
   const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -27168,7 +27175,7 @@ async function request$1(path, action2, signal) {
     const response = await fetchWithGuardAuth(path, {
       cache: "no-store",
       signal: requestSignal,
-      ...action2 ? {
+      ...action ? {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{}"
@@ -27177,7 +27184,7 @@ async function request$1(path, action2, signal) {
     if (response.ok) return parseContextAssistanceStatus(await response.json());
     const body = await response.json().catch(() => null);
     const code = body !== null && typeof body === "object" && "code" in body && typeof body.code === "string" && /^[a-z0-9_]{1,160}$/.test(body.code) ? body.code : "context_assistance_unavailable";
-    if (!action2 && response.status === 409 && code === "native_context_assistance_busy" && retry < 8) {
+    if (!action && response.status === 409 && code === "native_context_assistance_busy" && retry < 8) {
       await waitForStatusRetry(requestSignal);
       continue;
     }
@@ -27189,12 +27196,12 @@ async function request$1(path, action2, signal) {
 }
 const fetchContextAssistance = (signal) => request$1("/v1/context-assistance", void 0, signal);
 const fetchContextInstallations = (signal) => request$1("/v1/context-assistance/installations", void 0, signal);
-function controlContextAssistance(action2, signal) {
-  if (!["recheck", "activate", "stop"].includes(action2)) {
+function controlContextAssistance(action, signal) {
+  if (!["recheck", "activate", "stop"].includes(action)) {
     return Promise.reject(new ContextAssistanceApiError("action_invalid", "Invalid context assistance action."));
   }
-  if (action2 === "stop") forgetTurnOn();
-  return request$1(`/v1/context-assistance/${action2}`, action2, signal);
+  if (action === "stop") forgetTurnOn();
+  return request$1(`/v1/context-assistance/${action}`, action, signal);
 }
 function ContextBriefView({ brief, scope }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
@@ -27252,17 +27259,24 @@ function parseContextBrief(value) {
   if (!object$2(value) || value.schema !== "guard-cigar-context-brief.v1" || value.data_role !== true || !digest$4(value.snapshot_id) || !text$2(value.policy_revision) || !count$1(value.graph_revision) || !text$2(value.rendered) || value.rendered.length > 262144 || !count$1(value.rendered_tokens) || !Array.isArray(value.excerpts) || value.excerpts.length > 16 || !value.excerpts.every((excerpt) => object$2(excerpt) && text$2(excerpt.text) && Array.isArray(excerpt.citations)) || !Array.isArray(value.citations) || value.citations.length > 1024 || !value.citations.every((citation) => object$2(citation) && text$2(citation.source) && text$2(citation.node_id) && count$1(citation.start_line) && citation.start_line > 0 && count$1(citation.end_line) && citation.end_line >= citation.start_line && digest$4(citation.document_digest))) invalid$3();
   return value;
 }
-function refusal(code, action2, status) {
+function refusal(code, action, status, maxActiveWorkspaces) {
   if (/runtime_(deadline_exceeded|not_verified|closed|crashed|cancelled|transport_failed)$/.test(code)) {
     return "CIGAR stopped before it could finish. Restart CIGAR at the top of this page, then try again. Your saved project choices are kept.";
   }
   if (code.endsWith("context_storage_repair_required")) return "CIGAR's saved notes need repair. Delete them in CIGAR → Privacy, then add the project again.";
   if (code.endsWith("context_storage_outcome_unknown")) return "CIGAR's saved notes may have changed before this finished. Check CIGAR → Privacy, then try again.";
-  if (code.endsWith("context_resource_limit") && action2 === "authorize_agent") {
+  if (code.endsWith("context_resource_limit") && action === "authorize_agent") {
     return "CIGAR is connected to as many apps as it can. Disconnect an app or remove a project you no longer use, then reconnect this app and use its new code.";
   }
+  if (code.endsWith("context_path_limit") && action === "grant") {
+    return "CIGAR can read up to 32 files in one project. Pick fewer files, then try again.";
+  }
+  if (code.endsWith("context_resource_limit") && action === "grant") {
+    const limit = Number.isSafeInteger(maxActiveWorkspaces) && maxActiveWorkspaces > 0 ? ` (${maxActiveWorkspaces})` : "";
+    return `CIGAR is already working with as many projects as your Context size allows${limit}. Remove a project, or raise Active workspaces under Custom limits.`;
+  }
   if (code.endsWith("context_busy") || code.endsWith("_busy")) return "CIGAR is still finishing something. Try again in a moment.";
-  if (code.endsWith("context_scope_denied") && action2 === "grant") {
+  if (code.endsWith("context_scope_denied") && action === "grant") {
     return "CIGAR couldn't add these files. It won't read a file that looks like it holds a password or key, a file your settings block, or a folder Guard keeps private. Take that file out, or pick another folder, and try again.";
   }
   if (code.endsWith("context_stale") || code.endsWith("context_scope_denied")) return "The project or its files changed. Choose Read files again, or add the project again.";
@@ -27270,12 +27284,12 @@ function refusal(code, action2, status) {
   return `CIGAR could not finish that (${code}). Refresh and try again.`;
 }
 const refusalCode = (value) => text$2(value) && /^[a-z0-9_]{1,160}$/.test(value) ? value : null;
-function refusalFromBody(body, action2, status) {
+function refusalFromBody(body, action, status, maxActiveWorkspaces) {
   const fields2 = object$2(body) ? body : {};
   const engineCode = refusalCode(fields2.code);
   const code = engineCode ?? refusalCode(fields2.error) ?? "context_request_refused";
   const gateMessage = !engineCode && code.includes("approval_gate") && text$2(fields2.message) && fields2.message.trim() && fields2.message.length <= 300 ? fields2.message : null;
-  return { code, message: gateMessage ?? refusal(code, action2, status) };
+  return { code, message: gateMessage ?? refusal(code, action, status, maxActiveWorkspaces) };
 }
 async function ask(route, input, proof, signal) {
   if (isGuardDemoMode()) throw new ContextAssistanceApiError("demo_unavailable", "Context sources require a local Guard installation.");
@@ -27318,8 +27332,8 @@ async function authorizeContextAgentSession(sessionId, scopeId, proof, signal) {
 async function revokeContextAgentSession(sessionId, signal) {
   return ask("workspace-access", { action: "revoke_agent", session_id: sessionId }, void 0, signal);
 }
-async function manageContextWorkspace(action2, scopeId, sourceId, signal) {
-  return ask("workspace-access", { action: action2, ...scopeId ? { scope_id: scopeId } : {}, ...sourceId ? { source_id: sourceId } : {} }, void 0, signal);
+async function manageContextWorkspace(action, scopeId, sourceId, signal) {
+  return ask("workspace-access", { action, ...scopeId ? { scope_id: scopeId } : {}, ...sourceId ? { source_id: sourceId } : {} }, void 0, signal);
 }
 async function compileWorkspaceContext(scopeId, query, signal) {
   const result = await ask("workspace", { action: "compile", scope_id: scopeId, query }, void 0, signal);
@@ -27759,18 +27773,18 @@ function nextSafeStep(receipt) {
   if (approvalLeftActionStopped(receipt)) {
     return 'A one-time approval cannot let the agent run this command. Run it yourself, or approve the next request with "Always allow exact action" when that option is offered.';
   }
-  const action2 = guardActionPresentation(receipt.policy_decision).action;
-  if (action2 === "block") {
+  const action = guardActionPresentation(receipt.policy_decision).action;
+  if (action === "block") {
     return "This action is blocked. Review the governing policy or choose a safer alternative; it cannot be approved from the review queue.";
   }
-  if (action2 === "sandbox-required") {
+  if (action === "sandbox-required") {
     return "Run this action through an approved sandbox, then retry only after the sandbox requirement is satisfied.";
   }
-  if (action2 === "allow" || action2 === "warn") {
+  if (action === "allow" || action === "warn") {
     return null;
   }
   const category = detectCategory(receipt);
-  const approvalCopy = action2 === "require-reapproval" ? "grant fresh approval" : "approve it";
+  const approvalCopy = action === "require-reapproval" ? "grant fresh approval" : "approve it";
   if (category === "supply-chain") {
     return `Review the package source and version, then ${approvalCopy} from the review queue if it is safe.`;
   }
@@ -27794,7 +27808,7 @@ function NextSafeCommandHint({ receipt }) {
   ] });
 }
 function EvidenceTimeline({ receipt }) {
-  const action2 = guardActionPresentation(receipt.policy_decision);
+  const action = guardActionPresentation(receipt.policy_decision);
   const stopped = approvalLeftActionStopped(receipt);
   const events = [
     {
@@ -27803,9 +27817,9 @@ function EvidenceTimeline({ receipt }) {
       icon: "start"
     },
     {
-      label: stopped ? APPROVAL_LEFT_STOPPED_LABEL : action2.label,
+      label: stopped ? APPROVAL_LEFT_STOPPED_LABEL : action.label,
       time: receipt.timestamp,
-      icon: stopped ? "blocked" : action2.disposition
+      icon: stopped ? "blocked" : action.disposition
     }
   ];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -31291,8 +31305,8 @@ const FEEDBACK_LABELS$1 = {
   should_not_have_interrupted: "Should not have interrupted",
   expected_guard_to_stop_this: "Expected Guard to stop this"
 };
-function commandDecisionLabel(action2) {
-  return action2 === null ? "Decision unavailable" : DECISION_LABELS[action2];
+function commandDecisionLabel(action) {
+  return action === null ? "Decision unavailable" : DECISION_LABELS[action];
 }
 function commandExecutionLabel(status) {
   return EXECUTION_LABELS[status];
@@ -35192,9 +35206,9 @@ function decisionButtonLabels(input) {
   const blockLabel = watchOnlyObservation || persistExactBlock ? "Stop this next time" : blockButtonLabel(blockScope);
   return { persistExactAllow, persistExactBlock, allowLabel, blockLabel };
 }
-function resolvedActionCopy(item, action2, persistedExactAction) {
-  if (item !== null) return buildRetryAfterApprovalCopy(item, action2, persistedExactAction);
-  if (action2 === "allow") return "Approved: action can proceed";
+function resolvedActionCopy(item, action, persistedExactAction) {
+  if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
+  if (action === "allow") return "Approved: action can proceed";
   return "Blocked: action stopped";
 }
 const EXTENSION_BRANDS = {
@@ -35471,6 +35485,26 @@ function McpAppMark({ name, size = "md" }) {
     }
   );
 }
+function browserReportCommand(requestId) {
+  return `hol-guard browser report-prompt ${requestId}`;
+}
+function BrowserReportPrompt({ requestId }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "This should not have asked" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: "Run this command to print the call as an anonymized case: every value is replaced and every site becomes site-a.example.test. Read it, then paste it into a public issue. Guard does not send anything." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      LoggedActionPanel,
+      {
+        label: "Command",
+        text: browserReportCommand(requestId),
+        copyAriaLabel: "Copy the report command to clipboard",
+        expandAriaLabel: "Expand the report command",
+        collapseAriaLabel: "Collapse the report command"
+      },
+      `${requestId}-report`
+    ) })
+  ] });
+}
 const EFFECT_ICONS = {
   "in-app": HiMiniComputerDesktop,
   read: HiMiniMagnifyingGlass,
@@ -35612,6 +35646,10 @@ function scopeNote(item, connector) {
   }
   return "Allow once and Always allow both cover only these exact inputs. If the inputs change, Guard asks again.";
 }
+function mcpCallReason(item, explanation) {
+  const coreReason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  return coreReason !== null && !GENERIC_REASON.test(coreReason) ? coreReason : explanation.whyAsked;
+}
 function CodePanel({ requestId, code }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     LoggedActionPanel,
@@ -35626,8 +35664,7 @@ function CodePanel({ requestId, code }) {
 function McpCallCard({ item, explanation }) {
   const watchOnly = isWatchOnlyObservation(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
-  const coreReason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
-  const reason = coreReason !== null && !GENERIC_REASON.test(coreReason) ? coreReason : explanation.whyAsked;
+  const reason = mcpCallReason(item, explanation);
   const app = actingApp(explanation);
   const facts = [
     ...explanation.facts,
@@ -35680,9 +35717,19 @@ function McpCallCard({ item, explanation }) {
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(McpCallFooter, { item, explanation, reason })
+  ] });
+}
+function McpCallFooter({
+  item,
+  explanation,
+  reason,
+  withheldInput
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the exact input" }),
-      explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      withheldInput !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-muted-foreground", children: withheldInput }) : explanation.rawInput !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         LoggedActionPanel,
         {
           label: "Input",
@@ -35704,8 +35751,122 @@ function McpCallCard({ item, explanation }) {
         scopeNote(item, explanation.connector),
         explanation.truncated ? " Long text is shown shortened here." : ""
       ] })
+    ] }),
+    item.browser_card ? /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserReportPrompt, { requestId: item.request_id }) : null
+  ] });
+}
+function CardRow(props) {
+  const Icon = props.icon;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_minmax(4.5rem,auto)_minmax(0,1fr)] items-start gap-x-2.5 py-1.5 text-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-dark/50", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "pt-px text-brand-dark/60", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex min-w-0 flex-col items-start", children: props.children })
+  ] });
+}
+const FLAG_TONES = {
+  note: "border-slate-200 bg-slate-50 text-brand-dark/80",
+  attention: "border-brand-attention/30 bg-brand-attention/[0.08] text-brand-dark"
+};
+function Flag({ tone, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${FLAG_TONES[tone]}`, children });
+}
+const INPUT_LABELS = { text: "Types", key: "Presses", file: "Sends", script: "Runs" };
+function BrowserInputPreview({ card }) {
+  const { element_preview: element, input_kind: kind, input_masked: masked } = card.detail;
+  const summary = browserInputSummary(card);
+  if (element === null && summary === null) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    element !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CardRow, { icon: HiMiniCursorArrowRays, label: "On", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-words text-brand-dark", children: element }) }),
+    kind !== null && summary !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs(CardRow, { icon: masked ? HiMiniLockClosed : HiMiniPencilSquare, label: INPUT_LABELS[kind], children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-dark", children: summary }),
+      masked && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 text-xs text-muted-foreground", children: "Guard does not show what it types here." })
     ] })
   ] });
+}
+const REACH = {
+  shared: "Your signed-in sites and saved data are reachable.",
+  "remote-debugging": "Anything attached to this browser can drive it.",
+  unknown: "Guard treats it as your own profile.",
+  dedicated: null,
+  isolated: null
+};
+function BrowserProfileLine({ profile }) {
+  const reach = REACH[profile];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(CardRow, { icon: HiMiniWindow, label: "Browser", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-dark", children: browserProfileLabel(profile) }),
+    reach !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Flag, { tone: "attention", children: reach }) })
+  ] });
+}
+function BrowserRiskChips({ chips }) {
+  const labelId = reactExports.useId();
+  const unique2 = [...new Set(chips)];
+  if (unique2.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: labelId, className: "text-xs font-medium text-brand-dark/60", children: "Can reach" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { "aria-labelledby": labelId, className: "mt-1.5 flex flex-wrap gap-1.5", children: unique2.map((chip) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "li",
+      {
+        "data-browser-surface": chip,
+        className: "inline-flex max-w-full items-center break-words rounded-full border border-brand-attention/30 bg-brand-attention/[0.08] px-2.5 py-0.5 text-xs font-medium text-brand-dark",
+        children: browserSurfaceLabel(chip)
+      },
+      chip
+    )) })
+  ] });
+}
+function BrowserSiteLine({ site }) {
+  const label = browserSiteLabel(site.origin);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(CardRow, { icon: HiMiniGlobeAlt, label: "Site", children: [
+    label !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-all font-mono text-[13px] text-brand-dark", title: site.origin ?? void 0, children: label }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-dark/80", children: "Guard could not tell which site" }),
+    (site.first_visit_in_task || site.left_granted_site) && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-1.5 flex flex-wrap gap-1.5", children: [
+      site.first_visit_in_task && /* @__PURE__ */ jsxRuntimeExports.jsx(Flag, { tone: "note", children: "First visit in this task" }),
+      site.left_granted_site && /* @__PURE__ */ jsxRuntimeExports.jsx(Flag, { tone: "attention", children: "Outside the site you allowed" })
+    ] })
+  ] });
+}
+const MASKED_INPUT_NOTE = "This step types into a hidden field, so Guard does not show its input.";
+function BrowserCallCard(props) {
+  const { item, card, explanation } = props;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      "aria-label": "What the agent is asking to do",
+      "data-browser-card": card.verb,
+      className: "mt-5 rounded-2xl border border-slate-200 bg-white",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:p-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(McpAppMark, { name: mcpMarkName(explanation), size: "md" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "break-words text-base font-semibold leading-snug text-brand-dark", children: explanation.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 break-words text-sm text-brand-dark/70", children: subtitleOf(explanation, actingApp(explanation)) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "col-start-2 row-start-2 sm:col-start-3 sm:row-start-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(EffectPill, { effect: explanation.effect }) })
+        ] }),
+        isWatchOnlyObservation(item) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mx-4 mb-3 text-sm font-medium text-brand-dark sm:mx-5", children: "Watch let this call through. Guard would have stopped it." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ConsequenceNote, { explanation }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-4 py-2.5 sm:px-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserSiteLine, { site: card.site }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserProfileLine, { profile: card.profile_line }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserInputPreview, { card }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRiskChips, { chips: card.risk_chips })
+        ] }),
+        explanation.code !== null && explanation.code.collapsed !== true && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) }),
+        explanation.code !== null && explanation.code.collapsed === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the code it runs" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          McpCallFooter,
+          {
+            item,
+            explanation,
+            reason: mcpCallReason(item, explanation),
+            withheldInput: card.detail.input_masked ? MASKED_INPUT_NOTE : void 0
+          }
+        )
+      ]
+    }
+  );
 }
 const PROTECTION_APPEARANCE = {
   protected: {
@@ -35815,23 +35976,27 @@ function ReviewEmptyState({ runtime: runtime2, resolutionMessage, codexResume, o
 }
 function PrimaryActionCard({ item }) {
   const mcpCall = explainMcpCall(item);
+  const browserCard = parseBrowserCard(item.browser_card);
+  if (mcpCall !== null && browserCard !== null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserCallCard, { item, card: browserCard, explanation: mcpCall });
+  }
   if (mcpCall !== null) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(McpCallCard, { item, explanation: mcpCall });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsx(LoggedActionCard, { item });
 }
 function LoggedActionCard({ item }) {
-  const action2 = buildPrimaryReviewAction(item);
+  const action = buildPrimaryReviewAction(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
   const agentIntent = resolveAgentStatedIntent(item);
   const watchOnlyObservation = isWatchOnlyObservation(item);
   const actionDescription = watchOnlyObservation ? "observed action" : "stopped action";
-  const actionLabel = watchOnlyObservation ? "Would have stopped" : action2.label;
+  const actionLabel = watchOnlyObservation ? "Would have stopped" : action.label;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: watchOnlyObservation ? "What Watch observed" : "What was stopped" }),
-        action2.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action2.detail })
+        action.detail !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: action.detail })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/15 bg-brand-blue/[0.04] px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-blue", children: actionLabel })
     ] }),
@@ -35840,7 +36005,7 @@ function LoggedActionCard({ item }) {
         LoggedActionPanel,
         {
           label: actionLabel,
-          text: action2.text,
+          text: action.text,
           copyAriaLabel: `Copy full ${actionDescription} to clipboard`,
           expandAriaLabel: `Expand full ${actionDescription}`,
           collapseAriaLabel: `Collapse full ${actionDescription}`
@@ -36319,6 +36484,13 @@ function mcpTool(value, label) {
     state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"])
   };
 }
+const CATALOG_SURFACES = ["terminal", "mcp", "browser", "package", "cloud"];
+function catalogSurfaces(value, label) {
+  if (value === void 0) return {};
+  const known = array(value, label, CATALOG_SURFACES.length * 2).map((entry, index) => string$1(entry, `${label}[${index}]`)).filter((entry) => CATALOG_SURFACES.includes(entry));
+  const surfaces = CATALOG_SURFACES.filter((surface) => known.includes(surface));
+  return surfaces.length > 0 ? { surfaces } : {};
+}
 function mcpCatalogFields(item, label) {
   if (item.surface === void 0) return {};
   if (typeof item.surface === "string" && item.surface !== "mcp") return { surface: "unsupported" };
@@ -36379,7 +36551,8 @@ function extension(value, label) {
     rules,
     permission_count: permissionCount,
     permissions,
-    ...mcpCatalogFields(item, label)
+    ...mcpCatalogFields(item, label),
+    ...catalogSurfaces(item.surfaces, `${label}.surfaces`)
   };
 }
 function normalizeExtensionCatalogItem(value, label = "extension") {
@@ -36412,6 +36585,7 @@ function normalizeExtensionCatalogSummary(value, label = "summary") {
     rule_count: integer$1(item.rule_count, `${label}.rule_count`),
     permission_count: integer$1(item.permission_count, `${label}.permission_count`),
     ...surface ? { surface } : {},
+    ...catalogSurfaces(item.surfaces, `${label}.surfaces`),
     content_revision: string$1(item.content_revision, `${label}.content_revision`)
   };
 }
@@ -36924,7 +37098,7 @@ function SetupStep(props) {
     ] })
   ] });
 }
-function CopyCommand(props) {
+function CopyCommand$1(props) {
   const [state, setState] = reactExports.useState("idle");
   const copy = async () => {
     try {
@@ -37002,7 +37176,7 @@ function ExtensionAuthoritySetup(props) {
             proofName,
             "."
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: terminal?.enroll ?? DEFAULT_ENROLL_COMMAND, label: "Copy enroll command" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand$1, { command: terminal?.enroll ?? DEFAULT_ENROLL_COMMAND, label: "Copy enroll command" })
         ] })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -37036,7 +37210,7 @@ function ExtensionAuthoritySetup(props) {
         proofName,
         "."
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: terminal?.recover_authority ?? DEFAULT_RECOVER_COMMAND, label: "Copy repair command" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand$1, { command: terminal?.recover_authority ?? DEFAULT_RECOVER_COMMAND, label: "Copy repair command" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: `When the repair finishes, Approve & always allow ${commandText} appears here.` })
     ] });
   }
@@ -37508,6 +37682,168 @@ function ApprovalExtensionRecommendationCard(props) {
     }
   );
 }
+class RuntimeUpgradeError extends Error {
+  constructor(status, code) {
+    super(runtimeUpgradeErrorMessage(code, status));
+    this.status = status;
+    this.code = code;
+    this.name = "RuntimeUpgradeError";
+  }
+  status;
+  code;
+}
+function runtimeUpgradeErrorMessage(code, status) {
+  switch (code) {
+    case "runtime_upgrade_unavailable":
+      return "Guard no longer offers this switch. Reload the review to see the current advice.";
+    case "runtime_upgrade_version_mismatch":
+      return "The advice changed since this page loaded. Reload the review and try again.";
+    case "runtime_upgrade_failed":
+      return "Guard could not update nvm's default version. Run the command below in a terminal instead.";
+    default:
+      if (status === 401 || status === 403) {
+        return "This review link cannot change nvm's default. Open the review from Guard, or run the command below in a terminal.";
+      }
+      return `Guard could not switch the Node.js version (${status}).`;
+  }
+}
+async function switchRuntimeDefault(requestId, version2) {
+  const response = await fetchWithGuardAuth(`/v1/requests/${encodeURIComponent(requestId)}/runtime-upgrade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version: version2 })
+  });
+  const payload = await response.json().catch(() => null);
+  const record2 = typeof payload === "object" && payload !== null ? payload : null;
+  if (!response.ok) {
+    throw new RuntimeUpgradeError(response.status, typeof record2?.error === "string" ? record2.error : null);
+  }
+  return normalizeRuntimeUpgradeAdvice(record2?.runtime_upgrade);
+}
+const RESTART_NOTE = "Agent sessions that are already running keep the Node.js they started with. Restart the agent so its next command uses the new version.";
+function RuntimeUpgradeCard(props) {
+  const [reply, setReply] = reactExports.useState(null);
+  const [state, setState] = reactExports.useState({ kind: "idle" });
+  const advice = currentRuntimeUpgradeAdvice(props.advice, reply);
+  if (!advice) return null;
+  const switchDefault = props.switchDefault ?? switchRuntimeDefault;
+  const target2 = runtimeUpgradeTarget(advice);
+  const exploited = advice.known_exploited ? " It is known to be exploited." : "";
+  const runSwitch = async (version2) => {
+    setState({ kind: "switching" });
+    try {
+      const answered = props.advice;
+      const next = await switchDefault(props.requestId, version2);
+      if (next) setReply({ answered, advice: next });
+      setState({ kind: "done", version: version2, answered });
+    } catch (error) {
+      setState({ kind: "failed", message: error instanceof Error ? error.message : "Guard could not switch the Node.js version." });
+    }
+  };
+  const doneVersion = finishedSwitchVersion(props.advice, state.kind === "done" ? state : null);
+  const switched = doneVersion !== null || advice.switched;
+  const switchVersion = doneVersion !== null ? null : advice.switch_version;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "section",
+    {
+      className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.04] p-4",
+      "aria-labelledby": "runtime-upgrade-title",
+      "data-testid": "runtime-upgrade",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldExclamation, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-brand-dark/75", children: "Why this is paused" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "runtime-upgrade-title", className: "mt-1 text-sm font-semibold text-brand-dark", children: "Update Node.js to stop these reviews" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: [
+            "This command runs Node.js ",
+            advice.current_version,
+            ", which ",
+            advice.advisory_id,
+            " (",
+            advice.severity,
+            ") affects.",
+            exploited,
+            " Guard pauses every command that starts it. ",
+            target2
+          ] }),
+          switched ? /* @__PURE__ */ jsxRuntimeExports.jsx(SwitchedNote, { version: doneVersion ?? advice.installed_version }) : switchVersion !== null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ActionButton,
+              {
+                variant: "primary",
+                onClick: () => void runSwitch(switchVersion),
+                disabled: state.kind === "switching",
+                "aria-busy": state.kind === "switching",
+                children: state.kind === "switching" ? "Switching…" : `Use Node.js ${switchVersion}`
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-brand-dark/70", children: "Sets nvm's default version. New terminals start it." })
+          ] }),
+          state.kind === "failed" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-red-700", role: "alert", children: state.message }),
+          !switched && advice.command !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: advice.command }),
+          !switched && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-brand-dark/70", children: [
+            "After you update, ",
+            RESTART_NOTE.charAt(0).toLowerCase(),
+            RESTART_NOTE.slice(1)
+          ] }),
+          !switched && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "a",
+            {
+              href: advice.download_url,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              className: "mt-3 inline-flex items-center gap-1 text-sm font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+              children: [
+                "Download Node.js",
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+              ]
+            }
+          )
+        ] })
+      ] })
+    }
+  );
+}
+function SwitchedNote(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-start gap-2 text-sm text-brand-dark", role: "status", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "mt-0.5 h-4 w-4 shrink-0 text-emerald-600", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+      props.version !== null ? `nvm now defaults to Node.js ${props.version}. ` : "nvm now defaults to a clean version. ",
+      RESTART_NOTE
+    ] })
+  ] });
+}
+function CopyCommand(props) {
+  const [state, setState] = reactExports.useState("idle");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(props.command);
+      setState("copied");
+    } catch {
+      setState("failed");
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-dark/70", children: "Or run this in a terminal:" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs text-brand-dark", children: props.command }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: () => void copy(),
+          "aria-label": state === "copied" ? "Command copied" : "Copy the update command",
+          className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-blue hover:border-brand-blue/40 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: [
+            state === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
+            state === "copied" ? "Copied" : "Copy"
+          ]
+        }
+      )
+    ] }),
+    state === "failed" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/70", role: "status", children: "Copy is unavailable here. Select the command and copy it." })
+  ] });
+}
 function resolvedStateForItem(state, item) {
   return item !== null && state?.requestId === item.request_id ? state : null;
 }
@@ -37641,30 +37977,30 @@ function useReviewDecisionResolve(params) {
     setFreshCodeRequired(false);
   }, [decisionSubjectKey]);
   const handleResolve = reactExports.useCallback(
-    async (action2, gateOverride) => {
+    async (action, gateOverride) => {
       if (!item || resolutionBlockReason !== null) return;
-      if (action2 === "allow" && !canSubmitAllow) {
+      if (action === "allow" && !canSubmitAllow) {
         setErrorMessage(hasAllowScope ? "Choose 'Always allow exact action' before approving; run once is unavailable." : "This action has no eligible approval scope.");
         return;
       }
       const requestId = item.request_id;
-      const requestedScope = action2 === "allow" ? allowScope : blockScope;
+      const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = gateOverride ?? approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action2, requestedScope);
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
       if (gateRequired && approvalGateIsLocked(gate)) {
         setErrorMessage(
           `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
         );
         return;
       }
-      setSubmitting(action2);
+      setSubmitting(action);
       setErrorMessage(null);
       try {
         const persistExactAction = willPersistExactAction(
           item,
-          action2,
+          action,
           requestedScope,
-          action2 === "allow" ? rememberExactAction : watchOnlyObservation
+          action === "allow" ? rememberExactAction : watchOnlyObservation
         );
         const includeGateFields = gateRequired && gate?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
           gate.cooldown_active,
@@ -37675,9 +38011,9 @@ function useReviewDecisionResolve(params) {
         await onResolve({
           ...buildDecisionPayload({
             item,
-            action: action2,
+            action,
             scope: requestedScope,
-            reason: action2 === "allow" ? "approved in review" : "blocked in review",
+            reason: action === "allow" ? "approved in review" : "blocked in review",
             persistExactAction
           }),
           ...proof,
@@ -37686,7 +38022,7 @@ function useReviewDecisionResolve(params) {
           } : {}
         });
         if (!isStillShown(requestId)) return;
-        setResolved({ requestId, action: action2, persistedExactAction: persistExactAction });
+        setResolved({ requestId, action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setCooldownOptOut(false);
@@ -37743,25 +38079,25 @@ function useReviewDecisionResolve(params) {
     ]
   );
   const handleRequestResolve = reactExports.useCallback(
-    (action2) => {
+    (action) => {
       if (resolutionBlockReason !== null || decisionBusy) return;
       if (!recheckSignIn()) return;
-      if (action2 === "allow" && !hasAllowScope) {
+      if (action === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
         return;
       }
-      if (action2 === "allow" && !canSubmitAllow) {
+      if (action === "allow" && !canSubmitAllow) {
         setErrorMessage("Choose 'Always allow exact action' before approving; run once is unavailable.");
         return;
       }
-      if (action2 === "block" && blockScopeOptions.length === 0) {
+      if (action === "block" && blockScopeOptions.length === 0) {
         setErrorMessage("This action has no eligible block scope.");
         return;
       }
-      setLastAction(action2);
-      const requestedScope = action2 === "allow" ? allowScope : blockScope;
+      setLastAction(action);
+      const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = approvalGate;
-      const gateRequired = approvalGateRequiredForResolution(gate, action2, requestedScope);
+      const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
       if (gateRequired && approvalGateIsLocked(gate)) {
         setErrorMessage(
           `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(gate)} seconds.`
@@ -37784,35 +38120,35 @@ function useReviewDecisionResolve(params) {
               setEffectiveApprovalGate(fresh2.gate);
             }
           }
-          if (approvalGateRequiredForResolution(current, action2, requestedScope) && approvalGateIsLocked(current)) {
+          if (approvalGateRequiredForResolution(current, action, requestedScope) && approvalGateIsLocked(current)) {
             setErrorMessage(
               `Approval gate is temporarily locked. Try again in ${approvalGateLockRemainingSeconds(current)} seconds.`
             );
             return;
           }
-          const gateEnabled = approvalGateRequiredForResolution(current, action2, requestedScope) && current?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
+          const gateEnabled = approvalGateRequiredForResolution(current, action, requestedScope) && current?.configured === true && (freshCodeRequired || requiresApprovalPasswordPrompt(
             current.cooldown_active,
             current.strict_all_decisions,
             requestedScope
           ));
           if (!gateEnabled) {
-            void handleResolve(action2, current);
+            void handleResolve(action, current);
             return;
           }
           setErrorMessage(null);
           if (freshCodeRequired || !approvalProofRecentlySatisfied(current)) {
-            setPendingAction(action2);
+            setPendingAction(action);
             setPendingContractKey(decisionContractKey);
             return;
           }
           const fresh = await fetchResolvedApprovalGate().catch(() => current);
           if (requestId !== null && !isStillShown(requestId)) return;
           if (approvalProofRecentlySatisfied(fresh ?? current)) {
-            void handleResolve(action2, fresh ?? current);
+            void handleResolve(action, fresh ?? current);
             return;
           }
           if (fresh) setEffectiveApprovalGate(fresh);
-          setPendingAction(action2);
+          setPendingAction(action);
           setPendingContractKey(decisionContractKey);
         } finally {
           setPreflighting(false);
@@ -38395,7 +38731,7 @@ function ReviewDecisionCard(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone, children: badgeLabel })
       ] }),
       !nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(PrimaryActionCard, { item }),
-      nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, item.request_id),
+      nativeDisplayOnly && /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryPanel, { requestId: item.request_id }, `business-summary:${item.request_id}`),
       resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: retryCannotReuseApprovalHint(item, harnessName) }) : null,
       mcpCall === null && item.scope_restrictions?.includes("provider_account_unverified_once_only") ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable." }) : null,
       resolutionBlockReason !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-4", role: "alert", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
@@ -38419,7 +38755,7 @@ function ReviewDecisionCard(props) {
           ) : null
         ] })
       ] }) }),
-      topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, item.request_id) }),
+      topAlertItems.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 rounded-xl border border-slate-100 bg-slate-50/50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: topAlertItems }, `top-alerts:${item.request_id}`) }),
       whatWouldHappen && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
@@ -38437,6 +38773,7 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
+      resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeUpgradeCard, { requestId: item.request_id, advice: item.runtime_upgrade }, `runtime-upgrade:${item.request_id}`),
       resolutionBlockReason === null && resolved === null && signInReason === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionRecommendationCard,
         {
@@ -38449,7 +38786,7 @@ function ReviewDecisionCard(props) {
           onApproved: handleExtensionApproved,
           onDialogActiveChange: setExtensionDialogActive
         },
-        item.request_id
+        `extension-recommendation:${item.request_id}`
       ),
       resolutionBlockReason === null && resolved === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ApprovalExtensionCoverageCard,
@@ -38548,13 +38885,13 @@ function ReviewDecisionCard(props) {
           ]
         }
       ),
-      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, item.request_id) })
+      showEvidence && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ConsolidatedEvidenceAlert, { items: evidenceItems }, `evidence:${item.request_id}`) })
     ] }),
-    mcpCall === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) : (
+    mcpCall === null ? /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `context-review:${item.request_id}:${decisionSubjectKey}`) : (
       // The MCP card answers the question on its own; extra context is there for anyone who wants it.
       /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-slate-100 px-4 py-3 sm:px-5", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80", children: "Prepare more context for this decision" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `${item.request_id}:${decisionSubjectKey}`) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ContextReviewPanel, { item }, `mcp-context-review:${item.request_id}:${decisionSubjectKey}`) })
       ] })
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ReviewLastTimeCard, { detail }),
@@ -40698,6 +41035,23 @@ function queuePageSyncTarget(input) {
   const activeOnPage = activeRequestId !== null && (pagedRequests.some((item) => item.request_id === activeRequestId) || detailRequestId === activeRequestId);
   return activeOnPage ? null : pagedRequests[0].request_id;
 }
+function pinAfterActiveChange(input) {
+  const { activeRequestId, selfSelectedRequestId, pinnedRequestId } = input;
+  if (activeRequestId === null || activeRequestId === selfSelectedRequestId) {
+    return pinnedRequestId;
+  }
+  return activeRequestId;
+}
+function missingActiveFallback(input) {
+  const { filteredRequests, requests, activeRequestId, detailRequestId, pinnedRequestId, detailGone } = input;
+  if (filteredRequests.length === 0) return null;
+  if (activeRequestId !== null) {
+    const loaded = requests.some((item) => item.request_id === activeRequestId) || detailRequestId === activeRequestId;
+    if (loaded) return null;
+    if (activeRequestId === pinnedRequestId && !detailGone) return null;
+  }
+  return filteredRequests[0].request_id;
+}
 const QUEUE_PAGE_SIZE = 10;
 function ReviewWorkspace(props) {
   const businessQueueReadFailed2 = useBusinessQueueReadFailure();
@@ -40713,23 +41067,34 @@ function ReviewWorkspace(props) {
   const [dateTo, setDateTo] = reactExports.useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const [page, setPage] = reactExports.useState(1);
-  const [setupPinnedRequestId, setSetupPinnedRequestId] = reactExports.useState(null);
+  const [pinnedRequestId, setPinnedRequestId] = reactExports.useState(activeRequestId);
+  const selfSelectedRef = reactExports.useRef(null);
+  const [seenActiveRequestId, setSeenActiveRequestId] = reactExports.useState(activeRequestId);
+  if (activeRequestId !== seenActiveRequestId) {
+    setSeenActiveRequestId(activeRequestId);
+    setPinnedRequestId(pinAfterActiveChange({
+      activeRequestId,
+      selfSelectedRequestId: selfSelectedRef.current,
+      pinnedRequestId
+    }));
+  }
   const selectRequest = reactExports.useCallback((id2) => {
+    selfSelectedRef.current = id2;
     props.onOpenRequest(id2);
     setMobileQueueOpen(false);
   }, [props.onOpenRequest]);
   const handleOpenRequest = reactExports.useCallback((id2) => {
-    setSetupPinnedRequestId(null);
+    setPinnedRequestId(null);
     selectRequest(id2);
     readState.markRead(id2);
   }, [selectRequest, readState]);
   const handleOpenSetupEvidence = reactExports.useCallback((id2) => {
-    setSetupPinnedRequestId(id2);
+    setPinnedRequestId(id2);
     selectRequest(id2);
     readState.markRead(id2);
   }, [selectRequest, readState]);
   const handlePageChange = reactExports.useCallback((nextPage) => {
-    setSetupPinnedRequestId(null);
+    setPinnedRequestId(null);
     setPage(nextPage);
   }, []);
   const handleToggleMobileQueue = reactExports.useCallback(() => {
@@ -40752,10 +41117,14 @@ function ReviewWorkspace(props) {
     const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
   }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, setupFilter, sortDirection, semanticFilter]);
+  const filterSignature = JSON.stringify([searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
+  const appliedFilterSignatureRef = reactExports.useRef(filterSignature);
   reactExports.useEffect(() => {
-    setSetupPinnedRequestId(null);
+    if (appliedFilterSignatureRef.current === filterSignature) return;
+    appliedFilterSignatureRef.current = filterSignature;
+    setPinnedRequestId(null);
     setPage(1);
-  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
+  }, [filterSignature]);
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
@@ -40785,25 +41154,27 @@ function ReviewWorkspace(props) {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [pagedRequests, activeRequestId, handleOpenRequest]);
+  const detailGone = props.detailGone ?? false;
   reactExports.useEffect(() => {
-    if (filteredRequests.length === 0) {
-      return;
-    }
-    const activeInRequests = requests.some((item) => item.request_id === activeRequestId) || detail?.item.request_id === activeRequestId;
-    if (activeRequestId !== null && activeInRequests) {
-      return;
-    }
-    selectRequest(filteredRequests[0].request_id);
-  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
+    const target2 = missingActiveFallback({
+      filteredRequests,
+      requests,
+      activeRequestId,
+      detailRequestId: detail?.item.request_id ?? null,
+      pinnedRequestId,
+      detailGone
+    });
+    if (target2 !== null) selectRequest(target2);
+  }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, pinnedRequestId, detailGone, selectRequest]);
   reactExports.useEffect(() => {
     const target2 = queuePageSyncTarget({
       pagedRequests,
       activeRequestId,
       detailRequestId: detail?.item.request_id ?? null,
-      pinnedRequestId: setupPinnedRequestId
+      pinnedRequestId
     });
     if (target2 !== null) selectRequest(target2);
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, setupPinnedRequestId, selectRequest]);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, pinnedRequestId, selectRequest]);
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
@@ -42166,11 +42537,11 @@ function WatchProtectionBanner(props) {
   const perApp = props.model !== void 0 && props.model !== null && !props.model.globalWatch;
   const actionLabel = perApp ? "Turn protection on for these apps" : "Turn protection on";
   let detail = null;
-  let action2;
+  let action;
   switch (state.kind) {
     case "confirming":
       detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage });
-      action2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+      action = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void handleConfirm(), disabled, className: PRIMARY_BUTTON, children: "Turn on" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleCancel, className: SECONDARY_BUTTON, children: "Not now" })
       ] });
@@ -42178,21 +42549,21 @@ function WatchProtectionBanner(props) {
     case "working":
     case "proof":
       detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage });
-      action2 = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: true, "aria-busy": "true", className: PRIMARY_BUTTON, children: state.kind === "proof" ? "Waiting for approval…" : "Turning on…" });
+      action = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: true, "aria-busy": "true", className: PRIMARY_BUTTON, children: state.kind === "proof" ? "Waiting for approval…" : "Turning on…" });
       break;
     case "error":
       detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-1 text-sm text-slate-600", children: state.message });
-      action2 = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+      action = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => void handleConfirm(), disabled, className: PRIMARY_BUTTON, children: "Try again" }),
         onOpenSettings !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: onOpenSettings, className: SECONDARY_BUTTON, children: "Open settings" }) : null
       ] });
       break;
     case "locked":
       detail = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: LOCKED_COPY });
-      action2 = null;
+      action = null;
       break;
     default:
-      action2 = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleAsk, disabled, className: PRIMARY_BUTTON, children: actionLabel });
+      action = /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleAsk, disabled, className: PRIMARY_BUTTON, children: actionLabel });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
@@ -42208,7 +42579,7 @@ function WatchProtectionBanner(props) {
             detail
           ] })
         ] }),
-        action2,
+        action,
         state.kind === "proof" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
           SettingsSaveProofModal,
           {
@@ -42230,7 +42601,7 @@ function WatchProtectionBanner(props) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BO9hBtR_.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-D6ExxcQr.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot, onRestored } = props;
@@ -42292,6 +42663,7 @@ function renderInboxContent(props) {
       activeRequestId: props.activeRequestId,
       detailError: props.detail.kind === "error" ? props.detail.message : null,
       detailLoading: props.detail.kind === "loading",
+      detailGone: props.detail.kind === "stale",
       onRetryDetail: props.onRetryDetail,
       detail: props.detail.kind === "ready" ? {
         item: props.detail.item,
@@ -42969,35 +43341,35 @@ function PulseApprovalOverlay() {
   )) });
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-CRKVu82y.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-dhHEpEoW.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BCM0x-g-.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CL9k2vqu.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-CdVksrz9.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-aUrRL07j.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-D6aqOZsz.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-C7_KJc3T.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-BWBn1bK0.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-B9m9ICz8.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-B0vkFxxc.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-WVe37kGf.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-CtJlE48x.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DYqi92V0.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BAc95i7H.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-BKSgx2UE.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-B3mQX5sw.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-Bd0-K7Pl.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-CuJmJCRM.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-DFptdkRX.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-DWNMbsSN.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-MDflVaAm.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-Bkym75PI.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -44032,7 +44404,7 @@ export {
   HiMiniExclamationCircle as ay,
   hasRepairableProtectionGap as az,
   HiMiniCommandLine as b,
-  parseContextAssistanceStatus as b$,
+  HiMiniChatBubbleLeftRight as b$,
   overrideRows as b0,
   harnessPostureSummary as b1,
   joinNames as b2,
@@ -44059,17 +44431,17 @@ export {
   HiMiniFolderPlus as bN,
   HiMiniClock as bO,
   HiMiniFolderOpen as bP,
-  manageContextWorkspace as bQ,
-  compileWorkspaceContext as bR,
-  HiMiniChatBubbleLeftEllipsis as bS,
-  HiMiniDocumentMagnifyingGlass as bT,
-  HiMiniPower as bU,
-  HiMiniEyeSlash as bV,
-  HiMiniCpuChip as bW,
-  HiMiniAcademicCap as bX,
-  HiMiniArrowLeft as bY,
-  subscribeDashboardLocation as bZ,
-  HiMiniChatBubbleLeftRight as b_,
+  refusal as bQ,
+  manageContextWorkspace as bR,
+  compileWorkspaceContext as bS,
+  HiMiniChatBubbleLeftEllipsis as bT,
+  HiMiniDocumentMagnifyingGlass as bU,
+  HiMiniPower as bV,
+  HiMiniEyeSlash as bW,
+  HiMiniCpuChip as bX,
+  HiMiniAcademicCap as bY,
+  HiMiniArrowLeft as bZ,
+  subscribeDashboardLocation as b_,
   getDefaultExportFromCjs as ba,
   React as bb,
   PULSE_FACE_SCAN_OPTIONS as bc,
@@ -44097,243 +44469,244 @@ export {
   listContextAgentSessions as by,
   HiMiniLink as bz,
   HiMiniFolder as c,
-  applyExtensionMutation as c$,
-  fetchContextInstallations as c0,
-  turnOnJob as c1,
-  shouldResumeTurnOn as c2,
-  turnOnRequestedAt as c3,
-  forgetTurnOn as c4,
-  rememberTurnOn as c5,
-  forgetTurnOnClick as c6,
-  rememberTurnOnJob as c7,
-  HiMiniArrowDownTray as c8,
-  downloadBlob as c9,
-  settingsWatchBannerModel as cA,
-  WorkspacePageHeader as cB,
-  navigateFromAnchor as cC,
-  resolveSettingsSaveProofModalCopy as cD,
-  humanizeList as cE,
-  isProtectionPosture as cF,
-  deriveProtectionPosture as cG,
-  normalizeHarnessPostures as cH,
-  approvalGateCooldownLabel as cI,
-  fetchExtensionCatalog as cJ,
-  ExtensionControlApiError as cK,
-  normalizeExtensionCatalogSummary as cL,
-  normalizeExtensionPermission as cM,
-  ExtensionControlProtocolError as cN,
-  normalizeExtensionCatalogItem as cO,
-  guardApiCacheScope as cP,
-  fetchExtensionCatalogV2Api as cQ,
-  localPermissionDraftState as cR,
-  setLocalPermissionDraftState as cS,
-  extensionPolicyAuthorityUnchanged as cT,
-  newExtensionPolicyDraftIdentity as cU,
-  extensionPolicyDraftIsDirty as cV,
-  setLocalPermissionDraftStates as cW,
-  buildExtensionPolicyDraftMutation as cX,
-  fetchEffectiveExtensionControls as cY,
-  previewExtensionMutation as cZ,
-  isCurrentExtensionPolicyDraft as c_,
-  savedEvidenceCopy as ca,
-  guardAwareHref as cb,
-  fetchContextData as cc,
-  forgetContextHistory as cd,
-  forgetSavedEvidence as ce,
-  resolveProtectionLevelCopy as cf,
-  fetchSettings as cg,
-  fetchRuntimeSnapshot as ch,
-  clearHarnessWatchOverrides as ci,
-  withHarnessPosturePatch as cj,
-  updateSettings as ck,
-  clearPolicy as cl,
-  clearReviewQueue as cm,
-  revokeApprovalGateCooldown as cn,
-  disableApprovalGateTotp as co,
-  importSettings as cp,
-  resetSettings as cq,
-  resolveSettingsSaveProofKind as cr,
-  requiresSettingsSaveProof as cs,
-  enrollApprovalGateTotp as ct,
-  verifyApprovalGateTotp as cu,
-  clearEvidence as cv,
-  exportDiagnostics as cw,
-  repairApprovalCenter as cx,
-  exportSettings as cy,
-  setupDesktopNotifications as cz,
+  isCurrentExtensionPolicyDraft as c$,
+  parseContextAssistanceStatus as c0,
+  fetchContextInstallations as c1,
+  turnOnJob as c2,
+  shouldResumeTurnOn as c3,
+  turnOnRequestedAt as c4,
+  forgetTurnOn as c5,
+  rememberTurnOn as c6,
+  forgetTurnOnClick as c7,
+  rememberTurnOnJob as c8,
+  HiMiniArrowDownTray as c9,
+  setupDesktopNotifications as cA,
+  settingsWatchBannerModel as cB,
+  WorkspacePageHeader as cC,
+  navigateFromAnchor as cD,
+  resolveSettingsSaveProofModalCopy as cE,
+  humanizeList as cF,
+  isProtectionPosture as cG,
+  deriveProtectionPosture as cH,
+  normalizeHarnessPostures as cI,
+  approvalGateCooldownLabel as cJ,
+  fetchExtensionCatalog as cK,
+  ExtensionControlApiError as cL,
+  normalizeExtensionCatalogSummary as cM,
+  normalizeExtensionPermission as cN,
+  ExtensionControlProtocolError as cO,
+  normalizeExtensionCatalogItem as cP,
+  guardApiCacheScope as cQ,
+  fetchExtensionCatalogV2Api as cR,
+  localPermissionDraftState as cS,
+  setLocalPermissionDraftState as cT,
+  extensionPolicyAuthorityUnchanged as cU,
+  newExtensionPolicyDraftIdentity as cV,
+  extensionPolicyDraftIsDirty as cW,
+  setLocalPermissionDraftStates as cX,
+  buildExtensionPolicyDraftMutation as cY,
+  fetchEffectiveExtensionControls as cZ,
+  previewExtensionMutation as c_,
+  downloadBlob as ca,
+  savedEvidenceCopy as cb,
+  guardAwareHref as cc,
+  fetchContextData as cd,
+  forgetContextHistory as ce,
+  forgetSavedEvidence as cf,
+  resolveProtectionLevelCopy as cg,
+  fetchSettings as ch,
+  fetchRuntimeSnapshot as ci,
+  clearHarnessWatchOverrides as cj,
+  withHarnessPosturePatch as ck,
+  updateSettings as cl,
+  clearPolicy as cm,
+  clearReviewQueue as cn,
+  revokeApprovalGateCooldown as co,
+  disableApprovalGateTotp as cp,
+  importSettings as cq,
+  resetSettings as cr,
+  resolveSettingsSaveProofKind as cs,
+  requiresSettingsSaveProof as ct,
+  enrollApprovalGateTotp as cu,
+  verifyApprovalGateTotp as cv,
+  clearEvidence as cw,
+  exportDiagnostics as cx,
+  repairApprovalCenter as cy,
+  exportSettings as cz,
   HiMiniCircleStack as d,
-  profileSetupCommand as d$,
-  fetchExtensionControlHistory as d0,
-  managedPermissionState as d1,
-  controlProvenance as d2,
-  treatmentLabel as d3,
-  useResolvedApprovalGate as d4,
-  groupPermissionsByFamily as d5,
-  HiMiniInformationCircle as d6,
-  LocalCliApiError as d7,
-  hasSuggestedRules as d8,
-  approvalProofRecentlySatisfied as d9,
-  recognizeLocalCli as dA,
-  preferredPackageScriptExtension as dB,
-  looksLikePackageScriptPaste as dC,
-  enrollmentCommandStates as dD,
-  isBulkApproveGateReady as dE,
-  fetchLocalCliList as dF,
-  normalizeLocalCliList as dG,
-  unreviewedToolChangeCount as dH,
-  connectorSetupMatch as dI,
-  refreshMcpInventory as dJ,
-  connectorGroupOutcome as dK,
-  allowedEarlierVersion as dL,
-  startGuardCloudConnect as dM,
-  extensionEffectiveState as dN,
-  permissionEffectiveState as dO,
-  fetchExtensionControlApi as dP,
-  permissionForRule as dQ,
-  refreshEffectiveExtensionControls as dR,
-  fetchExtensionDiscoveryApi as dS,
-  startCancelableDiscoveryJob as dT,
-  waitForMcpDiscoveryJob as dU,
-  isLocalCliId as dV,
-  localCliHref as dW,
-  fetchPluginUpdatesApi as dX,
-  filterCodexHostApps as dY,
-  connectorWorkspaceItems as dZ,
-  customExtensionNeedsReview as d_,
-  StyledSelect as da,
-  bulkCommandState as db,
-  fetchLocalCliApi as dc,
-  ExtensionBrandMark as dd,
-  fetchMcpProviderActions as de,
-  connectorSetupReady as df,
-  shortIdentity as dg,
-  customExtensionDisplayName as dh,
-  previewLocalCliMutation as di,
-  applyLocalCliMutation as dj,
-  LOCAL_CLI_CAPABILITIES as dk,
-  loadLocalCliCommands as dl,
-  DiscoveryFailure as dm,
-  readJson as dn,
-  enrollablePackageScriptCommands as dp,
-  seenSuggestionMeta as dq,
-  looksLikeProjectRelocatePaste as dr,
-  packageScriptFilterNeedle as ds,
-  initialAddCommand as dt,
-  suggestedPackageScriptExtensions as du,
-  filterExtensionSuggestions as dv,
-  suggestedHarnessExtensions as dw,
-  suggestedSeenExtensions as dx,
-  keepsPackageScriptCatalog as dy,
-  prefillSuggestedStates as dz,
+  customExtensionNeedsReview as d$,
+  applyExtensionMutation as d0,
+  fetchExtensionControlHistory as d1,
+  managedPermissionState as d2,
+  controlProvenance as d3,
+  treatmentLabel as d4,
+  useResolvedApprovalGate as d5,
+  groupPermissionsByFamily as d6,
+  HiMiniInformationCircle as d7,
+  LocalCliApiError as d8,
+  hasSuggestedRules as d9,
+  prefillSuggestedStates as dA,
+  recognizeLocalCli as dB,
+  preferredPackageScriptExtension as dC,
+  looksLikePackageScriptPaste as dD,
+  enrollmentCommandStates as dE,
+  isBulkApproveGateReady as dF,
+  fetchLocalCliList as dG,
+  normalizeLocalCliList as dH,
+  unreviewedToolChangeCount as dI,
+  connectorSetupMatch as dJ,
+  refreshMcpInventory as dK,
+  connectorGroupOutcome as dL,
+  allowedEarlierVersion as dM,
+  startGuardCloudConnect as dN,
+  extensionEffectiveState as dO,
+  permissionEffectiveState as dP,
+  fetchExtensionControlApi as dQ,
+  permissionForRule as dR,
+  refreshEffectiveExtensionControls as dS,
+  fetchExtensionDiscoveryApi as dT,
+  startCancelableDiscoveryJob as dU,
+  waitForMcpDiscoveryJob as dV,
+  isLocalCliId as dW,
+  localCliHref as dX,
+  fetchPluginUpdatesApi as dY,
+  filterCodexHostApps as dZ,
+  connectorWorkspaceItems as d_,
+  approvalProofRecentlySatisfied as da,
+  StyledSelect as db,
+  bulkCommandState as dc,
+  fetchLocalCliApi as dd,
+  ExtensionBrandMark as de,
+  fetchMcpProviderActions as df,
+  connectorSetupReady as dg,
+  shortIdentity as dh,
+  customExtensionDisplayName as di,
+  previewLocalCliMutation as dj,
+  applyLocalCliMutation as dk,
+  LOCAL_CLI_CAPABILITIES as dl,
+  loadLocalCliCommands as dm,
+  DiscoveryFailure as dn,
+  readJson as dp,
+  enrollablePackageScriptCommands as dq,
+  seenSuggestionMeta as dr,
+  looksLikeProjectRelocatePaste as ds,
+  packageScriptFilterNeedle as dt,
+  initialAddCommand as du,
+  suggestedPackageScriptExtensions as dv,
+  filterExtensionSuggestions as dw,
+  suggestedHarnessExtensions as dx,
+  suggestedSeenExtensions as dy,
+  keepsPackageScriptCatalog as dz,
   HiMiniSquares2X2 as e,
-  GuardOperationTimeoutError as e$,
-  customExtensionBadge as e0,
-  extensionDisplayName as e1,
-  catalogRowSecondLine as e2,
-  extensionStateLabel as e3,
-  HiMiniGlobeAlt as e4,
-  HiMiniFunnel as e5,
-  discoveryFailureMessage as e6,
-  refreshCodexHostInventory as e7,
-  CODEX_HOST_FALLBACK as e8,
-  CONFIGURED_CONNECTIONS_FALLBACK as e9,
-  CommandActivityWorkspace as eA,
-  EvidenceFilterBar as eB,
-  EvidenceInsightStrip as eC,
-  EvidenceActionList as eD,
-  EvidenceActionDetail as eE,
-  policyIdentityKey as eF,
-  clearLabelForScope as eG,
-  HiMiniChartBar as eH,
-  HiMiniCheckBadge as eI,
-  isSupplyChainAuditIncomplete as eJ,
-  isSupplyChainAuditEvidence as eK,
-  readString$1 as eL,
-  IconActionButton as eM,
-  HiMiniBeaker as eN,
-  HiMiniBugAnt as eO,
-  ActivationSummary as eP,
-  ActionResultPanel as eQ,
-  fetchSupplyChainBundle as eR,
-  closeOnEscape as eS,
-  ConnectFlowCard as eT,
-  ApprovalProofInline as eU,
-  HiMiniCloudArrowDown as eV,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eW,
-  fetchPackageFirewallStatus as eX,
-  runPackageAudit as eY,
-  resolveSupplyChainAuditFailure as eZ,
-  runPackageSync as e_,
-  loadCurrentDashboardBuild as ea,
-  canonicalExtensionId as eb,
-  extensionDetailHref as ec,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as ed,
-  addCustomExtensionPrefillHref as ee,
-  acknowledgeDegradedExtensionControlAuthority as ef,
-  recoverExtensionControlAuthority as eg,
-  connectorSetupLinkFromSearch as eh,
-  readExtensionDetailUrlState as ei,
-  parseProtectionRoute as ej,
-  addCustomExtensionHref as ek,
-  runHarnessAction as el,
-  GuardHarnessActionError as em,
-  HiMiniRocketLaunch as en,
-  HiMiniTrash as eo,
-  fetchGuardApi as ep,
-  formatHarnessCommand as eq,
-  appModes as er,
-  fetchApprovalPage as es,
-  fetchPolicy as et,
-  appSetupTarget as eu,
-  guardActionPresentation as ev,
-  DEFAULT_FILTER_STATE as ew,
-  filterEvidence as ex,
-  sortEvidence as ey,
-  computeMetrics as ez,
+  runPackageSync as e$,
+  profileSetupCommand as e0,
+  customExtensionBadge as e1,
+  extensionDisplayName as e2,
+  catalogRowSecondLine as e3,
+  extensionStateLabel as e4,
+  HiMiniGlobeAlt as e5,
+  HiMiniFunnel as e6,
+  discoveryFailureMessage as e7,
+  refreshCodexHostInventory as e8,
+  CODEX_HOST_FALLBACK as e9,
+  computeMetrics as eA,
+  CommandActivityWorkspace as eB,
+  EvidenceFilterBar as eC,
+  EvidenceInsightStrip as eD,
+  EvidenceActionList as eE,
+  EvidenceActionDetail as eF,
+  policyIdentityKey as eG,
+  clearLabelForScope as eH,
+  HiMiniChartBar as eI,
+  HiMiniCheckBadge as eJ,
+  isSupplyChainAuditIncomplete as eK,
+  isSupplyChainAuditEvidence as eL,
+  readString$1 as eM,
+  IconActionButton as eN,
+  HiMiniBeaker as eO,
+  HiMiniBugAnt as eP,
+  ActivationSummary as eQ,
+  ActionResultPanel as eR,
+  fetchSupplyChainBundle as eS,
+  closeOnEscape as eT,
+  ConnectFlowCard as eU,
+  ApprovalProofInline as eV,
+  HiMiniCloudArrowDown as eW,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eX,
+  fetchPackageFirewallStatus as eY,
+  runPackageAudit as eZ,
+  resolveSupplyChainAuditFailure as e_,
+  CONFIGURED_CONNECTIONS_FALLBACK as ea,
+  loadCurrentDashboardBuild as eb,
+  canonicalExtensionId as ec,
+  extensionDetailHref as ed,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as ee,
+  addCustomExtensionPrefillHref as ef,
+  acknowledgeDegradedExtensionControlAuthority as eg,
+  recoverExtensionControlAuthority as eh,
+  connectorSetupLinkFromSearch as ei,
+  readExtensionDetailUrlState as ej,
+  parseProtectionRoute as ek,
+  addCustomExtensionHref as el,
+  runHarnessAction as em,
+  GuardHarnessActionError as en,
+  HiMiniRocketLaunch as eo,
+  HiMiniTrash as ep,
+  fetchGuardApi as eq,
+  formatHarnessCommand as er,
+  appModes as es,
+  fetchApprovalPage as et,
+  fetchPolicy as eu,
+  appSetupTarget as ev,
+  guardActionPresentation as ew,
+  DEFAULT_FILTER_STATE as ex,
+  filterEvidence as ey,
+  sortEvidence as ez,
   fetchWithGuardAuth as f,
-  startPackageFirewallConnect as f0,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f1,
-  repairSupplyChainProtection as f2,
-  runPackageFirewallAction as f3,
-  parseInterceptProofSnapshot as f4,
-  activatePackageFirewallRuntime as f5,
-  EntitlementNotice as f6,
-  chooseSupplyChainAuditFolder as f7,
-  fetchReceipts as f8,
-  lazyWorkspace as f9,
-  HiMiniArrowUp as fA,
-  HiMiniChevronLeft as fB,
-  HiMiniArrowDown as fC,
-  runAuditRemediation as fD,
-  isBlockedGuardAction as fE,
-  isSupplyChainScannerEvidence as fF,
-  HiMiniSignal as fG,
-  scopeLabel as fa,
-  HiMiniCloudArrowUp as fb,
-  HiMiniCodeBracket as fc,
-  HiMiniUsers as fd,
-  HiMiniIdentification as fe,
-  policyActionLabel as ff,
-  createCloudExceptionRequest as fg,
-  HiMiniPuzzlePiece as fh,
-  fetchCloudExceptions as fi,
-  fetchCloudExceptionRequests as fj,
-  PaginationControls as fk,
-  PolicyStatField as fl,
-  HiMiniInbox as fm,
-  HiMiniQueueList as fn,
-  Surface as fo,
-  HiMiniEllipsisHorizontal as fp,
-  HiMiniMinus as fq,
-  HiMiniWrench as fr,
-  HiMiniArrowLongRight as fs,
-  HiMiniArrowUpCircle as ft,
-  fetchReleaseFeedApi as fu,
-  fetchMcpPolicyRequest as fv,
-  resolveMcpPolicyRequest as fw,
-  HiMiniDocumentPlus as fx,
-  HiMiniKey as fy,
-  HiMiniArrowUpRight as fz,
+  GuardOperationTimeoutError as f0,
+  startPackageFirewallConnect as f1,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f2,
+  repairSupplyChainProtection as f3,
+  runPackageFirewallAction as f4,
+  parseInterceptProofSnapshot as f5,
+  activatePackageFirewallRuntime as f6,
+  EntitlementNotice as f7,
+  chooseSupplyChainAuditFolder as f8,
+  fetchReceipts as f9,
+  HiMiniArrowUpRight as fA,
+  HiMiniArrowUp as fB,
+  HiMiniChevronLeft as fC,
+  HiMiniArrowDown as fD,
+  runAuditRemediation as fE,
+  isBlockedGuardAction as fF,
+  isSupplyChainScannerEvidence as fG,
+  HiMiniSignal as fH,
+  lazyWorkspace as fa,
+  scopeLabel as fb,
+  HiMiniCloudArrowUp as fc,
+  HiMiniCodeBracket as fd,
+  HiMiniUsers as fe,
+  HiMiniIdentification as ff,
+  policyActionLabel as fg,
+  createCloudExceptionRequest as fh,
+  HiMiniPuzzlePiece as fi,
+  fetchCloudExceptions as fj,
+  fetchCloudExceptionRequests as fk,
+  PaginationControls as fl,
+  PolicyStatField as fm,
+  HiMiniInbox as fn,
+  HiMiniQueueList as fo,
+  Surface as fp,
+  HiMiniEllipsisHorizontal as fq,
+  HiMiniMinus as fr,
+  HiMiniWrench as fs,
+  HiMiniArrowLongRight as ft,
+  HiMiniArrowUpCircle as fu,
+  fetchReleaseFeedApi as fv,
+  fetchMcpPolicyRequest as fw,
+  resolveMcpPolicyRequest as fx,
+  HiMiniDocumentPlus as fy,
+  HiMiniKey as fz,
   HiMiniComputerDesktop as g,
   HiMiniMagnifyingGlass as h,
   HiMiniListBullet as i,

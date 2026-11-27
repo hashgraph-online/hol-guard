@@ -1,9 +1,9 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.aifa-memory",
-  "version": "1.9.8",
+  "version": "2.3.0",
   "name": "AIfa Memory",
-  "description": "Encrypted long-term memory for AI agents via Streamable HTTP at https://aifa.works/api/mcp with optional permanent Arweave anchoring (AES-256-GCM). Discovery (initialize, tools/list) is public; every tool call requires a per-user Bearer key from https://aifa.works/mcp. Read-only info tools (memory_about, plans, partner_kit) inherit Guard defaults; every tool that reads or modifies private memory, creates payment invoices, requests payouts or configures webhooks is gated on review. Off until you turn it on.",
+  "description": "Encrypted long-term memory for AI agents via Streamable HTTP at https://aifa.works/api/mcp. Discovery (initialize, tools/list) is public; tool calls require per-user memory-only Bearer keys from https://aifa.works/mcp. Self-service erasure includes SHA-256 receipts; optional permanent Arweave anchoring uses AES-256-GCM. Read-only info tools inherit Guard defaults; private memory reads/writes/erasure, Family Hearth, invoices, payouts and webhooks require review. Off until enabled.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -96,6 +96,22 @@
       "state": "review"
     },
     {
+      "name": "memory_wake_up",
+      "state": "review"
+    },
+    {
+      "name": "memory_forget",
+      "state": "review"
+    },
+    {
+      "name": "memory_forget_receipts",
+      "state": "review"
+    },
+    {
+      "name": "family_hearth",
+      "state": "review"
+    },
+    {
       "name": "other",
       "state": "review"
     }
@@ -108,7 +124,7 @@
     "https://aifa.works/terms"
   ],
   "saferAlternatives": [
-    "Run discovery (initialize and tools/list) without credentials; once a per-user Bearer key is configured, use read-only info tools (memory_about, plans, partner_kit) that do not read or modify private memory.",
-    "Keep memory_write, memory_export, buy_plan, request_payout and set_webhook on Review so private memory exports, invoices, payouts and webhooks require explicit approval."
+    "Run discovery (initialize and tools/list) without credentials; once a per-user Bearer key is configured, use read-only info tools (memory_about, plans, partner_kit) that do not read or modify private memory, or use scoped memory-only Bearer keys.",
+    "Keep memory_write, memory_forget, memory_export, family_hearth, buy_plan, request_payout and set_webhook on Review so private memory changes, deletions, exports, invoices, payouts and webhooks require explicit approval."
   ]
 }

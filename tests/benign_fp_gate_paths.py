@@ -202,6 +202,7 @@ PROBES_FOR_ABSENCE = frozenset(
         # A fallback listing of a build file that is not there, before a cd into the repository.
         "or-fallback-prefix-then-cd-git-check-ignore",
         "or-fallback-prefix-then-cd-git-status",
+        "gauntlet-missing-file-fallback-then-cd-subfolder-status",
         # A sibling checkout that keeps no workflows, probed for them.
         "sibling-ls-missing-github-workflows",
         "sibling-find-missing-github-workflows",

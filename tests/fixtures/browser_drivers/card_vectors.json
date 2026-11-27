@@ -1,0 +1,517 @@
+{
+  "schemaVersion": "guard.browser-card-vectors.v1",
+  "vectors": [
+    {
+      "name": "plain typing on the user's signed-in profile",
+      "request": {
+        "action": {
+          "version": 2,
+          "driver": {
+            "id": "browser.playwright-mcp",
+            "kind": "mcp",
+            "identity_hash": null,
+            "trust_class": "first-party"
+          },
+          "session": {
+            "harness": "claude-code",
+            "session_ref_digest": null,
+            "profile_mode": "shared"
+          },
+          "intent": "browser.interact",
+          "operation": "browser_type",
+          "verb": "type",
+          "target": {
+            "origin": "https://shop.example.test",
+            "site_group": null,
+            "path_prefix": "/checkout",
+            "is_loopback": false,
+            "is_guard_origin": false,
+            "url_redacted": "https://shop.example.test/checkout"
+          },
+          "element": {
+            "role": "textbox",
+            "name_digest": null,
+            "name_preview": "Email",
+            "is_password": false,
+            "is_payment": false,
+            "is_file_input": false
+          },
+          "input": {
+            "kind": "text",
+            "length": 17,
+            "digest": "abababababababababababababababababababababababababababababababab",
+            "preview_class": "plain"
+          },
+          "sensitive_surface_flags": [],
+          "cdp": null,
+          "volatile_fields_dropped": []
+        },
+        "agent": "Claude Code"
+      },
+      "card": {
+        "headline": "Claude Code wants to type into a form on shop.example.test",
+        "verb": "type",
+        "site": {
+          "origin": "https://shop.example.test",
+          "first_visit_in_task": false,
+          "left_granted_site": false
+        },
+        "profile_line": "shared",
+        "detail": {
+          "element_preview": "Email",
+          "input_kind": "text",
+          "input_length": 17,
+          "input_masked": false
+        },
+        "risk_chips": [],
+        "provider_findings": [],
+        "choices": [
+          "allow_once",
+          "always_allow",
+          "deny"
+        ],
+        "steps": []
+      }
+    },
+    {
+      "name": "a password field is masked and shows its chip",
+      "request": {
+        "action": {
+          "version": 2,
+          "driver": {
+            "id": "browser.playwright-mcp",
+            "kind": "mcp",
+            "identity_hash": null,
+            "trust_class": "first-party"
+          },
+          "session": {
+            "harness": "claude-code",
+            "session_ref_digest": null,
+            "profile_mode": "isolated"
+          },
+          "intent": "browser.interact",
+          "operation": "browser_type",
+          "verb": "type",
+          "target": {
+            "origin": "https://shop.example.test",
+            "site_group": null,
+            "path_prefix": "/checkout",
+            "is_loopback": false,
+            "is_guard_origin": false,
+            "url_redacted": "https://shop.example.test/checkout"
+          },
+          "element": {
+            "role": "textbox",
+            "name_digest": null,
+            "name_preview": "Password",
+            "is_password": true,
+            "is_payment": false,
+            "is_file_input": false
+          },
+          "input": {
+            "kind": "text",
+            "length": 12,
+            "digest": "abababababababababababababababababababababababababababababababab",
+            "preview_class": "looks_like_secret"
+          },
+          "sensitive_surface_flags": [
+            "password_field"
+          ],
+          "cdp": null,
+          "volatile_fields_dropped": []
+        },
+        "agent": "Claude Code"
+      },
+      "card": {
+        "headline": "Claude Code wants to type into a form on shop.example.test",
+        "verb": "type",
+        "site": {
+          "origin": "https://shop.example.test",
+          "first_visit_in_task": false,
+          "left_granted_site": false
+        },
+        "profile_line": "isolated",
+        "detail": {
+          "element_preview": "Password",
+          "input_kind": "text",
+          "input_length": 12,
+          "input_masked": true
+        },
+        "risk_chips": [
+          "password_field"
+        ],
+        "provider_findings": [],
+        "choices": [
+          "allow_once",
+          "always_allow",
+          "deny"
+        ],
+        "steps": []
+      }
+    },
+    {
+      "name": "a payment element masks even a plain-looking value",
+      "request": {
+        "action": {
+          "version": 2,
+          "driver": {
+            "id": "browser.playwright-mcp",
+            "kind": "mcp",
+            "identity_hash": null,
+            "trust_class": "first-party"
+          },
+          "session": {
+            "harness": "claude-code",
+            "session_ref_digest": null,
+            "profile_mode": "shared"
+          },
+          "intent": "browser.interact",
+          "operation": "browser_type",
+          "verb": "type",
+          "target": {
+            "origin": "https://shop.example.test",
+            "site_group": null,
+            "path_prefix": "/checkout",
+            "is_loopback": false,
+            "is_guard_origin": false,
+            "url_redacted": "https://shop.example.test/checkout"
+          },
+          "element": {
+            "role": "textbox",
+            "name_digest": null,
+            "name_preview": "Card number",
+            "is_password": false,
+            "is_payment": true,
+            "is_file_input": false
+          },
+          "input": {
+            "kind": "text",
+            "length": 19,
+            "digest": "abababababababababababababababababababababababababababababababab",
+            "preview_class": "plain"
+          },
+          "sensitive_surface_flags": [],
+          "cdp": null,
+          "volatile_fields_dropped": []
+        },
+        "agent": "Claude Code"
+      },
+      "card": {
+        "headline": "Claude Code wants to type into a form on shop.example.test",
+        "verb": "type",
+        "site": {
+          "origin": "https://shop.example.test",
+          "first_visit_in_task": false,
+          "left_granted_site": false
+        },
+        "profile_line": "shared",
+        "detail": {
+          "element_preview": "Card number",
+          "input_kind": "text",
+          "input_length": 19,
+          "input_masked": true
+        },
+        "risk_chips": [],
+        "provider_findings": [],
+        "choices": [
+          "allow_once",
+          "always_allow",
+          "deny"
+        ],
+        "steps": []
+      }
+    },
+    {
+      "name": "navigation names the site as its object",
+      "request": {
+        "action": {
+          "version": 2,
+          "driver": {
+            "id": "browser.playwright-mcp",
+            "kind": "mcp",
+            "identity_hash": null,
+            "trust_class": "first-party"
+          },
+          "session": {
+            "harness": "claude-code",
+            "session_ref_digest": null,
+            "profile_mode": "dedicated"
+          },
+          "intent": "browser.navigation",
+          "operation": "browser_navigate",
+          "verb": "navigate",
+          "target": {
+            "origin": "http://localhost:4173",
+            "site_group": null,
+            "path_prefix": "/",
+            "is_loopback": true,
+            "is_guard_origin": false,
+            "url_redacted": "http://localhost:4173/"
+          },
+          "element": null,
+          "input": null,
+          "sensitive_surface_flags": [],
+          "cdp": null,
+          "volatile_fields_dropped": []
+        },
+        "agent": "Codex"
+      },
+      "card": {
+        "headline": "Codex wants to open localhost:4173",
+        "verb": "navigate",
+        "site": {
+          "origin": "http://localhost:4173",
+          "first_visit_in_task": false,
+          "left_granted_site": false
+        },
+        "profile_line": "dedicated",
+        "detail": {
+          "element_preview": null,
+          "input_kind": null,
+          "input_length": null,
+          "input_masked": false
+        },
+        "risk_chips": [],
+        "provider_findings": [],
+        "choices": [
+          "allow_once",
+          "always_allow",
+          "deny"
+        ],
+        "steps": []
+      }
+    },
+    {
+      "name": "a script without a site keeps one chip per surface",
+      "request": {
+        "action": {
+          "version": 2,
+          "driver": {
+            "id": "browser.playwright-mcp",
+            "kind": "mcp",
+            "identity_hash": null,
+            "trust_class": "first-party"
+          },
+          "session": {
+            "harness": "claude-code",
+            "session_ref_digest": null,
+            "profile_mode": "remote-debugging"
+          },
+          "intent": "browser.privileged",
+          "operation": "browser_evaluate",
+          "verb": "evaluate",
+          "target": {
+            "origin": null,
+            "site_group": null,
+            "path_prefix": null,
+            "is_loopback": false,
+            "is_guard_origin": false,
+            "url_redacted": null
+          },
+          "element": null,
+          "input": {
+            "kind": "script",
+            "length": 240,
+            "digest": "abababababababababababababababababababababababababababababababab",
+            "preview_class": "plain"
+          },
+          "sensitive_surface_flags": [
+            "script_eval",
+            "cookies",
+            "script_eval"
+          ],
+          "cdp": null,
+          "volatile_fields_dropped": []
+        },
+        "agent": "Cursor"
+      },
+      "card": {
+        "headline": "Cursor wants to run a script in the browser",
+        "verb": "evaluate",
+        "site": {
+          "origin": null,
+          "first_visit_in_task": false,
+          "left_granted_site": false
+        },
+        "profile_line": "remote-debugging",
+        "detail": {
+          "element_preview": null,
+          "input_kind": "script",
+          "input_length": 240,
+          "input_masked": false
+        },
+        "risk_chips": [
+          "script_eval",
+          "cookies"
+        ],
+        "provider_findings": [],
+        "choices": [
+          "allow_once",
+          "always_allow",
+          "deny"
+        ],
+        "steps": []
+      }
+    },
+    {
+      "name": "a blank agent name falls back and the site markers pass through",
+      "request": {
+        "action": {
+          "version": 2,
+          "driver": {
+            "id": "browser.playwright-mcp",
+            "kind": "mcp",
+            "identity_hash": null,
+            "trust_class": "first-party"
+          },
+          "session": {
+            "harness": "claude-code",
+            "session_ref_digest": null,
+            "profile_mode": "unknown"
+          },
+          "intent": "browser.inspect",
+          "operation": "browser_take_screenshot",
+          "verb": "screenshot",
+          "target": {
+            "origin": "https://docs.example.test",
+            "site_group": null,
+            "path_prefix": "/",
+            "is_loopback": false,
+            "is_guard_origin": false,
+            "url_redacted": "https://docs.example.test/"
+          },
+          "element": null,
+          "input": null,
+          "sensitive_surface_flags": [],
+          "cdp": null,
+          "volatile_fields_dropped": []
+        },
+        "agent": " \u0007 ",
+        "first_visit_in_task": true,
+        "left_granted_site": true
+      },
+      "card": {
+        "headline": "The agent wants to take a screenshot on docs.example.test",
+        "verb": "screenshot",
+        "site": {
+          "origin": "https://docs.example.test",
+          "first_visit_in_task": true,
+          "left_granted_site": true
+        },
+        "profile_line": "unknown",
+        "detail": {
+          "element_preview": null,
+          "input_kind": null,
+          "input_length": null,
+          "input_masked": false
+        },
+        "risk_chips": [],
+        "provider_findings": [],
+        "choices": [
+          "allow_once",
+          "always_allow",
+          "deny"
+        ],
+        "steps": []
+      }
+    },
+    {
+      "name": "an action of another version has no card",
+      "request": {
+        "action": {
+          "version": 1,
+          "driver": {
+            "id": "browser.playwright-mcp",
+            "kind": "mcp",
+            "identity_hash": null,
+            "trust_class": "first-party"
+          },
+          "session": {
+            "harness": "claude-code",
+            "session_ref_digest": null,
+            "profile_mode": "shared"
+          },
+          "intent": "browser.interact",
+          "operation": "browser_type",
+          "verb": "type",
+          "target": {
+            "origin": "https://shop.example.test",
+            "site_group": null,
+            "path_prefix": "/checkout",
+            "is_loopback": false,
+            "is_guard_origin": false,
+            "url_redacted": "https://shop.example.test/checkout"
+          },
+          "element": {
+            "role": "textbox",
+            "name_digest": null,
+            "name_preview": "Email",
+            "is_password": false,
+            "is_payment": false,
+            "is_file_input": false
+          },
+          "input": {
+            "kind": "text",
+            "length": 17,
+            "digest": "abababababababababababababababababababababababababababababababab",
+            "preview_class": "plain"
+          },
+          "sensitive_surface_flags": [],
+          "cdp": null,
+          "volatile_fields_dropped": []
+        },
+        "agent": "Claude Code"
+      },
+      "error": "browser_action_wrong_version"
+    },
+    {
+      "name": "an unredacted URL has no card",
+      "request": {
+        "action": {
+          "version": 2,
+          "driver": {
+            "id": "browser.playwright-mcp",
+            "kind": "mcp",
+            "identity_hash": null,
+            "trust_class": "first-party"
+          },
+          "session": {
+            "harness": "claude-code",
+            "session_ref_digest": null,
+            "profile_mode": "shared"
+          },
+          "intent": "browser.interact",
+          "operation": "browser_type",
+          "verb": "type",
+          "target": {
+            "origin": "https://shop.example.test",
+            "site_group": null,
+            "path_prefix": "/checkout",
+            "is_loopback": false,
+            "is_guard_origin": false,
+            "url_redacted": "https://shop.example.test/checkout?token=abc"
+          },
+          "element": {
+            "role": "textbox",
+            "name_digest": null,
+            "name_preview": "Email",
+            "is_password": false,
+            "is_payment": false,
+            "is_file_input": false
+          },
+          "input": {
+            "kind": "text",
+            "length": 17,
+            "digest": "abababababababababababababababababababababababababababababababab",
+            "preview_class": "plain"
+          },
+          "sensitive_surface_flags": [],
+          "cdp": null,
+          "volatile_fields_dropped": []
+        },
+        "agent": "Claude Code"
+      },
+      "error": "browser_action_url_not_redacted"
+    }
+  ]
+}

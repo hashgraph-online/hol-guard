@@ -199,9 +199,15 @@ class GuardDaemonServer:
         self._daemon.start()
         self.port = self._daemon.port
 
+    def wait_for_hook_worker(self, timeout_seconds: float = 60.0) -> bool:
+        """Wait for the daemon's start-time hook warm-up; see ``NativeGuardDaemon``."""
+
+        return self._daemon.wait_for_hook_worker(timeout_seconds)
+
     def stop(self) -> None:
         self._daemon.stop()
         self._library.close()
+        self._hosts_retired = _retire_resident_hosts(self.store.guard_home)
 
     def hook_capacity(self) -> dict[str, Any]:
         """The daemon's hook scheduler counters, as its health details report them."""
@@ -219,10 +225,46 @@ class GuardDaemonServer:
         return capacity if isinstance(capacity, dict) else {}
 
     def _finish_service(self) -> bool:
-        return self._daemon._process is None
+        return self._daemon._process is None and getattr(self, "_hosts_retired", True)
 
     def _is_quarantined(self) -> bool:
         return False
+
+
+_HOST_RETIRE_SECONDS = 5.0
+
+
+def _retire_resident_hosts(guard_home: Path) -> bool:
+    """Stop the hook host this process kept for the daemon's Guard home.
+
+    In production the library host is its own process and ends with the
+    daemon. Here it lives in the test process, so its policy publisher and
+    evidence threads would outlive ``stop`` and keep calling the resident,
+    restarting it while cleanup tries to stop it. Returns False when a
+    thread did not stop in time, so cleanup reports it instead of passing.
+    """
+
+    import time
+
+    from codex_plugin_scanner.guard.routes import hook_calls
+
+    wanted = os.path.realpath(guard_home)
+    with hook_calls._SERVERS_LOCK:
+        keys = [key for key in hook_calls._SERVERS if os.path.realpath(key) == wanted]
+        servers = [hook_calls._SERVERS.pop(key) for key in keys]
+    deadline = time.monotonic() + _HOST_RETIRE_SECONDS
+    retired = True
+    for server in servers:
+        state = server.__dict__
+        worker = state.get("hook_worker")
+        if worker is not None and worker.close(deadline_monotonic=deadline) is False:
+            retired = False
+        for name in ("runtime_resident_evidence_dispatch", "runtime_hook_evidence_writer"):
+            stop = getattr(state.get(name), "stop", None)
+            if callable(stop) and stop(timeout_seconds=max(0.0, deadline - time.monotonic())) is False:
+                retired = False
+        server.server_close()
+    return retired
 
 
 __all__ = ["GuardDaemonServer"]

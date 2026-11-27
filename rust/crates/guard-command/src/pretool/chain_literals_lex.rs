@@ -143,16 +143,23 @@ pub(super) fn identifier(name: &str) -> bool {
 /// operand of an attached flag such as `-vNAME`, the forms in which a builtin
 /// takes a variable to set. `$NAME` and `${NAME}` are uses, not targets.
 /// Quotes and escapes are removed first, as the shell removes them before
-/// the builtin sees `O"UT"`, `'O'UT` or `O\UT` as `OUT`.
+/// the builtin sees `O"UT"`, `'O'UT` or `O\UT` as `OUT`. A hyphen inside a
+/// word, as in `/tmp/pytest-of-runner`, joins two parts of one operand and
+/// never opens a flag, so `-of` there is not `-o f`.
 pub(super) fn names_variable(text: &str, target: impl Fn(&str) -> bool) -> bool {
+    let mut before = ' ';
     let mut previous = ' ';
     let mut opener = ' ';
     let mut token = String::new();
     let dequoted = text.chars().filter(|c| !matches!(c, '\'' | '"' | '\\'));
+    let word_char = |c: char| c == '_' || c.is_ascii_alphanumeric();
     for c in dequoted.chain(std::iter::once(' ')) {
-        if c == '_' || c.is_ascii_alphanumeric() {
+        if word_char(c) {
             if token.is_empty() {
-                opener = previous;
+                opener = match previous {
+                    '-' if word_char(before) => ' ',
+                    other => other,
+                };
             }
             token.push(c);
         } else if !token.is_empty() {
@@ -169,6 +176,7 @@ pub(super) fn names_variable(text: &str, target: impl Fn(&str) -> bool) -> bool 
             }
             token.clear();
         }
+        before = previous;
         previous = c;
     }
     false
@@ -194,4 +202,54 @@ pub(super) fn opaque(word: &str) -> bool {
         }
     }
     false
+}
+
+/// Whether the character outside ASCII at `at` is plain text to every shell:
+/// printable, no word break, no direction or zero-width mark that hides
+/// text, and not the tail of a `$NAME` or `${NAME` that zsh reads it into.
+/// A joiner and a variation selector stay plain, since emoji carry them.
+pub(super) fn plain_non_ascii(chars: &[char], at: usize) -> bool {
+    let character = chars[at];
+    if character.is_whitespace()
+        || character.is_control()
+        || matches!(
+            character,
+            '\u{00AD}'
+                | '\u{061C}'
+                | '\u{180E}'
+                | '\u{200B}'
+                | '\u{200C}'
+                | '\u{200E}'
+                | '\u{200F}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{2060}'..='\u{206F}'
+                | '\u{FEFF}'
+                | '\u{FFF9}'..='\u{FFFB}'
+                | '\u{E0000}'..='\u{E007F}'
+        )
+    {
+        return false;
+    }
+    // The index of the character before `end`, stepping over every
+    // backslash-newline, which the shell removes before it reads a name.
+    let previous = |mut end: usize| loop {
+        let index = end.checked_sub(1)?;
+        if chars[index] == '\n' && index > 0 && chars[index - 1] == '\\' {
+            end = index - 1;
+            continue;
+        }
+        return Some(index);
+    };
+    let mut start = at;
+    while let Some(index) = previous(start) {
+        let c = chars[index];
+        if c.is_ascii() && !(c.is_ascii_alphanumeric() || c == '_') {
+            break;
+        }
+        start = index;
+    }
+    let first = previous(start);
+    let opener = first.map(|index| chars[index]);
+    let second = first.and_then(previous).map(|index| chars[index]);
+    !(opener == Some('$') || (opener == Some('{') && second == Some('$')))
 }

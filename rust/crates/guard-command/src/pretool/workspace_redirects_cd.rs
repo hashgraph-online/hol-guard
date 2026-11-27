@@ -31,18 +31,48 @@ pub(super) fn python_after_cd(projected: &str) -> bool {
 
 /// The text after a leading `cd <one word> && `.
 fn after_cd(text: &str) -> Option<&str> {
+    split_cd(text).map(|(_, program)| program)
+}
+
+/// The directory a leading `cd <one word> && ` names, without its quotes, and
+/// the text after it.
+fn split_cd(text: &str) -> Option<(&str, &str)> {
     let rest = text.strip_prefix("cd ")?.trim_start_matches(' ');
-    let word_end = match rest.chars().next()? {
+    let (word, word_end) = match rest.chars().next()? {
         quote @ ('\'' | '"') => {
             let end = rest[1..].find(quote)?;
-            (quote == '\'' || !rest[1..1 + end].contains(['$', '`', '\\'])).then_some(end + 2)?
+            (quote == '\'' || !rest[1..1 + end].contains(['$', '`', '\\']))
+                .then_some((&rest[1..1 + end], end + 2))?
         }
-        _ => rest.find(' ').filter(|end| plain(&rest[..*end]))?,
+        _ => rest
+            .find(' ')
+            .filter(|end| plain(&rest[..*end]))
+            .map(|end| (&rest[..end], end))?,
     };
     let program = rest[word_end..]
         .trim_start_matches(' ')
         .strip_prefix("&&")?;
-    Some(program.trim_start_matches(' '))
+    Some((word, program.trim_start_matches(' ')))
+}
+
+/// Whether the leading `cd` of `projected` names `workspace` by its absolute
+/// path. The sandbox runs from the workspace root, so that `cd` changes
+/// nothing. A relative word could be moved by `CDPATH`, which the sandbox
+/// cannot see, so it is not taken. Neither is a word with `..`: the shell's
+/// logical `cd` drops the name before it, while canonicalizing first follows
+/// that name if it is a link, so the two could reach different directories.
+pub(super) fn enters_workspace(projected: &str, workspace: &Path) -> bool {
+    split_cd(projected)
+        .map(|(word, _)| Path::new(word))
+        .filter(|target| {
+            target.is_absolute()
+                && !target
+                    .components()
+                    .any(|part| part == std::path::Component::ParentDir)
+        })
+        .and_then(|target| std::fs::canonicalize(target).ok())
+        .zip(std::fs::canonicalize(workspace).ok())
+        .is_some_and(|(target, root)| target == root)
 }
 
 /// The payload the raw text is reviewed from. Once the `cd` is proved to

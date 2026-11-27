@@ -47,6 +47,10 @@ pub(super) struct RedirectProjection {
     /// supplied, so the projected text runs exactly the programs the raw text
     /// runs.
     pub(super) inert_sinks: bool,
+    /// The execution sink peels the command's only file redirect, a trailing
+    /// write to a scratch log, and writes that file itself, so the core runs
+    /// contained and the redirect never reaches the sandbox.
+    pub(super) sink_log: bool,
 }
 
 impl RedirectProjection {
@@ -306,6 +310,7 @@ pub(super) fn project(
         scratch_writes,
         init_chain,
         written: targets,
+        sink_log: false,
     })
 }
 
@@ -418,8 +423,16 @@ pub(super) fn join(
         && projected.reason_code == crate::pretool::curl_reads::NETWORK_READ_REASON;
     let other_proof =
         projection.init_chain && projected.reason_code != crate::pretool::git_init_chain::REASON;
+    // A scratch log the sink writes itself leaves the core's own sandbox
+    // route intact: the redirect is peeled before anything runs.
+    let sink_log = projection.sink_log
+        && projected.minimum_action == "sandbox-required"
+        && !projected.action.sensitive_target
+        && !raw.action.sensitive_target
+        && !other_proof;
     if writes_file
         && !scratch_body
+        && !sink_log
         && (other_proof || redirect_disqualifies_containment(&projected.reason_code))
     {
         write_review(&mut projected);

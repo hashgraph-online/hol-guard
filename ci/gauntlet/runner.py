@@ -63,7 +63,8 @@ from .input_evidence import (
 )
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
-from .native_routes import await_native_routes
+from .loopback_page import LoopbackPage
+from .native_routes import SinkReceiptTally, await_native_routes
 from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_private_temp
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
@@ -183,6 +184,8 @@ def run_case(
         "guard_observations": [],
         "native_routes": {},
         "resident_direct_answers": 0,
+        "sink_receipt_routes": {},
+        "sink_receipt_calls": {},
         "inference": {"live_rounds": [], "canary_export_violations": 0},
         "filesystem": {},
         "egress_requests": [],
@@ -204,8 +207,13 @@ def run_case(
     try:
         if approval_retry_enabled(scenario):
             review = OmpReview(scenario, fixture, case)
-        with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
+        with (
+            LoopbackCollector() as collector,
+            LoopbackPage() as page,
+            InferenceRelay(canary=fixture.canary, **provider) as relay,
+        ):
             replacements[collector.url] = "{{collector_url}}"
+            replacements[page.url] = "{{page_url}}"
             rendered = scenario.render(
                 {
                     "home": str(fixture.home),
@@ -214,6 +222,7 @@ def run_case(
                     "scratch": str(scratch_checkout(fixture.root)),
                     "stage": str(stage_directory(fixture.root)),
                     "collector_url": collector.url,
+                    "page_url": page.url,
                 }
             )
             prompt = _scenario_prompt(rendered)
@@ -272,6 +281,7 @@ def run_case(
                     case["business_policy"], publisher.current_snapshot(), policy_snapshot
                 )
             worker = daemon._server.hook_worker
+            receipt_tally = SinkReceiptTally(worker)
             if scenario.oracle == "blocked-extension":
                 extension_receipt_ids = native_probe.persisted_native_receipt_ids(worker.store)
                 extension_receipt_writer = daemon._server.runtime_hook_evidence_writer
@@ -398,9 +408,10 @@ def run_case(
             # A bridged hook is answered either by a live resident, which counts
             # it itself, or by the daemon, which routes it; read both once the
             # case's observations say how many answers to account for.
-            case["native_routes"], case["resident_direct_answers"] = await_native_routes(
-                worker, len(case["guard_observations"])
+            case["native_routes"], case["resident_direct_answers"], tallied = await_native_routes(
+                worker, len(case["guard_observations"]), tally=receipt_tally
             )
+            case["sink_receipt_routes"], case["sink_receipt_calls"] = tallied["routes"], tallied["calls"]
             if proofs := request_proofs(host_log, fixture.workspace, replacements):
                 case["contained_request_proofs"] = proofs
             if scenario.oracle == "blocked-extension":

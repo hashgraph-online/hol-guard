@@ -4,6 +4,7 @@ import { LoggedActionPanel } from "../logged-action-panel";
 import { plainMcpReason } from "./explain-mcp-call";
 import type { McpCallExplanation, McpCodeBlock, McpFact } from "./mcp-call-types";
 import { McpAppMark } from "./mcp-app-mark";
+import { BrowserReportPrompt } from "./browser-report-prompt";
 import { actingApp, mcpMarkName } from "./mcp-brand";
 import { ConsequenceNote, EffectPill, FactList, StepRow } from "./mcp-call-parts";
 
@@ -13,7 +14,7 @@ function showsSteps(explanation: McpCallExplanation): boolean {
   return explanation.steps.some((step) => step.details.length > 0 || step.hiddenDetails > 0);
 }
 
-function subtitleOf(explanation: McpCallExplanation, app: string): string {
+export function subtitleOf(explanation: McpCallExplanation, app: string): string {
   if (explanation.builtIn === true) return `Built into ${explanation.connector}`;
   return app === explanation.connector ? `Tool from ${explanation.connector}` : `${app}, through ${explanation.connector}`;
 }
@@ -22,14 +23,20 @@ function subtitleOf(explanation: McpCallExplanation, app: string): string {
 const GENERIC_REASON = /needs your approval before this action can run/i;
 
 /** What approving covers. When Guard cannot confirm the account, it can only allow the call once, and says why. */
-function scopeNote(item: GuardApprovalRequest, connector: string): string {
+export function scopeNote(item: GuardApprovalRequest, connector: string): string {
   if (item.scope_restrictions?.includes("provider_account_unverified_once_only") === true) {
     return `You can allow this once, for these exact inputs. Guard cannot save it for next time, because it cannot confirm which ${connector} account it uses.`;
   }
   return "Allow once and Always allow both cover only these exact inputs. If the inputs change, Guard asks again.";
 }
 
-function CodePanel({ requestId, code }: { requestId: string; code: McpCodeBlock }) {
+/** Why Guard asked, said once on the card. The alerts above the card leave this sentence out. */
+export function mcpCallReason(item: GuardApprovalRequest, explanation: McpCallExplanation): string {
+  const coreReason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
+  return coreReason !== null && !GENERIC_REASON.test(coreReason) ? coreReason : explanation.whyAsked;
+}
+
+export function CodePanel({ requestId, code }: { requestId: string; code: McpCodeBlock }) {
   return (
     <LoggedActionPanel
       key={`${requestId}-code`}
@@ -44,9 +51,7 @@ function CodePanel({ requestId, code }: { requestId: string; code: McpCodeBlock 
 export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest; explanation: McpCallExplanation }) {
   const watchOnly = isWatchOnlyObservation(item);
   const workingDirectory = resolveRequestWorkingDirectory(item);
-  // Why Guard asked is said here, once. The alerts above the card leave this sentence out.
-  const coreReason = plainMcpReason(item, buildPrimaryReviewAction(item).detail);
-  const reason = coreReason !== null && !GENERIC_REASON.test(coreReason) ? coreReason : explanation.whyAsked;
+  const reason = mcpCallReason(item, explanation);
   const app = actingApp(explanation);
   const facts: McpFact[] = [
     ...explanation.facts,
@@ -131,11 +136,35 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
         </details>
       )}
 
+      <McpCallFooter item={item} explanation={explanation} reason={reason} />
+    </section>
+  );
+}
+
+/**
+ * The exact input, why Guard asked, and what approving covers. A card that
+ * withholds the input passes the sentence to show in its place.
+ */
+export function McpCallFooter({
+  item,
+  explanation,
+  reason,
+  withheldInput,
+}: {
+  item: GuardApprovalRequest;
+  explanation: McpCallExplanation;
+  reason: string;
+  withheldInput?: string;
+}) {
+  return (
+    <>
       <details className="border-t border-slate-100 px-4 py-3 sm:px-5">
         <summary className="cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30">
           See the exact input
         </summary>
-        {explanation.rawInput !== null ? (
+        {withheldInput !== undefined ? (
+          <p className="mt-2 text-sm text-muted-foreground">{withheldInput}</p>
+        ) : explanation.rawInput !== null ? (
           <div className="mt-3">
             <LoggedActionPanel
               key={`${item.request_id}-input`}
@@ -161,6 +190,7 @@ export function McpCallCard({ item, explanation }: { item: GuardApprovalRequest;
           {explanation.truncated ? " Long text is shown shortened here." : ""}
         </p>
       </div>
-    </section>
+      {item.browser_card ? <BrowserReportPrompt requestId={item.request_id} /> : null}
+    </>
   );
 }

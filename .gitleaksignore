@@ -278,3 +278,15 @@ b197d4bdc2d5810feb5475c3d5f5f3884e97fda1:rust/crates/guard-scanner/src/path_segm
 b197d4bdc2d5810feb5475c3d5f5f3884e97fda1:rust/crates/guard-scanner/src/path_segment.rs:generic-api-key:49
 b197d4bdc2d5810feb5475c3d5f5f3884e97fda1:rust/crates/guard-scanner/src/result_pass.rs:generic-api-key:86
 b197d4bdc2d5810feb5475c3d5f5f3884e97fda1:rust/crates/guard-scanner/src/result_pass.rs:generic-api-key:87
+
+# Synthetic Git signing key IDs in signing-key test vectors: a key ID is a public identifier, not a credential.
+a2746004b391051a55a13e9195a73b247303fdd2:tests/fixtures/benign_false_positive_gate.json:generic-api-key:30129
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:416
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:417
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:419
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:424
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:425
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/src/pretool/literal_secrets_tests.rs:generic-api-key:426
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/tests/pretool_extension_allow_git_signing_key.rs:generic-api-key:140
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/tests/pretool_extension_allow_git_signing_key.rs:generic-api-key:158
+a2746004b391051a55a13e9195a73b247303fdd2:rust/crates/guard-command/tests/pretool_extension_allow_git_signing_key.rs:generic-api-key:159

@@ -25,7 +25,10 @@ pub(super) use super::safe_writes::{
     safe_copy_arguments_into, safe_file_mutation_arguments,
 };
 pub(crate) use command_sequences::proven_created_file_removal;
-pub(super) use command_sequences::{exact_safe_sequence, leading_and_cd, leading_semicolon_cd};
+pub(super) use command_sequences::{
+    and_chained_cds, exact_safe_sequence, leading_and_cd, leading_and_cd_nested,
+    leading_semicolon_cd, leading_semicolon_cd_nested, nested_cd_proof,
+};
 pub(super) use head_tail::{safe_head_tail_arguments, safe_head_tail_stdin_arguments};
 pub(super) use jq_arguments::{
     jq_filter_position, safe_jq_file_arguments, safe_jq_piped_arguments, safe_jq_stdin_arguments,
@@ -34,6 +37,7 @@ pub(crate) use jq_filter::rendering_format as jq_rendering_format;
 pub(crate) use jq_filter::variables_bound as jq_variables_bound;
 pub(super) use read_globs::{
     directory_glob_file_matches, glob_file_matches, wildcard_matches, wildcard_may_match,
+    wildcard_sure_match,
 };
 pub(super) use sed_reads::{safe_sed_arguments, safe_sed_stdin_arguments, sed_writes_nothing};
 
@@ -50,14 +54,20 @@ pub(super) fn safe_file_predicate_arguments(
     };
     // Each predicate reads only the target's metadata: its type, permission
     // bits or size. `-x` is also true for a directory the caller may enter.
+    // `-L` and its older spelling `-h` ask `lstat` whether the name itself is
+    // a link and never follow it, one bit less than `-e` returns, so they
+    // take the same proof; a link is as often to a directory as to a file.
     verified_path_context(context.home_dir, context.cwd)
-        && matches!(predicate.as_str(), "-f" | "-d" | "-e" | "-r" | "-x" | "-s")
+        && matches!(
+            predicate.as_str(),
+            "-f" | "-d" | "-e" | "-r" | "-x" | "-s" | "-L" | "-h"
+        )
         && !target.starts_with('-')
         && (bounded_read_target(
             target,
             context.home_dir,
             context.cwd,
-            matches!(predicate.as_str(), "-d" | "-e" | "-x"),
+            matches!(predicate.as_str(), "-d" | "-e" | "-x" | "-L" | "-h"),
         ) || metadata_only_target(target, context)
             || super::listing_reads::tested_glob_operand(target, context))
 }
@@ -109,6 +119,14 @@ pub(super) fn safe_listing_arguments(
             || super::tool_bin_listing::node_bin_listing_operand(argument, context)
             || super::tool_bin_listing::credential_file_metadata_operand(argument, context)
             || super::tool_bin_listing::global_package_listing_operand(argument, context)
+            // A directory of the session's own repository whose every entry
+            // is committed prints only names Git already shows, whatever
+            // word the directory's own name carries, and a missing name
+            // under such a directory prints `No such file or directory`.
+            || super::search_scope_tracked::listing::resolves_to_listed_directory(
+                argument,
+                context.cwd,
+            )
     })
 }
 

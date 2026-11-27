@@ -38,7 +38,7 @@ use pick::{named_definitions, outlined, Pick};
 pub(super) mod rename;
 #[path = "context_assistance_prompt_map_render.rs"]
 mod render;
-use render::render;
+use render::{quoted, render};
 #[path = "context_assistance_prompt_map_uses.rs"]
 mod uses;
 use uses::sought;
@@ -288,11 +288,11 @@ pub(super) fn map(
         .flat_map(|file| file.sections.iter().filter_map(|s| s.name.clone()))
         .collect();
     let plain_name = |item: &Sought| !asked.changes && !item.common && defined.contains(&item.text);
-    // A misspelled name means the one definition a letter away.
+    // A misspelled or new name means the definition it is near.
     let names: Vec<(&str, bool)> = (sought.iter())
         .filter(|item| !item.phrase)
         .filter_map(|item| {
-            let near = uses::misspelled(item, &defined).filter(|_| !asked.changes);
+            let near = uses::meant(item, &defined).filter(|_| !asked.changes);
             match near {
                 Some(name) => Some((name, item.name)),
                 None => (item.name || plain_name(item)).then_some((item.text.as_str(), item.name)),
@@ -337,25 +337,20 @@ pub(super) fn map(
     }
     let mut blocks: Vec<(String, Vec<Entry>)> = Vec::new();
     let listed = more::listed(&files, &chosen, asked);
-    let earlier: Vec<Span> = (asked.earlier.iter().cloned())
+    let mut earlier: Vec<Span> = (asked.earlier.iter().cloned())
         .chain(listed.iter().flat_map(|entry| entry.shown.iter().cloned()))
         .collect();
     blocks.push((NAMED_TITLE.to_owned(), listed));
+    if let Some((title, entry)) = beside::callees::callees(&files, &chosen, asked, &earlier) {
+        earlier.extend(entry.shown.iter().cloned());
+        blocks.push((title, vec![entry]));
+    }
     let title = (used.iter().take(MAX_TITLE_WORDS))
         .map(|word| format!("'{word}'"))
         .collect::<Vec<_>>()
         .join(", ");
     let plain =
         |entries: Vec<String>| -> Vec<Entry> { entries.into_iter().map(Entry::plain).collect() };
-    // Lines quoted from files are code, held to their own limits.
-    let quoted = |entries: Vec<String>| -> Vec<Entry> {
-        let code = |text: String| Entry {
-            code: text.len(),
-            text,
-            shown: Vec::new(),
-        };
-        entries.into_iter().map(code).collect()
-    };
     // A rename lists every line naming the old name instead.
     let (renamed, rewrite) = rename::blocks(&files, sought, asked, until);
     if renamed.is_empty() {
@@ -486,6 +481,9 @@ mod docstring_tests;
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_imports_tests.rs"]
 mod imports_tests;
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_more_tests.rs"]
+mod more_tests;
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_nested_tests.rs"]
 mod nested_tests;

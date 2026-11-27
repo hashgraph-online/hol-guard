@@ -2,6 +2,7 @@ import type {
   EffectiveExtensionControls,
   ExtensionCatalogItem,
   ExtensionCatalogResponse,
+  ExtensionCatalogSurface,
   ExtensionCatalogSummary,
   ExtensionControlLayer,
   ExtensionControlTerminalCommands,
@@ -245,6 +246,17 @@ function mcpTool(value: unknown, label: string): McpToolDefault {
   };
 }
 
+const CATALOG_SURFACES: readonly ExtensionCatalogSurface[] = ["terminal", "mcp", "browser", "package", "cloud"];
+
+function catalogSurfaces(value: unknown, label: string): Pick<ExtensionCatalogItem, "surfaces"> {
+  if (value === undefined) return {};
+  const known = array(value, label, CATALOG_SURFACES.length * 2)
+    .map((entry, index) => string(entry, `${label}[${index}]`))
+    .filter((entry): entry is ExtensionCatalogSurface => (CATALOG_SURFACES as readonly string[]).includes(entry));
+  const surfaces = CATALOG_SURFACES.filter((surface) => known.includes(surface));
+  return surfaces.length > 0 ? { surfaces } : {};
+}
+
 function mcpCatalogFields(
   item: RecordValue,
   label: string,
@@ -319,6 +331,7 @@ function extension(value: unknown, label: string): ExtensionCatalogItem {
     permission_count: permissionCount,
     permissions,
     ...mcpCatalogFields(item, label),
+    ...catalogSurfaces(item.surfaces, `${label}.surfaces`),
   };
 }
 
@@ -355,6 +368,7 @@ export function normalizeExtensionCatalogSummary(value: unknown, label = "summar
     rule_count: integer(item.rule_count, `${label}.rule_count`),
     permission_count: integer(item.permission_count, `${label}.permission_count`),
     ...(surface ? { surface } : {}),
+    ...catalogSurfaces(item.surfaces, `${label}.surfaces`),
     content_revision: string(item.content_revision, `${label}.content_revision`),
   };
 }

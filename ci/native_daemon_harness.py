@@ -21,6 +21,8 @@ from typing import IO
 from codex_plugin_scanner.guard.store import GuardStore
 
 _START_TIMEOUT_SECONDS = 30.0
+# The daemon gives its start-time hook warm-up this long.
+_HOOK_WARM_TIMEOUT_SECONDS = 60.0
 # Ask the kernel: tests patch ``sys.platform`` while a daemon starts.
 _HOST_IS_LINUX = hasattr(os, "uname") and os.uname().sysname == "Linux"
 
@@ -45,6 +47,10 @@ def _stop_with_parent() -> None:
 
     pr_set_pdeathsig = 1
     ctypes.CDLL(None, use_errno=True).prctl(pr_set_pdeathsig, signal.SIGTERM)
+
+
+class HookWorkerWarmTimeoutError(RuntimeError):
+    """The daemon recorded no end to its hook warm-up before the wait ran out."""
 
 
 class NativeGuardDaemon:
@@ -143,6 +149,55 @@ class NativeGuardDaemon:
         facts = json.loads(announced)
         self.port = int(facts["port"])
         self.pid = int(facts["pid"])
+
+    def wait_for_hook_worker(self, timeout_seconds: float = _HOOK_WARM_TIMEOUT_SECONDS) -> bool:
+        """Wait for the daemon's start-time hook warm-up; True when it built the worker.
+
+        The daemon builds the resident's hook worker in the background after it
+        reports ready. A hook that arrives first waits behind that build, and a
+        client that keeps its own short deadline gives up on it. An installed
+        daemon has long finished warming when an agent starts, so a launcher
+        that starts an agent right away waits here first.
+
+        Returns False when the warm-up recorded that it could not build the
+        worker, or when the daemon exited. Raises ``HookWorkerWarmTimeoutError``
+        when no end of the warm-up was recorded before the wait ran out, or
+        when the warm-up recorded that its call timed out: that call may still
+        be running in the resident, so the worker is neither built nor known
+        to be missing.
+        """
+
+        process = self._process
+        # Lifecycle records carry the daemon's own process ID. On Windows the
+        # daemon announces its launcher's ID instead, so match either.
+        pids = {self.pid}
+        native_pid = getattr(process, "pid", None)
+        if isinstance(native_pid, int):
+            pids.add(native_pid)
+        directory = Path(self.store.guard_home) / "daemon-lifecycle"
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            for pid in sorted(pids):
+                for path in sorted(directory.glob(f"*-{pid:010d}-*.json")):
+                    try:
+                        record = json.loads(path.read_text(encoding="utf-8"))
+                    except (OSError, ValueError):
+                        continue
+                    if isinstance(record, dict) and record.get("event") == "hook_worker_warmed":
+                        if record.get("reason") == "timeout":
+                            raise HookWorkerWarmTimeoutError(
+                                "The native daemon's hook worker warm-up timed out and may still be running."
+                            )
+                        return record.get("reason") == "ok"
+            if process is None or process.poll() is not None:
+                return False
+            if time.monotonic() >= deadline:
+                # No record means the warm-up may still be running; starting
+                # the agent now would put its first hook behind it.
+                raise HookWorkerWarmTimeoutError(
+                    f"The native daemon's hook worker did not finish warming within {timeout_seconds:g} s."
+                )
+            time.sleep(0.05)
 
     def stop(self) -> None:
         process = self._process

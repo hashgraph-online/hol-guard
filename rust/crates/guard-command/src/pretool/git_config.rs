@@ -222,6 +222,7 @@ fn raw_paging(
             | "rev-parse"
             | "ls-files"
             | "apply"
+            | "merge-file"
             | "bisect"
             | "notes"
             | "replace"
@@ -284,6 +285,11 @@ fn raw_paging(
     // Only the patch check reads; every other apply writes, and its own
     // review decides it.
     if operation == "apply" && !super::git_apply_check::is_check_only(&remaining[1..]) {
+        return Raw::NotModelled;
+    }
+    // Only the printing merge reads; without `-p` it writes the first file,
+    // and its own review decides it.
+    if operation == "merge-file" && !super::git_merge_file_read::is_read_only(&remaining[1..]) {
         return Raw::NotModelled;
     }
     // A plain configuration write is no read; its own proof decides it.
@@ -563,13 +569,16 @@ fn probe(
         .iter()
         .skip(1)
         .take_while(|value| value.as_str() != "--");
-    // Deliberately conservative: an explicit signature request always needs
-    // review, even if a later --no-show-signature would disable it. We do not
-    // claim to prove the complete signature-format/helper option grammar.
+    // Deliberately conservative: an explicit signature request is read as
+    // one even if a later --no-show-signature would disable it. It starts the
+    // configured verification program, so it is cleared only below, once the
+    // program is shown to be one the user chose.
+    let verifies = super::git_history_reads::verifies_signatures(rendering);
+    let mut signature_requested = options
+        .clone()
+        .any(|value| value.as_str() == "--show-signature" || (verifies && value.contains("%G")));
     if options.clone().any(|value| {
-        value.as_str() == "--show-signature"
-            || (super::git_history_reads::verifies_signatures(rendering) && value.contains("%G"))
-            || value.starts_with("--remerge-diff")
+        value.starts_with("--remerge-diff")
             || value == "--diff-merges=remerge"
             || value == "--submodule=diff"
     }) {
@@ -645,11 +654,11 @@ fn probe(
         // plumbing: Git starts no pager for any of them, so only their own
         // `pager.*` key can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
-        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
-        | "check-attr" | "fsck" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files"
-        | "diff-index" | "diff-files" | "name-rev" | "show-branch" | "check-ref-format"
-        | "symbolic-ref" | "var" | "patch-id" | "stripspace" | "check-mailmap"
-        | "interpret-trailers" => false,
+        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "merge-file"
+        | "count-objects" | "check-attr" | "fsck" | "sparse-checkout" | "submodule"
+        | "rev-parse" | "ls-files" | "diff-index" | "diff-files" | "name-rev" | "show-branch"
+        | "check-ref-format" | "symbolic-ref" | "var" | "patch-id" | "stripspace"
+        | "check-mailmap" | "interpret-trailers" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
@@ -749,9 +758,11 @@ fn probe(
             // A verbose ignore check prints the rule that matched and the file
             // it came from. The repository's own ignore files are part of the
             // checkout, but a configured excludes file names anything, so the
-            // check keeps its review until someone reads that setting.
+            // check keeps its review unless the setting names the repository's
+            // own exclude file or a per-user ignore list.
             "core.excludesfile" => {
                 !value.is_empty()
+                    && !super::git_excludes_file::names_an_ignore_list(value, git_home)
                     && super::git_listing_reads::prints_rule_source(operation, &remaining[1..])
             }
             // An attribute check prints the attribute names and values of
@@ -819,13 +830,16 @@ fn probe(
             }
             key if key.starts_with("filter.") => filtered && !value.is_empty() && !filters_unused,
             "format.pretty" => {
-                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
+                signature_requested |= verifies && value.contains("%G");
+                false
             }
             key if key.starts_with("pretty.") => {
-                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
+                signature_requested |= verifies && value.contains("%G");
+                false
             }
             "log.showsignature" => {
-                super::git_history_reads::verifies_signatures(rendering) && !disabled
+                signature_requested |= verifies && !disabled;
+                false
             }
             // A configured skip list names a file of object names Git reads
             // before it checks anything, and a line of that file that is not
@@ -837,18 +851,30 @@ fn probe(
             // Outside a repository grep would search every file under cwd.
             "grep.fallbacktonoindex" => operation == "grep" && !disabled,
             // A configured verification program (a very common developer
-            // setting) runs only when signature verification is requested.
-            // Every such request is rejected above: --show-signature,
-            // log.showSignature, %G placeholders in the command line,
-            // format.pretty or any pretty.* alias, for the reflog walk as
-            // much as for `log` and `show`. A bare gpg.* definition
-            // therefore cannot execute for the remaining reads.
+            // setting) runs only when signature verification is requested:
+            // --show-signature, log.showSignature, %G placeholders in the
+            // command line, format.pretty or any pretty.* alias, for the
+            // reflog walk as much as for `log` and `show`. Each of those
+            // marks the read above, and the read is cleared below only when
+            // every program it could start is one the user chose. A bare
+            // gpg.* definition cannot execute for the remaining reads.
             key if key.starts_with("gpg.") => false,
             _ => return None,
         };
         if unsafe_value {
             return Some(false);
         }
+    }
+    if signature_requested
+        && !super::git_signature_helper::user_chosen(
+            &command,
+            &home,
+            &cwd,
+            execution_environment,
+            deadline,
+        )
+    {
+        return Some(false);
     }
     if operation == "config" {
         return super::git_config_reads::credential_free(&command, &remaining[1..], deadline);

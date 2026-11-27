@@ -85,6 +85,7 @@ LISTING_CATEGORIES = frozenset(
         "other",
     }
 )
+LISTING_V2_CATEGORIES = LISTING_CATEGORIES | frozenset({"browser-web"})
 CONTRIBUTOR_ROLES = frozenset({"author", "co-author", "reviewer", "maintainer"})
 ORIGINAL_CONTRIBUTION_KINDS = frozenset({"pull-request", "issue", "commit", "discussion"})
 
@@ -464,9 +465,11 @@ def accepted_github_ids(listing: dict[str, Any], extension_id: str) -> tuple[str
     if schema_version == LISTING_SCHEMA_V1:
         required_keys = LISTING_REQUIRED_KEYS
         allowed_keys = LISTING_ALLOWED_KEYS
+        categories = LISTING_CATEGORIES
     elif schema_version == LISTING_SCHEMA_V2:
         required_keys = LISTING_V2_REQUIRED_KEYS
         allowed_keys = LISTING_V2_ALLOWED_KEYS
+        categories = LISTING_V2_CATEGORIES
     else:
         raise ClaimNoticeError(f"{extension_id}: unsupported extension listing schema")
     if not keys.issuperset(required_keys) or not keys.issubset(allowed_keys):
@@ -480,7 +483,7 @@ def accepted_github_ids(listing: dict[str, Any], extension_id: str) -> tuple[str
     ):
         raise ClaimNoticeError(f"{extension_id}: listing identity does not match its path")
     _plain_text(listing.get("tagline"), minimum=10, maximum=140, field="tagline")
-    if listing.get("category") not in LISTING_CATEGORIES:
+    if listing.get("category") not in categories:
         raise ClaimNoticeError(f"{extension_id}: listing category is invalid")
 
     limitations = listing.get("limitations")

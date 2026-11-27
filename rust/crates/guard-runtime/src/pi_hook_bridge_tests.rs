@@ -213,7 +213,37 @@ fn a_hook_no_resident_answers_goes_to_the_daemon_as_the_extension_sent_it() {
     assert!(request
         .header(DIRECT_MISS_HEADER)
         .is_some_and(|miss| !miss.is_empty()));
-    assert_eq!(request.body, PRE_TOOL.as_bytes());
+    let mut sent: Value = serde_json::from_slice(&request.body).unwrap();
+    let hint = sent
+        .as_object_mut()
+        .unwrap()
+        .remove("guard_remaining_ms")
+        .and_then(|hint| hint.as_u64());
+    assert!(hint.is_some_and(|hint| (1..=20_000).contains(&hint)));
+    assert_eq!(sent, serde_json::from_str::<Value>(PRE_TOOL).unwrap());
+}
+
+#[test]
+fn the_daemon_hears_the_time_left_not_the_budget_the_extension_stamped() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let daemon = serve_once(listener, 200, "{}".to_owned());
+    let home = home_with_daemon("pi-bridge-rehint", port);
+    // The extension stamps its whole budget before the resident attempt; a
+    // daemon that trusted it would keep working after this bridge gave up.
+    let stamped =
+        r#"{"hook_event_name":"UserPromptSubmit","prompt":"hi","guard_remaining_ms":30000}"#;
+
+    let deadline = Instant::now() + Duration::from_secs(2);
+    assert_eq!(
+        reply(&home_config(&home, "omp"), stamped, deadline),
+        Some((200, "{}".to_owned()))
+    );
+    let request = daemon.join().unwrap().unwrap();
+    let sent: Value = serde_json::from_slice(&request.body).unwrap();
+    let hint = sent["guard_remaining_ms"].as_u64().unwrap();
+    assert!((1..=2_000).contains(&hint), "daemon was told {hint} ms");
+    assert_eq!(sent["prompt"], "hi");
 }
 
 #[test]
@@ -296,6 +326,61 @@ fn a_sandbox_requirement_the_runtime_sink_runs_is_marked_for_it() {
         required
     );
     assert_eq!(marked(QUERY, call, "not json".to_owned(), runs), "not json");
+}
+
+#[test]
+fn a_daemon_requirement_for_a_scratch_log_call_is_marked_for_the_runtime_sink() {
+    // The resident defers some calls to the daemon. An unmarked answer goes to
+    // the Python launcher, which refuses a plan that writes a scratch log, so
+    // a log-carrying call is marked for the runtime's sink on this path too.
+    let root = tempfile::Builder::new().tempdir_in("/tmp").unwrap();
+    let workspace = std::fs::canonicalize(root.path()).unwrap();
+    let query = format!(
+        "guard-home=%2Ftmp%2Fg&workspace={}&home=%2Ftmp%2Fh",
+        workspace.display()
+    );
+    let required = json!({
+        "decision": "deny",
+        "policy_action": "sandbox-required",
+        "reason_code": "native_workspace_containment_required",
+        "required_execution_profile": "workspace-contained-v1",
+    })
+    .to_string();
+    let call = |command: &str| {
+        json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "bash",
+            "tool_input": { "command": command },
+        })
+        .to_string()
+    };
+    let logged = call(
+        "node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit --pretty false \
+         > /tmp/hg-typecheck-scratch.log 2>&1 && echo TYPES_CLEAN || echo TYPES_FAILED",
+    );
+    let runs: NativeSink = |_, _, _, _| Some("/opt/hol guard/runtime".to_owned());
+    let answer: Value =
+        serde_json::from_str(&daemon_marked(&query, &logged, required.clone(), runs)).unwrap();
+    assert_eq!(answer[NATIVE_SINK_FIELD], json!(true));
+    assert_eq!(answer["policy_action"], json!("sandbox-required"));
+    // A call with no scratch log keeps the daemon's answer as sent, as does a
+    // log-carrying call the runtime's sink does not run, or any other answer.
+    let plain = call("node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit");
+    assert_eq!(
+        daemon_marked(&query, &plain, required.clone(), runs),
+        required
+    );
+    let declines: NativeSink = |_, _, _, _| None;
+    assert_eq!(
+        daemon_marked(&query, &logged, required.clone(), declines),
+        required
+    );
+    let allow = json!({ "decision": "allow", "policy_action": "allow" }).to_string();
+    assert_eq!(daemon_marked(&query, &logged, allow.clone(), runs), allow);
+    assert_eq!(
+        daemon_marked("guard-home=%2Ftmp%2Fg", &logged, required.clone(), runs),
+        required
+    );
 }
 
 #[test]

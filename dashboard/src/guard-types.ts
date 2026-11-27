@@ -1,4 +1,5 @@
 import type { GuardApprovalExtensionCoverage } from "./approval-extension-coverage-types";
+import type { GuardRuntimeUpgradeAdvice } from "./runtime-upgrade-advice";
 import type { GuardApprovalExtensionRecommendation } from "./approval-extension-recommendation-types";
 import type { NativeDecisionSelector } from "./context-assistance/native-decision-selector";
 
@@ -298,10 +299,14 @@ export type GuardApprovalRequest = {
   watch_only_observation?: boolean;
   scanner_evidence?: GuardScannerEvidence[];
   temporary_mcp_approval?: GuardTemporaryMcpApproval | null;
+  /** Core's native browser approval card. Present only when a browser driver profile classified the call. */
+  browser_card?: GuardBrowserCardV1 | null;
   local_tool_approval?: GuardLocalToolApproval | null;
   /** Live daemon advice: a built-in extension permission that would let this command run automatically. */
   extension_recommendation?: GuardApprovalExtensionRecommendation;
   extension_coverage?: GuardApprovalExtensionCoverage;
+  /** Upgrade advice when an affected Node.js build is why this is paused. */
+  runtime_upgrade?: GuardRuntimeUpgradeAdvice;
 };
 
 export type GuardTemporaryMcpGrantTarget = "exact" | "category" | "server";
@@ -1301,3 +1306,57 @@ export type GuardUpdateScheduleResult = {
 };
 
 export type GuardUpdatePhase = "idle" | "checking" | "updating" | "reconnecting" | "error";
+
+/** `BrowserCardV1`: Core's approval card for one browser action. It never carries typed text. */
+export type GuardBrowserVerbV1 =
+  | "navigate"
+  | "read"
+  | "click"
+  | "type"
+  | "key"
+  | "select"
+  | "scroll"
+  | "screenshot"
+  | "upload"
+  | "download"
+  | "evaluate"
+  | "cookie_read"
+  | "cookie_write"
+  | "storage_read"
+  | "storage_write"
+  | "intercept"
+  | "permission"
+  | "tab_control"
+  | "attach"
+  | "other";
+
+export type GuardBrowserSurfaceV1 =
+  | "cookies"
+  | "storage"
+  | "auth_headers"
+  | "cdp"
+  | "script_eval"
+  | "upload"
+  | "download"
+  | "clipboard"
+  | "network_intercept"
+  | "password_field";
+
+export type GuardBrowserProfileLineV1 = "shared" | "dedicated" | "isolated" | "remote-debugging" | "unknown";
+
+export type GuardBrowserCardV1 = {
+  headline: string;
+  verb: GuardBrowserVerbV1;
+  site: { origin: string | null; first_visit_in_task: boolean; left_granted_site: boolean };
+  profile_line: GuardBrowserProfileLineV1;
+  detail: {
+    element_preview: string | null;
+    input_kind: "text" | "key" | "file" | "script" | null;
+    input_length: number | null;
+    input_masked: boolean;
+  };
+  risk_chips: GuardBrowserSurfaceV1[];
+  provider_findings: string[];
+  choices: string[];
+  steps: string[];
+};

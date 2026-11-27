@@ -85,12 +85,14 @@ def refine_desktop_version_check(
     source = str(version_check.get("source") or "")
     if status == "unavailable" or source not in {"pypi", "desktop_core"}:
         return version_check
-    if include_alpha and alpha_is_live is not None:
-        candidates = live_release_candidates(candidates, alpha_is_live=alpha_is_live)
     known = [item.strip() for item in candidates if item.strip()]
     latest = version_check.get("latest_version")
     if isinstance(latest, str) and latest.strip() and latest.strip() not in known:
         known.append(latest.strip())
+    # The index check's own latest version joins the candidates before the
+    # liveness filter, so a retracted alpha it reported is withheld too.
+    if include_alpha and alpha_is_live is not None:
+        known = live_release_candidates(known, alpha_is_live=alpha_is_live)
     current = current_version.strip()
     if current and current not in known:
         known.append(current)

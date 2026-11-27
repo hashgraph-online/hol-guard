@@ -32,6 +32,9 @@ const BEHAVIOR: [&str; 7] = [
     "bug",
     "fails",
 ];
+/// The most lines of a named container shown whole. Past this it is mostly
+/// methods, each better opened by its own range.
+const MAX_SHOWN_CONTAINER_LINES: usize = 30;
 /// The most lines of a long function's signature and docstring shown.
 const MAX_HEAD_LINES: usize = 80;
 const NOT_RAW: &str = "\nIts docstring is not a raw string: write a backslash in an example \
@@ -131,7 +134,7 @@ pub(super) fn shown(
         }
         None => {}
     }
-    if let Some((span, code)) = whole(file, at) {
+    if let Some((span, code)) = whole(file, at).or_else(|| short_container(file, at)) {
         return Some((span, code, note));
     }
     let (last, raw) = head?;
@@ -149,6 +152,31 @@ pub(super) fn shown(
         code,
         note,
     ))
+}
+
+/// A short named struct, enum, interface or other container with no member
+/// definitions, to show whole. Its fields answer the request themselves (what
+/// a type holds, what it derives), and named alone the agent opens the file to
+/// read them. One with methods gets its member list instead.
+fn short_container(file: &File, at: usize) -> Option<(Span, String)> {
+    let section = &file.sections[at];
+    let holds_member = file.sections.iter().any(|other| {
+        section.start <= other.start
+            && other.end <= section.end
+            && (other.start, other.end) != (section.start, section.end)
+    });
+    if !file.container(at)
+        || holds_member
+        || section.end + 1 - section.start > MAX_SHOWN_CONTAINER_LINES
+    {
+        return None;
+    }
+    let code = file
+        .lines
+        .get(section.start.checked_sub(1)?..section.end)?
+        .join("\n");
+    let span = Span::new(file.path, section.start as u64, section.end as u64, &code);
+    Some((span, code))
 }
 
 /// The index, from the definition's first line, of the last line of a
@@ -320,3 +348,7 @@ pub(super) fn whole_here(asked: &Asked, shown_any: bool, code: &str) -> bool {
         code.len() <= SHORT_BUILD_CHARS && builds.iter().any(|name| head.contains(name));
     !shown_any || asked.lookup || !asked.reads_first || short_build
 }
+
+#[cfg(test)]
+#[path = "context_assistance_prompt_map_container_tests.rs"]
+mod container_tests;

@@ -352,13 +352,14 @@ fn start_and_serve(home: &Path, config: &LaunchConfig) -> i32 {
             workers::exit_when_idle(&reads, &registration, timeout, pending);
         }
     }
-    warm_hook_worker(&reads, port, pid);
+    warm_hook_worker(&reads, port, pid, &home);
     super::lifecycle::record(&home, "hook_worker_warming", None, None, None);
     if config.workers {
         resident_prewarm::prewarm_resident(&home);
     }
     crate::runtime_output::stdout_line(format_args!("{}", json!({"port": port, "pid": pid})));
     let _ = io::stdout().flush();
+    reads.mark_ready();
     super::lifecycle::record(&home, "ready", None, Some(&session_id), Some(port));
     match serve(
         &listener,
@@ -393,10 +394,18 @@ fn idle_timeout(seconds: Option<f64>) -> Option<std::time::Duration> {
 /// signed daemon state naming this process. Returns the auth secret.
 /// Builds the resident's hook worker in the background, so the first hook
 /// does not pay for the library's start inside its own deadline.
-fn warm_hook_worker(reads: &Arc<NativeReads>, port: u16, pid: u32) {
+///
+/// Records `hook_worker_warmed` when the warm-up ends, so a launcher can
+/// wait for the worker before it starts an agent whose hooks keep their own
+/// short deadline: `ok` when it built the worker, `unavailable` when it
+/// could not, and `timeout` when the call got no answer in time and may
+/// still be running in the resident.
+fn warm_hook_worker(reads: &Arc<NativeReads>, port: u16, pid: u32, home: &Path) {
     let Some(config) = reads.config() else {
         return;
     };
+    let home = home.to_path_buf();
+    let failure_home = home.clone();
     super::reads::set_hook_worker_warming(true);
     let spawned = std::thread::Builder::new()
         .name("hook-warm".to_owned())
@@ -406,16 +415,29 @@ fn warm_hook_worker(reads: &Arc<NativeReads>, port: u16, pid: u32) {
                 "daemon_pid": pid,
                 "home_dir": config.user_home.clone(),
             });
-            let _ = super::library::call_resident_within(
+            let warmed = super::library::call_resident_within(
                 &config,
                 "hook.warm",
                 args,
                 std::time::Duration::from_secs(60),
             );
             super::reads::set_hook_worker_warming(false);
+            let outcome = match warmed {
+                Ok(_) => "ok",
+                Err(super::library::CallError::NoAnswer) => "timeout",
+                Err(_) => "unavailable",
+            };
+            super::lifecycle::record(&home, "hook_worker_warmed", Some(outcome), None, None);
         });
     if spawned.is_err() {
         super::reads::set_hook_worker_warming(false);
+        super::lifecycle::record(
+            &failure_home,
+            "hook_worker_warmed",
+            Some("unavailable"),
+            None,
+            None,
+        );
     }
 }
 

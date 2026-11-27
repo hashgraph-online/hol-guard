@@ -116,6 +116,11 @@ fn size_and_comparison_reads_proceed() {
         "du -sh",
         "du -h -d 1 src",
         "du -sh src old --max-depth=0",
+        "du -sh *",
+        "du -sh src/*",
+        "du -sh -- *",
+        "du -sh */ | sort -h",
+        "du -h src/*.ts",
         "df -h",
         "df -h /tmp",
         "df -kP .",
@@ -146,6 +151,10 @@ fn unproven_size_and_comparison_reads_still_ask() {
         "du -ah src",
         "du -h src",
         "du -h -d 2 src",
+        "du -h *",
+        "du -sh src/*.env",
+        "du -sh ~/.s*",
+        "du -sh missing/*",
         "du -shL src",
         "du -L -s src",
         "df -h $(cat list)",
@@ -170,6 +179,19 @@ fn unproven_size_and_comparison_reads_still_ask() {
         "cmp -x README.md src/one.ts",
     ] {
         assert!(!shell(&home, command).contains("allow"), "{command}");
+    }
+}
+
+/// A bare pattern hands each match over as its own word, so a file named
+/// like an option would reach `du` as that option. After `--` it is an
+/// operand, and below a directory part it starts with that directory.
+#[test]
+fn a_glob_match_named_like_an_option_still_asks() {
+    let home = home();
+    write(home.join("project/--files0-from=notes.txt"), "x\n");
+    assert!(!shell(&home, "du -sh *").contains("allow"), "du -sh *");
+    for command in ["du -sh -- *", "du -sh src/*"] {
+        assert!(shell(&home, command).contains("allow"), "{command}");
     }
 }
 
@@ -362,5 +384,36 @@ fn gnu_stat_short_flags_do_not_hide_the_next_file_operand() {
     for flag in ["-f", "-t"] {
         let command = format!("stat {flag} /etc/shadow README.md");
         assert!(!shell(&home, &command).contains("allow"), "{command}");
+    }
+}
+
+/// A pattern read prints only the entries its pattern matches. A header or
+/// token in an unrelated section of the user's global configuration does not
+/// stop `git config --get-regexp '^user\.'`, while a pattern that reaches that
+/// entry, a whole listing, and a pattern the shell could still expand keep
+/// their review.
+#[test]
+fn pattern_reads_screen_only_the_entries_they_print() {
+    let home = home();
+    let config = home.join(".gitconfig");
+    let mut text = std::fs::read_to_string(&config).unwrap();
+    text.push_str("[http \"https://git.example.test/\"]\n\textraHeader = X-Trace: fixture\n");
+    std::fs::write(&config, text).unwrap();
+    for command in [
+        "git config --get-regexp '^user\\.'",
+        "git config --get-regexp '^(user\\.|commit\\.gpgsign$|gpg\\.format$)'",
+        "git config --get-regexp '^core\\.editor$'",
+        "git config get --regexp '^user\\.'",
+    ] {
+        assert_eq!(shell(&home, command), "allow", "{command}");
+    }
+    for command in [
+        "git config --get-regexp '^http\\.'",
+        "git config --get-regexp 'header'",
+        "git config --get-regexp 'http.*header'",
+        "git config --get-regexp '^user\\.' && git config --list",
+        "git config --list",
+    ] {
+        assert_ne!(shell(&home, command), "allow", "{command}");
     }
 }

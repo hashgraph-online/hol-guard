@@ -24,7 +24,7 @@ from .approval_rows import approval_rows
 from .case_helpers import _fixture_replacements, add_credential_redactions
 from .catalog import Scenario
 from .cleanup import cleanup_case_resources
-from .evidence import sha256_bytes
+from .evidence import execution_error_chain, sha256_bytes
 from .fixtures import create_run_root, digest_file
 from .full_task_runner import MODES, _proven_interruption, finish_report
 from .full_tasks import (
@@ -41,7 +41,7 @@ from .harness_case import harness_environment, install_harness_hooks
 from .harness_judge import _observed_lifecycle_answers
 from .harnesses import CredentialSeed, adapter, credential_environment, keep_login_shell_path, read_transcript
 from .host_process import run_process
-from .input_evidence import redact_value
+from .input_evidence import Redaction, operator_home_replacements, redact_value
 from .parallel import terminate_as_exit, validate_jobs
 from .provider import LoopbackCollector
 from .source_identity import source_identity
@@ -165,6 +165,8 @@ def run_harness_full_task(
         "started_at": time.time(),
     }
     started = time.monotonic()
+    # Setup can fail before the fixture exists; start from the replacements that need none.
+    replacements: dict[Redaction, str] = operator_home_replacements()
     try:
         fixture = create_full_task_fixture(root / f"task-{index:02d}", task.id)
         private = fixture.root / "private-evidence"
@@ -230,6 +232,7 @@ def run_harness_full_task(
                 raise RuntimeError("installed Guard changed during the session")
     except Exception as exc:
         case["execution_error"] = type(exc).__name__
+        case["execution_error_chain"] = execution_error_chain(exc, replacements)
         if private is not None and private.is_dir():
             (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
     finally:

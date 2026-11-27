@@ -80,6 +80,12 @@ pub(super) fn allowable_review(
     }
 }
 
+/// Step indexes of the model after a leading `cd`, as indexes into the
+/// model that still holds the `cd`.
+fn shifted_past_cd(steps: Vec<usize>) -> Vec<usize> {
+    steps.into_iter().map(|index| index + 1).collect()
+}
+
 /// One segment's configuration proof: what it answered, and whether a
 /// refusal was an unanswered probe rather than a helper it found.
 #[derive(Clone, Copy)]
@@ -177,37 +183,50 @@ fn verdict(
     {
         return Verdict::Clear;
     }
-    // A proven read prefix holds no Git segment and changes nothing a later
-    // read depends on, so the floor judges the command from its `cd` onward.
-    if let Some(rest) = super::segment_proof::after_read_prefix(model, context) {
-        return Verdict::from_parts([verdict(&rest, context, deadline, execution_environment)]);
-    }
-    if let Some(rest) = after_git_read_prefix(model, context, deadline, execution_environment) {
-        return Verdict::from_parts([verdict(&rest, context, deadline, execution_environment)]);
-    }
-    // After `cd <dir>;` the rest runs in either directory, so each Git read
-    // must be helper-free in both.
-    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd(model, context) {
-        let moved = super::PathContext {
-            cwd: Some(&cwd),
-            ..context
-        };
-        return Verdict::from_parts([
-            verdict(&rest, moved, deadline, execution_environment),
-            verdict(&rest, context, deadline, execution_environment),
-        ]);
-    }
-    // `cd <dir> && <head>; <tail>`: the head runs only in `<dir>`, the tail
-    // after it there or alone in the original directory when the `cd` failed.
-    if let Some((cwd, rest, tail)) = super::safe_reads::leading_and_cd(model, context) {
-        let moved = super::PathContext {
-            cwd: Some(&cwd),
-            ..context
-        };
-        return Verdict::from_parts([
-            verdict(&rest, moved, deadline, execution_environment),
-            verdict(&tail, context, deadline, execution_environment),
-        ]);
+    if let Some(split) = split(model, context, deadline, execution_environment) {
+        let mut verdicts: Vec<Verdict> = split
+            .parts
+            .iter()
+            .map(|(part, cwd)| {
+                let part_context = super::PathContext {
+                    cwd: cwd.as_deref().or(context.cwd),
+                    ..context
+                };
+                verdict(part, part_context, deadline, execution_environment)
+            })
+            .collect();
+        if split.reported_tail {
+            // `cd <dir> && git add <file> && git status; echo "exit $?"`:
+            // when the whole tail is the trailing report, only the head's
+            // earlier steps keep its reads under the floor. The head holds
+            // every segment after the `cd`, so its step indexes name this
+            // model's segments one place later, and an allow is asked the
+            // same question it would be asked without the tail. Any other
+            // tail keeps the review: the read directory an allow settles in
+            // resolves through the `cd` only when the tail is that report.
+            let tail = &split.parts[1].0;
+            let reported =
+                super::contained_wrapper::trailing_report_steps(model, &model.segments, 1);
+            if matches!(verdicts[1], Verdict::Clear)
+                && reported > 0
+                && reported == tail.segments.len()
+                && !tail
+                    .segments
+                    .iter()
+                    .any(super::git_read_after_allow::git_segment)
+            {
+                match verdicts.swap_remove(0) {
+                    Verdict::Unsettled(steps) => {
+                        return Verdict::Unsettled(shifted_past_cd(steps));
+                    }
+                    Verdict::UnansweredProbe(steps) if !steps.is_empty() => {
+                        return Verdict::UnansweredProbe(shifted_past_cd(steps));
+                    }
+                    head => verdicts.insert(0, head),
+                }
+            }
+        }
+        return Verdict::from_parts(verdicts);
     }
     // Past this point every Git read is probed in one directory, so a later
     // `cd` moves reads somewhere this probe never looked. The exception is
@@ -497,7 +516,11 @@ fn verdict(
 
 #[path = "git_read_floor_prefix.rs"]
 mod prefix;
-use prefix::{after_git_read_prefix, git_after_later_cd};
+use prefix::{after_git_read_prefix, git_after_later_cd, proven_reads};
+#[path = "git_read_floor_split.rs"]
+mod split;
+pub(super) use split::allow_answers;
+use split::split;
 
 /// `dir=/tmp/work` or `dir="$HOME/work"` on its own: a plain shell variable
 /// the command sets for its own later words.
@@ -508,8 +531,12 @@ use prefix::{after_git_read_prefix, git_after_later_cd};
 /// name a proxy or a credential. Only a bare assignment counts: no command
 /// word, so nothing runs with it in its environment. The value is a literal
 /// path or a double-quoted `$HOME` root, so no substitution, arithmetic or
-/// subscript runs while it is set. An uppercase name keeps the review, since
-/// one already exported (`GIT_DIR`, `PAGER`) would reach Git.
+/// subscript runs while it is set. A name with capitals may already be
+/// exported and so reach Git, so it counts only when
+/// [`plain_name`](super::generic::chain_literals::inert::assigned::plain_name)
+/// accepts it: no `GIT_` prefix, no name the shell or a pager reads
+/// (`PAGER`, `LESS`), and no part of a name a program reads to choose what it
+/// runs (`*_COMMAND`, `*_DIR`, `*_CONFIG`).
 fn shell_local_assignment(segment: &crate::CommandSegmentV1) -> bool {
     let text = segment.text.trim();
     let Some((name, value)) = text.split_once('=') else {
@@ -529,9 +556,9 @@ fn shell_local_assignment(segment: &crate::CommandSegmentV1) -> bool {
         && !name.starts_with(|c: char| c.is_ascii_digit())
         && name
             .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-        && name.bytes().any(|byte| byte.is_ascii_lowercase())
-        && super::generic::chain_literals::ordinary_name(name)
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        && name.bytes().any(|byte| byte.is_ascii_alphabetic())
+        && super::generic::chain_literals::inert::assigned::plain_name(name)
         && !value.is_empty()
         && value.chars().all(|c| {
             c.is_ascii_alphanumeric()

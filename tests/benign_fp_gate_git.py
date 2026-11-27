@@ -184,5 +184,7 @@ def _signed_checkout(home: Path) -> None:
         ("core.pager", "cat"),
         ("pager.log", "false"),
         ("pull.rebase", "false"),
+        # The checkout names its own exclude file as its ignore list.
+        ("core.excludesfile", ".git/info/exclude"),
     ):
         _git(repository, "config", "--local", key, value, home=home)

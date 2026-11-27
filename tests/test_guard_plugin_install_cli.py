@@ -200,6 +200,20 @@ class FakeRuntimes:
         return [argv for argv in self.ran]
 
 
+class _RunnerSubprocess:
+    """``runner``'s own view of ``subprocess``: ``run`` is the stand-in for the
+    two CLIs, every other name comes from the real module. Replacing
+    ``runner.subprocess.run`` would instead rebind the module attribute every
+    importer shares, so an unrelated call from elsewhere in the process would
+    land in ``FakeRuntimes.ran``."""
+
+    def __init__(self, run: FakeRuntimes) -> None:
+        self.run = run
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(subprocess, name)
+
+
 @pytest.fixture(autouse=True)
 def guard_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> Path:
     home = tmp_path_factory.mktemp("guard-home")
@@ -223,7 +237,7 @@ def runtimes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeRuntimes:
     fake = FakeRuntimes(tmp_path)
     monkeypatch.setenv("PATH", str(fake.bin))
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(fake.claude_home))
-    monkeypatch.setattr(runner.subprocess, "run", fake)
+    monkeypatch.setattr(runner, "subprocess", _RunnerSubprocess(fake))
     monkeypatch.setattr(runner, "_run_capped", lambda argv, **kwargs: fake(argv, stdout=subprocess.PIPE, **kwargs))
     monkeypatch.setattr(runner, "stdin_is_terminal", lambda: False)
     # Keep the developer's own claude and codex installs out of the lookup.

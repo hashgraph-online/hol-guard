@@ -24,10 +24,11 @@ fn chained_uses_take_the_literal_assigned_earlier() {
             "F=a && F=b cat $F && rm $F",
             "F=a && F=b cat a && rm $F",
         ),
-        // Only an assignment that always ran survives a `;`.
+        // Only an assignment that always ran survives a `;`. A literal
+        // assignment cannot fail, so what its `&&` joins always ran too.
         (
             "F=a; G=b && H=c; cat $F $G $H",
-            "F=a; G=b && H=c; cat a b $H",
+            "F=a; G=b && H=c; cat a b c",
         ),
         (
             "export LD_PRELOAD=./x.so && export F=a && cat $F $LD_PRELOAD",
@@ -63,6 +64,7 @@ fn assignments_that_might_not_run_first_stay_unresolved() {
         "rm $F && F=a",
         "true || export F=a && rm $F",
         "false && F=a; rm $F",
+        "true && F=a && G=b; rm $F $G",
         "F=a | cat && rm $F",
         "F=a cat x && rm $F",
         "(F=a) && rm $F",
@@ -177,6 +179,32 @@ fn a_command_naming_a_bound_variable_refuses_the_chain() {
         "X=build && sometool --into=X && rm -rf $X",
         // The variable's name can reach the builtin through another binding.
         "N=X && X=build && zformat -f $N /tmp && rm -rf $X",
+    ] {
+        assert_eq!(substituted(command), None, "{command}");
+    }
+}
+
+#[test]
+fn a_hyphen_inside_a_word_opens_no_flag() {
+    // `pytest-of-runner` is one operand: the `-of` in it is not `-o f`.
+    for (command, expected) in [
+        (
+            "f=/tmp/pytest-of-runner/a.md; cat $f",
+            "f=/tmp/pytest-of-runner/a.md; cat /tmp/pytest-of-runner/a.md",
+        ),
+        (
+            "f=/work/copy-of-notes/a.md && wc -l $f",
+            "f=/work/copy-of-notes/a.md && wc -l /work/copy-of-notes/a.md",
+        ),
+    ] {
+        assert_eq!(substituted(command).as_deref(), Some(expected), "{command}");
+    }
+    // A flag that opens a word still names the variable it sets.
+    for command in [
+        "f=build && getln -vf && rm -rf $f",
+        "f=build && getln --vf && rm -rf $f",
+        "f=build && getln \"-vf\" && rm -rf $f",
+        "N=-vf; f=build; getln $N; rm -rf $f",
     ] {
         assert_eq!(substituted(command), None, "{command}");
     }
@@ -422,5 +450,69 @@ mod envelope {
             &fresh
         )
         .is_none());
+    }
+}
+
+/// `command` with the named assignments [`super::unused::removals`] drops.
+fn without_unused(command: &str, candidates: &[(usize, &str)]) -> String {
+    let chars: Vec<char> = command.chars().collect();
+    let list = super::items(&super::tokenize(&chars).unwrap()).unwrap();
+    let spans: Vec<super::unused::Item> = list
+        .iter()
+        .map(|(stages, separator)| {
+            (
+                stages[0][0].0,
+                stages.last().unwrap().last().unwrap().1,
+                *separator,
+            )
+        })
+        .collect();
+    let words: Vec<String> = list
+        .iter()
+        .flat_map(|(stages, _)| stages.iter().flatten())
+        .map(|&(start, end)| chars[start..end].iter().collect())
+        .collect();
+    let candidates: Vec<(usize, Vec<String>)> = candidates
+        .iter()
+        .map(|&(position, name)| (position, vec![name.to_owned()]))
+        .collect();
+    let mut out = String::new();
+    let mut cursor = 0;
+    for (start, end) in super::unused::removals(&spans, &candidates, &words) {
+        out.extend(&chars[cursor..start]);
+        cursor = end;
+    }
+    out.extend(&chars[cursor..]);
+    out
+}
+
+#[test]
+fn an_unused_assignment_leaves_with_the_operator_that_joined_it() {
+    for (command, candidates, expected) in [
+        (
+            "cd . && f=a; sed -n 1p a",
+            &[(1, "f")][..],
+            "cd .; sed -n 1p a",
+        ),
+        ("f=a; sed -n 1p a", &[(0, "f")], "sed -n 1p a"),
+        ("f=a && sed -n 1p a", &[(0, "f")], "sed -n 1p a"),
+        ("x && f=a && y; z", &[(1, "f")], "x && y; z"),
+        ("x && f=1 && g=2; z", &[(1, "f"), (2, "g")], "x; z"),
+        ("cd . && f=a", &[(1, "f")], "cd ."),
+        ("true; f=a", &[(1, "f")], "true"),
+    ] {
+        assert_eq!(without_unused(command, candidates), expected, "{command}");
+    }
+}
+
+#[test]
+fn an_assignment_a_word_still_mentions_stays() {
+    for (command, candidates) in [
+        ("cd . && f=a; sed -n 1p $f", &[(1, "f")][..]),
+        ("cd . && f=a; sed -n 1p ${f}", &[(1, "f")]),
+        ("f=a; export f; sed -n 1p a", &[(0, "f")]),
+        ("f=a", &[(0, "f")]),
+    ] {
+        assert_eq!(without_unused(command, candidates), command, "{command}");
     }
 }

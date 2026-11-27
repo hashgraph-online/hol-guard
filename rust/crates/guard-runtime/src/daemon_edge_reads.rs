@@ -185,6 +185,9 @@ impl ReadConfig {
     }
 }
 
+/// How long after reporting ready a daemon still counts as starting.
+const STARTUP_SETTLE: Duration = Duration::from_secs(60);
+
 /// What the edge knows from its daemon: the handshake, once it arrives, and
 /// the socket that reports answered requests back.
 pub(super) struct NativeReads {
@@ -205,6 +208,8 @@ pub(super) struct NativeReads {
     published: std::sync::OnceLock<serde_json::Map<String, Value>>,
     /// When this process began serving, for the health details' uptime.
     started: Instant,
+    /// When this daemon reported ready; unset until then.
+    ready_at: std::sync::OnceLock<Instant>,
     /// Connections being served, and when the last one began or ended: what
     /// the standalone daemon's idle shutdown reads.
     connections: AtomicUsize,
@@ -230,6 +235,7 @@ impl NativeReads {
             state_id: std::sync::OnceLock::new(),
             published: std::sync::OnceLock::new(),
             started: Instant::now(),
+            ready_at: std::sync::OnceLock::new(),
             connections: AtomicUsize::new(0),
             touched: Mutex::new(Instant::now()),
         }
@@ -300,6 +306,28 @@ impl NativeReads {
     /// How long this process has served.
     pub(super) fn uptime(&self) -> Duration {
         self.started.elapsed()
+    }
+
+    /// Records that this daemon reported ready and began serving.
+    pub(super) fn mark_ready(&self) {
+        let _ = self.ready_at.set(Instant::now());
+    }
+
+    /// Whether this daemon is still settling after its start: it has not
+    /// reported ready, or did so less than `STARTUP_SETTLE` ago. The worker
+    /// host may still be migrating the installed authority and the resident
+    /// warming, so a hook that cannot be reviewed now usually can be in a
+    /// few seconds. An edge in front of another daemon is never starting.
+    pub(super) fn starting(&self) -> bool {
+        self.starting_at(Instant::now())
+    }
+
+    fn starting_at(&self, now: Instant) -> bool {
+        self.is_standalone()
+            && self
+                .ready_at
+                .get()
+                .is_none_or(|ready| now.saturating_duration_since(*ready) < STARTUP_SETTLE)
     }
 
     fn is_standalone(&self) -> bool {
@@ -1065,6 +1093,11 @@ mod identity;
 
 #[path = "daemon_edge_hook_review.rs"]
 mod hook_review;
+
+pub(super) fn note_resident_hook_counters(guard_home: &Path, epoch: &str, counters: &Value) {
+    hook_review::counters::note_resident(guard_home, epoch, counters);
+}
+
 #[path = "daemon_edge_hook_scheduler.rs"]
 mod hook_scheduler;
 pub(super) use hook_scheduler::set_warming as set_hook_worker_warming;

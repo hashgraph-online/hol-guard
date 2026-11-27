@@ -163,7 +163,10 @@ def select_desktop_core_latest(
             parsed = Version(candidate)
         except InvalidVersion:
             continue
-        if parsed.major != series[0] or (include_alpha and parsed.minor != series[1]):
+        # Stable and alpha updates both cross minor versions within the
+        # installed major: every alpha publish ships its signed Core build
+        # beside the wheel, so a newer 3.Y alpha is installable.
+        if parsed.major != series[0]:
             continue
         if not _version_matches_channel(parsed, include_alpha=include_alpha):
             continue

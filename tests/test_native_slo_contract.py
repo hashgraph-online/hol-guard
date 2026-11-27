@@ -15,6 +15,8 @@ from scripts.bench_guard_native_installed_slo import (
 )
 from scripts.native_slo_adapter import Observation, payload, process_resources, route_matrix, source_payloads
 from scripts.native_slo_contract import (
+    BROWSER_DECISION_BASELINE_P95_MS,
+    MAX_BROWSER_ADDED_P95_MS,
     MAX_COLD_P95_MS,
     MAX_EVIDENCE_BYTES,
     MAX_INSTALLED_ADAPTER_P95_MS,
@@ -23,6 +25,7 @@ from scripts.native_slo_contract import (
     SIZE_CLASSES,
     all_gates_pass,
     assert_privacy_safe,
+    browser_decision_gate,
     clear_proof_environment,
     gate_results,
     percentile,
@@ -475,3 +478,21 @@ def test_installed_proof_and_soak_contract_are_wired_without_force_defaults() ->
     assert "installed_wheel_ownership_contract" in Path("scripts/bench_guard_native_installed_slo.py").read_text(
         encoding="utf-8"
     )
+
+
+def test_browser_decision_gate_allows_at_most_five_ms_over_an_mcp_call() -> None:
+    assert MAX_BROWSER_ADDED_P95_MS == 5.0
+    assert BROWSER_DECISION_BASELINE_P95_MS == 73.7
+    gate = browser_decision_gate
+    assert gate(browser_p95_ms=12.0, mcp_p95_ms=8.0) is True
+    assert gate(browser_p95_ms=13.0, mcp_p95_ms=8.0) is True
+    assert gate(browser_p95_ms=7.0, mcp_p95_ms=8.0) is True
+    assert gate(browser_p95_ms=13.5, mcp_p95_ms=8.0) is False
+
+
+def test_browser_decision_gate_rejects_missing_or_invalid_measurements() -> None:
+    gate = browser_decision_gate
+    assert gate(browser_p95_ms=float("nan"), mcp_p95_ms=8.0) is False
+    assert gate(browser_p95_ms=8.0, mcp_p95_ms=float("inf")) is False
+    assert gate(browser_p95_ms=-1.0, mcp_p95_ms=8.0) is False
+    assert gate(browser_p95_ms=True, mcp_p95_ms=8.0) is False  # type: ignore[arg-type]
