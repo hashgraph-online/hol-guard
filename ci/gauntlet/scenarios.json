@@ -933,6 +933,18 @@
       ]
     },
     {
+      "id": "omp-native-search-project-root-ts-globs",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find where the project's TypeScript files export names or mention the word ordinary, searching from the project root. Run each listed command once, in order, from the project directory, and tell me what each one printed. An empty result is a valid answer: report it and carry on to the next command. Do not substitute tools, change the command or the directory, add verification calls, request approval, or change policy. Stop after the listed calls.",
+      "commands": [
+        "rg -n \"export|ordinary\" -g '*.ts*' . | head -30"
+      ]
+    },
+    {
       "id": "omp-native-find-tool-home-notes",
       "expectation": "allow",
       "oracle": "native-tools",
