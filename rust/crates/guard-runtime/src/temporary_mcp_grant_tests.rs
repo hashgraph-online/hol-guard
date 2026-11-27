@@ -291,3 +291,90 @@ fn site_picks_the_card_does_not_offer_are_refused() {
         json!("invalid_mcp_grant_target")
     );
 }
+
+/// BP-T061: `site_intent` with `risks` and extra filed fields.
+fn tiered_intent(session: bool, risks: Value, extra: Value) -> Value {
+    let mut filed = site_intent(session);
+    filed["risk_categories"] = risks;
+    for (key, value) in extra.as_object().expect("extra") {
+        filed[key] = value.clone();
+    }
+    filed
+}
+
+#[test]
+fn offers_follow_the_tier_and_the_surface() {
+    let shared = json!(["browser_interaction", "browser_shared_profile"]);
+    let routine = json!(["browser_interaction"]);
+    let password = json!({"element": {"is_password": true}});
+    let secret = json!({"input": {"preview_class": "looks_like_secret"}});
+    let legacy = json!(["exact", "category", "server"]);
+    let rows = [
+        (
+            tiered_intent(true, shared.clone(), json!({})),
+            json!(["session-site"]),
+        ),
+        (tiered_intent(false, shared.clone(), json!({})), Value::Null),
+        (
+            tiered_intent(true, shared.clone(), password.clone()),
+            Value::Null,
+        ),
+        (
+            tiered_intent(true, shared.clone(), secret.clone()),
+            Value::Null,
+        ),
+        (
+            tiered_intent(
+                true,
+                shared,
+                json!({"sensitive_surface_flags": ["cookies"]}),
+            ),
+            Value::Null,
+        ),
+        (
+            tiered_intent(
+                true,
+                json!([
+                    "browser_interaction",
+                    "browser_shared_profile",
+                    "browser_privileged"
+                ]),
+                json!({}),
+            ),
+            Value::Null,
+        ),
+        (
+            tiered_intent(true, routine.clone(), password),
+            legacy.clone(),
+        ),
+        (tiered_intent(true, routine, secret), legacy),
+    ];
+    for (filed, targets) in rows {
+        let answer = dispatch(&json!({ "browser_intents": [filed.clone()] })).expect("answer");
+        let approval = &answer["approvals"][0];
+        let offered = if approval.is_null() {
+            Value::Null
+        } else {
+            approval["allowed_targets"].clone()
+        };
+        assert_eq!(offered, targets, "{filed}");
+    }
+}
+
+#[test]
+fn a_shared_profile_call_may_pick_session_site_and_nothing_else() {
+    let filed = tiered_intent(
+        true,
+        json!(["browser_interaction", "browser_shared_profile"]),
+        json!({}),
+    );
+    let picked = select_one(filed.clone(), pick("session-site", "session"));
+    assert_eq!(picked["refusal"], Value::Null);
+    for target in ["exact", "category", "server", "site", "site-category"] {
+        assert_eq!(
+            select_one(filed.clone(), pick(target, "15m"))["refusal"],
+            json!("invalid_mcp_grant_target"),
+            "{target}"
+        );
+    }
+}

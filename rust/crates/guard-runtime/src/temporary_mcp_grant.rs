@@ -11,7 +11,9 @@
 //! by code, never widened to fit.
 //!
 //! An intent that names its driver identity and site also offers the site
-//! targets of `browser_site_grant.rs` (BP-T060).
+//! targets of `browser_site_grant.rs` (BP-T060), under the tiers of
+//! `browser_grant_eligibility.rs` (BP-T061): a shared-profile call may carry a
+//! `session-site` grant and nothing else.
 //!
 //! Two shapes share the kind:
 //! - `{"browser_intents": [intent, ...]}` answers `{"approvals": [...]}`, one
@@ -21,14 +23,13 @@
 
 use serde_json::{json, Map, Value};
 
+use crate::browser_grant_eligibility::{grant_tier, surface_clean, GrantTier};
 use crate::browser_site_grant::{
     is_site_target, site_scope, site_selector, site_targets, SiteScope, SESSION_BOUND_SECONDS,
     SESSION_DURATION,
 };
 use crate::context_digest::python_strip;
-use crate::mcp_tool_policy_grants::{
-    category_for, exact_grant_selector, risks_allow_grant, scope_grant_selector,
-};
+use crate::mcp_tool_policy_grants::{category_for, exact_grant_selector, scope_grant_selector};
 use crate::runner_authority_op::KindResult;
 
 const ERR_INVALID: &str = "native_temporary_mcp_grant_invalid";
@@ -61,12 +62,15 @@ struct Eligibility {
     category: &'static str,
     target_label: Option<String>,
     site: Option<SiteScope>,
+    tier: GrantTier,
+    surface_clean: bool,
 }
 
 impl Eligibility {
     fn targets(&self) -> Vec<&'static str> {
         let mut targets = TARGETS.to_vec();
         targets.extend(self.site.as_ref().map(site_targets).unwrap_or_default());
+        targets.retain(|target| self.tier.allows(target, self.surface_clean));
         targets
     }
 
@@ -123,7 +127,9 @@ pub(crate) fn approval(intent: Option<&Value>) -> Option<Value> {
 }
 
 /// `eligibility_from_browser_intent`: the routine category must be claimed,
-/// and nothing beyond it but the informational external-domain flag.
+/// and nothing beyond it but the informational external-domain flag and, for
+/// a `session-site` grant only, the shared-profile risk. An intent that leaves
+/// no target to offer offers nothing.
 fn eligibility(intent: Option<&Value>) -> Option<Eligibility> {
     let filed = intent?;
     let intent = filed.as_object()?;
@@ -142,18 +148,19 @@ fn eligibility(intent: Option<&Value>) -> Option<Eligibility> {
         .flatten()
         .filter_map(Value::as_str)
         .collect();
-    if !risks_allow_grant(category, &risk_categories) {
-        return None;
-    }
+    let tier = grant_tier(category, &risk_categories)?;
     let target_label =
         nonempty(intent, "target_domain").or_else(|| nonempty(intent, "target_origin"));
-    Some(Eligibility {
+    let found = Eligibility {
         server_identity_hash,
         server_name,
         category,
         target_label,
         site: site_scope(filed),
-    })
+        tier,
+        surface_clean: surface_clean(intent),
+    };
+    (!found.targets().is_empty()).then_some(found)
 }
 
 /// `parse_temporary_mcp_grant_selection` and the selector

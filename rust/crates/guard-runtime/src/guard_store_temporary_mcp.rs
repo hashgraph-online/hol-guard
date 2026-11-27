@@ -11,6 +11,7 @@
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
+use crate::browser_grant_eligibility::{grant_tier, surface_clean, GrantTier};
 use crate::browser_site_grant::{is_site_target, site_covers, site_scope, SiteScope};
 use crate::context_digest::python_strip;
 use crate::guard_store_approval_page_reads::ORDER;
@@ -22,7 +23,7 @@ use crate::guard_store_approval_reads::{payloads, COLUMNS};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_all, value_error, StoreResult};
 use crate::guard_store_policy_upsert::upsert_policy;
-use crate::mcp_tool_policy_grants::{category_for, risks_allow_grant};
+use crate::mcp_tool_policy_grants::category_for;
 use crate::policy_store::PolicySnapshotStore;
 
 /// A temporary grant resolves its request the way the dashboard resolves an
@@ -214,15 +215,20 @@ struct Grant<'a> {
 /// also needs the same driver identity and site.
 fn covers(item: &Value, grant: &Grant<'_>) -> bool {
     let intent = &item["browser_intent"];
-    let Some((candidate_server, candidate_category)) = eligibility(intent) else {
+    let Some((candidate_server, candidate_category, tier)) = eligibility(intent) else {
         return false;
     };
     if candidate_server != grant.server {
         return false;
     }
     let Some((target, site)) = grant.site else {
-        return grant.whole_server || candidate_category == grant.category;
+        return tier == GrantTier::Routine
+            && (grant.whole_server || candidate_category == grant.category);
     };
+    let clean = intent.as_object().is_some_and(surface_clean);
+    if !tier.allows(target, clean) {
+        return false;
+    }
     site_scope(intent).is_some_and(|candidate| {
         site_covers(
             target,
@@ -232,10 +238,10 @@ fn covers(item: &Value, grant: &Grant<'_>) -> bool {
     })
 }
 
-/// `eligibility_from_browser_intent`: the server a stored browser intent names
-/// and the routine category it is eligible for, or none when the call carries
-/// risk beyond that one category.
-fn eligibility(intent: &Value) -> Option<(&str, &'static str)> {
+/// `eligibility_from_browser_intent`: the server a stored browser intent names,
+/// the routine category it is eligible for and its grant tier, or none when
+/// no grant may cover the call.
+fn eligibility(intent: &Value) -> Option<(&str, &'static str, GrantTier)> {
     let text = |name: &str| -> Option<&str> {
         let value = python_strip(intent.get(name)?.as_str()?);
         (!value.is_empty()).then_some(value)
@@ -250,10 +256,7 @@ fn eligibility(intent: &Value) -> Option<(&str, &'static str)> {
         .and_then(Value::as_array)
         .map(|items| items.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
-    if !risks_allow_grant(category, &risks) {
-        return None;
-    }
-    Some((server, category))
+    Some((server, category, grant_tier(category, &risks)?))
 }
 
 /// `bulk_resolve_approval_requests`: the covered requests, resolved the way
