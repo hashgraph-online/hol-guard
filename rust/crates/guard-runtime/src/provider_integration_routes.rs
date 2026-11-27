@@ -214,13 +214,12 @@ fn read_apply<T: serde::de::DeserializeOwned>(
     ledger: &mut ProofLedger,
     body: &[u8],
 ) -> Result<T, RouteAnswer> {
-    read_body(body).map_err(|refused| {
+    read_body(body).inspect_err(|_| {
         if let Ok(value) = read_body::<Value>(body) {
             if let Some(proof) = value.get("proof").and_then(Value::as_str) {
                 ledger.discard(proof);
             }
         }
-        refused
     })
 }
 

@@ -279,7 +279,6 @@ fn a_misshapen_apply_still_spends_the_proof_it_presents() {
         let bytes = serde_json::to_vec(&good).unwrap();
         let reused = answer(&mut ledger, &context, "POST", &apply, &bytes).unwrap();
         assert_eq!(code(&reused), PROOF_INVALID, "{action}");
-        drop(context);
         fixture.ledger = ledger;
     }
     assert!(fixture.stored().is_some(), "nothing was disconnected");
