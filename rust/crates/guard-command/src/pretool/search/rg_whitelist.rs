@@ -358,24 +358,25 @@ fn walk(
         let mut has_git = false;
         let mut has_ignore = [false; IGNORE_FILES.len()];
         let mut children = Vec::new();
-        for entry in std::fs::read_dir(&directory).ok()? {
+        // The content walk proving the same search shares the listing.
+        let limit = (MAX_ENTRIES - entries).saturating_add(1);
+        let listing = super::super::search_scope_listing::read_listing(&directory, limit)?;
+        for entry in listing.iter().take(limit) {
             entries += 1;
             if entries > MAX_ENTRIES {
                 return None;
             }
-            let entry = entry.ok()?;
-            let file_name = entry.file_name();
-            let name = file_name.to_str()?;
+            let name = entry.name.to_str()?;
             has_git |= name.eq_ignore_ascii_case(".git");
             for (listed, wanted) in has_ignore.iter_mut().zip(IGNORE_FILES) {
                 *listed |= name.eq_ignore_ascii_case(wanted);
             }
             if name.starts_with('.') && name != ".git" {
-                hidden.push(entry.path());
+                hidden.push(directory.join(name));
             }
-            let is_dir = entry.file_type().ok()?.is_dir();
+            let is_dir = entry.file_type.is_dir();
             if is_dir && name != ".git" && (!name.starts_with('.') || benign_hidden(name)) {
-                children.push((name.to_owned(), entry.path()));
+                children.push((name.to_owned(), directory.join(name)));
             }
         }
         let nested =
