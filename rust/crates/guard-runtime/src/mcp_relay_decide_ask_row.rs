@@ -58,7 +58,20 @@ pub(super) fn project(
         }),
     })
     .map_err(|_| ASK_PROJECTION)?;
-    projection(&projected).ok_or(ASK_PROJECTION)
+    let mut found = projection(&projected).ok_or(ASK_PROJECTION)?;
+    // BP-T065: file the intent with the facts its site grants key on.
+    found.browser_intent = found.browser_intent.map(|intent| {
+        let home = std::path::Path::new(&request.guard_home);
+        let hash = crate::browser_grant_scope::driver_identity_hash(home, &intent);
+        let arguments = crate::browser_grant_scope::arguments_map(&request.arguments);
+        crate::browser_grant_scope::scoped_intent(
+            &intent,
+            hash.as_deref(),
+            &arguments,
+            &request.build.harness,
+        )
+    });
+    Ok(found)
 }
 
 /// The `McpCallProjection` fields the queued item reads, from a call

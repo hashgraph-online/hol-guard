@@ -42,7 +42,11 @@ pub(super) fn run_policy(
             Ok(Pass::Final(decision)) => return Ok(*decision),
             Ok(Pass::Claimed { .. }) | Err(Stop::Fail(_)) => return Err(POLICY_FAILED),
             Err(Stop::Need(need)) => {
-                let result = match provider::answer(connection, &need) {
+                let scope = crate::browser_grant_scope::answer(connection, None, &need);
+                let result = match scope
+                    .map(Ok)
+                    .or_else(|| provider::answer(connection, &need))
+                {
                     Some(answer) => answer?,
                     None => match saved {
                         Some(saved) => saved.answer(&need)?,

@@ -116,7 +116,18 @@ Each package-launched tool is `inherit`, `allow`, `review`, or `block`. Remote H
 
 Evaluation order for a live `tools/call` is:
 
-1. Temporary browser MCP grant
+1. Temporary browser MCP grant, tried in the order of PRD 5.5:
+   1. `session-site`
+   2. `site-category`
+   3. `site`
+   4. `site-group`
+   5. exact call
+   6. category
+   7. whole server
+
+   The site targets need the call's driver identity hash from the driver ledger and the call's
+   target origin. A call without them is checked only against the last three. Self-protection and
+   site deny memory, which come before every grant, land with BP-T064.
 2. This-device custom MCP grant
 3. Contributed defaults when the catalog item is locally enabled
 4. First-party floors and stronger policy requirements

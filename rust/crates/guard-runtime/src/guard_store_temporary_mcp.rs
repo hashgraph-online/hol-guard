@@ -12,6 +12,7 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use crate::browser_grant_eligibility::{grant_tier, surface_clean, GrantTier};
+use crate::browser_grant_scope::is_current_driver;
 use crate::browser_site_grant::{is_site_target, site_covers, site_scope, SiteScope};
 use crate::context_digest::python_strip;
 use crate::guard_store_approval_page_reads::ORDER;
@@ -142,7 +143,9 @@ fn write_decision(
 /// `_covered_pending_request_ids_locked`: the pending requests of the same
 /// harness that this grant answers, minus any that cannot be resolved at all.
 /// An exact grant covers only the request that asked for it. A site grant
-/// takes its driver identity and site from the request that asked for it.
+/// takes its driver identity and site from the request that asked for it,
+/// and covers nothing when that identity is no longer the driver's current
+/// one: every candidate it covers carries the same hash.
 fn covered_request_ids(
     connection: &Connection,
     guard_home: &str,
@@ -158,9 +161,10 @@ fn covered_request_ids(
     let server = args.str("grant_server_identity_hash")?;
     let category = args.str("grant_category")?;
     let site = if is_site_target(target) {
-        match site_scope(&source["browser_intent"]) {
-            Some(site) => Some((target, site)),
-            None => return Ok(Vec::new()),
+        let intent = &source["browser_intent"];
+        match site_scope(intent) {
+            Some(site) if is_current_driver(connection, intent) => Some((target, site)),
+            _ => return Ok(Vec::new()),
         }
     } else {
         None

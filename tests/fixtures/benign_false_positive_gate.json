@@ -74762,6 +74762,17 @@
       "page": "docs-article"
     },
     {
+      "id": "browser-playwright-navigate-site-grant",
+      "server": "playwright",
+      "tool": "browser_navigate",
+      "arguments": {
+        "url": "https://docs.example.test/guide/configuration"
+      },
+      "expect": "allow",
+      "state": "site-grant",
+      "page": "docs-article"
+    },
+    {
       "id": "browser-playwright-click-link",
       "server": "playwright",
       "tool": "browser_click",

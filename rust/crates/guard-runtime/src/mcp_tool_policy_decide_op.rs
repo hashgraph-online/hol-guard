@@ -8,11 +8,14 @@
 //! resident must be treated as a fail-closed block by the caller.
 
 use guard_contracts::{
-    McpToolPolicyDecideRequestV1, McpToolPolicyDecideResultV1, MCP_TOOL_POLICY_DECIDE_MAX_BYTES,
-    MCP_TOOL_POLICY_DECIDE_MAX_OBSERVATIONS, MCP_TOOL_POLICY_DECIDE_REQUEST_SCHEMA,
-    MCP_TOOL_POLICY_DECIDE_RESULT_SCHEMA,
+    McpToolPolicyDecideRequestV1, McpToolPolicyDecideResultV1, McpToolPolicyObservationV1,
+    MCP_TOOL_POLICY_DECIDE_MAX_BYTES, MCP_TOOL_POLICY_DECIDE_MAX_OBSERVATIONS,
+    MCP_TOOL_POLICY_DECIDE_REQUEST_SCHEMA, MCP_TOOL_POLICY_DECIDE_RESULT_SCHEMA,
 };
 use serde_json::Value;
+use std::path::Path;
+
+use crate::browser_grant_scope;
 
 use crate::mcp_tool_policy_decision::Decision;
 use crate::mcp_tool_policy_flow::{evaluate_pass, Ctx, Flow, Pass, Phase, Stop};
@@ -36,8 +39,35 @@ fn request_digest(request: &McpToolPolicyDecideRequestV1) -> Result<String, &'st
     ))
 }
 
+/// The most `browser_driver_scope` needs one decision answers in-process:
+/// one per phase, with room for a refreshed subject.
+const MAX_SCOPE_ANSWERS: usize = 4;
+
+/// Runs the flow, answering the resident's own `browser_driver_scope` needs
+/// in-process (BP-T065). Every other need goes back to the caller unchanged.
 fn decide(
     request: &McpToolPolicyDecideRequestV1,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+    guard_home: Option<&Path>,
+) -> Flow<Decision> {
+    let mut observations = request.observations.clone();
+    for _ in 0..MAX_SCOPE_ANSWERS {
+        match decide_pass(request, &observations, catalog) {
+            Err(Stop::Need(need)) => {
+                let Some(result) = browser_grant_scope::answer(None, guard_home, &need) else {
+                    return Err(Stop::Need(need));
+                };
+                observations.push(McpToolPolicyObservationV1 { need, result });
+            }
+            done => return done,
+        }
+    }
+    decide_pass(request, &observations, catalog)
+}
+
+fn decide_pass(
+    request: &McpToolPolicyDecideRequestV1,
+    observations: &[McpToolPolicyObservationV1],
     catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
 ) -> Flow<Decision> {
     if request.schema != MCP_TOOL_POLICY_DECIDE_REQUEST_SCHEMA {
@@ -47,7 +77,7 @@ fn decide(
         return Err(Stop::Fail(ERR_TOO_LARGE));
     }
     let ctx = Ctx {
-        observations: &request.observations,
+        observations,
         lookup: request.lookup.as_ref(),
         memo: None,
         catalog,
@@ -84,7 +114,7 @@ fn result(
 pub(crate) fn evaluate_mcp_tool_policy_decide_request(
     request: &McpToolPolicyDecideRequestV1,
 ) -> Result<Vec<u8>, String> {
-    evaluate_with_catalog(request, None)
+    evaluate_with_catalog(request, None, None)
 }
 
 pub(crate) fn evaluate_with_store(
@@ -93,7 +123,11 @@ pub(crate) fn evaluate_with_store(
 ) -> Result<Vec<u8>, String> {
     if let Some(extension) = &request.subject.extension {
         crate::contributed_mcp_decision_op::with_catalog(store, &extension.guard_home, |catalog| {
-            evaluate_with_catalog(request, Some(catalog))
+            evaluate_with_catalog(
+                request,
+                Some(catalog),
+                Some(Path::new(&extension.guard_home)),
+            )
         })
     } else {
         // A refreshed subject may introduce extension evidence after an
@@ -104,7 +138,7 @@ pub(crate) fn evaluate_with_store(
         crate::contributed_mcp_decision_op::with_catalog(
             Some(store),
             &guard_home.to_string_lossy(),
-            |catalog| evaluate_with_catalog(request, Some(catalog)),
+            |catalog| evaluate_with_catalog(request, Some(catalog), Some(&guard_home)),
         )
     }
 }
@@ -112,6 +146,7 @@ pub(crate) fn evaluate_with_store(
 fn evaluate_with_catalog(
     request: &McpToolPolicyDecideRequestV1,
     catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+    guard_home: Option<&Path>,
 ) -> Result<Vec<u8>, String> {
     // Digest failures are this op's own typed error result, not a transport
     // error (which the resident would redact to invalid-json).
@@ -119,7 +154,7 @@ fn evaluate_with_catalog(
         Ok(digest) => digest,
         Err(code) => return result(request, String::new(), "error", code, None),
     };
-    match decide(request, catalog) {
+    match decide(request, catalog, guard_home) {
         Ok(decision) => {
             let mut payload = decision.to_value();
             let connector = crate::mcp_tool_policy_connector::connector_setup_with_catalog(

@@ -109,6 +109,7 @@ mod browser_driver_gate_rows;
 pub mod browser_driver_ledger;
 mod browser_explain_command;
 mod browser_grant_eligibility;
+mod browser_grant_scope;
 mod browser_hold_text;
 mod browser_open;
 mod browser_report_prompt_command;

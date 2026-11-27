@@ -428,8 +428,20 @@ transcript in the pull request (after BP-T052).
 - [ ] **BP-T064** Deny memory: `mcp_grant_target` values `deny-site` and `deny-site-group` with
   durations `session` and `always`. Checked after R-SELF and before any grant. Agent sees a block with
   a clear reason. Removal is a protected settings mutation.
-- [ ] **BP-T065** Evaluation order per PRD 5.5 in `mcp_tool_policy_flow.rs`. Update the list in
+- [x] **BP-T065** Evaluation order per PRD 5.5 in `mcp_tool_policy_flow.rs`. Update the list in
   `docs/guard/mcp-server-contributions.md`. Add an ordering test with every tier present.
+  - Done in `browser_grant_scope.rs`. The policy flow asks for the call's driver identity hash as a
+    `browser_driver_scope` need.
+    - The resident answers it from the driver ledger.
+    - A relay decision reads its snapshot without writing.
+    - Filing a queued call records the call and fills `driver_identity_hash`, `element` and `input`
+      on the filed intent.
+  - Site selectors are tried before the exact, category and server ones. The covered-request sweep
+    resolves nothing for a grant filed under a retired driver identity.
+  - Still open:
+    - The filed intent does not carry `session_ref_digest` (BP-T040) or `site_group` yet.
+    - The page origin of calls without a URL is not tracked yet (BP-T062).
+    - R-SELF and deny memory come first in the order (BP-T064).
 - [x] **BP-T066** Burst coalescing: pending browser rows from one session on one origin within the
   review window render as one card with a count and a step list; resolving with a grant resolves
   covered rows and leaves uncovered rows pending. Queue grouping in `dashboard/src/queue-state.ts` and

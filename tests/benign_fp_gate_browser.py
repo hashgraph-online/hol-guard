@@ -8,8 +8,10 @@ Nothing opens a browser or a socket.
 Browser rows add two optional fields, each a closed list (PRD 8.2):
 
 - ``state`` seeds the Guard home before the call. ``none`` seeds nothing; ``pending-same-call``
-  makes the same call once first and leaves its review unanswered. Every other preset names the
-  feature that wires it and fails the row until it lands.
+  makes the same call once first and leaves its review unanswered; ``site-grant`` navigates to
+  another page of the row's origin first and answers that review with a one-hour ``site`` grant, as
+  the approval card would. Every other preset names the feature that wires it and fails the row
+  until it lands.
 - ``page`` names the scripted page the driver starts on. It reaches the driver through a
   ``start-page`` file next to the call journal, not through argv, so every row relays the same
   connector identity the harness config declares.
@@ -18,10 +20,14 @@ Browser rows add two optional fields, each a closed list (PRD 8.2):
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
+from ci.gauntlet.approval_rows import await_rows
 from ci.gauntlet.browser_cases import BROWSER_FIXTURES
 from ci.gauntlet.browser_driver_server import START_PAGE_FILE
 from ci.gauntlet.browser_fixtures import (
@@ -37,7 +43,12 @@ BROWSER_SERVERS = (REFERENCE_DRIVER, UNPROFILED_DRIVER)
 BROWSER_STATES = BROWSER_FIXTURES
 # R-QUIET-1: the gate makes the same call once before the measured call and leaves it unanswered.
 PENDING_SAME_CALL = "pending-same-call"
-WIRED_STATES = frozenset({"none", PENDING_SAME_CALL})
+# BP-T065: an earlier call on the same site was approved with a site grant.
+SITE_GRANT = "site-grant"
+SEEDED_STATES = frozenset({PENDING_SAME_CALL, SITE_GRANT})
+WIRED_STATES = frozenset({"none", *SEEDED_STATES})
+# The page of the row's origin the ``site-grant`` seed navigates to.
+SITE_GRANT_SEED_PATH = "/guide/getting-started"
 
 
 def validate_browser_fields(case_id: str, server: str, state: str, page: str | None) -> None:
@@ -98,3 +109,67 @@ def start_page(home: Path, page: str | None) -> Iterator[None]:
         yield
     finally:
         marker.unlink(missing_ok=True)
+
+
+def seed_case(case: Any) -> Any:
+    """The call a seeded row makes first: the same call, or for ``site-grant`` the seed navigation."""
+    if case.state != SITE_GRANT:
+        return case
+    url = urlsplit(str(case.arguments.get("url") or ""))
+    if not url.scheme or not url.netloc or url.path == SITE_GRANT_SEED_PATH:
+        raise ValueError(f"{case.case_id}: a site-grant row navigates to another page of one origin")
+    seed_url = urlunsplit((url.scheme, url.netloc, SITE_GRANT_SEED_PATH, "", ""))
+    return replace(case, arguments={**case.arguments, "url": seed_url})
+
+
+def row_counts(store: Any) -> dict[str, int]:
+    """Each approval row's id and how many calls it records."""
+    return {
+        str(row.get("request_id")): int(row.get("dedupe_count") or 1)
+        for row in store.list_approval_requests(status=None, limit=500)
+        if isinstance(row, dict) and row.get("request_id")
+    }
+
+
+def grant_site(store: Any, known: set[str]) -> None:
+    """Answer the one review the seed call queued with a one-hour ``site`` grant."""
+    from codex_plugin_scanner.guard.approvals import apply_approval_resolution
+
+    pending = [
+        str(row["request_id"])
+        for row in store.list_approval_requests(status="pending", limit=500)
+        if isinstance(row, dict) and row.get("request_id") and str(row["request_id"]) not in known
+    ]
+    if len(pending) != 1:
+        raise RuntimeError(f"a site-grant seed must queue one review, got {len(pending)}")
+    apply_approval_resolution(
+        store=store,
+        request_id=pending[0],
+        action="allow",
+        scope="artifact",
+        workspace=None,
+        reason="benign gate site grant",
+        mcp_grant_target="site",
+        mcp_grant_duration="1h",
+    )
+
+
+def seed_call(
+    case: Any, store: Any, before: dict[str, int], decide: Callable[[Any], dict[str, Any]]
+) -> tuple[dict[str, Any] | None, dict[str, int]]:
+    """Make a seeded row's first call and settle it.
+
+    ``pending-same-call`` leaves the review unanswered, so the measured call is a retry;
+    ``site-grant`` answers it with a site grant. Returns the seed's answer when the relay never
+    decided it, and the row counts the measured call's rows are compared with.
+    """
+    if case.state not in SEEDED_STATES:
+        return None, before
+    seed = decide(seed_case(case))
+    if "relay_defer" in seed:
+        return seed, before
+    await_rows(store, set(before), waiting="error" in seed, changed_from=before)
+    if case.state != SITE_GRANT:
+        return None, before
+    grant_site(store, set(before))
+    return None, row_counts(store)
