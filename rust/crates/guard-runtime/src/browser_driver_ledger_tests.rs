@@ -4,7 +4,7 @@ use super::*;
 use crate::browser_session_schema::ensure_browser_session_schema;
 
 fn digest(seed: char) -> String {
-    std::iter::repeat(seed).take(64).collect()
+    seed.to_string().repeat(64)
 }
 
 fn store() -> Connection {

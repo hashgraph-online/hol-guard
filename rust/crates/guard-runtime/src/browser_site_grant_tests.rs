@@ -3,7 +3,7 @@ use serde_json::json;
 use super::*;
 
 fn digest(seed: char) -> String {
-    std::iter::repeat(seed).take(64).collect()
+    seed.to_string().repeat(64)
 }
 
 fn scope(origin: &str) -> SiteScope {
