@@ -13,6 +13,7 @@ use super::search_scope_ignore::{
     holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
+use super::search_scope_listing::{inherited_tiers, listing_may_hold};
 use super::search_scope_plain_skips::PlainSkips;
 use super::search_scope_tracked::{Tracked, TrackedFiles};
 use std::path::{Path, PathBuf};
@@ -374,13 +375,27 @@ fn walk_scope_inner(
             return Err(ScopeUnproven);
         }
         let base = slash_path(&directory.path).ok_or(ScopeUnproven)?;
-        let mut tiers = (*directory.tiers).clone();
+        // The listing, read once, says which ignore and repository entries the
+        // directory may hold, so a directory without them costs no lookups.
+        // It is read no further than the entry budget could reach.
+        let children = std::fs::read_dir(&directory.path)
+            .map_err(|_| ScopeUnproven)?
+            .take((entry_limit + scope_entries).saturating_sub(inspected) + 1)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| ScopeUnproven)?;
+        let holds = |wanted: &str| listing_may_hold(&children, wanted);
+        // Most directories add no rules, so they share their parent's tiers
+        // rather than copying every inherited rule.
+        let mut nested = false;
+        let mut added = IgnoreTiers::default();
         if repository.is_some() {
             // A nested repository may not inherit outer git rules. Dropping
             // them can only widen the modeled scope.
-            if directory.depth > 0 && std::fs::symlink_metadata(directory.path.join(".git")).is_ok()
+            if directory.depth > 0
+                && holds(".git")
+                && std::fs::symlink_metadata(directory.path.join(".git")).is_ok()
             {
-                tiers.git.clear();
+                nested = true;
                 PlainSkips::enter(&mut skips, &directory.path);
                 // The host walks a nested checkout too, so it stays in the
                 // proof; each one brings its own entry budget, a few at most.
@@ -390,18 +405,19 @@ fn walk_scope_inner(
                 }
                 entry_limit += scope_entries;
             }
-            load_ignore_file(&directory.path.join(".gitignore"), &base, &mut tiers.git)?;
+            if holds(".gitignore") {
+                load_ignore_file(&directory.path.join(".gitignore"), &base, &mut added.git)?;
+            }
         }
-        if ignores == Ignores::Gitignore && holds_custom_ignore_file(&directory.path) {
+        let custom = holds(".ignore") || holds(".rgignore");
+        if ignores == Ignores::Gitignore && custom && holds_custom_ignore_file(&directory.path) {
             return Err(ScopeUnproven);
         }
-        if ripgrep {
-            load_custom_rules(&directory.path, &mut tiers)?;
+        if ripgrep && custom {
+            load_custom_rules(&directory.path, &mut added)?;
         }
-        let tiers = Rc::new(tiers);
-        let entries = std::fs::read_dir(&directory.path).map_err(|_| ScopeUnproven)?;
-        for entry in entries {
-            let entry = entry.map_err(|_| ScopeUnproven)?;
+        let tiers = inherited_tiers(&directory.tiers, nested, added)?;
+        for entry in children {
             inspected += 1;
             if inspected > entry_limit || budget.is_some_and(|limit| Instant::now() >= limit) {
                 return Err(ScopeUnproven);
@@ -409,8 +425,9 @@ fn walk_scope_inner(
             let path = entry.path();
             let name = entry.file_name();
             let name = name.to_str().ok_or(ScopeUnproven)?;
-            // Metadata only: never follow links or open a candidate secret.
-            let metadata = std::fs::symlink_metadata(&path).map_err(|_| ScopeUnproven)?;
+            // The entry's own kind, as the listing reports it: never follow
+            // links or open a candidate secret.
+            let file_type = entry.file_type().map_err(|_| ScopeUnproven)?;
             let relative = if directory.relative.is_empty() {
                 name.to_string()
             } else {
@@ -420,7 +437,7 @@ fn walk_scope_inner(
                 // Ripgrep's walk passes over .git unless an inclusion selects
                 // it, a names walk all but a link; a content walk inspects it.
                 if !filter.selects_git(name, &relative)
-                    && (ripgrep || (names && !metadata.is_symlink()))
+                    && (ripgrep || (names && !file_type.is_symlink()))
                 {
                     continue;
                 }
@@ -432,13 +449,14 @@ fn walk_scope_inner(
                 // over the same checkout is refused. A link is not walked
                 // here, so the symlink screen below decides it.
                 if !names
-                    && !metadata.is_symlink()
-                    && !super::search::safe_git_entry(&path, &metadata)
+                    && !file_type.is_symlink()
+                    && !std::fs::symlink_metadata(&path)
+                        .is_ok_and(|metadata| super::search::safe_git_entry(&path, &metadata))
                 {
                     return Err(ScopeUnproven);
                 }
             }
-            if metadata.file_type().is_symlink() {
+            if file_type.is_symlink() {
                 // Claude's Grep does not follow links. Still refuse a link
                 // whose name or file target is sensitive, in case it would.
                 let target = std::fs::canonicalize(&path).ok();
@@ -463,8 +481,8 @@ fn walk_scope_inner(
                 }
                 continue;
             }
-            let is_directory = metadata.is_dir();
-            if !is_directory && !metadata.is_file() {
+            let is_directory = file_type.is_dir();
+            if !is_directory && !file_type.is_file() {
                 // A socket or pipe has no names to list and no text to search.
                 if names {
                     continue;

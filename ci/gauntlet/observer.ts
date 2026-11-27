@@ -140,6 +140,8 @@ function recordExchange(exchange: {
     event: exchange.event,
     tool: request.tool_name,
     tool_call_id: request.tool_call_id,
+    ...(process.env.GUARD_GAUNTLET_LINKED_CWD && exchange.event === "PreToolUse"
+      ? { linked_fixture_cwd: request.cwd === process.env.GUARD_GAUNTLET_LINKED_CWD } : {}),
     input_json: input,
     input_sha256: createHash("sha256").update(input).digest("hex"),
     http_status: exchange.status,

@@ -54,7 +54,7 @@ from .review_fixtures import (
 )
 from .runtime_cases import runtime_case_checks
 from .script_cases import script_case_checks
-from .search_diff_fixtures import add_search_and_diff_content
+from .search_diff_fixtures import add_search_and_diff_content, linked_rg_workspace
 from .session_folder import session_folder_checks
 from .git_exclude_fixtures import add_own_exclude_setting
 from .package_store_fixtures import add_package_store_checkout
@@ -467,6 +467,7 @@ def create_fixture(
                 raise ValueError(f"Expected absent search root: {path}")
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
+    workspace = linked_rg_workspace(workspace, scenario_id)
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)
 
 

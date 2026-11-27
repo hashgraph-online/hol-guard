@@ -44,6 +44,7 @@ from .proofs import (
     task_tools_match,
 )
 from .repeat_cases import REPEAT_ORACLE, assess_repeat, repeat_sequence_error
+from .search_diff_fixtures import LINKED_RG_CASE, linked_rg_omp_proven
 from .task_arguments import task_arguments_match
 from .task_brief_cases import TASK_BRIEF_ORACLE
 from .transport import reconcile_rounds
@@ -213,6 +214,10 @@ def assess_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
     paths = decision_case_coverage(scenario, case)
     if outcome == "pass" and paths["missing"]:
         outcome, reason = "not-exercised", unexercised_reason(paths)
+    if outcome == "pass" and scenario.id == LINKED_RG_CASE and not linked_rg_omp_proven(
+        scenario.commands, case["guard_observations"]
+    ):
+        outcome, reason = "not-exercised", "the linked cwd spelling did not reach both Guard requests"
     return {
         "outcome": outcome,
         "reason": reason,
