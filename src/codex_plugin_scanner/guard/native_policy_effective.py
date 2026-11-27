@@ -198,9 +198,16 @@ def _json_default(value: object) -> object:
 
 
 def effective_native_policy_v3(
-    config: GuardConfig | Mapping[str, object], *, deadline_monotonic: float | None = None
+    config: GuardConfig | Mapping[str, object],
+    *,
+    deadline_monotonic: float | None = None,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
-    """Bounded effective policy consumed by native hook decisions."""
+    """Bounded effective policy consumed by native hook decisions.
+
+    ``guard_home`` only selects which idle resident may answer; the answer is
+    the command's own, and the command stays the fallback.
+    """
 
     return cast(
         "dict[str, object]",
@@ -209,6 +216,7 @@ def effective_native_policy_v3(
             (config,),
             guard_config=not isinstance(config, Mapping),
             deadline_monotonic=deadline_monotonic,
+            guard_home=guard_home,
         )["policy"],
     )
 

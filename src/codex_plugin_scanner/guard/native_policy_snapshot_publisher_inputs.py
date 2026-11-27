@@ -346,7 +346,9 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 return
             workspaces = frozenset(self._workspace_paths)
         try:
-            effective_native_policy_v3(self._compiled_effective_policy(workspaces=workspaces))
+            effective_native_policy_v3(
+                self._compiled_effective_policy(workspaces=workspaces), guard_home=self.guard_home
+            )
         except Exception:
             return
 

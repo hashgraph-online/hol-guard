@@ -352,3 +352,15 @@ def test_a_failed_resident_composition_is_reported_like_the_command(monkeypatch)
         client.compose_native_publication(
             (GuardConfig(guard_home=Path("/guard-home"), workspace=None),), guard_home=Path("/guard-home")
         )
+
+
+def test_snapshot_effective_policy_takes_an_idle_resident_answer(monkeypatch) -> None:
+    spawned = _install(monkeypatch, None, status=_status(features=_RESIDENT_STATUS))
+    sent = _resident(monkeypatch, json.dumps({"ok": True, "policy": {"default_action": "warn"}}).encode())
+
+    policy = client.effective_native_policy_v3(dict(_BASE), guard_home=Path("/guard-home"))
+
+    assert policy == {"default_action": "warn"}
+    assert spawned == []
+    assert [envelope["operation"] for envelope in sent] == ["policy_effective"]
+    assert sent[0]["request"]["op"] == "effective"
