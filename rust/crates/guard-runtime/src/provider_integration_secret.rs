@@ -150,10 +150,19 @@ pub fn load_provider_key(
         .map(|key| ProviderKey::new(Zeroizing::new(key)))
 }
 
-/// Disconnect: deletes one provider's key.
-pub fn delete_provider_key(store: &mut EncryptedFileSecretStore, provider_id: &str) {
-    if let Some(secret_id) = provider_secret_id(provider_id) {
-        store.delete_secret(&secret_id);
+/// Disconnect: deletes one provider's key file. The store's encryption is not set up first, so an
+/// unreadable store key never leaves the provider key behind. A key that is already gone is not an
+/// error; any other failure to remove the file is returned.
+pub fn delete_provider_key(
+    store: &EncryptedFileSecretStore,
+    provider_id: &str,
+) -> std::io::Result<()> {
+    let Some(secret_id) = provider_secret_id(provider_id) else {
+        return Ok(());
+    };
+    match fs::remove_file(store.path_for(&secret_id)) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        result => result,
     }
 }
 

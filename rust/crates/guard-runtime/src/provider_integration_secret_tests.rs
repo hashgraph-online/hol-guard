@@ -114,7 +114,8 @@ fn keys_round_trip_and_disconnect_deletes_one() {
     store_provider_key(&mut store, SHIELD, &key(KEY), &base64url).unwrap();
     store_provider_key(&mut store, WATCH, &key(&KEY.repeat(2)), &base64url).unwrap();
     assert_eq!(load_provider_key(&mut store, SHIELD).unwrap().expose(), KEY);
-    delete_provider_key(&mut store, SHIELD);
+    delete_provider_key(&store, SHIELD).unwrap();
+    delete_provider_key(&store, SHIELD).unwrap();
     assert!(load_provider_key(&mut store, SHIELD).is_none());
     assert!(load_provider_key(&mut store, WATCH).is_some());
     assert!(load_provider_key(&mut store, "provider.Bad").is_none());
@@ -204,4 +205,27 @@ fn forgetting_the_device_deletes_every_provider_key_and_nothing_else() {
         Some("unrelated")
     );
     assert!(home.path().join("secrets/key.bin").exists());
+}
+
+#[test]
+fn disconnect_deletes_the_key_even_when_the_store_key_is_unreadable() {
+    let home = tempfile::tempdir().unwrap();
+    let mut store = EncryptedFileSecretStore::new(home.path());
+    let base64url = auth(ProviderKeyCharsetV1::Base64url);
+    store_provider_key(&mut store, SHIELD, &key(KEY), &base64url).unwrap();
+    let key_path = store.path_for(&provider_secret_id(SHIELD).unwrap());
+    assert!(key_path.exists());
+    std::fs::write(home.path().join("secrets/key.bin"), b"not a store key").unwrap();
+    let fresh = EncryptedFileSecretStore::new(home.path());
+    delete_provider_key(&fresh, SHIELD).unwrap();
+    assert!(!key_path.exists());
+}
+
+#[test]
+fn disconnect_reports_a_key_file_it_cannot_remove() {
+    let home = tempfile::tempdir().unwrap();
+    let store = EncryptedFileSecretStore::new(home.path());
+    let key_path = store.path_for(&provider_secret_id(SHIELD).unwrap());
+    std::fs::create_dir_all(key_path.join("occupied")).unwrap();
+    assert!(delete_provider_key(&store, SHIELD).is_err());
 }
