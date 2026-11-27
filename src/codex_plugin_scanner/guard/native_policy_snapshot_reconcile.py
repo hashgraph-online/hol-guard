@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 # Errors a store or filesystem read can raise while another process holds the
 # database. They say nothing about whether the policy changed.
 _UNREADABLE_INPUT_ERRORS = (NativePolicySnapshotError, OSError, RuntimeError, ValueError, sqlite3.Error)
+# The periodic pass recompiles every policy input, which costs several
+# authenticated store reads. When no watched input moved since the last
+# compile, that compile proves only inputs that change without a file write
+# (an expiring record, say), so it runs on this slower backstop instead of
+# every pass.
+_UNCHANGED_RECOMPILE_SECONDS = 5.0
 
 
 def _local_cli_revision_or_none(publisher: NativePolicySnapshotPublisher) -> int | None:
@@ -60,7 +66,8 @@ def _reconcile(publisher: NativePolicySnapshotPublisher) -> None:
             if previous_inputs.get(path) != current_inputs.get(path)
         }
         publisher._input_fingerprint = fingerprint
-        if publisher._policy_input_changed(changed_paths):
+        compiled = _policy_input_changed(publisher, fingerprint[0], changed_paths)
+        if compiled:
             publisher._republish_preserving_watch()
     if publisher._monotonic_clock() >= publisher._reconcile_due_monotonic:
         publisher._reconcile_due_monotonic = publisher._monotonic_clock() + 1.0
@@ -68,13 +75,43 @@ def _reconcile(publisher: NativePolicySnapshotPublisher) -> None:
         # scope opens its own connection and parses the whole schema, so the
         # pass shares one connection.
         with publisher.store.connection_scope():
-            if publisher._policy_input_changed():
+            if _recompile_due(publisher, fingerprint[0]) and _policy_input_changed(publisher, fingerprint[0], None):
                 publisher._republish_preserving_watch()
             publisher._recheck_direct_lane_local_cli(_local_cli_revision_or_none(publisher))
             publisher._recheck_direct_lane_review_facts()
             publisher._recheck_direct_lane_structured_output()
             publisher._recheck_direct_lane_mcp_relay()
             publisher._recheck_direct_lane_saved_state()
+
+
+def _policy_input_changed(
+    publisher: NativePolicySnapshotPublisher, stats: object, changed_paths: set[str] | None
+) -> bool:
+    # Cleared first: a compile that raises leaves no proof behind it.
+    publisher._policy_compiled_at = None
+    changed = publisher._policy_input_changed(changed_paths)
+    publisher._policy_compiled_at = (stats, publisher._monotonic_clock())
+    return changed
+
+
+def _recompile_due(publisher: NativePolicySnapshotPublisher, stats: object) -> bool:
+    """Whether the periodic pass must recompile the effective inputs.
+
+    It may skip only after a compile that saw these same watched-file stats,
+    that left the snapshot acknowledged and the inputs readable, and that is
+    younger than the backstop. Anything else -- a moved file, a withdrawn or
+    pending snapshot, an unavailable input -- recompiles on this pass.
+    """
+
+    compiled = getattr(publisher, "_policy_compiled_at", None)
+    if compiled is None or compiled[0] != stats:
+        return True
+    if publisher._monotonic_clock() - compiled[1] >= _UNCHANGED_RECOMPILE_SECONDS:
+        return True
+    observed = publisher._observed_policy_fingerprint
+    with publisher._condition:
+        acked = publisher._acked
+    return not acked or observed is None or observed[0] in {"", "unavailable"}
 
 
 def _treat_inputs_as_changed(publisher: NativePolicySnapshotPublisher) -> None:
