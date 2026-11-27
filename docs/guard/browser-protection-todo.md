@@ -536,8 +536,9 @@ transcript in the pull request (after BP-T052).
     `401`/`403`, `429` and every other failure go to `ProviderWorker::record`.
   - [ ] Daemon scheduling: a background loop that picks subjects from the hook path's queue and runs
     the executor with the pinned HTTPS client, off the decision path (with BP-T124).
-- [ ] **BP-T123** `provider_integration_decide.rs`: cache read only, applies PRD 6.6. Property test:
+- [x] **BP-T123** `provider_integration_decide.rs`: cache read only, applies PRD 6.6. Property test:
   for any signal set the decision is never weaker than the decision with no provider.
+  - [ ] Wire `decide` into the hook and relay decision paths (with BP-T124's hot-path proof).
 - [ ] **BP-T124** Hot path proof: a test that fails if the hook or relay decision path performs
   network I/O or waits on the worker. Latency evidence in `scripts/native_slo_contract.py`.
 - [ ] **BP-T125** Settings "Enforce provider blocks" and "Require a fresh check", per provider and
