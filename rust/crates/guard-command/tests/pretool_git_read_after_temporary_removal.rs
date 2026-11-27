@@ -249,3 +249,70 @@ fn a_removal_inside_the_git_directory_or_of_an_attributes_file_keeps_the_review(
         assert_ne!(action, "allow", "{command}: {reason}");
     }
 }
+
+#[test]
+fn a_removal_inside_a_bare_repository_read_from_below_keeps_the_review() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/pretool-git-read-after-bare-removal")
+        .join(std::process::id().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home, &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+    fixture::git(&home, &repository, &["init", "--quiet"]);
+    fixture::git(
+        &home,
+        &repository,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    fixture::git(&home, &repository, &["config", "user.name", "fixture"]);
+    std::fs::write(repository.join("package.json"), "{}\n").unwrap();
+    fixture::git(&home, &repository, &["add", "-A"]);
+    fixture::git(&home, &repository, &["commit", "--quiet", "-m", "fixture"]);
+
+    // A bare repository has no `.git` entry; Git finds it by walking up
+    // from a subdirectory such as `refs`.
+    let scratch = PathBuf::from(format!("/tmp/hg-bare-removal-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir(&scratch).unwrap();
+    std::fs::set_permissions(&scratch, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let _scratch = Scratch(scratch.clone());
+    let bare = scratch.join("mirror.git");
+    fixture::git(
+        &home,
+        &repository,
+        &[
+            "clone",
+            "--quiet",
+            "--bare",
+            repository.to_str().unwrap(),
+            bare.to_str().unwrap(),
+        ],
+    );
+    std::fs::create_dir_all(bare.join("info")).unwrap();
+    // A macro word passes the content scan, yet a macro defined elsewhere
+    // can make it unset a filter.
+    std::fs::write(bare.join("info").join("attributes"), "*.json plain\n").unwrap();
+    std::fs::write(scratch.join("notes.txt"), "draft commit message\n").unwrap();
+    let scratch = scratch.display();
+    let bare = bare.display();
+
+    // The session works inside the bare repository's `refs`.
+    let refs = PathBuf::from(format!("{bare}/refs"));
+    let command = format!("rm -f {scratch}/notes.txt; git log --oneline -1");
+    let (action, reason) = evaluate(&home, &refs, &command);
+    assert_eq!(action, "allow", "{command}: {reason}");
+
+    for command in [
+        format!("rm -f {bare}/info/attributes; git log --oneline -1"),
+        format!("rm -f {bare}/description; git log --oneline -1"),
+    ] {
+        let (action, reason) = evaluate(&home, &refs, &command);
+        assert_ne!(action, "allow", "{command}: {reason}");
+    }
+}

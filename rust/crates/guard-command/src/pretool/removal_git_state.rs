@@ -132,23 +132,44 @@ fn read_roots(model: &CanonicalCommandV1, cwd: Option<&str>) -> Option<Vec<PathB
 
 /// The Git directories a read from `root` uses: the first `.git` entry in
 /// `root` or above it, resolved through a `gitdir:` file and its common
-/// directory. `None` when an entry cannot be read, so the removal keeps the
-/// review.
+/// directory, and every directory on the way up that can itself be a Git
+/// directory, as a bare repository is to a read from its `refs`. `None` when
+/// an entry cannot be read, so the removal keeps the review.
 fn read_git_directories(root: Option<&Path>) -> Option<Vec<PathBuf>> {
     let Some(root) = root else {
         return Some(Vec::new());
     };
-    let Some(git) = root
-        .ancestors()
-        .map(|directory| directory.join(".git"))
-        .find(|git| git.symlink_metadata().is_ok())
-    else {
-        return Some(Vec::new());
-    };
-    git_directories(&git)?
+    let mut directories = Vec::new();
+    for directory in root.ancestors() {
+        let git = directory.join(".git");
+        if git.symlink_metadata().is_ok() {
+            directories.extend(git_directories(&git)?);
+            break;
+        }
+        if can_be_git_directory(directory) {
+            directories.push(directory.to_path_buf());
+            match read_small(&directory.join("commondir")) {
+                Ok(Some(common)) => directories.push(directory.join(common.trim())),
+                Ok(None) => {}
+                Err(()) => return None,
+            }
+        }
+    }
+    directories
         .into_iter()
         .map(|directory| std::fs::canonicalize(directory).ok())
         .collect()
+}
+
+/// Whether Git could take this directory for a Git directory: it holds a
+/// `HEAD` entry beside `refs`, `objects` or a `commondir` file. Git asks
+/// more of it, so this also counts some directories Git would pass over,
+/// which only keeps more removals reviewed.
+fn can_be_git_directory(directory: &Path) -> bool {
+    directory.join("HEAD").symlink_metadata().is_ok()
+        && ["refs", "objects", "commondir"]
+            .iter()
+            .any(|entry| directory.join(entry).symlink_metadata().is_ok())
 }
 
 /// Whether removing a file with this text changes no configuration section
