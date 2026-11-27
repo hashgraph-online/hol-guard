@@ -56,9 +56,6 @@ def structured_outage_overlay(
     deadline: float | None,
     load_config: object | None = None,
 ) -> dict[str, object]:
-    # Rust resolves the admitted structured-output view. Keep the callback in
-    # the compatibility signature without invoking Python configuration code.
-    del load_config
     if not withholds_structured_destination(harness=harness, event_name=event_name):
         return {}
     withhold = withhold_structured_destination({})
@@ -80,6 +77,17 @@ def structured_outage_overlay(
         overlay = rendered[1]
         if overlay is not None and (not overlay or overlay == withhold):
             return overlay
+    if callable(load_config):
+        try:
+            from ..native_policy_snapshot_direct_lane_structured import structured_output_view
+
+            configured = load_config()
+            if configured is None or getattr(configured, "managed_policy", None) is None:
+                return {}
+            if not structured_output_view(configured):
+                return {}
+        except Exception:
+            return withhold
     return withhold
 
 
