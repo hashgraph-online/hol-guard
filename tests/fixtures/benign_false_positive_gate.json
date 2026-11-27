@@ -38040,6 +38040,23 @@
       "expect": "allow"
     },
     {
+      "id": "rg-wildcard-extension-glob-over-two-roots",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"export\" -g '*.ts*' src app | head -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "session-ln-s-sibling-wt-modules-then-test",
       "fix_area": "queue",
       "harnesses": [

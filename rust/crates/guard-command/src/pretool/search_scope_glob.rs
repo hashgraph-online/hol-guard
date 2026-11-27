@@ -21,6 +21,17 @@ pub(super) fn glob_matches(pattern: &str, text: &str) -> Result<bool, GlobError>
     match_from(pattern.as_bytes(), text.as_bytes(), &mut steps)
 }
 
+/// Whether `pattern` holds no wildcard, class or escape, so it matches
+/// exactly the text equal to it: `glob_matches` would compare it byte by byte.
+/// A pattern too long for `glob_matches` is not literal, so it still errs.
+pub(super) fn is_literal(pattern: &str) -> bool {
+    !pattern.is_empty()
+        && pattern.len() <= MAX_PATTERN_BYTES
+        && !pattern
+            .bytes()
+            .any(|byte| matches!(byte, b'*' | b'?' | b'[' | b'\\'))
+}
+
 fn match_from(pattern: &[u8], text: &[u8], steps: &mut usize) -> Result<bool, GlobError> {
     *steps += 1;
     if *steps > MAX_MATCH_STEPS {
