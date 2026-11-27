@@ -611,9 +611,12 @@ transcript in the pull request (after BP-T052).
   - [x] `cli/integrations_providers_command.py` calls the daemon routes. Connect, disconnect and
     settings show the daemon preview and ask (or need `--yes`) before spending its proof; the key is
     read with `getpass` or one line of `--key-stdin` and sent only in the connect body.
-- [ ] **BP-T132** Integrations page `/extensions/integrations` and provider detail
+- [x] **BP-T132** Integrations page `/extensions/integrations` and provider detail
   `/extensions/provider.<slug>`: capability text, "What leaves this device" rendered from `shares`,
   privacy and terms links, publisher verification state, Connect.
+  - [x] The provider detail route now carries the publisher, surfaces, hosts and the privacy, terms and
+    key links from the compiled manifest. Connect shows the CLI command until the BP-T133 dialog lands.
+    The sponsor label waits for discovery v2 (BP-T140).
 - [ ] **BP-T133** Connect dialog modeled on `dashboard/src/pulse-setup-modal.tsx` and
   `pulse-connect-step.tsx`: write-only key field, per-fact toggles, one-use proof, verify, state
   display. "Get a key" link with a static referral parameter and no user data.
