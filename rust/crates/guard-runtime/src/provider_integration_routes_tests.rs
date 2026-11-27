@@ -1,13 +1,14 @@
 use guard_command::provider_integration_compile::compile_provider_integration;
 use guard_contracts::{
-    ProviderCapabilityV1 as Cap, ProviderConnectionStateV1 as State, ProviderEffectLevelV1 as Level,
+    ProviderCapabilityV1 as Cap, ProviderConnectionStateV1 as State, ProviderDetailV1,
+    ProviderEffectLevelV1 as Level,
 };
 use serde_json::Map;
 use zeroize::Zeroizing;
 
 use super::*;
 use crate::provider_integration_secret::{load_provider_key, store_provider_key, ProviderKey};
-use crate::provider_integration_store::ensure_provider_integration_schema;
+use crate::provider_integration_store::{capability_settings, ensure_provider_integration_schema};
 
 const SHIELD: &str = "provider.exampleshield";
 const NOW: u64 = 50_000_000;

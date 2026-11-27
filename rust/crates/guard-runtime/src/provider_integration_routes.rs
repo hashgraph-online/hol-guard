@@ -20,8 +20,8 @@
 use guard_command::provider_integration_compile::CompiledProviderIntegrationV1;
 use guard_contracts::{
     ProviderCapabilitySettingsV1, ProviderConnectPreviewV1, ProviderConnectionStateV1,
-    ProviderDetailV1, ProviderDisconnectRequestV1, ProviderIntegrationErrorV1,
-    ProviderSettingsRequestV1, ProviderShareableFactV1,
+    ProviderDisconnectRequestV1, ProviderIntegrationErrorV1, ProviderSettingsRequestV1,
+    ProviderShareableFactV1,
 };
 use guard_provider_integrations::parse::parse_strict_bounded;
 use rusqlite::Connection;
@@ -36,8 +36,8 @@ pub use crate::provider_integration_proof::{
 };
 use crate::provider_integration_secret::delete_provider_key;
 use crate::provider_integration_store::{
-    capability_settings, forget_provider, provider_connection, put_capability_setting,
-    put_connection, CapabilitySetting, ProviderConnection,
+    forget_provider, provider_connection, put_capability_setting, put_connection,
+    CapabilitySetting, ProviderConnection,
 };
 
 /// The rollback switch.
