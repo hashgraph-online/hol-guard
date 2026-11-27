@@ -139,6 +139,20 @@ pub fn store_provider_key(
         .map_err(|_| ProviderSecretError::StoreUnavailable)
 }
 
+/// Puts back a key Guard stored earlier, without checking it against the current manifest's
+/// `keyFormat`: a rollback must not lose a key because the format changed since it was stored.
+pub fn restore_provider_key(
+    store: &mut EncryptedFileSecretStore,
+    provider_id: &str,
+    key: &ProviderKey,
+) -> Result<(), ProviderSecretError> {
+    let secret_id =
+        provider_secret_id(provider_id).ok_or(ProviderSecretError::ProviderIdInvalid)?;
+    store
+        .set_secret(&secret_id, key.expose())
+        .map_err(|_| ProviderSecretError::StoreUnavailable)
+}
+
 /// The stored key, or `None` when the provider has none or the id is outside the contract.
 pub fn load_provider_key(
     store: &mut EncryptedFileSecretStore,

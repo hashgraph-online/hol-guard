@@ -1,0 +1,196 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.maidan-coordinator",
+  "version": "1.0.0",
+  "name": "Maidan (coordinator profile)",
+  "description": "Maidan's coordinator profile: a fixed list of the 37 tools an agent needs for the coordinator loop, served at /mcp/coordinator. Every tool is named; state changes that bind others or leave Maidan need review, and a tool the profile does not list is reviewed. Sign-in is OAuth 2.0, with Maidan as its own authorization server.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.david-engelmann",
+    "displayName": "Maidan",
+    "url": "https://github.com/david-engelmann/maidan"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#1F2937"
+  },
+  "homepage": "https://github.com/david-engelmann/maidan",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://maidan.world/mcp/coordinator",
+    "serverNames": [
+      "maidan-coordinator"
+    ]
+  },
+  "riskClasses": [
+    "maidan-gate",
+    "maidan-remove"
+  ],
+  "tools": [
+    {
+      "name": "add_reviewer",
+      "state": "review"
+    },
+    {
+      "name": "approval_decide",
+      "state": "review"
+    },
+    {
+      "name": "assign_thread",
+      "state": "inherit"
+    },
+    {
+      "name": "cancel_thread",
+      "state": "review"
+    },
+    {
+      "name": "create_thread",
+      "state": "inherit"
+    },
+    {
+      "name": "find_thread",
+      "state": "inherit"
+    },
+    {
+      "name": "find_threads",
+      "state": "inherit"
+    },
+    {
+      "name": "get_approval_gate",
+      "state": "inherit"
+    },
+    {
+      "name": "get_inbox",
+      "state": "inherit"
+    },
+    {
+      "name": "get_review_packet",
+      "state": "inherit"
+    },
+    {
+      "name": "get_review_status",
+      "state": "inherit"
+    },
+    {
+      "name": "get_thread_context",
+      "state": "inherit"
+    },
+    {
+      "name": "get_thread_result",
+      "state": "inherit"
+    },
+    {
+      "name": "get_thread_status",
+      "state": "inherit"
+    },
+    {
+      "name": "get_thread_steer",
+      "state": "inherit"
+    },
+    {
+      "name": "get_waiting_inbox",
+      "state": "inherit"
+    },
+    {
+      "name": "get_workspace_context",
+      "state": "inherit"
+    },
+    {
+      "name": "list_channels",
+      "state": "inherit"
+    },
+    {
+      "name": "list_child_threads",
+      "state": "inherit"
+    },
+    {
+      "name": "list_messages",
+      "state": "inherit"
+    },
+    {
+      "name": "list_notifications",
+      "state": "inherit"
+    },
+    {
+      "name": "list_recently_active_threads",
+      "state": "inherit"
+    },
+    {
+      "name": "list_result_deliveries",
+      "state": "inherit"
+    },
+    {
+      "name": "list_reviews",
+      "state": "inherit"
+    },
+    {
+      "name": "list_thread_results",
+      "state": "inherit"
+    },
+    {
+      "name": "list_threads",
+      "state": "inherit"
+    },
+    {
+      "name": "mark_inbox_read",
+      "state": "inherit"
+    },
+    {
+      "name": "mark_notification_read",
+      "state": "inherit"
+    },
+    {
+      "name": "post_message",
+      "state": "inherit"
+    },
+    {
+      "name": "search_messages",
+      "state": "inherit"
+    },
+    {
+      "name": "set_priority",
+      "state": "inherit"
+    },
+    {
+      "name": "set_thread_attributes",
+      "state": "inherit"
+    },
+    {
+      "name": "set_thread_steer",
+      "state": "inherit"
+    },
+    {
+      "name": "transition_thread",
+      "state": "review"
+    },
+    {
+      "name": "wait_for_notification",
+      "state": "inherit"
+    },
+    {
+      "name": "wait_for_result",
+      "state": "inherit"
+    },
+    {
+      "name": "whoami",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/david-engelmann/maidan/blob/main/listings/hol-guard/README.md",
+    "https://github.com/david-engelmann/maidan/blob/main/listings/hol-guard/policy.json",
+    "https://github.com/david-engelmann/maidan/blob/main/crates/maidan-mcp/tests/fixtures/tool-annotations.json",
+    "https://github.com/david-engelmann/maidan/blob/main/docs/Integration.md"
+  ],
+  "saferAlternatives": [
+    "Give each agent its own seat token holding maidan.agent.worker, never an admin token.",
+    "Name secrets as secret:// references in payloads so their values never enter a model's context."
+  ]
+}

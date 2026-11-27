@@ -53,6 +53,24 @@ pub(super) fn glob_base<'a>(value: &'a str, context: ReadContext<'_>) -> Option<
     })
 }
 
+/// The literal directory a glob expands below: where its expansion starts,
+/// joined with every component before the first wildcard.
+pub(in super::super) fn literal_directory(
+    value: &str,
+    context: ReadContext<'_>,
+) -> Option<PathBuf> {
+    let scope = glob_base(value, context)?;
+    let mut directory = scope.base;
+    directory.extend(
+        scope
+            .pattern
+            .split('/')
+            .filter(|part| !part.is_empty() && *part != ".")
+            .take_while(|part| !part.contains(GLOB_CHARACTERS)),
+    );
+    Some(directory)
+}
+
 /// Literal prefix and pattern. Leading `..` steps are the only parent steps;
 /// every named component is visible or a benign project-metadata directory.
 fn split_prefix(value: &str) -> Option<(&str, &str)> {

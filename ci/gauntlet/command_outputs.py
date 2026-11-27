@@ -29,6 +29,7 @@ from .realism_fixtures import VITE_BUILD_MARKER
 from .runtime_cases import OUTPUT as RUNTIME_OUTPUT
 from .runtime_cases import QUIET_CASES as RUNTIME_QUIET_CASES
 from .script_cases import REPORT_CASES, report_output
+from .search_diff_fixtures import LINKED_RG_CASE
 from .source_output_fixtures import (
     HELPER_MARKER,
     HELPER_PATH,
@@ -345,12 +346,70 @@ def cwd_argument_error(scenario: Scenario, calls: list[dict[str, Any]]) -> str |
 
 def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
     """A successful host status cannot replace the required read, search or transformation."""
+    if scenario.id == "omp-native-shell-rg-wildcard-extension-glob":
+        # head can succeed without rg; require the actual matched lines.
+        # The declaration is excluded only in the first search.
+        ordinary = {
+            "password-reset-email.tsx:1:export const mail = 1;",
+            "settings.ts:1:export const settings = {",
+        }
+        declaration = "gauntlet-types.d.ts:1:export declare const gauntletType: string;"
+        expected = (
+            {"src/" + row for row in ordinary},
+            {"./" + row for row in ordinary | {declaration}},
+        )
+        if len(calls) != len(expected):
+            return False
+        for call, wanted in zip(calls, expected, strict=True):
+            rows = (_text(call) or "").splitlines()
+            # Normalize only the filename, not its matched source text.
+            rows = [
+                path.replace("\\", "/") + sep + rest
+                for path, sep, rest in (row.partition(":") for row in rows)
+            ]
+            if len(rows) != len(wanted) or set(rows) != wanted:
+                return False
+        return True
+    if scenario.id == "omp-native-shell-cd-quoted-route-folder-then-grep":
+        # The final head may succeed even when grep found no matching page.
+        return len(calls) == 1 and _text(calls[0]) == "1:export default 1;\n"
+    if scenario.id == LINKED_RG_CASE:
+        if len(calls) != 2:
+            return False
+        first, second = (_text(call) for call in calls)
+        return (
+            first is not None
+            and second is not None
+            and "src/rail.ts:1:export const railStage = 1;" in first.replace("\\", "/")
+            and "tests/rail.test.tsx:1:export const railStage = 2;" in first.replace("\\", "/")
+            and "src/rail.ts:1:export const railStage = 1;" in second.replace("\\", "/")
+        )
     if scenario.id == BUSINESS_ORDINARY_READ:
         return len(calls) == 1 and _text(calls[0]) == SOURCE
     if scenario.id in TOKEN_CASES:
         return _token_sources_match(scenario, calls)
     if scenario.id == FEATURE_DIRECTORY_CASE:
         return _feature_directory_match(calls)
+    if scenario.id == "omp-native-shell-rg-unmatched-root-glob-after-cd":
+        # Both pipelines may succeed via head even when rg never ran. The
+        # missing-glob diagnostic is legitimate, but the existing source must
+        # still appear in each search, including the two searches after cd.
+        if tuple(call.get("args", {}).get("command") for call in calls) != scenario.commands:
+            return False
+        first, second = (_text(call) for call in calls)
+        if first is None or second is None:
+            return False
+        relative = {"./settings.ts", "settings.ts"}
+        rows = second.splitlines()
+        expected = "1:" + SOURCE_FILES["src/settings.ts"].splitlines()[0]
+        return (
+            any(line.replace("\\", "/") == "src/settings.ts" for line in first.splitlines())
+            and any(line.replace("\\", "/") in relative for line in rows)
+            and any(
+                path.replace("\\", "/") in relative and sep == ":" and rest == expected
+                for path, sep, rest in (line.partition(":") for line in rows)
+            )
+        )
     if scenario.id == WORKSPACE_GREP_CASE:
         return _workspace_search_match(calls)
     if scenario.id in CLONE_SEARCH_CASES:

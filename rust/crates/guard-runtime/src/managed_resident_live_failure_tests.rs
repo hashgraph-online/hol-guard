@@ -492,3 +492,126 @@ fn a_scope_that_cannot_be_written_publishes_no_state() {
         Err("native_resident_state_write_failed".to_owned())
     );
 }
+
+/// Count connections reaching `listener` until `stop` fires.
+#[cfg(unix)]
+fn count_connections(
+    listener: std::net::TcpListener,
+    stop: std::sync::mpsc::Receiver<()>,
+) -> thread::JoinHandle<usize> {
+    listener.set_nonblocking(true).unwrap();
+    thread::spawn(move || {
+        let mut accepted = Vec::new();
+        loop {
+            match listener.accept() {
+                Ok((stream, _)) => accepted.push(stream),
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if stop.try_recv().is_ok() {
+                        return accepted.len();
+                    }
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("test listener failed: {error}"),
+            }
+        }
+    })
+}
+
+/// A stream remembers the resident that last answered it, but a resident
+/// whose state file is gone has retired: the client must not knock on its
+/// endpoint again, and goes through discovery instead.
+#[cfg(unix)]
+#[test]
+fn a_remembered_resident_that_retired_its_state_is_not_asked_again() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = listener.local_addr().unwrap().to_string();
+    let root = private_live_root("warm-retired");
+    let digest = runtime_digest().unwrap();
+    let scope = state_scope(&root, &digest).unwrap();
+    let state = crate::resident_state::publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        endpoint,
+        &[17; crate::AUTH_TOKEN_BYTES],
+    )
+    .unwrap();
+    let path = scope.join(format!("generation-{:020}.json", 1u64));
+    assert!(crate::resident_state::state_file_present(&scope, 1));
+    std::fs::remove_file(&path).unwrap();
+    assert!(!crate::resident_state::state_file_present(&scope, 1));
+    let (stop, wait_stop) = std::sync::mpsc::channel::<()>();
+    let worker = count_connections(listener, wait_stop);
+    let client_lease = lease::acquire(&root).unwrap();
+    client_lease.keep_warm(lease::WarmResident {
+        scope: scope.clone(),
+        state,
+    });
+    let result = client_request_with_deadline(
+        &root,
+        b"{}",
+        Instant::now() + Duration::from_secs(4),
+        &client_lease,
+    );
+    let _ = stop.send(());
+    let connections = worker.join().unwrap();
+    drop(client_lease);
+    std::fs::remove_dir_all(&root).unwrap();
+    assert_eq!(connections, 0);
+    // Discovery found nothing, so the client went on to start a resident.
+    assert_eq!(result.unwrap_err(), "native_policy_verifier_key_missing");
+}
+
+/// The warm resident is only a hint for this client's own runtime. One
+/// recorded under another digest is dropped without being contacted.
+#[cfg(unix)]
+#[test]
+fn a_remembered_resident_of_another_runtime_is_not_asked() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remembered = listener.local_addr().unwrap().to_string();
+    // The published resident is gone: nothing serves its endpoint.
+    let endpoint = {
+        let dead = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        dead.local_addr().unwrap().to_string()
+    };
+    let root = private_live_root("warm-foreign");
+    let digest = runtime_digest().unwrap();
+    let scope = state_scope(&root, &digest).unwrap();
+    let mut state = crate::resident_state::publish_state(
+        &scope,
+        1,
+        std::process::id(),
+        &digest,
+        "loopback",
+        endpoint,
+        &[19; crate::AUTH_TOKEN_BYTES],
+    )
+    .unwrap();
+    let path = scope.join(format!("generation-{:020}.json", 1u64));
+    assert!(crate::resident_state::state_file_present(&scope, 1));
+    let _ = path;
+    // The state file stays, so only the digest differs. The remembered copy
+    // names its own endpoint, so any knock on it came from the warm path.
+    state.runtime_sha256 = "0".repeat(64);
+    state.endpoint = remembered;
+    let (stop, wait_stop) = std::sync::mpsc::channel::<()>();
+    let worker = count_connections(listener, wait_stop);
+    let client_lease = lease::acquire(&root).unwrap();
+    client_lease.keep_warm(lease::WarmResident {
+        scope: scope.clone(),
+        state,
+    });
+    let _ = client_request_with_deadline(
+        &root,
+        b"{}",
+        Instant::now() + Duration::from_secs(4),
+        &client_lease,
+    );
+    let _ = stop.send(());
+    let connections = worker.join().unwrap();
+    drop(client_lease);
+    std::fs::remove_dir_all(&root).unwrap();
+    assert_eq!(connections, 0);
+}

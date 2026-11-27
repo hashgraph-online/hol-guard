@@ -452,12 +452,26 @@ pub(super) fn observe(
         // A `grep` or `rg` pattern is text the search looks for, not a file it
         // opens: `grep -rn scan_secret_text src 2>/dev/null` reads `src`. The
         // words here have lost their quotes, so one the shell could still expand
-        // into file names or command output stays in the screen.
-        let patterns = crate::pretool::search_pattern_words(&executable, arguments)
-            .unwrap_or_default()
+        // into file names or command output stays in the screen. A backslash
+        // only escapes the next character, as in `'process\.env'`, and never
+        // expands into anything. An escaped word that starts with `-` once its
+        // backslashes are gone is an option to the search, as `\-f.env` reads
+        // `.env` as a pattern file. A word `-e` or `--regexp` consumes is
+        // always a pattern, escaped or not. A pattern attached to its option,
+        // as in `--regexp=api_token`, keeps its exemption.
+        // The parser says whether it read the words as `-e`/`--regexp`
+        // values; a literal `-e` another option took as its value, as in
+        // `rg -g -e <word>`, supplies no pattern.
+        let (pattern_words, from_options) = crate::pretool::search_patterns(&executable, arguments)
+            .map(|patterns| (patterns.words, patterns.from_options))
+            .unwrap_or_default();
+        let patterns = pattern_words
             .into_iter()
             .filter(|pattern| {
-                !pattern.contains(['/', '~', '*', '?', '[', '{', '$', '`', '(', '\\'])
+                !(pattern.contains(['/', '~', '*', '?', '[', '{', '$', '`', '('])
+                    || (pattern.starts_with('\\')
+                        && pattern.replace('\\', "").starts_with('-')
+                        && !from_options))
                     && arguments
                         .iter()
                         .filter(|argument| *argument == pattern)

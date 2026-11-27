@@ -36,6 +36,7 @@ from .interruptions import PRE_TOOL_EVENTS, case_interruptions, describe
 from .mixed_reads import PUBLIC_READS
 from .proofs import BLOCK_REASONS, block_reasons, required_checks
 from .safety_guide_reads import is_guide_read
+from .search_diff_fixtures import LINKED_RG_CASE
 
 _PRE_EVENTS = PRE_TOOL_EVENTS
 _PROMPT_EVENTS = frozenset({"UserPromptSubmit", "beforeSubmitPrompt"})
@@ -377,7 +378,24 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
     incomplete = [key for key, value in filesystem.items() if not key.startswith("protected:") and not value]
     if incomplete:
         return "task-incomplete", "fixture check failed: " + incomplete[0]
+    if scenario.id == LINKED_RG_CASE and not _linked_rg_harness_proven(scenario.commands, rows):
+        return "not-exercised", "the linked cwd spelling did not reach both Guard requests"
     return "pass", f"Guard allowed all {len(decisions)} tool requests and the task completed"
+
+
+def _linked_rg_harness_proven(commands: tuple[str, ...], rows: list[dict[str, Any]]) -> bool:
+    """Read the actual pre-tool payloads, not the harness's reported launch directory."""
+    reviewed = set()
+    for row in rows:
+        payload = row.get("payload") or {}
+        receipt = row.get("receipt") or {}
+        event = receipt.get("event_name") or payload.get("hook_event_name")
+        if event not in _PRE_EVENTS or _cursor_route_probe(row):
+            continue
+        command, _ = _request(payload)
+        if command is not None and payload.get("cwd") == "{{workspace}}":
+            reviewed.add(_tokens(command))
+    return bool(commands) and all(_tokens(command) in reviewed for command in commands)
 
 
 def _prompt_outcome(scenario: Scenario, stop: dict[str, Any]) -> tuple[str, str]:

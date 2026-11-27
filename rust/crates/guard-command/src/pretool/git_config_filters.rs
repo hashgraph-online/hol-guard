@@ -6,8 +6,101 @@ use std::time::{Duration, Instant};
 // Attribute inspection never invokes clean/smudge/process filters. Check every
 // tracked and untracked path, or only the `named` operands when the command
 // reads nothing else; a global filter definition alone cannot execute.
+//
+// Within one evaluation the answer is shared by every segment that asks the
+// same question. `git lfs install` defines a filter on almost every machine,
+// so each working-tree `git diff` in a chain asks it, and in a checkout of a
+// few tens of thousands of files a chain of ten such reads spent the hook's
+// whole budget asking it again. Nothing the hook evaluates runs in between,
+// so the attributes and the path listing are the ones the first answer read.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn unused(
+    binary: &Path,
+    leading: &[String],
+    cwd: &Path,
+    home: &Path,
+    environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    deadline: Instant,
+    named: &[&str],
+    repository_optional: bool,
+    tracked_only: bool,
+) -> Option<bool> {
+    let inspect = || {
+        inspect_unused(
+            binary,
+            leading,
+            cwd,
+            home,
+            environment,
+            deadline,
+            named,
+            repository_optional,
+            tracked_only,
+        )
+    };
+    match memo_key(
+        binary,
+        leading,
+        cwd,
+        home,
+        environment,
+        named,
+        repository_optional,
+        tracked_only,
+    ) {
+        Some(key) => super::super::git_probe::memoized(key, inspect),
+        None => inspect(),
+    }
+}
+
+/// Everything the filter answer depends on besides the repository itself:
+/// the Git that answers, its leading options, the directories and the
+/// configuration locations it reads, and the question asked. A path that is
+/// not text is never shared.
+#[allow(clippy::too_many_arguments)]
+fn memo_key(
+    binary: &Path,
+    leading: &[String],
+    cwd: &Path,
+    home: &Path,
+    environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    named: &[&str],
+    repository_optional: bool,
+    tracked_only: bool,
+) -> Option<super::super::git_probe::MemoKey> {
+    let configuration = match environment {
+        Some(value) => format!(
+            "{}\0{}",
+            value.xdg_config_home.as_deref().unwrap_or_default(),
+            value.git_config_no_system
+        ),
+        None => format!(
+            "ambient\0{}",
+            std::env::var_os("XDG_CONFIG_HOME")
+                .map(|directory| directory.into_string())
+                .transpose()
+                .ok()?
+                .unwrap_or_default()
+        ),
+    };
+    let mut arguments = leading.to_vec();
+    // A leading option holds no NUL, so the question cannot read as one.
+    arguments.push("\0named".to_owned());
+    arguments.extend(named.iter().map(|path| (*path).to_owned()));
+    Some((
+        format!(
+            "{}\0filters-unused\0{repository_optional}\0{tracked_only}\0{configuration}",
+            binary.to_str()?
+        ),
+        arguments,
+        Some(home.to_str()?.to_owned()),
+        Some(cwd.to_str()?.to_owned()),
+        false,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn inspect_unused(
     binary: &Path,
     leading: &[String],
     cwd: &Path,
@@ -245,6 +338,8 @@ fn bounded_output(
     if Instant::now() >= deadline {
         return None;
     }
+    #[cfg(test)]
+    super::super::git_probe::count_spawn();
     let mut child = command
         .stdin(if input.is_some() {
             Stdio::piped()

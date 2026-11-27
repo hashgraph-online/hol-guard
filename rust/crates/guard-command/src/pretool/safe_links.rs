@@ -237,7 +237,7 @@ fn removal_model(model: &crate::CanonicalCommandV1) -> bool {
         && model.wrapper_chain.is_empty()
 }
 
-fn temporary_removal_segment(
+pub(super) fn temporary_removal_segment(
     segment: &crate::CommandSegmentV1,
     context: super::PathContext<'_>,
 ) -> bool {
@@ -282,6 +282,23 @@ fn temporary_removal_segment(
         }
     }
     operands > 0
+}
+
+/// The operands of an `rm` the temporary-removal proof accepted: every word
+/// after its `-f`, `--force` and `--` options.
+pub(super) fn removal_operands(arguments: &[String]) -> impl Iterator<Item = &String> {
+    let mut options = true;
+    arguments.iter().filter(move |argument| {
+        if options && argument.as_str() == "--" {
+            options = false;
+            return false;
+        }
+        if options && matches!(argument.as_str(), "-f" | "--force") {
+            return false;
+        }
+        options = false;
+        true
+    })
 }
 
 fn removable_regular_file(value: &str, context: super::PathContext<'_>) -> bool {

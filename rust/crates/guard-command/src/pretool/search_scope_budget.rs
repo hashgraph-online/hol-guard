@@ -66,6 +66,10 @@ thread_local! {
     /// redirect rewrite. Those are not separate submissions and must not get
     /// budgets of their own, so only the outermost opens the budget.
     static INCLUDE_SCOPE_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// The hook's deadline for the submission open on this thread, when its
+    /// caller set one.
+    static SUBMISSION_DEADLINE: std::cell::Cell<Option<Instant>> =
+        const { std::cell::Cell::new(None) };
 }
 
 /// What an include walk is decided by: the directory it starts at, the globs
@@ -84,8 +88,16 @@ pub(super) type IncludeScopeKey = (PathBuf, String, Option<String>);
 /// The answers of the previous submission are dropped with it, because a
 /// tree is read again when the next one asks: what is in it may have changed
 /// since.
+#[cfg(test)]
 #[must_use]
 pub(crate) fn begin_include_scope_budget() -> IncludeScopeBudget {
+    begin_submission_budget(None)
+}
+
+/// [`begin_include_scope_budget`] for a submission the hook must answer by
+/// `deadline`. Only the outermost reading records it, like the budget.
+#[must_use]
+pub(crate) fn begin_submission_budget(deadline: Option<Instant>) -> IncludeScopeBudget {
     let depth = INCLUDE_SCOPE_DEPTH.with(|depth| {
         let entered = depth.get() + 1;
         depth.set(entered);
@@ -99,6 +111,7 @@ pub(crate) fn begin_include_scope_budget() -> IncludeScopeBudget {
             )));
         });
         INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
+        SUBMISSION_DEADLINE.with(|stored| stored.set(deadline));
     }
     IncludeScopeBudget
 }
@@ -116,6 +129,7 @@ impl Drop for IncludeScopeBudget {
         if left == 0 {
             INCLUDE_SCOPE_SPENT.with(|spent| spent.set(None));
             INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
+            SUBMISSION_DEADLINE.with(|stored| stored.set(None));
         }
     }
 }
@@ -127,6 +141,24 @@ fn clear_include_scope_budget() {
     INCLUDE_SCOPE_DEPTH.with(|depth| depth.set(0));
     INCLUDE_SCOPE_SPENT.with(|spent| spent.set(None));
     INCLUDE_SCOPE_ANSWERS.with(|answers| answers.borrow_mut().clear());
+    SUBMISSION_DEADLINE.with(|stored| stored.set(None));
+}
+
+/// When a walk held only to its entry count must stop: early enough that
+/// the extension check after it still fits inside the hook's deadline, the
+/// reserve a Git probe keeps. Without a deadline there is no clock.
+///
+/// Such a walk over a large checkout can take longer than the hook has. Run
+/// to the end, it left no time for the rest of the decision, and the hook
+/// failed without a review the user could approve.
+pub(in crate::pretool) fn submission_walk_stop() -> Option<Instant> {
+    SUBMISSION_DEADLINE
+        .with(std::cell::Cell::get)
+        .map(|deadline| {
+            deadline
+                .checked_sub(super::git_probe::HOOK_RESERVE)
+                .unwrap_or(deadline)
+        })
 }
 
 /// When an include walk starting now has to stop: what is left of the

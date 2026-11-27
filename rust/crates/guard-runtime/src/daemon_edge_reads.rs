@@ -677,6 +677,13 @@ fn answer_request(
     }
     if let Some(request) = request
         .as_ref()
+        .filter(|request| integrations::owns(request.method, request.path))
+    {
+        let response = integrations::response(request, body, config, reads);
+        return write_answer(client, &response, reads, stalled_write);
+    }
+    if let Some(request) = request
+        .as_ref()
         .filter(|request| request.method == "GET" && releases::owns(request.path))
     {
         let response = releases_response(request, config, reads).unwrap_or_else(|| {
@@ -1135,6 +1142,8 @@ pub(super) fn dashboard_build_id(static_dir: &Path) -> Option<String> {
 }
 #[path = "daemon_edge_discovery.rs"]
 mod discovery;
+#[path = "daemon_edge_integrations.rs"]
+mod integrations;
 #[path = "daemon_edge_network.rs"]
 mod network;
 #[path = "daemon_edge_plugin_updates.rs"]

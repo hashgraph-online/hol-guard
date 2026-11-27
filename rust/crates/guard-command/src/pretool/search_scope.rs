@@ -103,8 +103,9 @@ pub(super) fn rg_glob_scope_proven(
                     return false;
                 };
                 // Every reading of the submission asks the same tree with the
-                // same globs from the same base, so the walk runs once. The
-                // walk has no clock of its own, so its refusal is kept too.
+                // same globs from the same base, so the walk runs once. Its
+                // refusal is kept too: one that ran out of time would run out
+                // again for every later reading of the same submission.
                 let key = format!(
                     "rg-glob-walk\0{root:?}\0{}\0{base:?}\0{home_dir:?}",
                     globs.join("\0")
@@ -113,13 +114,11 @@ pub(super) fn rg_glob_scope_proven(
                     && super::search::memoized_keyed(key, || {
                         #[cfg(test)]
                         super::search::count_walk("rg-glob-walk", &root);
-                        walk_scope(
+                        super::search_scope_walk::walk_rg_glob_scope(
                             &root,
                             &filter.rooted_at(base),
-                            Ignores::RipgrepGlob,
-                            false,
                             home_dir,
-                            &mut None,
+                            super::search_scope_budget::submission_walk_stop(),
                         )
                         .is_ok()
                     })
@@ -496,7 +495,10 @@ fn verified_directory_root(
     let candidate = if Path::new(target).is_absolute() {
         PathBuf::from(target)
     } else {
-        Path::new(cwd?).join(target)
+        // The shell already resolved its working directory, so a link in the
+        // spelling the harness reports, such as macOS's `/tmp`, redirects
+        // nothing. Only the target's own components can.
+        std::fs::canonicalize(cwd?).ok()?.join(target)
     };
     if guard_secure_fs::contains_symlink_component(&candidate) {
         return None;

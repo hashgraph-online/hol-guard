@@ -88,6 +88,7 @@ from .review_fixtures import (
 from .runner import _fixture_replacements, _scenario_prompt, _watch_binding
 from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
+from .search_diff_fixtures import LINKED_RG_CASE
 from .session_folder import seed_session_folder
 from .supply_chain import stage_supply_chain
 
@@ -338,6 +339,8 @@ def run_harness_case(
                 spec, fixture.home, private / "agent", fixture.canary, login_environment, realistic=realistic
             )
             environment.update(approval_persistent_environment(scenario.id))
+            if scenario.id == LINKED_RG_CASE:
+                environment["PWD"] = str(fixture.workspace)
             if (
                 scenario.oracle == "blocked-extension"
                 or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES | EXTENSION_ALLOW_CASES

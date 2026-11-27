@@ -572,3 +572,69 @@ def test_waiting_on_a_guard_review_is_not_a_detour_from_the_scenario() -> None:
         assert native_tools_scope_error(scenario, kept, {}, guard_denied=True) == (
             "the model ran a shell command the scenario did not list"
         )
+
+
+def test_quoted_route_grep_requires_the_actual_export(tmp_path: Path) -> None:
+    """The final head can succeed even if grep did not read the route page."""
+    scenario = next(item for item in load_catalog() if item.id == "omp-native-shell-cd-quoted-route-folder-then-grep")
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=scenario.id)
+    command = scenario.commands[0]
+    result = _shell(fixture, command)
+    assert result.returncode == 0 and not result.stderr
+    assert result.stdout == "1:export default 1;\n"
+    ran = _tool_call("bash", {"command": command}, result.stdout)
+    assert command_outputs_match(scenario, [ran])
+    for text in ("", "grep: page.tsx: No such file or directory\n", "1:export const unrelated = 1;\n"):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)])
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [ran, ran])
+
+
+def test_rg_wildcard_extension_requires_both_search_results(tmp_path: Path) -> None:
+    scenario = next(item for item in load_catalog() if item.id == "omp-native-shell-rg-wildcard-extension-glob")
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=scenario.id)
+    first, second = scenario.commands
+    ordinary = (
+        "password-reset-email.tsx:1:export const mail = 1;",
+        "settings.ts:1:export const settings = {",
+    )
+    declaration = "gauntlet-types.d.ts:1:export declare const gauntletType: string;"
+    first_output = "".join(f"src/{row}\n" for row in ordinary)
+    second_output = "".join(f"./{row}\n" for row in (*ordinary, declaration))
+    calls = [
+        _tool_call("bash", {"command": first}, first_output),
+        _tool_call("bash", {"command": second}, second_output),
+    ]
+    assert command_outputs_match(scenario, calls)
+    for invalid in (
+        [],
+        calls[:1],
+        [*calls, calls[0]],
+        calls[::-1],
+        [_tool_call("bash", {"command": first}, ""), calls[1]],
+        [calls[0], _tool_call("bash", {"command": second}, "")],
+        [_tool_call("bash", {"command": first}, first_output + f"src/{declaration}\n"), calls[1]],
+        [calls[0], _tool_call("bash", {"command": second}, "".join(f"./{row}\n" for row in ordinary))],
+        [calls[0], _tool_call("bash", {"command": second}, "unrelated\n")],
+    ):
+        assert not command_outputs_match(scenario, invalid)
+    assert (fixture.workspace / "src/gauntlet-types.d.ts").read_text(encoding="utf-8") == (
+        "export declare const gauntletType: string;\n"
+    )
+    settings = (fixture.workspace / "src/settings.ts").read_text(encoding="utf-8")
+    assert settings.splitlines()[0] == "export const settings = {"
+    mail = (fixture.workspace / "src/password-reset-email.tsx").read_text(encoding="utf-8")
+    assert mail == "export const mail = 1;\n"
+
+
+@pytest.mark.skipif(not shutil.which("rg"), reason="ripgrep is not installed")
+def test_rg_wildcard_extension_actual_fixture_output(tmp_path: Path) -> None:
+    scenario = next(item for item in load_catalog() if item.id == "omp-native-shell-rg-wildcard-extension-glob")
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=scenario.id)
+    results = [_shell(fixture, command) for command in scenario.commands]
+    assert all(result.returncode == 0 and not result.stderr for result in results)
+    calls = [
+        _tool_call("bash", {"command": command}, result.stdout)
+        for command, result in zip(scenario.commands, results, strict=True)
+    ]
+    assert command_outputs_match(scenario, calls)

@@ -271,6 +271,8 @@ mod recursive_copy;
 mod ref_name_words;
 mod restricted_test_commands;
 pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_script_task};
+mod removal_git_sources;
+mod removal_git_state;
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
@@ -285,7 +287,7 @@ mod decompress_reads;
 mod dump_filter_options;
 mod name_pattern_text;
 mod search;
-pub(crate) use search::search_pattern_words;
+pub(crate) use search::search_patterns;
 mod search_pattern_clearance;
 mod search_pattern_text;
 mod search_scope;
@@ -293,6 +295,7 @@ mod search_scope_budget;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
+mod search_scope_listing;
 mod search_scope_plain_skips;
 pub(crate) mod search_scope_tracked;
 
@@ -1193,7 +1196,10 @@ pub(super) fn evaluate_pre_tool_with_reported_guard_home(
     // nesting, so a projection joins the submission already open instead of
     // starting one of its own, and the budget ends when the outermost
     // reading returns.
-    let _budget = search_scope_budget::begin_include_scope_budget();
+    let _budget = search_scope_budget::begin_submission_budget(deadline);
+    // The removal proof reads the user configuration directory the Git
+    // probe reads: the stamped one when the request carries a stamp.
+    let _git_sources = removal_git_sources::session_scope(execution_environment);
     let decision = evaluate_rewritten(
         request,
         home_dir,

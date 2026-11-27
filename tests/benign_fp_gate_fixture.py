@@ -191,6 +191,7 @@ class BenignFixture:
             "org_clone": self.org.parent / "app-portal-clone",
             **hooked_cwds(self.org),
             "tmp_org": self.tmp_org,
+            "tmp_org_app_alias": self.tmp_org.parent / "org-alias" / "app",
             "org_rebase": self.org.parent / "app-portal-rebase",
             "org_rebase_exec": self.org.parent / "app-portal-rebase-exec",
             "signed_app": self.home / "Code" / "signed" / "app-signed",
@@ -335,6 +336,8 @@ def build_fixture(root: Path) -> BenignFixture:
     # Private user-owned temp dir (mode 0700, as mktemp -d creates) with one existing file.
     private_tmp = Path(tempfile.mkdtemp(prefix="tmp.", dir=_system_tmp())).resolve()
     _write(private_tmp / "notes.txt", "first draft\n")
+    # A file a Git configuration could include: removing it drops a setting.
+    _write(private_tmp / "pager-settings.conf", "[pager]\n\tlog = false\n")
     _write(private_tmp / "resume-phase1.mjs", "console.log('resume');\n")
     # A probe file an earlier step wrote here: the cases that copy it into the
     # checkout are about where it came from, not about whether it exists.
@@ -431,6 +434,8 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(rustlib_core / "src" / "lib.rs", "//! core\n")
     _write(tmp_org / "app" / "package.json", '{"name": "app", "version": "1.0.0"}\n')
     _write(tmp_org / "app" / "src" / "index.ts", "export const railStage = 1;\n")
+    # The scratch checkout spelled through a directory link, as macOS spells `/private/tmp` as `/tmp`.
+    (tmp_org.parent / "org-alias").symlink_to("org", target_is_directory=True)
     _write(tmp_org / "app" / "tests" / "index.test.ts", "import { railStage } from '../src';\n")
     _write(tmp_org / "app" / "scripts" / "report.py", "print('report')\n")
     _write(tmp_org / "app" / ".gitignore", "node_modules/\n")

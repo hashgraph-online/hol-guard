@@ -54,7 +54,7 @@ from .review_fixtures import (
 )
 from .runtime_cases import runtime_case_checks
 from .script_cases import script_case_checks
-from .search_diff_fixtures import add_search_and_diff_content
+from .search_diff_fixtures import add_search_and_diff_content, linked_rg_workspace
 from .session_folder import session_folder_checks
 from .git_exclude_fixtures import add_own_exclude_setting
 from .package_store_fixtures import add_package_store_checkout
@@ -460,8 +460,20 @@ def create_fixture(
     add_nested_workspace_package(workspace, environment, scenario_id)
     add_backfill_shapes(workspace, environment, scenario_id)
     add_hidden_script_checkout(home, environment, scenario_id)
+    if scenario_id == "omp-native-shell-grep-globs-below-missing-folders":
+        for folder in ("scripts", "lib"):
+            path = workspace / folder
+            if path.exists() or path.is_symlink():
+                raise ValueError(f"Expected absent search root: {path}")
+    if scenario_id == "omp-native-shell-rg-wildcard-extension-glob":
+        # Make the exclusion observable: the first search must omit this
+        # ordinary declaration while the second must find it.
+        (workspace / "src/gauntlet-types.d.ts").write_bytes(
+            b"export declare const gauntletType: string;\n"
+        )
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
+    workspace = linked_rg_workspace(workspace, scenario_id)
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)
 
 
@@ -883,6 +895,10 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     (main / "app/items/[slug]").mkdir(parents=True)
     (main / "app/items/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
     tracked = add_main_shapes(main)
+    if scenario_id == "omp-native-shell-grep-globs-below-missing-folders":
+        # Keep the realistic script fixtures, but outside the literal search roots.
+        (main / "scripts").rename(main / "fixture-scripts")
+        tracked = tuple("fixture-scripts" if path == "scripts" else path for path in tracked)
     tracked = (*tracked, *add_ignore_negation_template(main, scenario_id))
     if scenario_id == BUN_TEST_CASE:
         (main / "calc.test.ts").write_text(BUN_TEST, encoding="utf-8", newline="\n")

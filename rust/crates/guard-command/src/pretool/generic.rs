@@ -459,6 +459,7 @@ fn evaluate_envelope(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     project_redirects: bool,
 ) -> PreToolResultV1 {
+    let _git_sources = super::removal_git_sources::session_scope(execution_environment);
     let context = super::PathContext {
         guard_home: context.guard_home,
         ..super::PathContext::for_session(context.home_dir, context.cwd, execution_environment)
@@ -1447,22 +1448,30 @@ fn evaluate_envelope(
         payload,
         execution_environment,
     );
-    super::workspace_contained::convert(
-        &mut result,
-        &pre_floor,
-        command_model,
-        controls,
-        super::PathContext {
-            home_dir,
-            cwd,
-            ..context
-        },
-        execution_environment,
-        harness,
-        event,
-        payload,
-        signals.command.as_deref(),
-    );
+    // The reading that decided the command has closed its submission, so
+    // the walks containment asks for, such as whether a search glob brings
+    // back what ignore rules hide, would run with no clock and could outlive
+    // the hook. They answer inside the same deadline instead; a walk the
+    // clock stops keeps the review.
+    {
+        let _containment_budget = super::search_scope_budget::begin_submission_budget(deadline);
+        super::workspace_contained::convert(
+            &mut result,
+            &pre_floor,
+            command_model,
+            controls,
+            super::PathContext {
+                home_dir,
+                cwd,
+                ..context
+            },
+            execution_environment,
+            harness,
+            event,
+            payload,
+            signals.command.as_deref(),
+        );
+    }
     super::git_local_writes::settle(
         &mut result,
         &pre_floor,

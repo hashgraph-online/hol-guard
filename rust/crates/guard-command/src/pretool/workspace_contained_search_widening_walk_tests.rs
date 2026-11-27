@@ -145,3 +145,124 @@ fn a_search_after_a_directory_change_keeps_review() {
     assert!(!segment_widens(&arguments, root.path(), false));
     assert!(segment_widens(&arguments, root.path(), true));
 }
+
+#[test]
+fn a_literal_ignore_rule_is_read_without_the_glob_matcher() {
+    // A walk asks every rule about every entry it meets. Over a large
+    // checkout whose `.gitignore` names dozens of directories outright, the
+    // glob matcher made the walk outlast the hook's deadline.
+    let root = tree(true);
+    let mut rules = String::from("node_modules/\n/build\n*.log\n");
+    for index in 0..40 {
+        rules.push_str(&format!("generated-{index}/\n/fixtures/output-{index}\n"));
+    }
+    write(root.path(), ".gitignore", &rules);
+    for index in 0..30 {
+        write(
+            root.path(),
+            &format!("src/module_{index}.ts"),
+            "export {};\n",
+        );
+    }
+    super::GLOB_RULE_READS.with(|reads| reads.set(0));
+    assert!(!widens(&["-n", "KEY", "-g", "*.ts*"], root.path()));
+    let reads = super::GLOB_RULE_READS.with(std::cell::Cell::get);
+    // Only `*.log` goes to the glob matcher: once for each of the ~35
+    // entries the walk meets, not 83 times.
+    assert!(reads > 0, "the wildcard rule was never read");
+    assert!(
+        reads <= 40,
+        "literal rules went to the glob matcher: {reads}"
+    );
+}
+
+#[test]
+fn a_literal_rule_matches_exactly_what_the_glob_matcher_matches() {
+    use crate::pretool::search_scope_glob::{glob_matches, is_literal};
+    let patterns = [
+        "node_modules",
+        "dist",
+        "app/generated",
+        ".env",
+        "a b",
+        "*.log",
+        "build?",
+        "[ab]c",
+        "\\#notes",
+        "out/**",
+    ];
+    let subjects = [
+        "node_modules",
+        "node_modules2",
+        "Node_modules",
+        "dist",
+        "dist/x",
+        "app/generated",
+        "app/generated/x",
+        "x/app/generated",
+        ".env",
+        ".envrc",
+        "a b",
+        "build1",
+        "ac",
+        "#notes",
+        "",
+    ];
+    for pattern in patterns {
+        assert_eq!(
+            is_literal(pattern),
+            !pattern.contains(['*', '?', '[', '\\']),
+            "{pattern}"
+        );
+        if !is_literal(pattern) {
+            continue;
+        }
+        for subject in subjects {
+            assert_eq!(
+                glob_matches(pattern, subject),
+                Ok(pattern == subject),
+                "{pattern} against {subject}"
+            );
+        }
+    }
+    // A pattern too long for the glob matcher is not literal, so it still
+    // reads as unreadable instead of as a plain comparison.
+    let long = "x".repeat(257);
+    assert!(!is_literal(&long));
+    assert!(glob_matches(&long, &long).is_err());
+}
+
+#[test]
+fn a_spent_hook_deadline_keeps_review_instead_of_walking_on() {
+    // The walk ran without a clock after the read review had spent part of
+    // the hook's deadline, so a large checkout outlived the hook. Once the
+    // submission has no time left the walk stops and keeps the review.
+    let root = tree(true);
+    let roomy = crate::pretool::search_scope_budget::begin_submission_budget(Some(
+        std::time::Instant::now() + std::time::Duration::from_secs(60),
+    ));
+    assert!(!widens(&["-n", "KEY", "-g", "*.ts"], root.path()));
+    drop(roomy);
+    let _spent = crate::pretool::search_scope_budget::begin_submission_budget(Some(
+        std::time::Instant::now(),
+    ));
+    assert!(widens(&["-n", "KEY", "-g", "*.ts"], root.path()));
+}
+
+#[test]
+fn the_issued_and_shaped_readings_walk_the_tree_once() {
+    let root = tree(true);
+    let _ = crate::pretool::search::take_walks();
+    let answers = crate::pretool::search::with_walk_memo(|| {
+        [
+            widens(&["-n", "KEY", "-g", "*.ts"], root.path()),
+            widens(&["-n", "KEY", "-g", "*.ts"], root.path()),
+        ]
+    });
+    assert_eq!(answers, [false, false]);
+    let walks: Vec<String> = crate::pretool::search::take_walks()
+        .into_iter()
+        .filter(|walk| walk.starts_with("rg-widening-walk"))
+        .collect();
+    assert_eq!(walks.len(), 1, "{walks:?}");
+}

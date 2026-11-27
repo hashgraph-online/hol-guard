@@ -920,9 +920,11 @@ refused. Register in `rust/crates/guard-runtime/src/daemon_route_paths.rs` and
 | `/v1/integrations/providers/<id>` | GET | Detail, shares, settings, last verify, cache counts. |
 | `/v1/integrations/providers/<id>/connect/preview` | POST | Returns the exact share set and a proof challenge. |
 | `/v1/integrations/providers/<id>/connect` | POST | Key plus one-use proof. Verifies, stores, enables. |
-| `/v1/integrations/providers/<id>/settings` | POST | Preview plus proof. Effect level per capability, enforcement and fresh-check toggles, fact toggles, quieted reason codes. |
+| `/v1/integrations/providers/<id>/settings/preview` | POST | Checks the requested settings against the manifest and managed policy, returns them and a proof challenge bound to them. |
+| `/v1/integrations/providers/<id>/settings` | POST | Preview plus proof. Effect level per capability, enforcement and fresh-check toggles, fact toggles. Applies exactly the previewed body. Quieted reason codes are deferred: a non-empty list is refused with `400 invalid_request` until they are stored and read back. |
+| `/v1/integrations/providers/<id>/disconnect/preview` | POST | Returns a proof challenge. |
 | `/v1/integrations/providers/<id>/disconnect` | POST | Proof. Deletes secret and cache. |
-| `/v1/integrations/providers/<id>/test` | POST | One live call for a user-typed public origin. Rate limited. |
+| `/v1/integrations/providers/<id>/test` | POST | One live call for a user-typed public origin, through the lookup executor. Rate limited by the provider's token bucket (`max_requests_per_minute`, shared with background lookups): `429` when empty. A non-public origin answers `400` and is never sent. |
 | `/v1/browser/sessions` | GET | Live sessions and posture. |
 | `/v1/browser/sites` | GET, POST | Site allow, ask, block list. POST is preview plus proof. |
 | `/v1/browser/grants` | GET, POST | Live grants. POST revokes. |
@@ -932,6 +934,31 @@ Errors follow the existing code style: `provider_integration_unavailable`, `prov
 `provider_capability_unavailable`. Rollback switch: `HOL_GUARD_PROVIDER_INTEGRATIONS=off` makes every
 route answer `provider_capability_unavailable` and makes `provider_integration_decide` a no-op, the
 same shape as `HOL_GUARD_DISCOVERY=off`.
+
+A challenge is bound to the provider, the action and the exact previewed body, expires after two
+minutes and is spent by the first apply that presents it, even a refused one. A requested setting
+that managed policy would change answers `409 provider_setting_managed`; managed policy is checked
+again at apply time. Other route codes: `404 provider_not_found`, `409 provider_not_connected`,
+`403 provider_proof_invalid`, `400 invalid_request`.
+
+The daemon edge answers these routes itself; they are never relayed. A caller needs the daemon's
+header token or a local dashboard session, and hosted dashboard origins are refused. When managed
+policy failed closed, or its `provider_integrations` value does not parse, every route answers
+`503 provider_managed_policy_unavailable` rather than guess at a floor; a store that cannot be opened
+answers `503 provider_store_unavailable`.
+
+`connect` spends its proof and checks the key format and opt-in facts first, then sends the
+manifest's `verify` request with no store lock held, under the managed network policy and the
+manifest's pinned hosts. Only a `2xx` answer stores the key and the connection row, which is bound
+to the SHA-256 digest of the manifest's source bytes. `401` or `403` answers
+`400 provider_key_invalid`, `429` answers `429 provider_rate_limited`, a refused host answers
+`403 provider_host_refused`, an oversized answer `502 provider_response_too_large`, and any other
+failure `502 provider_integration_unavailable`. A managed network policy Guard cannot honour answers
+`503 provider_managed_policy_unavailable` and sends nothing. A disconnect, settings apply or other
+connect that finished while the provider was being called wins: the late connect answers
+`409 provider_connect_superseded` and stores nothing. If the connection row cannot be written after
+the key was stored, the provider's previous key is put back. A session opened from an approval link
+for one request cannot read or change provider integrations.
 
 ### 6.10 Sponsors and discovery
 

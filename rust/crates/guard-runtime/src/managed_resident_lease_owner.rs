@@ -56,6 +56,19 @@ pub(in crate::managed_resident) struct ClientLease {
     identity: LeaseIdentity,
     heartbeat: Heartbeat,
     deadline: Option<Instant>,
+    // The resident the last request of this lease reached, so a long-lived
+    // client (a stream) can ask it again without rediscovering the home.
+    warm: std::sync::Mutex<Option<WarmResident>>,
+}
+
+/// A resident of this client's own runtime that answered a request made under
+/// this lease. Only a hint: the next request still checks the process, its
+/// endpoint identity and the token handshake, and discovers the home again
+/// when any of that fails.
+#[derive(Clone)]
+pub(in crate::managed_resident) struct WarmResident {
+    pub(in crate::managed_resident) scope: PathBuf,
+    pub(in crate::managed_resident) state: crate::resident_state::ResidentState,
 }
 
 impl ClientLease {
@@ -96,6 +109,17 @@ impl ClientLease {
             identity,
             heartbeat,
             deadline: None,
+            warm: std::sync::Mutex::new(None),
+        }
+    }
+
+    pub(in crate::managed_resident) fn take_warm(&self) -> Option<WarmResident> {
+        self.warm.lock().ok().and_then(|mut warm| warm.take())
+    }
+
+    pub(in crate::managed_resident) fn keep_warm(&self, resident: WarmResident) {
+        if let Ok(mut warm) = self.warm.lock() {
+            *warm = Some(resident);
         }
     }
 

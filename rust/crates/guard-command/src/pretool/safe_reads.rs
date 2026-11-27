@@ -12,7 +12,6 @@ mod read_globs;
 mod sed_reads;
 #[path = "test_predicates.rs"]
 mod test_predicates;
-pub(super) use super::directory_targets::verified_cwd_target;
 pub(super) use super::read_paths::{
     bounded_file_read_target, bounded_omp_directory_read_target, bounded_omp_file_read_target,
     bounded_omp_selector_requires_review, bounded_read_target, bounded_structured_file_read_target,

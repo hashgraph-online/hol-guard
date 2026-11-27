@@ -272,6 +272,8 @@ pub(crate) fn requires_header_token(path: &str) -> bool {
     (n >= 3 && starts_with(&parts, &["v1", "hooks"]))
         // Sponsored extension discovery: authenticated daemon routes.
         || (n >= 4 && starts_with(&parts, &["v1", "discovery", "extensions"]))
+        // Provider integrations: the edge answers them, never a hosted origin.
+        || (n >= 3 && starts_with(&parts, &["v1", "integrations", "providers"]))
         || (n == 3
             && starts_with(&parts, &["v1", "apps"])
             && HEADLESS_APP_ACTIONS.contains(&parts[2]))
@@ -339,6 +341,8 @@ pub(crate) fn local_surface_session_allowed(method: &str, path: &str) -> bool {
     let n = parts.len();
     if (n == 3 && starts_with(&parts, &["v1", "apps"]) && HEADLESS_APP_ACTIONS.contains(&parts[2]))
         || (n >= 2 && starts_with(&parts, &["v1", "supply-chain"]))
+        // The local dashboard's provider integration screens.
+        || (n >= 3 && starts_with(&parts, &["v1", "integrations", "providers"]))
     {
         return true;
     }

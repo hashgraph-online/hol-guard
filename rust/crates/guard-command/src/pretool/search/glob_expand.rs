@@ -5,7 +5,7 @@
 //! after the prefix, no hidden name other than benign project metadata, and
 //! no links between the screening root and any match.
 #[path = "glob_scope.rs"]
-mod glob_scope;
+pub(super) mod glob_scope;
 
 use super::{
     hidden_allowed, ReadContext, HAZARDS, MAX_GLOB_ENTRIES, MAX_GLOB_MATCHES, MAX_WALK_DEPTH,
@@ -149,7 +149,7 @@ fn named_entries(directory: &Path, pattern: &str) -> Option<Vec<PathBuf>> {
 /// anywhere below the directory refuses as well: the walk that proves a
 /// recursive search skips links, but the shell hands a matching link to the
 /// search as an operand, and the search follows it.
-fn search_glob_directory(
+pub(super) fn search_glob_directory(
     value: &str,
     context: ReadContext<'_>,
 ) -> Option<(PathBuf, Option<String>)> {
@@ -287,15 +287,15 @@ fn expand_bounded(
         .split('/')
         .filter(|part| !part.is_empty() && *part != ".")
         .collect();
-    // A pattern ending in `/` matches only directories, as `src/*/` does in
-    // the shell, so its last component descends like an inner one.
-    let directories_only = scope.pattern.ends_with('/');
+    // A pattern ending in `/` or `/.` matches only directories, as `src/*/`
+    // does in the shell, so its last component descends like an inner one.
+    let directories_only = super::glob_search_cleared::directories_only(scope.pattern);
     let mut current = vec![scope.base.clone()];
     let mut inspected = 0_usize;
     for (index, component) in components.iter().enumerate() {
         let last = index + 1 == components.len();
         let is_pattern = component.contains(GLOB_CHARACTERS);
-        let keeps_files = last && !(directories_only && is_pattern);
+        let keeps_files = last && !directories_only;
         // `ls -a` already prints every hidden name a directory holds, so a
         // listing narrowed by a dot-leading pattern prints a subset of what
         // the bare listing prints. Only the last component earns that, and
@@ -325,7 +325,7 @@ fn expand_bounded(
                 // The shell keeps only literal continuations that exist.
                 let path = directory.join(component);
                 let exists = std::fs::symlink_metadata(&path).is_ok();
-                if (last && exists) || traversable(&path)? {
+                if (keeps_files && exists) || traversable(&path)? {
                     next.push(path);
                 }
                 continue;
