@@ -120,8 +120,13 @@ static ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| {
     // Equivalent to `(?im)` + the three capture arms of `_ASSIGNMENT`; the
     // `(?P=quote)` backreference is expanded into distinct named groups so the
     // regex crate (no backreference support) can compile it.
+    //
+    // A quoted value may start on the next line, as a formatter wraps
+    // `const apiKey =` before a long string. An unquoted one must start on
+    // the separator's own line: in `API_TOKEN=` followed by `NEXT_NAME=value`
+    // the first name is empty, and the next line is its own assignment.
     Regex::new(
-        r#"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{1,80})\s*[:=]\s*(?:(?P<quote>")(?P<secret>[^\s"',}{]{12,256})"|(?P<quote1>')(?P<secret_sq>[^\s"',}{]{12,256})'|(?P<secret_uq>[^\s"',}{]{12,256}))"#,
+        r#"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{1,80})\s*[:=](?:\s*(?P<quote>")(?P<secret>[^\s"',}{]{12,256})"|\s*(?P<quote1>')(?P<secret_sq>[^\s"',}{]{12,256})'|[ \t]*(?P<secret_uq>[^\s"',}{]{12,256}))"#,
     )
     .expect("ASSIGNMENT is a static literal")
 });
