@@ -15,6 +15,7 @@ import argparse
 import getpass
 import json
 import sys
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol, TextIO
@@ -133,6 +134,9 @@ def run_provider_command(
         return _fail(ProviderCommandError(code, str(exc)), as_json, output_stream, error_stream)
     except ProviderCommandError as exc:
         return _fail(exc, as_json, output_stream, error_stream)
+    except RuntimeError as exc:
+        # The daemon client could not load: the daemon is not running or its state is incomplete.
+        return _fail(ProviderCommandError("daemon_unavailable", str(exc)), as_json, output_stream, error_stream)
 
 
 def _fail(exc: ProviderCommandError, as_json: bool, output: TextIO, errors: TextIO) -> int:
@@ -212,8 +216,8 @@ class _Session:
             raise ProviderCommandError(
                 "invalid_request", f"The provider does not offer {', '.join(unknown)} as an opt-in fact."
             )
-        if not self.as_json:
-            _print_connect_preview(preview, shares, self.output)
+        if self._show_preview():
+            _print_connect_preview(preview, shares, self._preview_stream())
         self._confirm("Connect this provider?")
         payload: dict[str, object] = {
             "key": key,
@@ -226,9 +230,9 @@ class _Session:
     def _disconnect(self, base: str) -> int:
         calls = self._client()
         preview = calls.post(f"{base}/disconnect/preview", {}, timeout=_READ_TIMEOUT_S)
-        if not self.as_json:
+        if self._show_preview():
             provider = preview.get("provider_id")
-            print(f"Disconnecting {provider} deletes its key and every cached answer.", file=self.output)
+            print(f"Disconnecting {provider} deletes its key and every cached answer.", file=self._preview_stream())
         self._confirm("Disconnect this provider?")
         answer = calls.post(f"{base}/disconnect", {"proof": _challenge(preview)}, timeout=_READ_TIMEOUT_S)
         return self._emit(answer, _print_disconnected)
@@ -262,9 +266,13 @@ class _Session:
         else:
             facts = _strings(detail.get("enabled_opt_in_facts"))
         change: dict[str, object] = {"settings": settings, "enabled_opt_in_facts": facts}
-        preview = calls.post(f"{base}/settings/preview", change, timeout=_READ_TIMEOUT_S)
-        if not self.as_json:
-            _print_settings_preview(preview, self.output)
+        # The daemon refuses the preview if the stored settings moved since this read, and refuses
+        # the apply if they move before it, so no other client's change is overwritten.
+        baseline = detail.get("settings_baseline")
+        request = {**change, "baseline": baseline} if isinstance(baseline, str) and baseline else change
+        preview = calls.post(f"{base}/settings/preview", request, timeout=_READ_TIMEOUT_S)
+        if self._show_preview():
+            _print_settings_preview(preview, self._preview_stream())
         self._confirm("Apply these settings?")
         apply = {**change, "proof": _challenge(preview)}
         answer = calls.post(f"{base}/settings", apply, timeout=_READ_TIMEOUT_S)
@@ -272,6 +280,12 @@ class _Session:
 
     def _read_key(self) -> str:
         if self.args.key_stdin:
+            if self.stdin.isatty():
+                # A terminal would echo the key as it is typed; the prompt below hides it.
+                raise ProviderCommandError(
+                    "key_stdin_needs_a_pipe",
+                    "--key-stdin reads a piped key. In a terminal, leave it off and paste the key at the prompt.",
+                )
             key = self.stdin.readline().strip()
         else:
             if not self.stdin.isatty():
@@ -279,10 +293,18 @@ class _Session:
                     "terminal_required",
                     "Run this in a terminal, or pass --key-stdin to read the key from standard input.",
                 )
-            key = getpass.getpass("Provider key (not shown): ", stream=self.errors).strip()
+            key = _read_hidden("Provider key (not shown): ", self.errors)
         if not key:
             raise ProviderCommandError("provider_key_missing", "No key was entered.")
         return key
+
+    def _show_preview(self) -> bool:
+        # A JSON caller that passes --yes reads the answer only; one that will be asked sees the
+        # preview first, on standard error.
+        return not (self.as_json and self.args.yes)
+
+    def _preview_stream(self) -> TextIO:
+        return self.errors if self.as_json else self.output
 
     def _confirm(self, question: str) -> None:
         if self.args.yes:
@@ -290,9 +312,22 @@ class _Session:
         # With --key-stdin the key used up standard input, so no answer can follow it there.
         if getattr(self.args, "key_stdin", False) or not self.stdin.isatty():
             raise ProviderCommandError("confirmation_required", "Pass --yes to apply without a terminal prompt.")
-        print(f"{question} [y/N] ", end="", file=self.output, flush=True)
+        # With --json, standard output carries only the final JSON answer.
+        print(f"{question} [y/N] ", end="", file=self._preview_stream(), flush=True)
         if self.stdin.readline().strip().lower() not in {"y", "yes"}:
             raise ProviderCommandError("cancelled", "Nothing was changed.")
+
+
+def _read_hidden(prompt: str, stream: TextIO) -> str:
+    # getpass falls back to an echoing read when it cannot turn echo off; refuse that instead.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        try:
+            return getpass.getpass(prompt, stream=stream).strip()
+        except getpass.GetPassWarning as exc:
+            raise ProviderCommandError(
+                "terminal_required", "This terminal cannot hide the key. Pipe it in with --key-stdin."
+            ) from exc
 
 
 class _Calls:

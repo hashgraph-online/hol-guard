@@ -278,3 +278,71 @@ def test_enforce_blocks_sets_and_lowers_every_capability(
         assert body is not None
         assert [row["effect"] for row in body["settings"]] == [effect]
     capsys.readouterr()
+
+
+def test_settings_send_the_baseline_they_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    answers = {
+        BASE: {**DETAIL, "settings_baseline": "a" * 64},
+        f"{BASE}/settings/preview": _preview(settings=[], enabled_opt_in_facts=[]),
+        f"{BASE}/settings": {"provider_id": SHIELD, "applied": True},
+    }
+    client = _install(monkeypatch, answers, io.StringIO())
+    argv = ["guard", "integrations", "settings", SHIELD, "--enforce-blocks", "on", "--yes"]
+    assert cli.main(argv) == 0
+    _method, path, preview_body = client.sent[1]
+    assert path == f"{BASE}/settings/preview"
+    assert preview_body is not None and preview_body["baseline"] == "a" * 64
+    _method, path, apply_body = client.sent[2]
+    assert apply_body is not None and "baseline" not in apply_body, "the proof carries the baseline"
+
+
+def test_json_with_a_prompt_keeps_stdout_for_the_answer(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    answers = {
+        f"{BASE}/disconnect/preview": _preview(),
+        f"{BASE}/disconnect": {"provider_id": SHIELD, "disconnected": True},
+    }
+    _install(monkeypatch, answers, Terminal("y\n"))
+    assert cli.main(["guard", "integrations", "disconnect", SHIELD, "--json"]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {"provider_id": SHIELD, "disconnected": True}
+    assert "deletes its key" in captured.err, "the preview is shown before the person answers"
+    assert "Disconnect this provider? [y/N]" in captured.err
+
+
+def test_key_stdin_refuses_a_terminal_that_would_echo_the_key(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    client = _install(monkeypatch, {}, Terminal(KEY + "\n"))
+    assert cli.main(["guard", "integrations", "connect", SHIELD, "--key-stdin", "--yes"]) == 2
+    assert "key_stdin_needs_a_pipe" in capsys.readouterr().err
+    assert client.sent == []
+
+
+def test_a_prompt_that_cannot_hide_the_key_is_refused(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def echoing(_prompt: str, stream: object = None) -> str:
+        import warnings
+
+        warnings.warn("echo is on", providers.getpass.GetPassWarning, stacklevel=1)
+        return KEY
+
+    client = _install(monkeypatch, {}, Terminal("y\n"))
+    monkeypatch.setattr(providers.getpass, "getpass", echoing)
+    assert cli.main(["guard", "integrations", "connect", SHIELD]) == 2
+    assert "terminal_required" in capsys.readouterr().err
+    assert client.sent == []
+
+
+def test_a_daemon_that_cannot_load_answers_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def unavailable(_args: object) -> object:
+        raise RuntimeError("Guard daemon state is incomplete.")
+
+    monkeypatch.setattr(providers, "_daemon_client", unavailable)
+    assert cli.main(["guard", "integrations", "list", "--json"]) == 2
+    answer = json.loads(capsys.readouterr().out)
+    assert answer["ok"] is False and answer["error"]["code"] == "daemon_unavailable"

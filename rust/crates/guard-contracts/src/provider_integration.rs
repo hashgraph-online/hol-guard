@@ -100,6 +100,10 @@ pub struct ProviderDetailV1 {
     pub last_verified_at_ms: Option<u64>,
     /// Cached signal count per capability id.
     pub cache_counts: BTreeMap<String, u64>,
+    /// Digest of the stored settings and opt-in facts. A settings preview that names it is
+    /// refused when the stored state has changed since this read.
+    #[serde(default)]
+    pub settings_baseline: String,
 }
 
 /// `POST .../connect/preview` response: the exact share set and a one-use proof challenge.
