@@ -215,7 +215,10 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
                     &expanded, ancestor, home,
                 ) || hidden_listing::absent_repository_hidden_path(
                     &expanded, ancestor, home, cwd,
-                ) || private_temporary;
+                ) || private_temporary
+                    || super::listing_temporary::absent_shared_temporary_leaf(
+                        &expanded, ancestor, &missing,
+                    );
                 // A missing name below a tool's own directory in the home
                 // directory (`lib` below `~/.nvm/versions/node/v24.9.0`).
                 let home_tool_ancestor = hidden_listing::absent_below_home_tool_directory(

@@ -7,6 +7,9 @@
 //!   `~/kubeconfig.yaml`. Reading it stays reviewed; confirming it exists
 //!   does not expose it. Symlinks, directories (whose entries could name
 //!   further secrets) and paths inside credential stores stay guarded.
+//! * one socket or named pipe outside the credential stores, such as a
+//!   database server's `/tmp/.s.PGSQL.5432`. A listing stats it and never
+//!   opens it.
 //! * a global package tree below a node version manager or runtime in the
 //!   home directory, such as `~/.bun/install/global/node_modules` or
 //!   `~/.nvm/versions/node/<v>/lib/node_modules`. The path must pass through
@@ -82,6 +85,50 @@ pub(in crate::pretool) fn credential_file_metadata_operand(
             false,
             true,
         )
+}
+
+/// `ls -la /tmp/.s.PGSQL.5432`: one socket or named pipe, which a listing
+/// stats and never opens, so it holds no bytes the listing could print. The
+/// entry itself must be the socket or pipe (a link to one keeps its review),
+/// and it must sit where a read may already name a file, outside every
+/// credential store and sensitive location.
+pub(in crate::pretool) fn special_file_metadata_operand(
+    value: &str,
+    context: crate::pretool::PathContext<'_>,
+) -> bool {
+    let Some(path) = plain_operand(value, context) else {
+        return false;
+    };
+    if !std::fs::symlink_metadata(&path).is_ok_and(|metadata| special_file(&metadata.file_type())) {
+        return false;
+    }
+    let Ok(canonical) = std::fs::canonicalize(&path) else {
+        return false;
+    };
+    let Some(parent) = canonical.parent() else {
+        return false;
+    };
+    std::fs::metadata(&canonical).is_ok_and(|metadata| special_file(&metadata.file_type()))
+        && guard_secure_fs::sensitive_path_family(&canonical).is_none()
+        && guard_secure_fs::credential_store_names::clears_store_screen(&canonical)
+        && crate::pretool::read_paths::resolved_path_allowed_for_operation(
+            parent,
+            context.home_dir,
+            context.cwd,
+            false,
+            true,
+        )
+}
+
+#[cfg(unix)]
+fn special_file(file_type: &std::fs::FileType) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    file_type.is_socket() || file_type.is_fifo()
+}
+
+#[cfg(not(unix))]
+fn special_file(_file_type: &std::fs::FileType) -> bool {
+    false
 }
 
 /// Component names that hold a tool's download or build caches rather than

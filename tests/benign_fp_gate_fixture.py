@@ -41,6 +41,7 @@ import json
 import os
 import secrets
 import shutil
+import socket
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -339,6 +340,10 @@ def build_fixture(root: Path) -> BenignFixture:
     # A running local Postgres leaves its socket and lock beside it, which is
     # what a session lists when it checks whether the server is up.
     _write(private_tmp / ".s.PGSQL.5432.lock", "4242\n")
+    if hasattr(socket, "AF_UNIX"):
+        # The socket itself, which `ls -la` stats without opening.
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+            server.bind(str(private_tmp / ".s.PGSQL.5432"))
     # Files a session preserved before resetting its checkout, copied back by glob.
     _write(private_tmp / "preserved" / "src" / "discovery" / "catalog.ts", "export const catalog = [];\n")
     _write(private_tmp / "preserved" / "src" / "discovery" / "rank.ts", "export const rank = 1;\n")
