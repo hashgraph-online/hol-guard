@@ -138,6 +138,17 @@ pub(crate) fn state_scope(base: &Path, digest: &str) -> Result<PathBuf, String> 
     )
 }
 
+/// Whether the state file a resident published for `generation` is still in
+/// `scope`. A resident removes its file when it retires, so a missing file
+/// means a remembered resident is going away. Presence proves nothing about the
+/// resident: callers still check its process, endpoint and token.
+pub(crate) fn state_file_present(scope: &Path, generation: u64) -> bool {
+    fs::symlink_metadata(scope.join(format!(
+        "{STATE_FILE_PREFIX}{generation:020}{STATE_FILE_SUFFIX}"
+    )))
+    .is_ok_and(|metadata| metadata.is_file())
+}
+
 /// Return the already-private guard-home root for a native runtime state base.
 /// Production state lives at `<guard-home>/native-runtime`; test fixtures may
 /// use the state base itself as their private root.

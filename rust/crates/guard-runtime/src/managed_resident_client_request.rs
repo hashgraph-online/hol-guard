@@ -60,10 +60,17 @@ fn try_live_or_restart(
     payload: &[u8],
     deadline: Instant,
     preferred_digest: &str,
+    client_lease: &lease::ClientLease,
     last_failure: &mut Option<String>,
 ) -> Result<Option<Vec<u8>>, String> {
     retain_live_failure(
-        try_home_states(state_base, payload, deadline, preferred_digest),
+        try_home_states(
+            state_base,
+            payload,
+            deadline,
+            preferred_digest,
+            client_lease,
+        ),
         last_failure,
     )
 }
@@ -81,143 +88,209 @@ fn retain_live_failure(
     }
 }
 
+/// What asking one discovered resident came to.
+enum StateOutcome {
+    Answered(Vec<u8>),
+    /// This resident cannot answer; try the next one.
+    Next,
+    /// The deadline passed before it was asked.
+    Expired,
+}
+
 fn try_home_states(
     state_base: &Path,
     payload: &[u8],
     deadline: Instant,
     preferred_digest: &str,
+    client_lease: &lease::ClientLease,
 ) -> Result<Option<Vec<u8>>, String> {
     let runtime_digest = runtime_digest()?;
-    let states = discover_home_states_prefer(state_base, Some(preferred_digest))?;
-    note("client_states", states.len());
-    for (scope, _digest, state) in states {
-        if deadline.saturating_duration_since(Instant::now()).is_zero() {
-            return Ok(None);
-        }
-        // Hand the home over from an older resident nothing of its runtime
-        // still uses; this client then starts its own resident.
-        if handoff::retire_orphaned_foreign_resident(
-            state_base,
-            &scope,
-            &state,
-            &runtime_digest,
-            deadline,
-        ) {
-            note("client_state_foreign_retired", 1);
-            handoff_record::record(
-                state_base,
-                &runtime_digest,
-                &state.runtime_sha256,
-                Retirement::Orphaned,
-            );
-            continue;
-        }
-        let same_runtime = runtime_digest == state.runtime_sha256;
-        if observe(Phase::ClientIdentity, || {
-            if same_runtime {
-                validate_package_process_identity(state.process_id, &state.process_start_marker)
-            } else {
-                validate_runtime_process_identity(
-                    state.process_id,
-                    &state.process_start_marker,
-                    &state.runtime_sha256,
-                )
-            }
-        })
-        .is_err()
+    // A long-lived client asks the resident that answered it last before
+    // listing the home again. Discovery re-reads and re-checks every state
+    // file, which costs far more than the request on a loaded host, and a
+    // stream sends several requests per hook. The warm resident gets the same
+    // process, endpoint and token checks as a discovered one; a resident that
+    // retired its state file, or fails any check, sends this request back
+    // through discovery.
+    if let Some(warm) = client_lease.take_warm() {
+        if warm.state.runtime_sha256 == runtime_digest
+            && crate::resident_state::state_file_present(&warm.scope, warm.state.generation)
         {
-            continue;
-        }
-        let token = token_from_state(&state)?;
-        let identity = crate::resident_client::ExpectedProcessIdentity {
-            process_id: state.process_id,
-            start_marker: &state.process_start_marker,
-            runtime: if same_runtime {
-                crate::resident_client::ExpectedRuntime::Package
-            } else {
-                crate::resident_client::ExpectedRuntime::Digest(&state.runtime_sha256)
-            },
-        };
-        if !same_runtime && handoff::requires_own_runtime(payload) {
-            // Never let another runtime's resident judge this request: ask it
-            // to make way so this client starts a resident of its own.
-            if handoff::retire_foreign_resident_for_request(
-                &scope,
-                &state,
-                &runtime_digest,
+            match try_state(
+                state_base,
                 payload,
                 deadline,
-            ) {
-                note("client_state_foreign_retired_for_request", 1);
-                handoff_record::record(
-                    state_base,
-                    &runtime_digest,
-                    &state.runtime_sha256,
-                    Retirement::Rejected,
-                );
-                continue;
-            }
-            // The foreign resident would not make way for a request only this
-            // runtime may answer, because its own clients still use it.
-            return Err(format!(
-                "native_resident_live_request_failed:{}",
-                handoff::SHUTDOWN_REFUSED_IN_USE
-            ));
-        }
-        let timeout = deadline.saturating_duration_since(Instant::now());
-        if timeout.is_zero() {
-            return Ok(None);
-        }
-        match crate::resident_client::send_request_for_digest_detailed(
-            &state.transport,
-            &state.endpoint,
-            &token,
-            payload,
-            timeout,
-            &identity,
-        ) {
-            // A foreign resident that rejects this runtime's policy snapshot or
-            // a request it predates never will admit it; replace it with a
-            // resident of our runtime.
-            Ok(response)
-                if handoff::retire_foreign_resident_rejecting_request(
-                    &scope,
-                    &state,
-                    &runtime_digest,
-                    &response,
-                    deadline,
-                ) =>
-            {
-                note("client_state_foreign_rejected", 1);
-                handoff_record::record(
-                    state_base,
-                    &runtime_digest,
-                    &state.runtime_sha256,
-                    Retirement::Rejected,
-                );
-            }
-            Ok(reply) if same_runtime => return Ok(Some(reply)),
-            Ok(reply) => return Ok(Some(fallback::reply(payload, reply, deadline))),
-            Err(error)
-                if containment::skip_failed_home_state_request(&error, same_runtime, &state) =>
-            {
-                note("client_state_request_skipped", 1);
-            }
-            Err(error) => {
-                let code = if error.code.len() <= 96
-                    && !error.code.is_empty()
-                    && error.code.bytes().all(|byte| {
-                        byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
-                    }) {
-                    error.code.as_str()
-                } else {
-                    "native_client_request_failed"
-                };
-                return Err(format!("native_resident_live_request_failed:{code}"));
+                &runtime_digest,
+                &warm.scope,
+                &warm.state,
+            )? {
+                StateOutcome::Answered(reply) => {
+                    note("client_state_warm", 1);
+                    client_lease.keep_warm(warm);
+                    return Ok(Some(reply));
+                }
+                StateOutcome::Expired => return Ok(None),
+                StateOutcome::Next => note("client_state_warm_missed", 1),
             }
         }
     }
+    let states = discover_home_states_prefer(state_base, Some(preferred_digest))?;
+    note("client_states", states.len());
+    for (scope, _digest, state) in states {
+        match try_state(
+            state_base,
+            payload,
+            deadline,
+            &runtime_digest,
+            &scope,
+            &state,
+        )? {
+            StateOutcome::Answered(reply) => {
+                if state.runtime_sha256 == runtime_digest {
+                    client_lease.keep_warm(lease::WarmResident { scope, state });
+                }
+                return Ok(Some(reply));
+            }
+            StateOutcome::Expired => return Ok(None),
+            StateOutcome::Next => {}
+        }
+    }
     Ok(None)
+}
+
+fn try_state(
+    state_base: &Path,
+    payload: &[u8],
+    deadline: Instant,
+    runtime_digest: &str,
+    scope: &Path,
+    state: &crate::resident_state::ResidentState,
+) -> Result<StateOutcome, String> {
+    if deadline.saturating_duration_since(Instant::now()).is_zero() {
+        return Ok(StateOutcome::Expired);
+    }
+    // Hand the home over from an older resident nothing of its runtime
+    // still uses; this client then starts its own resident.
+    if handoff::retire_orphaned_foreign_resident(state_base, scope, state, runtime_digest, deadline)
+    {
+        note("client_state_foreign_retired", 1);
+        handoff_record::record(
+            state_base,
+            runtime_digest,
+            &state.runtime_sha256,
+            Retirement::Orphaned,
+        );
+        return Ok(StateOutcome::Next);
+    }
+    let same_runtime = runtime_digest == state.runtime_sha256;
+    if observe(Phase::ClientIdentity, || {
+        if same_runtime {
+            validate_package_process_identity(state.process_id, &state.process_start_marker)
+        } else {
+            validate_runtime_process_identity(
+                state.process_id,
+                &state.process_start_marker,
+                &state.runtime_sha256,
+            )
+        }
+    })
+    .is_err()
+    {
+        return Ok(StateOutcome::Next);
+    }
+    let token = token_from_state(state)?;
+    let identity = crate::resident_client::ExpectedProcessIdentity {
+        process_id: state.process_id,
+        start_marker: &state.process_start_marker,
+        runtime: if same_runtime {
+            crate::resident_client::ExpectedRuntime::Package
+        } else {
+            crate::resident_client::ExpectedRuntime::Digest(&state.runtime_sha256)
+        },
+    };
+    if !same_runtime && handoff::requires_own_runtime(payload) {
+        // Never let another runtime's resident judge this request: ask it
+        // to make way so this client starts a resident of its own.
+        if handoff::retire_foreign_resident_for_request(
+            scope,
+            state,
+            runtime_digest,
+            payload,
+            deadline,
+        ) {
+            note("client_state_foreign_retired_for_request", 1);
+            handoff_record::record(
+                state_base,
+                runtime_digest,
+                &state.runtime_sha256,
+                Retirement::Rejected,
+            );
+            return Ok(StateOutcome::Next);
+        }
+        // The foreign resident would not make way for a request only this
+        // runtime may answer, because its own clients still use it.
+        return Err(format!(
+            "native_resident_live_request_failed:{}",
+            handoff::SHUTDOWN_REFUSED_IN_USE
+        ));
+    }
+    let timeout = deadline.saturating_duration_since(Instant::now());
+    if timeout.is_zero() {
+        return Ok(StateOutcome::Expired);
+    }
+    match crate::resident_client::send_request_for_digest_detailed(
+        &state.transport,
+        &state.endpoint,
+        &token,
+        payload,
+        timeout,
+        &identity,
+    ) {
+        // A foreign resident that rejects this runtime's policy snapshot or
+        // a request it predates never will admit it; replace it with a
+        // resident of our runtime.
+        Ok(response)
+            if handoff::retire_foreign_resident_rejecting_request(
+                scope,
+                state,
+                runtime_digest,
+                &response,
+                deadline,
+            ) =>
+        {
+            note("client_state_foreign_rejected", 1);
+            handoff_record::record(
+                state_base,
+                runtime_digest,
+                &state.runtime_sha256,
+                Retirement::Rejected,
+            );
+        }
+        Ok(reply) if same_runtime => return Ok(StateOutcome::Answered(reply)),
+        Ok(reply) => {
+            return Ok(StateOutcome::Answered(fallback::reply(
+                payload, reply, deadline,
+            )))
+        }
+        Err(error) if containment::skip_failed_home_state_request(&error, same_runtime, state) => {
+            note("client_state_request_skipped", 1);
+        }
+        Err(error) => {
+            let code = if error.code.len() <= 96
+                && !error.code.is_empty()
+                && error
+                    .code
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            {
+                error.code.as_str()
+            } else {
+                "native_client_request_failed"
+            };
+            return Err(format!("native_resident_live_request_failed:{code}"));
+        }
+    }
+    Ok(StateOutcome::Next)
 }
 
 /// What holds the home-wide owner lock, as far as discovery can tell.
@@ -346,7 +419,7 @@ fn client_request_with_deadline_inner(
     state_base: &Path,
     payload: &[u8],
     overall_deadline: Instant,
-    _client_lease: &lease::ClientLease,
+    client_lease: &lease::ClientLease,
     last_failure: &mut Option<String>,
 ) -> Result<Vec<u8>, String> {
     // Keep the caller's budget intact. Windows spawn already has
@@ -355,14 +428,22 @@ fn client_request_with_deadline_inner(
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
     }
-    let (digest, _update_lock, scope) = observe(Phase::ClientPrepare, || -> Result<_, String> {
+    // The runtime scope is only needed to start a resident, so a request a
+    // live resident answers skips creating and checking it.
+    let (digest, _update_lock) = observe(Phase::ClientPrepare, || -> Result<_, String> {
         let digest = runtime_digest()?;
         let update_lock = crate::resident_update_lock::acquire_shared(state_base, &digest)?;
-        let scope = state_scope(state_base, &digest)?;
-        Ok((digest, update_lock, scope))
+        Ok((digest, update_lock))
     })?;
     if let Some(response) = observe(Phase::ClientDiscovery, || {
-        try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
+        try_live_or_restart(
+            state_base,
+            payload,
+            overall_deadline,
+            &digest,
+            client_lease,
+            last_failure,
+        )
     })? {
         return Ok(response);
     }
@@ -374,6 +455,7 @@ fn client_request_with_deadline_inner(
     if Instant::now() >= overall_deadline {
         return Err("native_client_deadline_exceeded".to_owned());
     }
+    let scope = observe(Phase::ClientPrepare, || state_scope(state_base, &digest))?;
     // Older per-digest launchers left their startup marker in the runtime
     // scope.  Retire only an authenticated stale marker before taking the
     // home-wide lock; a live marker remains an active startup signal.
@@ -396,6 +478,7 @@ fn client_request_with_deadline_inner(
                         payload,
                         overall_deadline,
                         &digest,
+                        client_lease,
                         last_failure,
                     )? {
                         return Ok(Some(response));
@@ -419,7 +502,14 @@ fn client_request_with_deadline_inner(
         return Err("native_client_deadline_exceeded".to_owned());
     }
     if let Some(response) = observe(Phase::ClientDiscovery, || {
-        try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
+        try_live_or_restart(
+            state_base,
+            payload,
+            overall_deadline,
+            &digest,
+            client_lease,
+            last_failure,
+        )
     })? {
         return Ok(response);
     }
@@ -454,7 +544,14 @@ fn client_request_with_deadline_inner(
     let deadline = overall_deadline.min(Instant::now() + startup_limit(payload));
     let request_result = observe(Phase::ClientSpawnWait, || {
         start_wait::wait_for_response(&mut spawned, deadline, || {
-            try_live_or_restart(state_base, payload, overall_deadline, &digest, last_failure)
+            try_live_or_restart(
+                state_base,
+                payload,
+                overall_deadline,
+                &digest,
+                client_lease,
+                last_failure,
+            )
         })
     });
     start_wait::finish_request(request_result, || {
