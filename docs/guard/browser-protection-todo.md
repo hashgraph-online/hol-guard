@@ -605,9 +605,12 @@ transcript in the pull request (after BP-T052).
     contributed-set rules and the maintainer-owned verified list. A set that does not compile serves
     no provider. A test holds the embedded list to the directory. The shipped set is empty until a
     reviewed pack lands.
-- [ ] **BP-T131** CLI `hol-guard integrations list|status|connect|disconnect|test|settings`. The key is
+- [x] **BP-T131** CLI `hol-guard integrations list|status|connect|disconnect|test|settings`. The key is
   read from a prompt or stdin, never an argument, never echoed. Python is glue only, modeled on
   `cli/approval_pulse_commands.py` and `cli/approval_pulse_parser.py`.
+  - [x] `cli/integrations_providers_command.py` calls the daemon routes. Connect, disconnect and
+    settings show the daemon preview and ask (or need `--yes`) before spending its proof; the key is
+    read with `getpass` or one line of `--key-stdin` and sent only in the connect body.
 - [ ] **BP-T132** Integrations page `/extensions/integrations` and provider detail
   `/extensions/provider.<slug>`: capability text, "What leaves this device" rendered from `shares`,
   privacy and terms links, publisher verification state, Connect.

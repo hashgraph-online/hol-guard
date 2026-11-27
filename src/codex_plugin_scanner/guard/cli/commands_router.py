@@ -226,7 +226,7 @@ def _dispatch_guard_command(
 
         return run_browser_command(args, output_stream=output_stream, error_stream=error_stream)
     if args.guard_command == "integrations":
-        # Side-effect free: the native runtime checks one manifest against its recorded responses.
+        # conformance runs the native kit on one manifest; the other subcommands call the daemon routes.
         from .integrations_command import run_integrations_command
 
         return run_integrations_command(args, output_stream=output_stream, error_stream=error_stream)
