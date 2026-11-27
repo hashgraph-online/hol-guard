@@ -1191,6 +1191,7 @@ mod provider_integration_hot_path_tests;
 pub mod provider_integration_lookup;
 pub mod provider_integration_managed;
 pub mod provider_integration_proof;
+pub mod provider_integration_purge;
 pub mod provider_integration_routes;
 pub mod provider_integration_secret;
 pub mod provider_integration_shipped;

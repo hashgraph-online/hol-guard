@@ -602,6 +602,16 @@ pub(super) fn run() -> Result<(), String> {
             let health = managed_resident::lifecycle_health(std::path::Path::new(state_dir))?;
             write_json(&serde_json::json!({"health": health}))
         }
+        [command, flag, guard_home]
+            if command == "forget-provider-integrations" && flag == "--guard-home" =>
+        {
+            // Uninstall runs this before removing the Guard home, so no provider key outlives it.
+            let purge = crate::provider_integration_purge::purge_provider_integrations(
+                std::path::Path::new(guard_home),
+            )
+            .map_err(|error| error.code().to_owned())?;
+            write_json(&purge)
+        }
         [command, flag] if command == "command-model" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_command_model_bytes(&bytes)?;

@@ -173,6 +173,11 @@ fn a_proof_issued_on_one_request_is_spent_on_the_next() {
     let (status, body) = edge.call(Some(&none), "POST", &disconnect, json!({"proof": proof}));
     assert_eq!(status, 200, "{body}");
     assert_eq!(provider_connection(&edge.store(), SHIELD).unwrap(), None);
+    assert_eq!(
+        disconnected_provider(&(status, body)),
+        Some(SHIELD),
+        "the worker forgets the provider's pacing with the disconnect"
+    );
 
     let (status, _) = edge.call(Some(&none), "POST", &disconnect, json!({"proof": proof}));
     assert_ne!(status, 200, "a proof is spent once");
@@ -353,4 +358,13 @@ fn the_test_route_runs_one_lookup_under_the_store() {
         fake.requests().is_empty(),
         "an unconnected provider is never called"
     );
+}
+
+#[test]
+fn only_a_successful_disconnect_names_a_provider_to_forget() {
+    let done = json!({"provider_id": SHIELD, "disconnected": false});
+    assert_eq!(disconnected_provider(&(200, done.clone())), Some(SHIELD));
+    assert_eq!(disconnected_provider(&(403, done)), None);
+    let detail = json!({"provider_id": SHIELD});
+    assert_eq!(disconnected_provider(&(200, detail)), None);
 }

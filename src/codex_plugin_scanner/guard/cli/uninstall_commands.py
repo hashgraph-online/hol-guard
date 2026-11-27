@@ -16,6 +16,12 @@ from ..shims import package_shim_status, remove_guard_profile_blocks, uninstall_
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as _managed_install_context
+from .provider_integration_uninstall import (
+    PROVIDER_PURGE_NOTE,
+    PROVIDER_STORE_NOTE,
+    STORE_NOT_PURGED,
+    forget_provider_integrations,
+)
 from .update_commands import _current_version, _installer_kind
 from .update_retirement import _resident_state_absent, resident_stop_executable, retire_native_resident_for_home
 from .update_uv_layout import uv_tool_environment_overrides
@@ -164,6 +170,14 @@ def run_guard_self_uninstall(
     except (OSError, RuntimeError) as error:
         profile_cleanup = {"changed": False, "error": _clean_output(str(error))}
         notes.append(f"Could not remove Guard PATH entries from shell profiles: {error}")
+
+    # Provider keys go while the runtime that can read them is still installed (PRD 6.7).
+    provider_purge = forget_provider_integrations(context.guard_home)
+    payload["provider_integrations"] = provider_purge or {"error": "provider_keys_not_deleted"}
+    if provider_purge is None:
+        notes.append(PROVIDER_PURGE_NOTE)
+    elif provider_purge.get("error") == STORE_NOT_PURGED:
+        notes.append(PROVIDER_STORE_NOTE)
 
     if frozen_package_skip:
         notes.append(_FROZEN_PACKAGE_NOTE)
