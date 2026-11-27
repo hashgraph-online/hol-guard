@@ -454,12 +454,16 @@ pub(super) fn observe(
         // words here have lost their quotes, so one the shell could still expand
         // into file names or command output stays in the screen. A backslash
         // only escapes the next character, as in `'process\.env'`, and never
-        // expands into anything.
+        // expands into anything. An escaped word that starts with `-` once its
+        // backslashes are gone is an option to the search, as `\-f.env` reads
+        // `.env` as a pattern file. A pattern attached to its option, as in
+        // `--regexp=api_token`, keeps its exemption.
         let patterns = crate::pretool::search_pattern_words(&executable, arguments)
             .unwrap_or_default()
             .into_iter()
             .filter(|pattern| {
                 !pattern.contains(['/', '~', '*', '?', '[', '{', '$', '`', '('])
+                    && !(pattern.starts_with('\\') && pattern.replace('\\', "").starts_with('-'))
                     && arguments
                         .iter()
                         .filter(|argument| *argument == pattern)

@@ -489,6 +489,10 @@ fn a_search_pattern_beside_a_stderr_redirect_names_no_credential() {
         "rg --files .env 2>/dev/null",
         "grep -rn 'process\\.env' .env 2>/dev/null",
         "grep -n 'x\\.y' .env.local 2>/dev/null",
+        // An escaped option word is still an option once the shell drops
+        // the backslash: `-f.env` reads a pattern file.
+        "grep \\-f.env src 2>/dev/null",
+        "grep -n \\-\\-file=.env src 2>/dev/null",
         // A pattern the shell can still expand is not text: a glob becomes
         // file names.
         "grep -n .env* 2>/dev/null",
