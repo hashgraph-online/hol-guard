@@ -2,6 +2,7 @@ use guard_contracts::{ProviderCapabilityV1 as Cap, ProviderVerdictV1 as V};
 use serde_json::json;
 
 use super::*;
+use crate::parse::{parse_strict, MAX_BODY_BYTES};
 
 fn file(recordings: serde_json::Value) -> Vec<u8> {
     serde_json::to_vec(&json!({"schema": RECORDINGS_SCHEMA, "recordings": recordings})).unwrap()
@@ -37,6 +38,33 @@ fn signals_and_failures_are_read() {
     assert_eq!(
         recordings[1].borrow().expect,
         RecordedExpectation::Failure(RecordedFailure::RateLimited)
+    );
+}
+
+#[test]
+fn a_recordings_file_may_exceed_one_body_limit_up_to_its_own_cap() {
+    let wide = |name: &str, bytes: usize| {
+        let mut wide = entry(name);
+        wide["body"] = json!(format!("{{\"pad\":\"{}\"}}", "a".repeat(bytes)));
+        wide
+    };
+    let fits = file(json!([wide("one", 600_000), wide("two", 600_000)]));
+    assert!(fits.len() > MAX_BODY_BYTES && fits.len() <= MAX_RECORDINGS_FILE_BYTES);
+    assert_eq!(parse_recordings(&fits).unwrap().len(), 2);
+
+    let over: Vec<serde_json::Value> = (0..5)
+        .map(|index| wide(&format!("r{index}"), 900_000))
+        .collect();
+    let over = file(json!(over));
+    assert!(over.len() > MAX_RECORDINGS_FILE_BYTES);
+    assert_eq!(parse_recordings(&over).err(), Some(FixtureError::Invalid));
+
+    let duplicate = format!(
+        "{{\"schema\":\"{RECORDINGS_SCHEMA}\",\"schema\":\"{RECORDINGS_SCHEMA}\",\"recordings\":[]}}"
+    );
+    assert_eq!(
+        parse_recordings(duplicate.as_bytes()).err(),
+        Some(FixtureError::Invalid)
     );
 }
 

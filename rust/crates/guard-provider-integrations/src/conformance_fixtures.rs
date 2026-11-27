@@ -25,13 +25,16 @@ use serde_json::Value;
 
 use crate::conformance::{RecordedExpectation, RecordedFailure, Recording};
 use crate::noise::BaselineDecision;
-use crate::parse::parse_strict;
+use crate::parse::parse_strict_bounded;
 
 pub const RECORDINGS_SCHEMA: &str = "guard.provider-recordings.v1";
 /// More recordings than any capability set needs: 5 capabilities times 4 verdicts and 5 failures.
 pub const MAX_RECORDINGS: usize = 64;
 /// Large enough to exceed any `maxResponseBytes` the compiler accepts.
 pub const MAX_PAD_BYTES: usize = 1 << 20;
+
+/// The largest `recordings.json` file read. Each response body still has its own cap.
+pub const MAX_RECORDINGS_FILE_BYTES: usize = 4 << 20;
 const MAX_NAME_BYTES: usize = 64;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,7 +149,8 @@ fn name_is_valid(name: &str) -> bool {
 
 /// Read a `recordings.json` file.
 pub fn parse_recordings(bytes: &[u8]) -> Result<Vec<OwnedRecording>, FixtureError> {
-    let value = parse_strict(bytes).ok_or(FixtureError::Invalid)?;
+    let value =
+        parse_strict_bounded(bytes, MAX_RECORDINGS_FILE_BYTES).ok_or(FixtureError::Invalid)?;
     let file: FileV1 = serde_json::from_value(value).map_err(|_| FixtureError::Invalid)?;
     if file.schema != RECORDINGS_SCHEMA {
         return Err(FixtureError::Schema);

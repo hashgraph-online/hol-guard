@@ -22,7 +22,8 @@ const GATE: &str = "tests/fixtures/benign_false_positive_gate.json";
 const RECORDINGS: &str = "tests/fixtures/provider_integrations";
 const MAX_MANIFEST_BYTES: u64 = 256 * 1024;
 /// Recordings may pad a body past any `maxResponseBytes`, so they get the padding cap and room.
-const MAX_RECORDINGS_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_RECORDINGS_BYTES: u64 =
+    guard_provider_integrations::conformance_fixtures::MAX_RECORDINGS_FILE_BYTES as u64;
 const MAX_GATE_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
