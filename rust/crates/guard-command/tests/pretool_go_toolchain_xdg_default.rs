@@ -56,6 +56,7 @@ fn go_queries_stay_quiet_under_the_default_xdg_config_home_only() {
                 rustup_override_absent: false,
                 go_toolchain_inert: false,
                 cargo_config_inert: false,
+                cargo_compiler_inert: false,
                 npm_config_inert: false,
                 pip_config_inert: false,
                 python_environment_inert: false,

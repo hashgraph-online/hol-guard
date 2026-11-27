@@ -26,6 +26,11 @@ pub struct PathContext<'a> {
     /// can move the registry a Cargo query contacts, the index it reads or
     /// the credential provider it starts. Literal contexts leave this false.
     pub cargo_config_inert: bool,
+    /// No inherited variable names the program Cargo starts for the compiler
+    /// side of a manifest query: the `rustc` it runs to learn the host
+    /// target, a wrapper around it, or a per-target runner or linker. Literal
+    /// contexts leave this false.
+    pub cargo_compiler_inert: bool,
     /// No inherited npm or Node variable can move npm's registry, config
     /// files or loaded code. Literal contexts leave this false.
     pub npm_config_inert: bool,
