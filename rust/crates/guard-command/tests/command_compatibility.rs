@@ -468,6 +468,14 @@ fn a_search_pattern_beside_a_stderr_redirect_names_no_credential() {
         "grep -rn password_hash src 2>/dev/null | head",
         "rg --regexp=api_token src 2>/dev/null",
         "grep -neapi_token src 2>/dev/null",
+        // A backslash in the pattern escapes a regex character.
+        "grep -rn 'process\\.env' src 2>/dev/null",
+        "rg -n \"process\\.env\\.NODE_ENV\" src 2>/dev/null",
+        "grep -rnE 'import\\.meta\\.env' src 2>&1",
+        // A word `-e` or `--regexp` consumes is a pattern even when it
+        // starts with an escaped hyphen.
+        "grep -e '\\-f.env' src 2>/dev/null",
+        "rg --regexp '\\-\\-file=.env' src 2>/dev/null",
     ] {
         assert!(!writes_sensitive(command), "{command}");
     }
@@ -483,6 +491,21 @@ fn a_search_pattern_beside_a_stderr_redirect_names_no_credential() {
         "grep --color api_token .env 2>/dev/null",
         "grep --colour api_token .env 2>/dev/null",
         "rg --files .env 2>/dev/null",
+        "grep -rn 'process\\.env' .env 2>/dev/null",
+        "grep -n 'x\\.y' .env.local 2>/dev/null",
+        // An escaped option word is still an option once the shell drops
+        // the backslash: `-f.env` reads a pattern file.
+        "grep \\-f.env src 2>/dev/null",
+        "grep -n \\-\\-file=.env src 2>/dev/null",
+        // An escaped terminator still ends the options where the shell drops
+        // the backslash, so `-e` is the pattern and `.env` the file.
+        "grep \\-- -e \\.env 2>/dev/null",
+        "grep \\-e -e .env 2>/dev/null",
+        // A literal `-e` another option took as its value supplies no
+        // pattern, so the escaped word after it is still an option.
+        "rg -g -e \\-f.env src 2>/dev/null",
+        "rg -r -e \\-f.env src 2>/dev/null",
+        "grep --exclude -e \\-f.env src 2>/dev/null",
         // A pattern the shell can still expand is not text: a glob becomes
         // file names.
         "grep -n .env* 2>/dev/null",
