@@ -9,6 +9,8 @@ const MAX_NAMED_DEFINITIONS: usize = 6;
 /// The most lines of the definition a file is named for shown whole when the
 /// prompt places nothing else.
 const MAX_STEM_LINES: usize = 30;
+/// Same-named methods of other classes in a picked method's file.
+const MAX_OVERRIDES: usize = 2;
 /// Functions left to be written that stand in for a named file's outline.
 const MAX_STUBS: usize = 2;
 /// Definitions shown beside a function left to be written.
@@ -58,10 +60,15 @@ pub(super) fn named_definitions(
         }
         Some(found.find(|&at| spelled(file, at)).unwrap_or(first))
     };
-    let defining = |file: &File| {
+    // For a method, a file whose class also holds the prompt's other
+    // methods (`update()` beside `add()`) is the one meant.
+    let defining = |file: &File, member: bool| {
         names
             .iter()
-            .filter(|(name, _)| top(file, name).is_some())
+            .filter(|(name, shaped)| {
+                top(file, name).is_some()
+                    || (member && *shaped && more::member(file, name, names).is_some())
+            })
             .count()
     };
     // A file the prompt names holds the definition it means, even one named
@@ -84,7 +91,7 @@ pub(super) fn named_definitions(
             .max_by(|(a, _), (b, _)| {
                 let (a, b) = (&files[*a], &files[*b]);
                 (in_named(a).cmp(&in_named(b)))
-                    .then(defining(a).cmp(&defining(b)))
+                    .then(defining(a, member).cmp(&defining(b, member)))
                     .then(
                         b.path
                             .matches('/')
@@ -132,6 +139,50 @@ pub(super) fn named_definitions(
             }
         }
     }
+    // A fix to `SortedList.update` usually has to be made again in the
+    // `SortedKeyList.update` overriding it further down the same file; its
+    // first line points there without showing it. A method written with its
+    // class (`Store.load`) means that class's only.
+    // Each one goes right after the method it overrides, where it is read.
+    let unscoped = |pick: &Pick| {
+        let file = &files[pick.file];
+        file.parent[pick.at].is_some() && !asked.spellings.contains(&file.qualified(pick.at))
+    };
+    let mut placed: Vec<Pick> = Vec::with_capacity(picks.len());
+    for pick in std::mem::take(&mut picks) {
+        let file = &files[pick.file];
+        let name = file.sections[pick.at].name.as_deref();
+        let scoped = !unscoped(&pick);
+        let source = pick.file;
+        let at_pick = pick.at;
+        if let Some(early) = placed.iter_mut().find(|p| p.file == source && p.at == at_pick) {
+            // Placed early as an override, it keeps what the prompt gave it.
+            *early = pick;
+            continue;
+        }
+        placed.push(pick);
+        if scoped {
+            continue;
+        }
+        let same = (0..file.sections.len()).filter(|&at| {
+            at != at_pick
+                && file.parent[at].is_some()
+                && !file.container(at)
+                && file.sections[at].name.as_deref() == name
+        });
+        for at in same.take(MAX_OVERRIDES) {
+            let taken = |p: &Pick| p.file == source && p.at == at;
+            if !placed.iter().any(taken) {
+                placed.push(Pick {
+                    file: source,
+                    at,
+                    base: true,
+                    whole: false,
+                });
+            }
+        }
+    }
+    picks = placed;
     if picks.is_empty() {
         for (file, item) in files.iter().enumerate().filter(|(_, item)| in_named(item)) {
             // A function left to be written is the one a prompt naming only
@@ -352,3 +403,21 @@ pub(super) fn outlined(
 #[cfg(test)]
 #[path = "context_assistance_prompt_map_pick_tests.rs"]
 mod tests;
+
+/// What a method sharing its name with one picked before it, in another
+/// class of the same file, says: which one a change to usually belongs here too.
+pub(super) fn overriding(files: &[File], before: &[Pick], pick: &Pick) -> Option<String> {
+    let file = &files[pick.file];
+    let name = file.sections[pick.at].name.as_deref()?;
+    file.parent[pick.at]?;
+    let earlier = before.iter().find(|other| {
+        other.file == pick.file
+            && other.at != pick.at
+            && file.parent[other.at].is_some()
+            && file.parent[other.at] != file.parent[pick.at]
+            && file.sections[other.at].name.as_deref() == Some(name)
+    })?;
+    let other = file.qualified(earlier.at);
+    let said = "usually belongs here too";
+    Some(format!("\n  the same method in another class: a change to `{other}` {said}"))
+}

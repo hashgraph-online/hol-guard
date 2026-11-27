@@ -230,7 +230,8 @@ pub(super) fn mapped(
         exact: walk.exact.clone(),
     };
     let mapped = map(&texts, &sought, &asked, until);
-    withheld::added(mapped, &asked.kept_out, &sought, &asked, until)
+    let mapped = withheld::added(mapped, &asked.kept_out, &sought, &asked, until);
+    mapped.map(|done| render::nested(done, root))
 }
 
 /// The tests that use `names`, the definitions a change touched, from the

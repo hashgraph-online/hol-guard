@@ -6,9 +6,8 @@ use super::super::sections::{
     written_name, Section,
 };
 use super::super::seen::Span;
-use super::{
-    docstring, Asked, Entry, File, Kind, Pick, LONG_SECTION, MAX_LINE_CHARS, MAX_MEMBERS_CHARS,
-};
+use super::{docstring, pick, Asked, Entry, File, Kind, Pick};
+use super::{LONG_SECTION, MAX_LINE_CHARS, MAX_MEMBERS_CHARS};
 use crate::context_assistance_engine::prose;
 use crate::context_assistance_prompt_words::term_form;
 use std::collections::BTreeSet;
@@ -456,8 +455,9 @@ pub(super) fn listed(files: &[File], chosen: &[Pick], asked: &Asked) -> Vec<Entr
     };
     let mut said = docstring::Said::default();
     let mut shown_any = false;
-    for pick in chosen {
-        let mut item = Entry::plain(entry(files, pick));
+    for (at, pick) in chosen.iter().enumerate() {
+        let note = pick::overriding(files, &chosen[..at], pick).unwrap_or_default();
+        let mut item = Entry::plain(entry(files, pick) + &note);
         let code = (pick.whole).then(|| docstring::shown(&files[pick.file], pick.at, asked, said));
         if let Some((span, code, note)) = code.flatten() {
             let first = docstring::whole_here(asked, shown_any, &code);

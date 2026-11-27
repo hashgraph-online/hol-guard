@@ -154,6 +154,22 @@ fn a_called_or_dotted_name_is_written_as_code() {
     assert!(found.contains(&"peekable.prepend".to_owned()), "{found:?}");
 }
 
+/// A stop word written as code is still a name: "Fix update() ordering to
+/// match add()" is about the `update` and `add` methods, while the plain
+/// verb in "update the docs" is no name.
+#[test]
+fn a_stop_word_written_as_code_is_kept() {
+    let found = marked_terms("Fix update() ordering to be more consistent with add() ordering");
+    for name in ["update", "add"] {
+        assert!(found.contains(&(name.to_owned(), true)), "{name}: {found:?}");
+    }
+    let found = marked_terms("Please update the docs and add a note");
+    assert!(
+        !found.iter().any(|(word, _)| word == "update" || word == "add"),
+        "{found:?}"
+    );
+}
+
 /// A sentence a docstring or comment wraps is still the one the prompt
 /// quotes on one line.
 #[test]
