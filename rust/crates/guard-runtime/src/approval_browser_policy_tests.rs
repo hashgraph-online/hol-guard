@@ -121,19 +121,28 @@ fn an_idle_session_no_longer_holds_the_page() {
 #[test]
 fn a_withheld_page_prints_the_link_for_the_person() {
     let home = surface_home();
-    let link = "http://127.0.0.1:4781/requests/request_123";
+    let link = "http://127.0.0.1:4781/requests/request_123#guard-token=signed";
     let mut out = Vec::new();
-    assert!(!withheld(&home, link, &mut out));
+    assert!(!withheld(&home, Some(link), &mut out));
     assert!(out.is_empty());
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
     record_session(&home, &"a".repeat(64), BrowserProfileModeV1::Shared, now);
-    assert!(withheld(&home, link, &mut out));
+    assert!(withheld(&home, Some(link), &mut out));
     let text = String::from_utf8(out).unwrap();
     assert!(text.contains("did not open the approval page"));
     assert!(text.ends_with(&format!("Approval link: {link}\n")));
+    // A link that could not be signed is never printed unsigned.
+    let mut unsigned = Vec::new();
+    assert!(withheld(&home, None, &mut unsigned));
+    let text = String::from_utf8(unsigned).unwrap();
+    assert!(text.ends_with(&format!(
+        "{}\n",
+        crate::native_review_link::SIGNED_LINK_UNAVAILABLE
+    )));
+    assert!(!text.contains("Approval link:"));
     let answer = dispatch(&serde_json::json!({"guard_home": home.to_str().unwrap()})).unwrap();
     assert_eq!(answer, serde_json::json!({"approval_page_held": true}));
     assert!(dispatch(&serde_json::json!({"guard_home": ""})).is_err());

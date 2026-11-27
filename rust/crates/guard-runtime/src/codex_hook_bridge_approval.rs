@@ -15,6 +15,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use crate::approval_browser_surface::withheld;
 use crate::claude_hook_bridge_http::remaining;
 use crate::codex_hook_bridge_transport::{approval_request, ApprovalFailure};
 use crate::codex_hook_response::{codex_hook_response, PRE_TOOL_USE};
@@ -283,9 +284,7 @@ fn open_pending_with_source(
         );
         return;
     }
-    if crate::approval_browser_surface::withheld(home, url, &mut std::io::stderr()) {
-        return;
-    }
+    // Signed first: a held page prints the signed link, never the bare one.
     let browser_url = now_micros().and_then(|now| {
         crate::native_review_link::approval_browser_url(
             url,
@@ -297,6 +296,9 @@ fn open_pending_with_source(
             now,
         )
     });
+    if withheld(home, browser_url.as_deref(), &mut std::io::stderr()) {
+        return;
+    }
     let Some(browser_url) = browser_url else {
         notify(
             &mut std::io::stderr(),

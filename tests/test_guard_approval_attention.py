@@ -193,7 +193,8 @@ def test_attention_policy_opens_nothing_while_a_browser_session_holds_the_page(
     from codex_plugin_scanner.guard.runtime import approval_attention
 
     store, runtime, result = _queue_operation(tmp_path, harness="pi", severity="critical")
-    monkeypatch.setattr(approval_attention, "approval_page_held", lambda _home: True)
+    held = [True]
+    monkeypatch.setattr(approval_attention, "approval_page_held", lambda _home: held[0])
     now = [100.0]
     opened_urls: list[str] = []
     coordinator = _schedule(store, runtime, result, now=now, opened_urls=opened_urls)
@@ -201,6 +202,14 @@ def test_attention_policy_opens_nothing_while_a_browser_session_holds_the_page(
     coordinator.process_due()
 
     assert opened_urls == []
+    # The held item stays pending and opens once the session lets go.
+    held[0] = False
+    now[0] += approval_attention._HELD_RECHECK_SECONDS - 1
+    coordinator.process_due()
+    assert opened_urls == []
+    now[0] += 1
+    coordinator.process_due()
+    assert len(opened_urls) == 1
 
 
 def test_attention_policy_does_not_reopen_same_critical_request(tmp_path: Path) -> None:

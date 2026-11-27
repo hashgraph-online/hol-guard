@@ -71,11 +71,26 @@ pub(crate) const HELD_NOTICE: &str = "HOL Guard is waiting for approval. An agen
 /// Withholds the automatic page when a live browser session holds it: writes
 /// the notice and the approval link for the person and answers `true`. A write
 /// that fails is ignored, as the caller's answer to the agent is unchanged.
-pub(crate) fn withheld(guard_home: &Path, approval_url: &str, out: &mut impl Write) -> bool {
+///
+/// `approval_link` is the link the caller would have opened: the signed link,
+/// or `None` when it could not be signed, in which case the notice says so
+/// instead of printing an unsigned loopback link.
+pub(crate) fn withheld(
+    guard_home: &Path,
+    approval_link: Option<&str>,
+    out: &mut impl Write,
+) -> bool {
     if !approval_page_held(guard_home, now_unix()) {
         return false;
     }
-    let _ = writeln!(out, "{HELD_NOTICE}\nApproval link: {approval_url}");
+    let _ = match approval_link {
+        Some(link) => writeln!(out, "{HELD_NOTICE}\nApproval link: {link}"),
+        None => writeln!(
+            out,
+            "{HELD_NOTICE}\n{}",
+            crate::native_review_link::SIGNED_LINK_UNAVAILABLE
+        ),
+    };
     true
 }
 
