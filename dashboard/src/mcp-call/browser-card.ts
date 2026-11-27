@@ -4,6 +4,7 @@ import type {
   GuardBrowserSurfaceV1,
   GuardBrowserVerbV1,
 } from "../guard-types";
+import { parseProviderFindings } from "../browser-call/browser-provider-finding-model";
 import type { McpCallBody } from "./composio-calls";
 import { THOUGHT_CAPTION } from "./composio-calls";
 import type { McpFact } from "./mcp-call-types";
@@ -106,7 +107,7 @@ export function parseBrowserCard(value: unknown): GuardBrowserCardV1 | null {
       input_masked: detail.input_masked === true,
     },
     risk_chips: [...new Set(chips)],
-    provider_findings: [],
+    provider_findings: parseProviderFindings(value.provider_findings),
     choices: Array.isArray(value.choices) ? value.choices.filter((choice): choice is string => typeof choice === "string") : [],
     steps: [],
   };

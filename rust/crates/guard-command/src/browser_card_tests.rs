@@ -1,6 +1,7 @@
 use guard_contracts::{
-    BrowserCardChoiceV1, BrowserCardRequestV1, BrowserCardV1, BrowserIntentV1,
-    BrowserMcpArgumentsV1, BrowserMcpDisplayIntentV1, BrowserMcpRequestV1, BrowserMcpResultV1,
+    BrowserCardChoiceV1, BrowserCardProviderFindingV1, BrowserCardRequestV1, BrowserCardV1,
+    BrowserIntentV1, BrowserMcpArgumentsV1, BrowserMcpDisplayIntentV1, BrowserMcpRequestV1,
+    BrowserMcpResultV1, ProviderCapabilityV1, ProviderSignalStateV1, ProviderVerdictV1,
 };
 use serde_json::Value;
 
@@ -233,4 +234,68 @@ fn a_bad_action_inside_a_display_request_fails_the_request() {
         evaluate_browser_mcp(&display).err(),
         Some("browser_action_wrong_version")
     );
+}
+
+fn finding(
+    verdict: ProviderVerdictV1,
+    state: ProviderSignalStateV1,
+    id: &str,
+) -> BrowserCardProviderFindingV1 {
+    BrowserCardProviderFindingV1 {
+        provider_id: id.into(),
+        provider_name: "ExampleShield".into(),
+        capability: ProviderCapabilityV1::OriginReputation,
+        verdict,
+        state,
+        reason_labels: vec!["One".into(), "Two".into(), "Three".into(), "Four".into()],
+        observed_at_ms: 1_000,
+        sponsored: false,
+    }
+}
+
+#[test]
+fn the_card_orders_provider_rows_after_its_own_facts() {
+    let mut request = first_valid_request();
+    let own = browser_card(&request).expect("card");
+    request.provider_findings = vec![
+        finding(
+            ProviderVerdictV1::Unknown,
+            ProviderSignalStateV1::Unavailable,
+            "provider.alpha",
+        ),
+        finding(
+            ProviderVerdictV1::Ok,
+            ProviderSignalStateV1::Fresh,
+            "provider.bravo",
+        ),
+        finding(
+            ProviderVerdictV1::Danger,
+            ProviderSignalStateV1::Fresh,
+            "provider.charlie",
+        ),
+        finding(
+            ProviderVerdictV1::Danger,
+            ProviderSignalStateV1::Fresh,
+            "provider.",
+        ),
+    ];
+    let card = browser_card(&request).expect("card");
+    let order: Vec<&str> = card
+        .provider_findings
+        .iter()
+        .map(|row| row.provider_id.as_str())
+        .collect();
+    assert_eq!(
+        order,
+        ["provider.charlie", "provider.bravo", "provider.alpha"]
+    );
+    assert!(card
+        .provider_findings
+        .iter()
+        .all(|row| row.reason_labels.len() == 3));
+    // Guard's own facts and choices are unchanged by provider rows.
+    assert_eq!(card.risk_chips, own.risk_chips);
+    assert_eq!(card.headline, own.headline);
+    assert_eq!(card.choices, own.choices);
+    assert!(card.keeps_approval_invariant());
 }

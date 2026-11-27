@@ -3969,6 +3969,16 @@
     }
   }
 
+  .bg-brand-green\/\[0\.08\] {
+    background-color: var(--brand-green);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-brand-green\/\[0\.08\] {
+      background-color: color-mix(in oklab, var(--brand-green) 8%, transparent);
+    }
+  }
+
   .bg-brand-green\/\[0\.045\] {
     background-color: var(--brand-green);
   }

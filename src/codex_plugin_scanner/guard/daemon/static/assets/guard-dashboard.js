@@ -13503,6 +13503,80 @@ function buildDecisionPayload(input) {
 function willPersistExactAction(item, action, scope, requested) {
   return requested && normalizeDecisionScope(item, action, scope) === "artifact" && item.exact_action_persistence_eligible === true;
 }
+const PROVIDER_ID = /^provider\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const MAX_REASON_LABELS = 3;
+const MAX_TEXT$1 = 80;
+const VERDICT_TEXT = {
+  danger: "Flagged as dangerous",
+  caution: "Flagged for caution",
+  ok: "No problems found",
+  unknown: "No verdict"
+};
+const STATE_TEXT = {
+  stale: "Answer out of date",
+  unavailable: "Could not reach the provider",
+  rate_limited: "Provider is limiting requests",
+  key_invalid: "Provider rejected the key",
+  disabled: "Provider turned off"
+};
+const CAPABILITY_TEXT = {
+  "browser.origin-reputation": "Site reputation",
+  "browser.script-integrity": "Script integrity",
+  "browser.page-data-risk": "Page data risk",
+  "browser.download-reputation": "Download reputation",
+  "browser.site-policy": "Site policy"
+};
+function isRecord$e(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function plainText(value) {
+  if (typeof value !== "string") return null;
+  const text2 = value.trim();
+  if (text2.length === 0 || text2.length > MAX_TEXT$1 || /[\p{Cc}\p{Cf}]/u.test(text2)) return null;
+  return text2;
+}
+function parseRow(value) {
+  if (!isRecord$e(value)) return null;
+  const id2 = value.provider_id;
+  const name = plainText(value.provider_name);
+  const capability = value.capability;
+  const verdict = value.verdict;
+  const state = value.state;
+  const observed = value.observed_at_ms;
+  if (typeof id2 !== "string" || !PROVIDER_ID.test(id2) || name === null) return null;
+  if (typeof capability !== "string" || !Object.hasOwn(CAPABILITY_TEXT, capability)) return null;
+  if (typeof verdict !== "string" || !Object.hasOwn(VERDICT_TEXT, verdict)) return null;
+  if (typeof state !== "string" || state !== "fresh" && !Object.hasOwn(STATE_TEXT, state)) return null;
+  if (typeof observed !== "number" || !Number.isSafeInteger(observed) || observed < 0) return null;
+  const labels = Array.isArray(value.reason_labels) ? value.reason_labels.map(plainText) : [];
+  return {
+    provider_id: id2,
+    provider_name: name,
+    capability,
+    verdict,
+    state,
+    reason_labels: [...new Set(labels.filter((label) => label !== null))].slice(0, MAX_REASON_LABELS),
+    observed_at_ms: observed,
+    sponsored: value.sponsored === true
+  };
+}
+function parseProviderFindings(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(parseRow).filter((row) => row !== null);
+}
+function providerCapabilityText(capability) {
+  return CAPABILITY_TEXT[capability] ?? "Provider check";
+}
+function checkedAgo(observedAtMs, nowMs) {
+  const seconds = Math.max(0, Math.floor((nowMs - observedAtMs) / 1e3));
+  if (seconds < 5) return "checked just now";
+  if (seconds < 60) return `checked ${seconds} s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `checked ${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `checked ${hours} h ago`;
+  return `checked ${Math.floor(hours / 24)} d ago`;
+}
 const MCP_EFFECT_COPY = {
   // Only a built-in agent-app tool gets this; no name is read as in-app on its own.
   "in-app": { label: "Only in the app", meaning: "It changes what the agent app shows you and nothing else." },
@@ -14654,7 +14728,7 @@ function parseBrowserCard(value) {
       input_masked: detail.input_masked === true
     },
     risk_chips: [...new Set(chips)],
-    provider_findings: [],
+    provider_findings: parseProviderFindings(value.provider_findings),
     choices: Array.isArray(value.choices) ? value.choices.filter((choice) => typeof choice === "string") : [],
     steps: []
   };
@@ -35797,6 +35871,50 @@ function BrowserProfileLine({ profile }) {
     reach !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Flag, { tone: "attention", children: reach }) })
   ] });
 }
+const CHIP = "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-brand-dark";
+const VERDICT_TONE = {
+  danger: "border-brand-danger/30 bg-brand-danger/[0.08]",
+  caution: "border-brand-attention/30 bg-brand-attention/[0.08]",
+  ok: "border-brand-green/30 bg-brand-green/[0.08]",
+  unknown: "border-slate-200 bg-slate-50"
+};
+function VerdictChip({ row }) {
+  if (row.state !== "fresh") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${CHIP} ${VERDICT_TONE.unknown}`, children: STATE_TEXT[row.state] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "data-provider-verdict": row.verdict, className: `${CHIP} ${VERDICT_TONE[row.verdict]}`, children: VERDICT_TEXT[row.verdict] });
+}
+function ProviderFindingRow({ row, nowMs }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "data-provider-finding": row.provider_id, className: "py-2 first:pt-0 last:pb-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-x-2 gap-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: row.provider_name }),
+      row.sponsored && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-dark/60", children: "Sponsor" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-brand-dark/60", children: providerCapabilityText(row.capability) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(VerdictChip, { row })
+    ] }),
+    row.state === "fresh" && row.reason_labels.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-1 flex flex-wrap gap-1.5", "aria-label": "Reasons", children: row.reason_labels.map((label) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "text-xs text-brand-dark/80", children: label }, label)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-brand-dark/50", children: checkedAgo(row.observed_at_ms, nowMs) })
+  ] });
+}
+function useNow(intervalMs, enabled) {
+  const [now2, setNow] = reactExports.useState(() => Date.now());
+  reactExports.useEffect(() => {
+    if (!enabled) return void 0;
+    const id2 = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id2);
+  }, [intervalMs, enabled]);
+  return now2;
+}
+function BrowserProviderFindings(props) {
+  const labelId = reactExports.useId();
+  const ticking = useNow(1e4, props.nowMs === void 0 && props.findings.length > 0);
+  if (props.findings.length === 0) return null;
+  const nowMs = props.nowMs ?? ticking;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-4 py-2.5 sm:px-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: labelId, className: "text-xs font-medium text-brand-dark/60", children: "Provider findings" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { "aria-labelledby": labelId, className: "mt-1.5 divide-y divide-slate-100", children: props.findings.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderFindingRow, { row, nowMs }, `${row.provider_id}:${row.capability}`)) })
+  ] });
+}
 function BrowserRiskChips({ chips }) {
   const labelId = reactExports.useId();
   const unique2 = [...new Set(chips)];
@@ -35850,6 +35968,7 @@ function BrowserCallCard(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserInputPreview, { card }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRiskChips, { chips: card.risk_chips })
         ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserProviderFindings, { findings: card.provider_findings }),
         explanation.code !== null && explanation.code.collapsed !== true && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) }),
         explanation.code !== null && explanation.code.collapsed === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the code it runs" }),
