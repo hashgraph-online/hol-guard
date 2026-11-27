@@ -128,6 +128,15 @@ def write_ignore_rule_repos(home: Path) -> None:
             ".env*\n!.env.example\n",
             {".env.example": "TOKEN=synthetic-not-a-secret\n", "src/index.ts": "export const route = 2;\n"},
         ),
+        (
+            # A template that names its credentials and leaves them empty.
+            "ledger-api",
+            ".env*\n!.env.example\n",
+            {
+                ".env.example": "API_BASE_URL=http://127.0.0.1:3000\nAPI_TOKEN=\nNODE_ENV=development\nSESSION_SECRET=\nFEATURE_ROUTE_TIMEOUT_MS=2000\n",
+                "src/index.ts": "export const route = 3;\n",
+            },
+        ),
     ):
         repository = home / "Code" / "ignore-rules" / name
         repository.mkdir(parents=True)
@@ -137,7 +146,7 @@ def write_ignore_rule_repos(home: Path) -> None:
             _write(repository / relative, text)
         _git(repository, "add", "-A", home=home)
         _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
-        if name == "billing-api":
+        if name in {"billing-api", "ledger-api"}:
             # Untracked, gitignored synthetic secret for rg glob override controls.
             # Plain source globs cannot reach it; an explicit -g "**" can.
             _write(repository / ".env", "TOKEN=SYNTHETIC_MARKER_ONLY\n")
