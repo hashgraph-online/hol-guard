@@ -259,9 +259,6 @@ fn walk_brings_back_hidden_entry(
     stop: Option<std::time::Instant>,
 ) -> bool {
     let out_of_time = || stop.is_some_and(|stop| std::time::Instant::now() >= stop);
-    if out_of_time() {
-        return true;
-    }
     let mut inspected = 0_usize;
     let mut pending = Vec::new();
     for root in roots {
@@ -282,6 +279,11 @@ fn walk_brings_back_hidden_entry(
         });
     }
     while let Some(current) = pending.pop() {
+        // Before each directory is opened, so a run of empty directories
+        // cannot carry the walk past the clock.
+        if out_of_time() {
+            return true;
+        }
         let Ok(entries) = std::fs::read_dir(&current.directory) else {
             return true;
         };
