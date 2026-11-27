@@ -1,0 +1,32 @@
+{
+  "schema": "guard.provider-recordings.v1",
+  "recordings": [
+    {"name": "clean", "capability": "browser.origin-reputation", "status": 200,
+     "body": "{\"verdict\":\"clean\",\"ttl\":3600}",
+     "expect": {"verdict": "ok", "reasonCodes": []}},
+    {"name": "suspicious-new-domain", "capability": "browser.origin-reputation", "status": 200,
+     "body": "{\"verdict\":\"suspicious\",\"reasons\":[\"new_domain\",\"not_declared\"],\"ttl\":600}",
+     "expect": {"verdict": "caution", "reasonCodes": ["new_domain"]}},
+    {"name": "malicious-phishing", "capability": "browser.origin-reputation", "status": 200,
+     "body": "{\"verdict\":\"malicious\",\"reasons\":[\"phishing\"]}",
+     "expect": {"verdict": "danger", "reasonCodes": ["phishing"]}},
+    {"name": "unmapped-verdict", "capability": "browser.origin-reputation", "status": 200,
+     "body": "{\"verdict\":\"pending\"}",
+     "expect": {"verdict": "unknown"}},
+    {"name": "key-refused", "capability": "browser.origin-reputation", "status": 401,
+     "body": "{\"error\":\"invalid key\"}",
+     "expect": {"failure": "unauthorized"}},
+    {"name": "rate-limited", "capability": "browser.origin-reputation", "status": 429,
+     "body": "{}",
+     "expect": {"failure": "rate_limited"}},
+    {"name": "server-error", "capability": "browser.origin-reputation", "status": 503,
+     "body": "{}",
+     "expect": {"failure": "status"}},
+    {"name": "oversize", "capability": "browser.origin-reputation", "status": 200,
+     "body": "{\"verdict\":\"clean\"}", "padToBytes": 16385,
+     "expect": {"failure": "oversize"}},
+    {"name": "malformed", "capability": "browser.origin-reputation", "status": 200,
+     "body": "{\"verdict\":\"clean\",\"verdict\":\"malicious\"}",
+     "expect": {"failure": "malformed"}}
+  ]
+}

@@ -167,7 +167,7 @@ pub(crate) fn checked_url(
 }
 
 /// Map a refused exchange onto a provider error. The outcome's own text never leaves here.
-fn refused(outcome: &EgressOutcomeV1) -> ProviderClientError {
+pub(crate) fn refused(outcome: &EgressOutcomeV1) -> ProviderClientError {
     match outcome {
         EgressOutcomeV1::Blocked { .. } => ProviderClientError::Blocked,
         EgressOutcomeV1::Timeout => ProviderClientError::Timeout,

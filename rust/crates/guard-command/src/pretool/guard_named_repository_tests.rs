@@ -106,3 +106,34 @@ fn global_options_before_api_keep_the_repository_exemption() {
         assert!(names_guard_outside_message(&segment(command), &Moved::default()), "{command}");
     }
 }
+
+#[test]
+fn a_git_search_pattern_is_judged_only_by_the_state_screen() {
+    for command in [
+        "git diff --cached -G\"hol-guard status|TODO note\" --stat",
+        "git diff --cached --stat -G \"hol-guard status\"",
+        "git log -S\"plugin-guard run\" --oneline",
+        "git log --grep=\"hol-guard release notes\" --oneline",
+        "git -C repo show --grep \"hol-guard fix\" HEAD",
+    ] {
+        assert!(
+            !names_guard_outside_message(&segment(command), &Moved::default()),
+            "{command}"
+        );
+    }
+    for command in [
+        // The state directory keeps the floor inside a pattern too.
+        "git diff --cached -G\"~/.hol-guard/guard.db x\" --stat",
+        // A commit's `-S` signs; it takes no pattern.
+        "git commit -S \"!hol-guard hooks remove\"",
+        // After `--` an operand is a pathspec, never a pattern.
+        "git log -- \"-Ghol-guard status\"",
+        // A read that takes no pattern keeps the location screen.
+        "git status \"!hol-guard hooks remove\"",
+    ] {
+        assert!(
+            names_guard_outside_message(&segment(command), &Moved::default()),
+            "{command}"
+        );
+    }
+}

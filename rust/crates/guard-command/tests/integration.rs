@@ -71,6 +71,7 @@ pub mod pretool_blank_structured_field;
 pub mod pretool_brace_operands;
 pub mod pretool_brew_reads;
 pub mod pretool_bun_eval;
+pub mod pretool_cat_glob_missing_folder;
 pub mod pretool_cd_canonical_workspace;
 pub mod pretool_cd_into_agent_notes;
 pub mod pretool_cd_parenthesized_directory;

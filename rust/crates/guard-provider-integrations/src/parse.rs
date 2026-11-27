@@ -24,7 +24,12 @@ const ARBITRARY_PRECISION_TOKEN: &str = "$serde_json::private::Number";
 
 /// Parse a response body, refusing duplicate keys at any depth, trailing bytes and oversize bodies.
 pub fn parse_strict(bytes: &[u8]) -> Option<Value> {
-    if bytes.len() > MAX_BODY_BYTES {
+    parse_strict_bounded(bytes, MAX_BODY_BYTES)
+}
+
+/// [`parse_strict`] with a caller-chosen size cap, for local files that hold several bodies.
+pub fn parse_strict_bounded(bytes: &[u8], max_bytes: usize) -> Option<Value> {
+    if bytes.len() > max_bytes {
         return None;
     }
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);

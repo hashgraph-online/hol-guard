@@ -168,3 +168,26 @@ fn a_routed_read_resolves_its_operands_where_git_enters() {
     assert!(safe_in(Some(&inner), &["--cached", "release"]));
     assert!(!safe_in(Some(outer), &["--cached", "release"]));
 }
+
+#[test]
+fn a_search_filter_only_narrows_a_staged_read() {
+    let workspace = Workspace::new("search");
+    let cwd = Some(workspace.path());
+    assert!(safe_in(cwd, &["--cached", "-Gstatus|note", "--stat"]));
+    assert!(safe_in(cwd, &["--cached", "-G", "status note", "--stat"]));
+    assert!(safe_in(
+        cwd,
+        &["--cached", "-S", "status", "--pickaxe-regex", "--name-only"]
+    ));
+    assert!(safe_in(
+        cwd,
+        &["--cached", "-Sstatus", "--pickaxe-all", "--", "src"]
+    ));
+    assert!(safe_in(cwd, &["--cached", "-G", "--stat", "package.json"]));
+
+    // A filter with no pattern, or other options beside it, stays a review.
+    assert!(!safe_in(cwd, &["--cached", "--stat", "-G"]));
+    assert!(!safe_in(cwd, &["--cached", "-Gx", "--output=staged.txt"]));
+    assert!(!safe_in(cwd, &["--cached", "-Sx", "origin/main"]));
+    assert!(!safe_in(cwd, &["--cached", "-Gx", "--", "/outside"]));
+}

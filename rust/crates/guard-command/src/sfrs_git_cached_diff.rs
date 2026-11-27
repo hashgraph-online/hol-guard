@@ -247,6 +247,36 @@ pub(crate) fn cached_diff_operand_directory(
     cwd.map(|cwd| cwd.join(route))
 }
 
+/// Options that only choose which staged files the diff reports. `-G` and
+/// `-S` filter by a pattern, and the two pickaxe flags tune that filter, so a
+/// staged read with them prints no more than the same read without them.
+const SEARCH_FILTER_FLAGS: [&str; 2] = ["--pickaxe-all", "--pickaxe-regex"];
+
+/// The operands with every search filter (and its pattern) removed before
+/// `--`; `None` when a filter is missing its pattern.
+pub(crate) fn without_search_filters(args: &[String]) -> Option<Vec<String>> {
+    let mut kept = Vec::with_capacity(args.len());
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index].as_str();
+        if arg == "--" {
+            kept.extend_from_slice(&args[index..]);
+            break;
+        }
+        if arg == "-G" || arg == "-S" {
+            args.get(index + 1)?;
+            index += 2;
+            continue;
+        }
+        if !((arg.starts_with("-G") || arg.starts_with("-S")) || listed(&SEARCH_FILTER_FLAGS, arg))
+        {
+            kept.push(args[index].clone());
+        }
+        index += 1;
+    }
+    Some(kept)
+}
+
 /// `_cached_diff_operands_are_safe`.
 pub(crate) fn cached_diff_operands_are_safe(
     args: &[String],
@@ -256,6 +286,10 @@ pub(crate) fn cached_diff_operands_are_safe(
     if args.len() > 20 {
         return false;
     }
+    let Some(args) = without_search_filters(args) else {
+        return false;
+    };
+    let args = args.as_slice();
     let has_index_flag =
         |items: &[String]| items.iter().any(|item| listed(&INDEX_DIFF_FLAGS, item));
     let Some(separator) = args.iter().position(|arg| arg == "--") else {

@@ -43,8 +43,112 @@ pub(super) fn safe_cargo_probe(arguments: &[String], context: super::PathContext
     if matches!(arguments, [flag] if matches!(flag.as_str(), "--version" | "-V")) {
         return true;
     }
+    if manifest_query(arguments) {
+        return manifest_reading_is_inert(context);
+    }
     registry_query(arguments) && registry_is_official(context)
 }
+
+/// `cargo locate-project` or `cargo metadata --no-deps`: the two questions
+/// Cargo answers from the workspace's own manifests.
+///
+/// `locate-project` prints the path of the `Cargo.toml` Cargo would read from
+/// here and exits. `metadata --no-deps` prints the workspace's own packages as
+/// Cargo parsed them. Neither resolves a dependency graph, so neither queries
+/// the registry index, downloads a crate, unpacks one or runs a `build.rs` --
+/// the effects the package review exists for. An editor, a test runner and a
+/// release script all ask one of these before doing anything, and sending the
+/// question to review teaches nothing about the build that may follow.
+///
+/// `metadata` without `--no-deps` is the same command with the resolve behind
+/// it: it reads the index, may fetch what the lockfile does not pin and writes
+/// the lockfile back. `cargo tree` and `cargo pkgid` resolve for the same
+/// reason. All three keep their review.
+///
+/// An `[alias]` entry cannot turn either word into another subcommand: Cargo
+/// ignores an alias that shadows a built-in command, and both are built in.
+///
+/// Only the options that bound the same question are read. A `+toolchain`
+/// word installs a toolchain before the query, `--manifest-path` names a
+/// manifest somewhere else, and `--config`, `-Z` or a feature selection sets
+/// configuration the review should still see; each arrives here as a word
+/// this reading does not carry, so it keeps the review.
+fn manifest_query(arguments: &[String]) -> bool {
+    let Some((subcommand, rest)) = arguments.split_first() else {
+        return false;
+    };
+    let metadata = match subcommand.as_str() {
+        "locate-project" => false,
+        "metadata" => true,
+        _ => return false,
+    };
+    let mut no_deps = false;
+    let mut words = rest.iter();
+    while let Some(argument) = words.next() {
+        match argument.as_str() {
+            "--no-deps" if metadata => no_deps = true,
+            "--workspace" if !metadata => {}
+            "--offline" | "--frozen" | "--locked" | "--quiet" | "-q" => {}
+            "--format-version" if metadata => {
+                if words.next().is_none_or(|value| value != "1") {
+                    return false;
+                }
+            }
+            value if metadata && value.starts_with("--format-version=") => {
+                if &value["--format-version=".len()..] != "1" {
+                    return false;
+                }
+            }
+            "--message-format" if !metadata => {
+                if words
+                    .next()
+                    .is_none_or(|value| !matches!(value.as_str(), "plain" | "json"))
+                {
+                    return false;
+                }
+            }
+            value if !metadata && value.starts_with("--message-format=") => {
+                if !matches!(&value["--message-format=".len()..], "plain" | "json") {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+    }
+    !metadata || no_deps
+}
+
+/// Whether reading the manifests can start a program Cargo was pointed at.
+///
+/// The query contacts no registry, so the endpoint tables matter here only
+/// because a credential provider is a program; what it does ask for is proof
+/// about `rustc`. Cargo asks the compiler what the target supports while it
+/// builds its answer, and `[build]` names which `rustc` -- or which wrapper
+/// around it -- that is, while `[target]` names a linker and a runner for the
+/// same work. A workspace file choosing the program is the outcome the
+/// package review exists to catch, so those tables keep the review along with
+/// the ones a `cargo search` already screens.
+///
+/// The environment spells the same two settings, so it is read with them: a
+/// session that exports `RUSTC_WRAPPER` or a per-target runner chooses the
+/// program just as a workspace file would, and screening only the file would
+/// leave the proof half made.
+fn manifest_reading_is_inert(context: super::PathContext<'_>) -> bool {
+    context.cargo_compiler_inert && config_is_inert(context, &MANIFEST_READING_TABLES)
+}
+
+/// The endpoint tables plus the two that name a program the compiler query
+/// would run.
+const MANIFEST_READING_TABLES: [&str; 8] = [
+    "registry",
+    "registries",
+    "source",
+    "http",
+    "net",
+    "credential-alias",
+    "build",
+    "target",
+];
 
 /// `cargo search <term>`, optionally bounded by `--limit`.
 ///
@@ -263,6 +367,13 @@ fn rustup_settings_only_official(home: &Path) -> bool {
 /// settings they carry never reach a process. Refusing them would cost the
 /// reading in most real workspaces and buy nothing.
 fn registry_is_official(context: super::PathContext<'_>) -> bool {
+    config_is_inert(context, &REDIRECTING_TABLES)
+}
+
+/// Whether every `.cargo` configuration Cargo merges for this working
+/// directory leaves the named tables unset, and the environment sets none of
+/// the same settings.
+fn config_is_inert(context: super::PathContext<'_>, tables: &[&str]) -> bool {
     if !context.cargo_config_inert {
         return false;
     }
@@ -284,7 +395,7 @@ fn registry_is_official(context: super::PathContext<'_>) -> bool {
     cwd.ancestors()
         .chain(physical.ancestors())
         .chain(std::iter::once(home))
-        .all(cargo_config_inert)
+        .all(|directory| directory_config_inert(directory, tables))
 }
 
 /// The tables that can move the endpoint, name the index behind it, or pick
@@ -299,7 +410,7 @@ const REDIRECTING_TABLES: [&str; 6] = [
 ];
 
 /// Whether this directory's `.cargo` configuration leaves the query alone.
-fn cargo_config_inert(directory: &Path) -> bool {
+fn directory_config_inert(directory: &Path, tables: &[&str]) -> bool {
     for name in ["config.toml", "config"] {
         let path = directory.join(".cargo").join(name);
         let metadata = match fs::symlink_metadata(&path) {
@@ -316,10 +427,7 @@ fn cargo_config_inert(directory: &Path) -> bool {
         let Ok(table) = contents.parse::<toml::Table>() else {
             return false;
         };
-        if REDIRECTING_TABLES
-            .iter()
-            .any(|name| table.contains_key(*name))
-        {
+        if tables.iter().any(|name| table.contains_key(*name)) {
             return false;
         }
         // `[env]` sets variables for the processes Cargo starts, and the
@@ -330,6 +438,11 @@ fn cargo_config_inert(directory: &Path) -> bool {
         // An unstable table can turn on a feature whose behaviour this
         // reading has not been written against.
         if table.contains_key("unstable") {
+            return false;
+        }
+        // Cargo can recursively load additional configuration files. Until
+        // those files are proven inert, the local table alone proves nothing.
+        if table.contains_key("include") {
             return false;
         }
     }

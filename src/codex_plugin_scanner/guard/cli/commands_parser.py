@@ -14,6 +14,7 @@ from .commands_parser_constants import _GUARD_HELP_GROUPS
 from .commands_parser_cloud import _configure_guard_cloud_parsers
 from .commands_parser_cloud_actions import configure_guard_cloud_actions_parser
 from .browser_explain_command import configure_guard_browser_parser
+from .integrations_command import configure_guard_integrations_parser
 from .commands_parser_cloud_review import configure_guard_cloud_review_parser
 from .commands_parser_desktop import _configure_guard_desktop_parser
 from .commands_parser_hooks import configure_guard_hooks_parser
@@ -77,6 +78,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
     _configure_guard_cloud_parsers(guard_subparsers)
     configure_guard_cloud_review_parser(guard_subparsers)
     configure_guard_browser_parser(guard_subparsers)
+    configure_guard_integrations_parser(guard_subparsers)
     configure_guard_cloud_actions_parser(guard_subparsers)
     from .runtime_forward import configure_forward
 

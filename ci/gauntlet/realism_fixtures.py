@@ -411,8 +411,12 @@ IGNORE_NEGATION_CONSUMED_IGLOB_CASE = "omp-native-rg-consumed-iglob-hidden-prote
 IGNORE_NEGATION_BROAD_GLOB_CASE = "omp-native-rg-broad-glob-hidden-protected"
 ENV_TEMPLATE_READ_CASE = "omp-native-read-env-template"
 ENV_TEMPLATE_SHELL_READ_CASE = "omp-native-shell-read-env-template"
+ENV_TEMPLATE_EMPTY_CREDENTIALS_CASE = "omp-native-shell-read-env-template-empty-credentials"
 IGNORE_NEGATION_RULES = ".env*\n!.env.example\n"
 ENV_TEMPLATE = "API_BASE_URL=http://127.0.0.1:3000\nFEATURE_ROUTE_TIMEOUT_MS=2000\n"
+# A template that names its credentials and leaves them empty: the line
+# below each empty name is a plain setting, not that credential's value.
+ENV_TEMPLATE_EMPTY_CREDENTIALS = "API_BASE_URL=http://127.0.0.1:3000\nAPI_TOKEN=\nNODE_ENV=development\nSESSION_SECRET=\nFEATURE_ROUTE_TIMEOUT_MS=2000\n"
 
 
 def add_ignore_negation_template(main: Path, scenario_id: str | None) -> tuple[str, ...]:
@@ -430,10 +434,18 @@ def add_ignore_negation_template(main: Path, scenario_id: str | None) -> tuple[s
         _write(main / "src/.gitignore", "!.env.test.ts\n")
         _write(main / "src/.env.test.ts", "KEY=SYNTHETIC_MARKER_ONLY\n")
         return ("src/.gitignore", "src/.env.test.ts")
-    if scenario_id not in {IGNORE_NEGATION_CASE, ENV_TEMPLATE_READ_CASE, ENV_TEMPLATE_SHELL_READ_CASE}:
+    if scenario_id not in {
+        IGNORE_NEGATION_CASE,
+        ENV_TEMPLATE_READ_CASE,
+        ENV_TEMPLATE_SHELL_READ_CASE,
+        ENV_TEMPLATE_EMPTY_CREDENTIALS_CASE,
+    }:
         return ()
     _write(main / ".gitignore", GITIGNORE + IGNORE_NEGATION_RULES)
-    _write(main / ".env.example", ENV_TEMPLATE)
+    _write(
+        main / ".env.example",
+        ENV_TEMPLATE_EMPTY_CREDENTIALS if scenario_id == ENV_TEMPLATE_EMPTY_CREDENTIALS_CASE else ENV_TEMPLATE,
+    )
     return (".env.example",)
 
 

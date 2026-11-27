@@ -136,7 +136,7 @@ place to put its cases.
   offers the covering grant as a suggestion. Tests: no URL, path or argument text in any row; no
   route exports the table off the device; the suggestion never creates a grant without the proof
   flow.
-- [ ] **BP-T172** Report path: card menu item "This should not have asked" and
+- [x] **BP-T172** Report path: card menu item "This should not have asked" and
   `hol-guard browser report-prompt <request-id>`, native. Output is the anonymized skeleton from PRD
   5.10. Test: every argument value is a placeholder and the origin is `site-a.example.test`.
 - [x] **BP-T173** R-QUIET-4: `observe` state for an external driver profile mapping. The decision is
@@ -150,30 +150,51 @@ place to put its cases.
 - [ ] **BP-T175** Effect level per provider and capability (`observe`, `tighten`, `enforce`) as a
   protected setting through the settings route (preview plus proof) and managed policy. Default
   `tighten`. `enforce` is the existing "Enforce provider blocks". Extends BP-T125.
-- [ ] **BP-T176** `rust/crates/guard-provider-integrations/src/noise.rs`: unverified `caution` is a
+- [x] **BP-T176** `rust/crates/guard-provider-integrations/src/noise.rs`: unverified `caution` is a
   finding only; one provider-caused review per subject per signal version; three per session per
   provider, then findings plus one Browser-area notice; `danger` uncapped; a review Guard raises
   anyway is not counted. Property test: for any signal sequence the number of provider-caused reviews
   never exceeds the caps, and no sequence produces an allow Guard would not have given.
+  - `NoiseLedger::admit` and `noise::apply` are pure; the resident wires them in with BP-T120. The
+    property runs 2000 seeded sequences of 60 signals over three providers without a new
+    dependency.
 - [ ] **BP-T177** Override accounting: after three allow-throughs of the same provider and reason code
   in seven days the card offers "Stop asking for this reason from <provider>". Accepting sets that
   reason code to `observe`. Integrations page lists each with undo. Tests: never automatic, never
   below Guard's own decision, undo restores.
+  - Ledger done: `overrides.rs` counts allow-throughs per provider and reason in the window,
+    offers only at the threshold, refuses an unoffered accept, lowers only to `observe` and
+    undo restores. Still open: the card offer, the Integrations page list and the resident wiring.
 - [ ] **BP-T178** Multi-provider composition: strongest fresh verdict per subject, one review per
   subject, rows sorted by verdict then provider id, three rows plus "N more", placement never orders.
   Vectors and a Playwright spec for the card with four providers.
+  - `compose.rs` holds the vectors (order, "N more", arrival order, stale rows, one review per
+    subject). The Playwright spec waits for the provider rows on the card (BP-T047).
 - [ ] **BP-T179** `fixture_origin.rs` and the loopback provider stub (PRD 8.3).
   `HOL_GUARD_PROVIDER_FIXTURE_ORIGIN`, modeled on `HOL_GUARD_DISCOVERY_FIXTURE_ORIGIN`. One Rust test
   per restriction: loopback only; `provider.fixture-` ids only; the compiler rejects that prefix under
   `contributions/`; only the literal fixture key is ever sent; a stored secret is never sent; the
   Integrations page marks the provider as a fixture. Stub in `ci/gauntlet/browser_fixtures.py` with
   per-case scripts and a request journal.
+  - Rust side landed in `guard-provider-integrations/src/fixture_origin.rs`: the loopback-only
+    origin parser, the `provider.fixture-` route that never reroutes another provider and has no
+    route without an origin, and a transport that always sends the literal fixture key (proven
+    against a loopback stub). Still open: the compiler refusal under `contributions/`, the
+    resident wiring, the Integrations page mark and the Gauntlet stub.
 - [ ] **BP-T180** Conformance kit: `conformance.rs` and `hol-guard integrations conformance
   <manifest>` (PRD 6.12), runnable from the released CLI. Five checks: compile and labels, recorded
   responses, share set, no added prompt, bounded prompt. CI runs it for every manifest under
   `contributions/provider-integrations/`. Add `hol-guard extensions generate --provider` and
   `validate --provider` so a manifest is generated with its fixtures and gate rows.
-- [ ] **BP-T181** Calibration for `verified` (D12): document the report format, the public list named
+  - Kit done: `guard-provider-integrations/src/conformance.rs` runs the five checks over a manifest,
+    its recorded responses and the corpus decisions. Still open: the CLI command, recorded fixtures
+    under `tests/fixtures/provider_integrations/`, the CI job and `extensions generate/validate --provider`.
+  - Recordings and CI done: `conformance_fixtures.rs` reads `recordings.json` and the benign gate's
+    browser rows, and the `conformance_kit` cargo test runs the kit over the reference fixture
+    provider and every contributed manifest.
+  - CLI done: `hol-guard integrations conformance <manifest>` runs the native `provider-conformance`
+    command. Still open: `extensions generate/validate --provider`.
+- [x] **BP-T181** Calibration for `verified` (D12): document the report format, the public list named
   by digest and the starting thresholds in the provider contributing guide. No list is checked in.
 - [ ] **BP-T182** Noise view on the provider detail page and in `hol-guard integrations status <id>`:
   reviews caused in seven days, allowed through, quieted reason codes, effect level per capability.
@@ -488,6 +509,12 @@ transcript in the pull request (after BP-T052).
   `encrypted_secret_store`, format validation from the manifest before storing, `Zeroizing` copies
   only. Secret tests: the key never appears in a route response, a log line, a receipt, a store row
   outside the secret store, a panic message or `Debug` output.
+  - [x] Secret module: id, `keyFormat` check (length, charset, Guard's 4 KiB cap) before anything is
+    written, a `ProviderKey` wrapper that zeroes on drop and prints as `redacted`, refusal codes with
+    no key text, per-provider delete for disconnect and `delete_all_provider_keys` for uninstall and
+    forget-device. Tests cover `Debug`, error text and every file under the Guard home.
+  - [ ] Route, log and receipt checks land with the routes (BP-T130) and the worker (BP-T122), which
+    are the first code that handles a key outside this module.
 - [ ] **BP-T121** `provider_integration_store.rs`: connection rows and the `provider_signals` cache
   table keyed by `(provider_id, capability, subject_digest)`, through the native `ensure_schema`
   chain. Subjects are stored as digests.
@@ -502,8 +529,21 @@ transcript in the pull request (after BP-T052).
 - [ ] **BP-T122** `provider_integration_worker.rs`: the only caller of the client. Token bucket,
   negative cache (60 s), jittered refresh, circuit breaker (five failures, 5 minutes), `401` and `403`
   to `key_invalid` with calls stopped.
-- [ ] **BP-T123** `provider_integration_decide.rs`: cache read only, applies PRD 6.6. Property test:
+  - [x] Pacing and failure handling (`ProviderWorker`): per-provider token bucket at the manifest's
+    `max_requests_per_minute` with a burst of a tenth of a minute, a 60 s per-subject negative cache
+    for failures (bounded), a circuit that opens for 5 minutes after five consecutive failures and
+    reopens on a failed probe, `401`/`403` written to the stored connection as `key_invalid` with one
+    notice, and a jittered refresh point late in an answer's lifetime (`refresh_at`).
+  - [x] Lookup executor (`provider_integration_lookup.rs`): checks that the stored connection is for
+    the same compiled manifest, refuses an opt-in fact the user did not turn on and a private or
+    loopback origin or site group before a token is taken, loads the key, renders the body, sends it
+    through the transport, maps the answer with `map_answer` and caches it with `put_signal`.
+    `401`/`403`, `429` and every other failure go to `ProviderWorker::record`.
+  - [ ] Daemon scheduling: a background loop that picks subjects from the hook path's queue and runs
+    the executor with the pinned HTTPS client, off the decision path (with BP-T124).
+- [x] **BP-T123** `provider_integration_decide.rs`: cache read only, applies PRD 6.6. Property test:
   for any signal set the decision is never weaker than the decision with no provider.
+  - [ ] Wire `decide` into the hook and relay decision paths (with BP-T124's hot-path proof).
 - [ ] **BP-T124** Hot path proof: a test that fails if the hook or relay decision path performs
   network I/O or waits on the worker. Latency evidence in `scripts/native_slo_contract.py`.
 - [ ] **BP-T125** Settings "Enforce provider blocks" and "Require a fresh check", per provider and

@@ -404,9 +404,10 @@ pub(crate) fn fernet_decrypt(
     mac.update(&data[..data.len() - 32]);
     mac.verify_slice(tag).map_err(|_| "hmac mismatch")?;
 
-    let mut buf = ciphertext.to_vec();
+    // The buffer ends up holding the plaintext, so it is cleared when it is dropped.
+    let mut buf = zeroize::Zeroizing::new(ciphertext.to_vec());
     let pt = Aes128CbcDec::new(&encryption_key.into(), &iv.into())
-        .decrypt_padded_mut::<Pkcs7>(&mut buf)
+        .decrypt_padded_mut::<Pkcs7>(&mut buf[..])
         .map_err(|_| "bad padding")?
         .to_vec();
     Ok(pt)

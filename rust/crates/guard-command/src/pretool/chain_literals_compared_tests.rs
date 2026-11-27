@@ -63,7 +63,7 @@ fn a_value_compared_as_a_string_takes_the_display_stand_in() {
             format!("[ \"\" = \"{v}\" ] && echo clean"),
         ),
         (
-            "[ -n \"$(git log -1 --format='\"')\" ] && echo quoted",
+            "[ -n \"$(git log -1 --format='format:\"')\" ] && echo quoted",
             format!("[ -n \"{v}\" ] && echo quoted"),
         ),
     ] {

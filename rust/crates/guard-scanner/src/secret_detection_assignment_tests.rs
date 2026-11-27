@@ -152,3 +152,57 @@ fn matches_after_the_budget_is_spent_are_still_found() {
     text.push_str("\nclient_secret: correct-horse-battery-staple\n");
     assert_same(&text);
 }
+
+/// A value assembled at run time, so no literal here reads as a credential.
+fn sample_value() -> String {
+    ["xQ7", "mL2v", "Rp9T", "kW4n", "Zs8B", "hY3c"].concat()
+}
+
+fn assignment_lines(text: &str) -> Vec<usize> {
+    crate::secret_detection::scan_secret_text(text, ".env.example", "search", None, 10)
+        .findings
+        .iter()
+        .filter(|finding| finding.rule_id == "credential-assignment")
+        .map(|finding| finding.line)
+        .collect()
+}
+
+#[test]
+fn an_empty_assignment_does_not_take_the_next_line_as_its_value() {
+    // A dotenv template leaves its credentials empty; the next line is its
+    // own assignment, not the value of the empty one above it.
+    let template = "API_TOKEN=\nAPP_DISPLAY_NAME=storefront_portal_main\nDATABASE_PASSWORD=\nAPP_REGION_LABEL=north_america_east_2\n";
+    assert_eq!(assignment_lines(template), Vec::<usize>::new());
+    // A credential on the next line is still found, under its own name.
+    let filled = format!("API_TOKEN=\nSESSION_SECRET={}\n", sample_value());
+    assert_eq!(assignment_lines(&filled), vec![2]);
+    // A quoted value a formatter moved to the next line still belongs to
+    // the name before it.
+    let wrapped = format!("const apiKey =\n  \"{}\";\n", sample_value());
+    assert_eq!(assignment_lines(&wrapped).len(), 1);
+    // So does an unquoted value on the separator's own line.
+    let inline = format!("API_TOKEN= {}\n", sample_value());
+    assert_eq!(assignment_lines(&inline), vec![1]);
+}
+
+#[test]
+fn a_dotenv_template_with_empty_credentials_has_no_findings() {
+    // A committed template names its credentials and leaves them empty.
+    // Each empty name sits above a plain setting, which is not its value.
+    let template = "API_BASE_URL=http://127.0.0.1:3000\nAPI_TOKEN=\nNODE_ENV=development\nSESSION_SECRET=\nFEATURE_ROUTE_TIMEOUT_MS=2000\n";
+    let summary = crate::secret_detection::scan_secret_text(
+        template,
+        ".env.example",
+        "working_tree",
+        None,
+        200,
+    );
+    assert_eq!(
+        summary
+            .findings
+            .iter()
+            .map(|finding| finding.rule_id.to_string())
+            .collect::<Vec<_>>(),
+        Vec::<String>::new()
+    );
+}

@@ -188,6 +188,8 @@ class BenignFixture:
             "signed_app": self.home / "Code" / "signed" / "app-signed",
             # A checkout whose `.gitignore` re-includes a hidden template, as most application repositories do.
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
+            # A checkout whose committed template leaves its credentials empty.
+            "env_template_empty_credentials": self.home / "Code" / "ignore-rules" / "ledger-api",
             "feature_app": feature_app_path(self.home),
             "pnpm_monorepo": self.home / "Code" / "acme-platform",
             # A package inside a workspace whose shared type-check base sits at

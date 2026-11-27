@@ -280,6 +280,53 @@ pub(super) fn github_api_raw_fields(segment: &crate::CommandSegmentV1) -> Vec<&S
     values
 }
 
+/// Git reads whose `-G`, `-S` and `--grep` take a search pattern.
+const PATTERN_COMMANDS: &[&str] = &[
+    "diff",
+    "diff-files",
+    "diff-index",
+    "diff-tree",
+    "log",
+    "show",
+    "whatchanged",
+];
+
+/// The search patterns a Git diff or log read filters its output by: the
+/// values of `-G`, `-S` and `--grep`. Git matches a pattern against content
+/// and messages and never opens or runs it, so, like a `gh api` raw field,
+/// only the state screen applies to it. Nothing after `--` is a pattern.
+pub(super) fn git_search_patterns(segment: &crate::CommandSegmentV1) -> Vec<&String> {
+    if crate::command_compatibility::basename(segment) != "git" {
+        return Vec::new();
+    }
+    let arguments = &segment.arguments;
+    let Some(index) = crate::command_compatibility::git_command_index(arguments).filter(|index| {
+        arguments
+            .get(*index)
+            .is_some_and(|c| PATTERN_COMMANDS.contains(&c.as_str()))
+    }) else {
+        return Vec::new();
+    };
+    let mut values = Vec::new();
+    let mut value_next = false;
+    for argument in &arguments[index + 1..] {
+        if std::mem::take(&mut value_next) {
+            values.push(argument);
+            continue;
+        }
+        if argument == "--" {
+            break;
+        }
+        value_next = matches!(argument.as_str(), "-G" | "-S" | "--grep");
+        if argument.starts_with("--grep=")
+            || (argument.len() > 2 && (argument.starts_with("-G") || argument.starts_with("-S")))
+        {
+            values.push(argument);
+        }
+    }
+    values
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

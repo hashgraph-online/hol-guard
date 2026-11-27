@@ -506,6 +506,7 @@ impl<'a> super::PathContext<'a> {
             rustup_override_absent: fields.rustup_override_absent,
             go_toolchain_inert: fields.go_toolchain_inert,
             cargo_config_inert: fields.cargo_config_inert,
+            cargo_compiler_inert: fields.cargo_compiler_inert,
             npm_config_inert: fields.npm_config_inert,
             pip_config_inert: fields.pip_config_inert,
             python_environment_inert: fields.python_environment_inert,
@@ -605,6 +606,22 @@ impl<'a> super::PathContext<'a> {
                     && cargo_selector(&name)
                     && !(name.eq_ignore_ascii_case("CARGO_HOME")
                         && guard_contracts::cargo_home_default(home_dir, value.to_str()))
+            }),
+        };
+        // `cargo metadata` runs `rustc` to learn the host target, so a
+        // variable that names that program, a wrapper around it, or a
+        // per-target linker or runner hands the query something to execute
+        // even when every registry setting is where Cargo would find it.
+        let cargo_compiler_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| cargo_compiler_selector(name))
+            }
+            None => !std::env::vars_os().any(|(name, value)| {
+                !value.is_empty() && cargo_compiler_selector(&name.to_string_lossy())
             }),
         };
         let npm_config_inert = match execution_environment {
@@ -745,6 +762,7 @@ impl<'a> super::PathContext<'a> {
             rustup_override_absent,
             go_toolchain_inert,
             cargo_config_inert,
+            cargo_compiler_inert,
             npm_config_inert,
             pip_config_inert,
             python_environment_inert,
@@ -765,6 +783,7 @@ pub(super) struct SessionFields {
     rustup_override_absent: bool,
     go_toolchain_inert: bool,
     cargo_config_inert: bool,
+    cargo_compiler_inert: bool,
     npm_config_inert: bool,
     pip_config_inert: bool,
     python_environment_inert: bool,
@@ -866,6 +885,35 @@ fn cargo_selector(name: &str) -> bool {
         .any(|prefix| name.starts_with(prefix))
 }
 
+/// The variables that name the program Cargo starts for the compiler side of
+/// a manifest query. `cargo metadata` asks `rustc` for the host target before
+/// it prints anything, and `RUSTC`, `RUSTC_WRAPPER`,
+/// `RUSTC_WORKSPACE_WRAPPER` and their `CARGO_BUILD_` spellings each name the
+/// executable it runs for that answer. A `[target.<triple>]` linker or runner
+/// names one the same way, which is why the manifest proof reads the `build`
+/// and `target` configuration tables; the environment spells the same
+/// settings and has to be read with them.
+///
+/// Only the names that carry a program are read. `CARGO_TARGET_DIR`,
+/// `CARGO_BUILD_TARGET` and `CARGO_BUILD_JOBS` describe where output goes,
+/// which triple is wanted and how much of the machine to use. Ordinary shells
+/// and continuous-integration images export those, and none of them hands
+/// Cargo something to execute.
+fn cargo_compiler_selector(name: &str) -> bool {
+    let name = name.to_ascii_uppercase();
+    [
+        "RUSTC",
+        "RUSTC_WRAPPER",
+        "RUSTC_WORKSPACE_WRAPPER",
+        "CARGO_BUILD_RUSTC",
+        "CARGO_BUILD_RUSTC_WRAPPER",
+        "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+    ]
+    .contains(&name.as_str())
+        || (name.starts_with("CARGO_TARGET_")
+            && (name.ends_with("_LINKER") || name.ends_with("_RUNNER")))
+}
+
 /// npm reads every `npm_config_*` variable as configuration, including the
 /// registry and the paths of its other config files. Node reads the rest
 /// before npm's own code runs, and `NODE_TLS_REJECT_UNAUTHORIZED=0` turns off
@@ -894,7 +942,37 @@ fn npm_selector(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{drive_separators, shell_alters_backslash, xdg_config_is_default};
+    use super::{
+        cargo_compiler_selector, drive_separators, shell_alters_backslash, xdg_config_is_default,
+    };
+
+    #[test]
+    fn only_the_cargo_variables_that_name_a_program_are_read_as_the_compiler() {
+        for name in [
+            "RUSTC",
+            "rustc_wrapper",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_RUSTC",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER",
+            "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER",
+        ] {
+            assert!(cargo_compiler_selector(name), "{name}");
+        }
+        // These describe where output goes, which triple is wanted and how
+        // much of the machine to use. Ordinary shells export them and none
+        // hands Cargo something to execute.
+        for name in [
+            "CARGO_TARGET_DIR",
+            "CARGO_BUILD_TARGET",
+            "CARGO_BUILD_TARGET_DIR",
+            "CARGO_BUILD_JOBS",
+            "RUSTC_VERSION",
+            "RUSTUP_TOOLCHAIN",
+        ] {
+            assert!(!cargo_compiler_selector(name), "{name}");
+        }
+    }
 
     #[test]
     fn repeated_drive_separators_spell_one_backslash() {

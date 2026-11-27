@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "guard.provider-integration.v1",
+  "id": "provider.exampleshield",
+  "name": "ExampleShield",
+  "publisher": {"name": "ExampleShield Inc.", "url": "https://exampleshield.example", "verified": false},
+  "summary": "Checks the sites an agent opens against your ExampleShield account.",
+  "surfaces": ["browser"],
+  "auth": {
+    "kind": "api-key",
+    "header": "x-provider-key",
+    "keyFormat": {"minLength": 24, "maxLength": 128, "charset": "base64url"},
+    "obtainUrl": "https://exampleshield.example/keys"
+  },
+  "hosts": ["api.exampleshield.example"],
+  "capabilities": [
+    {
+      "id": "browser.origin-reputation",
+      "request": {
+        "method": "POST",
+        "path": "/v1/guard/origin",
+        "body": {"origin": {"fact": "target.origin"}}
+      },
+      "response": {
+        "verdict": {"pointer": "/verdict", "map": {"clean": "ok", "suspicious": "caution", "malicious": "danger"}},
+        "reasonCodes": {
+          "pointer": "/reasons",
+          "allow": ["phishing", "malware", "new_domain", "typosquat"],
+          "labels": {"phishing": "Reported for phishing", "new_domain": "Registered recently"}
+        },
+        "ttlSeconds": {"pointer": "/ttl", "min": 60, "max": 86400}
+      },
+      "shares": ["target.origin"]
+    }
+  ],
+  "verify": {"method": "GET", "path": "/v1/guard/key"},
+  "limits": {"timeoutMs": 1200, "maxResponseBytes": 16384, "maxRequestsPerMinute": 30},
+  "privacyUrl": "https://exampleshield.example/privacy",
+  "termsUrl": "https://exampleshield.example/terms"
+}

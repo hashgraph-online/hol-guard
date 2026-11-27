@@ -64,6 +64,11 @@ pub(crate) fn candidate_digest(candidate: &str) -> CandidateDigest {
 
 const DETECTOR_VERSION: &str = "guard-secrets-v1";
 const GENERIC_CANDIDATE_POLICY_VERSION: &str = "credential-expression-filter-v2";
+/// Folded into `detector_version`, so a stored scan taken while an unquoted
+/// assignment value could start on the next line is recognisable as one from
+/// a different detector. The Python-era `credential-assignment` material keeps
+/// its own line, so the digest Python published stays reproducible.
+const ASSIGNMENT_VALUE_POLICY_VERSION: &str = "assignment-unquoted-value-same-line-v1";
 
 /// `max_findings` default mirroring `scan_secret_text(..., max_findings=200)`.
 pub const DEFAULT_MAX_FINDINGS: usize = 200;
@@ -120,8 +125,13 @@ static ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| {
     // Equivalent to `(?im)` + the three capture arms of `_ASSIGNMENT`; the
     // `(?P=quote)` backreference is expanded into distinct named groups so the
     // regex crate (no backreference support) can compile it.
+    //
+    // A quoted value may start on the next line, as a formatter wraps
+    // `const apiKey =` before a long string. An unquoted one must start on
+    // the separator's own line: in `API_TOKEN=` followed by `NEXT_NAME=value`
+    // the first name is empty, and the next line is its own assignment.
     Regex::new(
-        r#"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{1,80})\s*[:=]\s*(?:(?P<quote>")(?P<secret>[^\s"',}{]{12,256})"|(?P<quote1>')(?P<secret_sq>[^\s"',}{]{12,256})'|(?P<secret_uq>[^\s"',}{]{12,256}))"#,
+        r#"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{1,80})\s*[:=](?:\s*(?P<quote>")(?P<secret>[^\s"',}{]{12,256})"|\s*(?P<quote1>')(?P<secret_sq>[^\s"',}{]{12,256})'|[ \t]*(?P<secret_uq>[^\s"',}{]{12,256}))"#,
     )
     .expect("ASSIGNMENT is a static literal")
 });
@@ -1319,7 +1329,14 @@ fn compute_detector_version() -> String {
     material_parts.push(assignment_material_line());
     material_parts.push(encoded_payload_material_line());
     material_parts.push(shell_credential_material_line());
+    material_parts.push(assignment_value_material_line());
     detector_version_over(&material_parts)
+}
+
+/// How an assignment's value is read: an unquoted value starts on the
+/// separator's own line, so an empty `API_TOKEN=` never takes the next line.
+fn assignment_value_material_line() -> String {
+    format!("assignment-value|{ASSIGNMENT_VALUE_POLICY_VERSION}")
 }
 
 /// One rule's contribution to the detector digest.
@@ -2324,6 +2341,20 @@ mod tests {
             .collect();
         material.push(assignment_material_line());
         assert_eq!(detector_version_over(&material), PYTHON_DETECTOR_VERSION);
+    }
+
+    #[test]
+    fn the_same_line_assignment_value_rule_moves_the_detector_version() {
+        // A stored scan from before an unquoted value had to start on its
+        // separator's line reported different findings, so it must not look
+        // current.
+        let mut material: Vec<String> = SECRET_RULES.iter().map(rule_material_line).collect();
+        material.push(assignment_material_line());
+        material.push(encoded_payload_material_line());
+        material.push(shell_credential_material_line());
+        assert_ne!(detector_version(), detector_version_over(&material));
+        material.push(assignment_value_material_line());
+        assert_eq!(detector_version(), detector_version_over(&material));
     }
 
     #[test]
