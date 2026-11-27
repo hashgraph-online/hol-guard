@@ -231,3 +231,51 @@ fn a_glob_with_a_pattern_folder_that_could_reach_a_secret_keeps_its_review() {
         }
     }
 }
+
+#[test]
+fn a_glob_below_a_missing_folder_reads_nothing() {
+    // An agent searches a fixed list of places, some of which this checkout
+    // does not have: there is no `tools` or `scripts` folder, so no shell
+    // option makes `tools/*io*` match. The other roots are proven.
+    let home = fixture();
+    for harness in HARNESSES {
+        for command in [
+            r#"grep -rn "FACT" src/app/*.py docs/*.md tools/*io* 2>/dev/null | head"#,
+            "grep -rn FACT README.md tools/*.py scripts/*/*.sh",
+            "grep -n FACT README.md tools/*.py",
+            "grep -rn FACT src tools/sub/*.py",
+        ] {
+            assert_eq!(
+                action(harness, command, &home),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_glob_below_a_missing_folder_that_could_reach_a_secret_keeps_its_review() {
+    let home = fixture();
+    for harness in HARNESSES {
+        for command in [
+            // Under nullglob nothing is left, and `grep -r` walks `.`, where
+            // the pattern can match `.env.local`.
+            "grep -rn synthetic tools/*.py",
+            // Below a credential store.
+            "grep -rn FACT README.md ~/.ssh/keys/*",
+            // A hidden folder the listing rule does not name.
+            "grep -rn FACT README.md .private/*.py",
+            // The chain creates the folder before the shell expands the glob.
+            "mkdir tools && ln -s ~/.ssh/id_ed25519 tools/a.py; grep -rn synthetic README.md tools/*.py",
+            // An extended-glob group can match a real folder.
+            "grep -rn synthetic README.md +(src)/app/*.py",
+        ] {
+            assert_ne!(
+                action(harness, command, &home),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
