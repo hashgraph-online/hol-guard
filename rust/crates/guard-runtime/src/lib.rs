@@ -1184,6 +1184,7 @@ mod protect_approval_plan;
 mod protect_guidance;
 mod protect_request_op;
 mod protection_health_report_op;
+pub mod provider_integration_secret;
 pub mod provider_integration_store;
 mod proxy_credentials;
 mod publication_inverse_claims;
