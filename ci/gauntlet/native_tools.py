@@ -732,7 +732,12 @@ def _route_segment_glob_error(calls: list[dict[str, Any]]) -> str | None:
     return None
 
 
-APPROVAL_WAIT_COMMAND = re.compile(r"hol-guard approvals wait [0-9a-f]{32}(?:\s|$)")
+# Only the standalone wait shape and literal home option are in scope.
+# A prefix match could discard another command from the benchmark trace.
+APPROVAL_WAIT_COMMAND = re.compile(
+    r"hol-guard approvals wait [0-9a-f]{32}(?: --json)?"
+    r"(?: --home (?:'[A-Za-z0-9_./\\:{} -]+'|[A-Za-z0-9_./\\:{}-]+))?"
+)
 
 
 def without_approval_waits(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -750,7 +755,7 @@ def without_approval_waits(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not (
             call.get("name") == "bash"
             and isinstance(command := call.get("args", {}).get("command"), str)
-            and APPROVAL_WAIT_COMMAND.match(command)
+            and APPROVAL_WAIT_COMMAND.fullmatch(command)
         )
     ]
 
