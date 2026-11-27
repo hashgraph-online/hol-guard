@@ -35829,6 +35829,10 @@ function McpCallFooter({
     item.browser_card ? /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserReportPrompt, { requestId: item.request_id }) : null
   ] });
 }
+function approvalSetupHref() {
+  const href = "/settings?section=approval";
+  return typeof window === "undefined" ? href : guardAwareHref(href);
+}
 const SHARED_PROFILES = /* @__PURE__ */ new Set(["shared", "remote-debugging"]);
 function browserGateNeedsSetup(profile, gate) {
   return SHARED_PROFILES.has(profile) && gate != null && !isBulkApproveGateReady(gate);
@@ -35850,7 +35854,7 @@ function BrowserGatePrompt() {
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "a",
           {
-            href: guardAwareHref("/settings?section=approval"),
+            href: approvalSetupHref(),
             className: "font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30",
             children: "Set up approval"
           }

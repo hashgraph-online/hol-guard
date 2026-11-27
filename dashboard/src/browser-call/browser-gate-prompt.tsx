@@ -5,6 +5,12 @@ import type { GuardApprovalGatePublicConfig, GuardApprovalRequest, GuardBrowserP
 import { parseBrowserCard } from "../mcp-call/browser-card";
 
 /** Profiles the agent shares with the person, so a page it opens there is one it can reach. */
+/** The approval setup page, with the Guard session when a browser renders it. */
+function approvalSetupHref(): string {
+  const href = "/settings?section=approval";
+  return typeof window === "undefined" ? href : guardAwareHref(href);
+}
+
 const SHARED_PROFILES: ReadonlySet<GuardBrowserProfileLineV1> = new Set(["shared", "remote-debugging"]);
 
 /**
@@ -38,7 +44,7 @@ export function BrowserGatePrompt() {
       <HiMiniKey className="h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
       <span className="min-w-0 flex-1">The agent uses your own browser. Set up approval so only you can approve.</span>
       <a
-        href={guardAwareHref("/settings?section=approval")}
+        href={approvalSetupHref()}
         className="font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30"
       >
         Set up approval
