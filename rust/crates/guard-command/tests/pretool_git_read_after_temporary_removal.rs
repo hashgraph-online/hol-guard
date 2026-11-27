@@ -68,6 +68,15 @@ fn a_temporary_file_removal_before_a_git_read_keeps_its_proof() {
     // A file a configuration could include: removing it drops its settings.
     std::fs::write(scratch.join("extra.conf"), "[pager]\n\tlog = false\n").unwrap();
     std::fs::write(scratch.join(".mailmap"), "Fixture <fixture@example.test>\n").unwrap();
+    // The repository's `info/attributes` is this file, and a macro defined
+    // elsewhere can make `quiet` unset a filter.
+    std::fs::write(scratch.join("quiet.txt"), "*.txt quiet\n").unwrap();
+    std::fs::create_dir_all(repository.join(".git/info")).unwrap();
+    std::os::unix::fs::symlink(
+        scratch.join("quiet.txt"),
+        repository.join(".git/info/attributes"),
+    )
+    .unwrap();
     let scratch = scratch.display();
     let absent = format!("/tmp/hg-git-read-removal-absent-{}.txt", std::process::id());
 
@@ -88,6 +97,9 @@ fn a_temporary_file_removal_before_a_git_read_keeps_its_proof() {
     for command in [
         // A file with a configuration section may be included by one.
         format!("rm -f {scratch}/extra.conf; git log --oneline -1"),
+        // An attributes file Git reads keeps the review whatever it holds.
+        format!("rm -f {scratch}/quiet.txt; git log --oneline -1"),
+        format!("rm -f {scratch}/quiet.txt 2>/dev/null && git status --short"),
         // A dotfile can be an attributes, ignore or mailmap file.
         format!("rm -f {scratch}/.mailmap; git log --oneline -1"),
         // Only Git commands that never write the work tree join the chain.
