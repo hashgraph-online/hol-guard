@@ -346,3 +346,29 @@ fn a_paused_default_mode_setup_reason_gets_no_link() {
     assert_eq!(shown(&ask), format!("{ask} {OPEN_GUARD} {external}."));
     assert_eq!(shown(&local), format!("{local} {OPEN_GUARD} {external}."));
 }
+
+#[test]
+fn a_shared_profile_browser_block_keeps_the_link_a_codex_bridge_waits_on() {
+    // BP-T072: the approval invariant keeps the link for every profile mode.
+    let row = json!({"browser_card": {
+        "site": {"origin": "https://shop.example"},
+        "profile_line": "shared",
+    }});
+    let row = row.as_object().expect("row");
+    for harness in ["claude-code", "codex"] {
+        let mut inputs = queued(harness);
+        crate::browser_hold_text::note_silent(
+            row,
+            true,
+            &mut inputs.result,
+            &mut inputs.setup_reason,
+        );
+        let text = Value::Object(answer(&inputs, Some("daemon-token"))).to_string();
+        assert!(
+            text.contains("on `https://shop.example`"),
+            "{harness}: {text}"
+        );
+        assert!(text.contains("/requests/abc"), "{harness}: {text}");
+        assert!(!text.contains(SIGNED_LINK_UNAVAILABLE), "{harness}: {text}");
+    }
+}

@@ -431,8 +431,13 @@ transcript in the pull request (after BP-T052).
   `approval_browser_policy_tests.rs`. Update `docs/guard/approval-browser-policy.md`.
 - [ ] **BP-T071** R-GATE: setup prompt on the browser card when a shared or remote-debugging session
   has no approval gate. The two required choices stay.
-- [ ] **BP-T072** Agent-facing hook text for browser holds and denials: names the site and the wait,
-  tells the agent not to retry in a loop, omits the approval link for shared profiles.
+- [x] **BP-T072** Agent-facing hook text for browser holds and denials: names the site and the wait,
+  tells the agent not to retry in a loop. The approval link stays for every profile mode, shared
+  ones included: `docs/guard/approval-invariant.md` requires every executable review to offer Allow
+  once and Always allow on every route, and a Codex bridge holds its wait only when the block names
+  the link. R-SURFACE (BP-T070) already keeps the page itself closed for shared sessions.
+  - Done: `browser_hold_text.rs` adds the note to the stored row's hook reply, for paused reviews
+    and silent blocks. A block no approval can release says not to wait.
 - [ ] **BP-T073** Daemon routes `/v1/browser/sessions`, `/v1/browser/sites`, `/v1/browser/grants` in
   `daemon_route_paths.rs` and `daemon_edge_route_calls.rs`, with preview plus one-use proof on every
   mutation.

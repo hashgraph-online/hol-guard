@@ -104,6 +104,7 @@ mod browser_debug_ports;
 mod browser_driver_builder_command;
 mod browser_driver_gate_rows;
 mod browser_explain_command;
+mod browser_hold_text;
 mod browser_open;
 mod browser_report_prompt_command;
 pub mod browser_session_store;

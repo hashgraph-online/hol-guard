@@ -400,6 +400,7 @@ impl Delegated {
                 if let Some(reason) = &respond.setup_reason {
                     verdict.insert("reason".to_owned(), Value::String(reason.clone()));
                 }
+                crate::browser_hold_text::note_paused(row, &mut verdict);
                 // The renderer reads only the link and the request id.
                 let approval = [("approval_url", approval_url), ("request_id", request_id)]
                     .into_iter()
@@ -414,10 +415,14 @@ impl Delegated {
                 .response
             }
             RespondAsk::SilentReviewBlock(ask) => {
+                let (mut result, mut setup_reason) =
+                    (respond.result.clone(), respond.setup_reason.clone());
+                let unblock = respond.retry_reuses_approval || respond.exact_action_allowable;
+                crate::browser_hold_text::note_silent(row, unblock, &mut result, &mut setup_reason);
                 let inputs = SilentReviewBlockInputsV1 {
                     harness: respond.harness.clone(),
-                    result: respond.result.clone(),
-                    setup_reason: respond.setup_reason.clone(),
+                    result,
+                    setup_reason,
                     queued: true,
                     request_id,
                     approval_url,
@@ -485,3 +490,7 @@ mod tests;
 #[cfg(test)]
 #[path = "guard_store_native_review_queue_context_tests.rs"]
 mod context_tests;
+
+#[cfg(test)]
+#[path = "guard_store_native_review_queue_browser_tests.rs"]
+mod browser_tests;
