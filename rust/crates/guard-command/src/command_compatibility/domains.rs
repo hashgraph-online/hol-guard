@@ -459,22 +459,19 @@ pub(super) fn observe(
         // `.env` as a pattern file. A word `-e` or `--regexp` consumes is
         // always a pattern, escaped or not. A pattern attached to its option,
         // as in `--regexp=api_token`, keeps its exemption.
-        let regexp_value = |pattern: &String| {
-            arguments
-                .iter()
-                .position(|argument| argument == pattern)
-                .and_then(|index| index.checked_sub(1))
-                .and_then(|index| arguments.get(index))
-                .is_some_and(|option| matches!(option.as_str(), "-e" | "--regexp"))
-        };
-        let patterns = crate::pretool::search_pattern_words(&executable, arguments)
-            .unwrap_or_default()
+        // The parser says whether it read the words as `-e`/`--regexp`
+        // values; a literal `-e` another option took as its value, as in
+        // `rg -g -e <word>`, supplies no pattern.
+        let (pattern_words, from_options) = crate::pretool::search_patterns(&executable, arguments)
+            .map(|patterns| (patterns.words, patterns.from_options))
+            .unwrap_or_default();
+        let patterns = pattern_words
             .into_iter()
             .filter(|pattern| {
                 !(pattern.contains(['/', '~', '*', '?', '[', '{', '$', '`', '('])
                     || (pattern.starts_with('\\')
                         && pattern.replace('\\', "").starts_with('-')
-                        && !regexp_value(pattern)))
+                        && !from_options))
                     && arguments
                         .iter()
                         .filter(|argument| *argument == pattern)

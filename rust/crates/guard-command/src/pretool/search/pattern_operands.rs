@@ -16,6 +16,23 @@ use super::options;
 /// `rg --files`, which searches for no pattern and reads every positional as
 /// a path.
 pub(crate) fn search_pattern_words(executable: &str, arguments: &[String]) -> Option<Vec<String>> {
+    search_patterns(executable, arguments).map(|patterns| patterns.words)
+}
+
+/// The pattern words of a search and where they came from.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct SearchPatterns {
+    pub(crate) words: Vec<String>,
+    /// Every word was the value of an `-e`/`--regexp` option the walk itself
+    /// read as that option, so each is a pattern whatever it looks like. A
+    /// literal `-e` that another option took as its value, as in `rg -g -e x`,
+    /// supplies no pattern.
+    pub(crate) from_options: bool,
+}
+
+/// [`search_pattern_words`], saying whether the words came from pattern
+/// options or from the first positional.
+pub(crate) fn search_patterns(executable: &str, arguments: &[String]) -> Option<SearchPatterns> {
     let rg = match executable {
         "rg" => true,
         "grep" | "egrep" | "fgrep" => false,
@@ -102,9 +119,15 @@ pub(crate) fn search_pattern_words(executable: &str, arguments: &[String]) -> Op
         }
     }
     if pattern_option {
-        return Some(option_patterns);
+        return Some(SearchPatterns {
+            words: option_patterns,
+            from_options: true,
+        });
     }
-    Some(positionals.into_iter().take(1).collect())
+    Some(SearchPatterns {
+        words: positionals.into_iter().take(1).collect(),
+        from_options: false,
+    })
 }
 
 fn known_flag(rg: bool, name: &str) -> bool {
@@ -174,6 +197,22 @@ mod tests {
         assert_eq!(words("cat", "x .env"), None);
         assert_eq!(words("grep", "-A"), None);
         assert_eq!(words("rg", "--files .env"), None);
+    }
+
+    #[test]
+    fn a_literal_e_taken_as_another_options_value_supplies_no_pattern() {
+        let reading = |executable: &str, line: &str| {
+            let arguments: Vec<String> = line.split_whitespace().map(str::to_owned).collect();
+            super::search_patterns(executable, &arguments)
+        };
+        let glob = reading("rg", r"-g -e \-f.env src").unwrap();
+        assert_eq!(glob.words, vec![r"\-f.env".to_owned()]);
+        assert!(!glob.from_options);
+        let exclude = reading("grep", r"--exclude -e \-f.env src").unwrap();
+        assert!(!exclude.from_options);
+        let regexp = reading("rg", r"-e \-f.env src").unwrap();
+        assert_eq!(regexp.words, vec![r"\-f.env".to_owned()]);
+        assert!(regexp.from_options);
     }
 
     #[test]
