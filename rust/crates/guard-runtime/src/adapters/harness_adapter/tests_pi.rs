@@ -99,6 +99,42 @@ fn pi_install_lists_the_extension_and_uninstall_removes_it() {
     assert_eq!(uninstall["finish"]["tail"], json!([]));
 }
 
+fn install_notes(harness: &str) -> Vec<String> {
+    let home = Home::new();
+    let extra = json!({"shim": shim(), "runtime": runtime()});
+    let answer = home.ask(harness, "prepare_install", extra);
+    let manifest: Value = serde_json::from_str(answer["manifest"].as_str().unwrap()).unwrap();
+    manifest["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|note| note.as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn omp_install_says_which_launch_flags_skip_the_extension() {
+    let notes = install_notes("omp");
+    let flags = notes
+        .iter()
+        .find(|note| note.contains("--no-tools"))
+        .unwrap_or_else(|| panic!("{notes:?}"));
+    for flag in ["--no-extensions", "--trusted-extension"] {
+        assert!(flags.contains(flag), "{flags}");
+    }
+    assert!(
+        flags.contains("Guard does not review those sessions."),
+        "{flags}"
+    );
+    // Pi's flags are not verified here, so its install says nothing about them.
+    assert!(
+        install_notes("pi")
+            .iter()
+            .all(|note| !note.contains("--no-")),
+        "{notes:?}"
+    );
+}
+
 #[test]
 fn pi_install_refuses_settings_that_are_not_an_object() {
     let home = Home::new();
