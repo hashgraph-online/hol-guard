@@ -499,6 +499,7 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
 /// The same holds for the owner and name in a `gh api repos/{owner}/{name}/...`
 /// endpoint; the rest of that path is still checked. A raw `-f` field of that
 /// call is a string in the request body, so only Guard's state counts there.
+/// So is the search pattern of a Git diff or log read (`-G`, `-S`, `--grep`).
 ///
 /// Git and directory changes take checkout paths, pathspecs and remote URLs.
 /// Those name Guard only when they reach its state, an installed Guard
@@ -509,8 +510,9 @@ fn names_guard_outside_message(
 ) -> bool {
     let selectors = github_repository_values(segment);
     let endpoint = github_api_endpoint(segment);
-    let raw_fields =
+    let mut raw_fields =
         endpoint.map_or_else(Vec::new, |_| guard_names::github_api_raw_fields(segment));
+    raw_fields.extend(guard_names::git_search_patterns(segment));
     let by_location = guard_names::judged_by_location(segment);
     arguments_outside_message(segment).any(|argument| {
         if selectors
