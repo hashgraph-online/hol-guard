@@ -7,6 +7,7 @@ import { ConsequenceNote, EffectPill } from "../mcp-call/mcp-call-parts";
 import type { McpCallExplanation } from "../mcp-call/mcp-call-types";
 import { BrowserInputPreview } from "./browser-input-preview";
 import { BrowserProfileLine } from "./browser-profile-line";
+import { BrowserProviderFindings } from "./browser-provider-findings";
 import { BrowserRiskChips } from "./browser-risk-chips";
 import { BrowserSiteLine } from "./browser-site-line";
 
@@ -57,6 +58,7 @@ export function BrowserCallCard(props: {
         <BrowserInputPreview card={card} />
         <BrowserRiskChips chips={card.risk_chips} />
       </div>
+      <BrowserProviderFindings findings={card.provider_findings} />
 
       {explanation.code !== null && explanation.code.collapsed !== true && (
         <div className="mx-4 mb-4 sm:mx-5">

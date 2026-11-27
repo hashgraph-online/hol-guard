@@ -1344,6 +1344,18 @@ export type GuardBrowserSurfaceV1 =
 
 export type GuardBrowserProfileLineV1 = "shared" | "dedicated" | "isolated" | "remote-debugging" | "unknown";
 
+/** One provider finding row on a browser card. Every text field comes from Guard's compiled manifest. */
+export type GuardBrowserProviderFindingV1 = {
+  provider_id: string;
+  provider_name: string;
+  capability: string;
+  verdict: "ok" | "caution" | "danger" | "unknown";
+  state: "fresh" | "stale" | "unavailable" | "rate_limited" | "key_invalid" | "disabled";
+  reason_labels: string[];
+  observed_at_ms: number;
+  sponsored: boolean;
+};
+
 export type GuardBrowserCardV1 = {
   headline: string;
   verb: GuardBrowserVerbV1;
@@ -1356,7 +1368,7 @@ export type GuardBrowserCardV1 = {
     input_masked: boolean;
   };
   risk_chips: GuardBrowserSurfaceV1[];
-  provider_findings: string[];
+  provider_findings: GuardBrowserProviderFindingV1[];
   choices: string[];
   steps: string[];
 };

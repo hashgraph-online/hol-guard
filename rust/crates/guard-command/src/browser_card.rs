@@ -11,8 +11,9 @@
 //! targets exist; a choice that cannot run is never shown.
 
 use guard_contracts::{
-    BrowserActionV2, BrowserCardChoiceV1, BrowserCardDetailV1, BrowserCardRequestV1,
-    BrowserCardSiteV1, BrowserCardV1, BrowserInputPreviewClassV1, BrowserVerbV1,
+    provider_id_is_valid, BrowserActionV2, BrowserCardChoiceV1, BrowserCardDetailV1,
+    BrowserCardProviderFindingV1, BrowserCardRequestV1, BrowserCardSiteV1, BrowserCardV1,
+    BrowserInputPreviewClassV1, BrowserVerbV1, BROWSER_CARD_MAX_REASON_LABELS,
 };
 
 const AGENT_MAX_CHARS: usize = 48;
@@ -146,6 +147,29 @@ fn detail(action: &BrowserActionV2) -> BrowserCardDetailV1 {
     }
 }
 
+/// Provider rows, strongest fresh verdict first. A stale or missing answer follows every fresh one.
+/// A row with a malformed provider id is dropped and extra reason labels are cut.
+fn ordered_findings(
+    findings: &[BrowserCardProviderFindingV1],
+) -> Vec<BrowserCardProviderFindingV1> {
+    let mut rows: Vec<BrowserCardProviderFindingV1> = findings
+        .iter()
+        .filter(|row| provider_id_is_valid(&row.provider_id))
+        .cloned()
+        .map(|mut row| {
+            row.reason_labels.truncate(BROWSER_CARD_MAX_REASON_LABELS);
+            row
+        })
+        .collect();
+    rows.sort_by_key(|row| {
+        (
+            std::cmp::Reverse(row.state.is_fresh()),
+            std::cmp::Reverse(row.verdict.strength()),
+        )
+    });
+    rows
+}
+
 /// Builds the approval card for one projected action.
 pub fn browser_card(request: &BrowserCardRequestV1) -> Result<BrowserCardV1, &'static str> {
     let action = &request.action;
@@ -170,7 +194,7 @@ pub fn browser_card(request: &BrowserCardRequestV1) -> Result<BrowserCardV1, &'s
         profile_line: action.session.profile_mode.into(),
         detail: detail(action),
         risk_chips,
-        provider_findings: Vec::new(),
+        provider_findings: ordered_findings(&request.provider_findings),
         choices: vec![
             BrowserCardChoiceV1::AllowOnce,
             BrowserCardChoiceV1::AlwaysAllow,

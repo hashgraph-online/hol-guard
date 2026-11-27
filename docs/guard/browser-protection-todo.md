@@ -614,9 +614,14 @@ transcript in the pull request (after BP-T052).
 - [ ] **BP-T133** Connect dialog modeled on `dashboard/src/pulse-setup-modal.tsx` and
   `pulse-connect-step.tsx`: write-only key field, per-fact toggles, one-use proof, verify, state
   display. "Get a key" link with a static referral parameter and no user data.
-- [ ] **BP-T134** Card finding row (PRD 6.8): provider name, capability label, verdict chip, up to
+- [x] **BP-T134** Card finding row (PRD 6.8): provider name, capability label, verdict chip, up to
   three reason labels, age. Never reorders or restyles Guard's own findings. Subscribes to a late
   signal on an open card.
+  - [x] `BrowserCardV1.provider_findings` carries typed rows built by `provider_finding_row` from the
+    compiled manifest, so the name and reason labels are manifest text. The card orders fresh
+    verdicts first and never touches Guard's own facts or choices. The approval queue's poll redraws
+    an open card, so a late answer appears once the approval path passes cached signals in (the
+    hook wiring item below).
 - [ ] **BP-T135** Playwright specs for the Integrations page, the connect dialog and the finding row
   at the contract widths, with the testkit provider.
 
