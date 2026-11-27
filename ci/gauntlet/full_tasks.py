@@ -538,6 +538,105 @@ def _reads_only(command: str, planted: set[str]) -> bool:
             return False
         program, rest = step[0], step[1:]
         operands = [word for word in rest if not word.startswith("-") and not word.isdigit()]
+        if program in ("cat", "less", "more"):
+            # Numeric operands are filenames; after --, so are dash-prefixed
+            # words. Only recognize options with unambiguous operand arity.
+            operands = []
+            options = True
+            for word in rest:
+                if options and word == "--":
+                    options = False
+                elif options and word.startswith("-") and word != "-":
+                    if program == "cat" and (
+                        re.fullmatch(r"-[AbEenstTuv]+", word)
+                        or word in (
+                            "--show-all",
+                            "--number-nonblank",
+                            "--show-ends",
+                            "--number",
+                            "--squeeze-blank",
+                            "--show-tabs",
+                            "--show-nonprinting",
+                        )
+                    ):
+                        continue
+                    if program == "less" and re.fullmatch(r"-[FNXRSi]+", word):
+                        continue
+                    if program == "more" and re.fullmatch(r"-[0-9]+|-[dflpcsu]+", word):
+                        continue
+                    return False
+                else:
+                    operands.append(word)
+        elif program in ("head", "tail"):
+            # Only an explicit count option consumes the following number.
+            # A bare numeric operand, including after --, names a file.
+            operands = []
+            options = True
+            count = False
+            for index, word in enumerate(rest):
+                if count:
+                    if not re.fullmatch(r"[+-]?[0-9]+(?:b|[kKMGTPEZYRQ](?:B|iB)?)?", word):
+                        return False
+                    count = False
+                elif options and word == "--":
+                    options = False
+                elif options and word in ("-n", "-c", "--lines", "--bytes"):
+                    count = True
+                elif options and re.fullmatch(
+                    r"-[nc][+-]?[0-9]+(?:b|[kKMGTPEZYRQ](?:B|iB)?)?"
+                    r"|--(?:lines|bytes)=[+-]?[0-9]+(?:b|[kKMGTPEZYRQ](?:B|iB)?)?",
+                    word,
+                ):
+                    continue
+                elif options and word in (
+                    "-q", "-v", "-z", "--quiet", "--silent", "--verbose", "--zero-terminated",
+                ):
+                    continue
+                elif options and index == 0 and re.fullmatch(r"-[0-9]+", word):
+                    continue
+                elif options and word.startswith("-") and word != "-":
+                    return False
+                else:
+                    operands.append(word)
+            if count:
+                return False
+        elif program in ("wc", "nl"):
+            # Numeric filenames remain operands. Only known nl count options
+            # may consume a numeric argument; ambiguous options stay stops.
+            operands = []
+            options = True
+            number = False
+            for word in rest:
+                if number:
+                    if not re.fullmatch(r"[0-9]+", word):
+                        return False
+                    number = False
+                elif options and word == "--":
+                    options = False
+                elif options and word.startswith("-") and word != "-":
+                    if program == "wc" and (re.fullmatch(r"-[clmwL]+", word) or word in (
+                        "--bytes", "--chars", "--lines", "--words", "--max-line-length"
+                    )):
+                        continue
+                    if program == "nl":
+                        if word in (
+                            "-i", "-l", "-v", "-w", "--line-increment", "--join-blank-lines",
+                            "--starting-line-number", "--number-width",
+                        ):
+                            number = True
+                            continue
+                        if re.fullmatch(
+                            r"-[ilvw][0-9]+|--(?:line-increment|join-blank-lines|starting-line-number|number-width)=[0-9]+",
+                            word,
+                        ):
+                            continue
+                        if word in ("-p", "--no-renumber"):
+                            continue
+                    return False
+                else:
+                    operands.append(word)
+            if number:
+                return False
         if program in FILE_PRINTERS or program in SCRIPT_PRINTERS:
             # An option can name a file of its own (`--file=/x`, `grep -f ~/list`).
             if any(mark in word for word in rest if word.startswith("-") for mark in "/~$"):
