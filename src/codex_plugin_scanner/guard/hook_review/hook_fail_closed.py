@@ -229,7 +229,10 @@ def render_pre_tool_review(
         "guard_home": str(guard_home),
     }
     with suppress(NativeHookDecisionError):
-        return native_review_response("paused_review", inputs, guard_home=guard_home, deadline=deadline)
+        rendered = native_review_response("paused_review", inputs, guard_home=guard_home, deadline=deadline)
+        if rendered is not None:
+            rendered.setdefault("prompted", True)
+            return rendered
     approval_url = None if approval is None else approval.get("approval_url")
     return _verdict_deny(
         harness,

@@ -452,13 +452,15 @@ impl Delegated {
                 .into_iter()
                 .filter_map(|(key, value)| Some((key.to_owned(), Value::String(value?))))
                 .collect();
-                paused_review(&PausedReviewInputsV1 {
+                let mut response = paused_review(&PausedReviewInputsV1 {
                     harness: respond.harness.clone(),
                     verdict,
                     approval: Some(approval),
                     guard_home: guard_home.to_owned(),
                 })
-                .response
+                .response;
+                response.insert("prompted".to_owned(), json!(true));
+                response
             }
             RespondAsk::SilentReviewBlock(ask) => {
                 let inputs = SilentReviewBlockInputsV1 {

@@ -375,6 +375,7 @@ fn a_paused_review_is_rendered_with_its_stored_row() {
         reply["response"]["approval_center_url"],
         "http://127.0.0.1:4781/approvals"
     );
+    assert_eq!(reply["response"]["prompted"], true);
     assert!(reply.get("connector_setup").is_none());
 }
 
