@@ -63,6 +63,7 @@ pub mod package_request_redaction_parity;
 pub mod portable_command_source_fixtures;
 pub mod pretool_absent_hidden_listings;
 pub mod pretool_absent_repository_hidden_paths;
+pub mod pretool_absent_temporary_read_cd_hop;
 pub mod pretool_agent_metadata;
 pub mod pretool_archive_listing;
 pub mod pretool_arithmetic_own_lookup;

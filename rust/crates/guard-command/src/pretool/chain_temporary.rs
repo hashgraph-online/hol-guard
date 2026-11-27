@@ -242,11 +242,34 @@ pub(super) fn absent_reads_bounded(
         || temporary_peers(model)
         || plain_chain(model, &["awk", "mkdir", "rm", "sed"])
         || fetch_then_read(model)
+        || directory_hops_bounded(model, context)
         || !model.segments.iter().any(|segment| {
             segment.arguments.iter().any(|argument| {
                 absent_temporary_read_target(argument, context.home_dir, context.cwd)
             })
         })
+}
+
+/// `ls -d /tmp/build 2>&1 | head; cd ../app && git log --oneline -1`: a `cd`
+/// changes only the directory later relative paths resolve against. It
+/// creates no file and no link, and an absent temporary read target is always
+/// an absolute path, so a hop cannot change which file that read names. The
+/// chain is judged as it would be without its plain one-operand hops. Each
+/// segment, the hops included, still needs its own proof.
+fn directory_hops_bounded(model: &CanonicalCommandV1, context: super::PathContext<'_>) -> bool {
+    let hop = |segment: &crate::CommandSegmentV1| segment.executable.as_deref() == Some("cd");
+    let plain_hop = |segment: &crate::CommandSegmentV1| {
+        segment.wrapper_chain.is_empty()
+            && segment.environment_names.is_empty()
+            && !segment.path_overridden
+            && matches!(segment.arguments.as_slice(), [target] if !target.starts_with('-'))
+    };
+    if !model.segments.iter().any(hop) || !model.segments.iter().filter(|s| hop(s)).all(plain_hop) {
+        return false;
+    }
+    let mut rest = model.clone();
+    rest.segments.retain(|segment| !hop(segment));
+    !rest.segments.is_empty() && absent_reads_bounded(&rest, context)
 }
 
 /// `gh api repos/o/r/contents/a.json --jq .content > /tmp/a.b64 && base64 -D -i
