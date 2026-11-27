@@ -421,10 +421,14 @@ transcript in the pull request (after BP-T052).
   eligible. "Block on this site" under More choices.
 - [ ] **BP-T068** Public-suffix snapshot for `site-group` in `guard-command-catalog-data` with a
   refresh script and a pinned digest (D5). Until it lands, `site-group` is not offered.
-- [ ] **BP-T069** Policy bundle: add `browserVerb`, `siteGroup`, `browserDriver` to
+- [x] **BP-T069** Policy bundle: add `browserVerb`, `siteGroup`, `browserDriver` to
   `BROWSER_SCOPE_KEYS` in `rust/crates/guard-policy-bundle/src/policy_bundle_v1_rules.rs`, update
   `spec/guard-policy/v1alpha1/schema.json`, `docs/policy/schema-reference.md`, and
   `tests/test_guard_policy_bundle_browser_scopes.py`.
+  - Landed: the three bundle keys (a `browserVerb` must name a `BrowserVerbV1` value), the plural
+    `browserVerbs`, `browserDrivers` and `siteGroups` matchers in the canonical schema and policy
+    document, and the regenerated schema reference. A rule scoped by them is skipped when decisions
+    are saved, like every other browser scope, so it never widens into a broad allow.
 - [ ] **BP-T070** R-SURFACE: surface resolution in the resident beside `approval_surface_policy`. For
   `shared` and `remote-debugging` sessions never auto-open a browser approval page; show the request
   on every non-browser surface and print the link for the user. Extend
