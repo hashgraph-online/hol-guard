@@ -26,7 +26,8 @@ use super::{
 };
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
 use crate::provider_integration_secret::{
-    check_key_format, delete_provider_key, load_provider_key, store_provider_key, ProviderKey,
+    check_key_format, delete_provider_key, load_provider_key, restore_provider_key,
+    store_provider_key, ProviderKey,
 };
 use crate::provider_integration_store::{
     in_write_savepoint, provider_connection, put_connection, ProviderConnection,
@@ -246,9 +247,8 @@ pub fn finish_connect(
         )
     };
     if in_write_savepoint(context.connection, write).is_err() {
-        let restored = previous.is_some_and(|key| {
-            store_provider_key(&mut secrets, &provider.id, &key, &provider.auth).is_ok()
-        });
+        let restored = previous
+            .is_some_and(|key| restore_provider_key(&mut secrets, &provider.id, &key).is_ok());
         if !restored {
             let _ = delete_provider_key(&secrets, &provider.id);
         }

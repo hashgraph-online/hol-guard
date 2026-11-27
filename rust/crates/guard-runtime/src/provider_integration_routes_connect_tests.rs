@@ -374,12 +374,69 @@ fn a_reconnect_whose_row_fails_keeps_the_previous_key() {
         )
         .unwrap();
 
-    let other = format!("fixture-connect-{}", "e".repeat(24));
+    // The new manifest asks for longer keys than the one already stored.
+    let mut providers = providers;
+    providers[0].auth.key_min_length = 48;
+    fixture.providers = providers.clone();
+    let other = format!("fixture-connect-{}", "e".repeat(40));
     let failed = fixture.prepare(&providers, &other);
     assert_eq!(fixture.finish(failed, true).status, 503);
     assert_eq!(
         fixture.stored_key(),
         Some(key()),
-        "the previous key is put back"
+        "the previous key is put back though it no longer fits the format"
+    );
+}
+
+#[test]
+fn a_refused_settings_change_does_not_supersede_a_connect() {
+    let mut fixture = Fixture::new();
+    let providers = fixture.providers.clone();
+    let first = fixture.prepare(&providers, &key());
+    assert_eq!(fixture.finish(first, true).status, 200);
+
+    let base = format!("{PREFIX}/{SHIELD}/settings");
+    let change = json!({
+        "settings": [{"capability": "browser.origin-reputation", "effect": "enforce",
+                      "require_fresh_check": true, "quieted_reason_codes": []}],
+        "enabled_opt_in_facts": [],
+    });
+    let mut ledger = std::mem::take(&mut fixture.ledger);
+    let preview = answer(
+        &mut ledger,
+        &fixture.context(),
+        "POST",
+        &format!("{base}/preview"),
+        &serde_json::to_vec(&change).unwrap(),
+    )
+    .unwrap();
+    fixture.ledger = ledger;
+    assert_eq!(preview.status, 200, "{}", preview.body);
+    let pending = fixture.prepare(&providers, &key());
+
+    // Managed policy locks the setting after the preview, so the apply is refused.
+    let mut settings = serde_json::Map::new();
+    settings.insert(
+        "provider_integrations".to_owned(),
+        json!([{"provider_id": SHIELD, "capability": "browser.origin-reputation", "effect": "observe"}]),
+    );
+    fixture.managed = ManagedProviderSettings::from_settings(&settings, true).unwrap();
+    let mut apply = change;
+    apply["proof"] = preview.body["challenge"].clone();
+    let mut ledger = std::mem::take(&mut fixture.ledger);
+    let refused = answer(
+        &mut ledger,
+        &fixture.context(),
+        "POST",
+        &base,
+        &serde_json::to_vec(&apply).unwrap(),
+    )
+    .unwrap();
+    fixture.ledger = ledger;
+    assert_eq!((refused.status, code(&refused)), (409, SETTING_MANAGED));
+    assert_eq!(
+        fixture.finish(pending, true).status,
+        200,
+        "the connect still lands"
     );
 }

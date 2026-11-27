@@ -396,7 +396,6 @@ fn settings_apply(
     ) {
         return Err(error(403, PROOF_INVALID));
     }
-    ledger.advance(&provider.id);
     // Managed policy may have changed since the preview.
     let change = checked_change(context, provider, change)?;
     // The connection read and every write are one change: a failure leaves nothing applied. The
@@ -425,6 +424,8 @@ fn settings_apply(
     in_write_savepoint(context.connection, write)
         .map_err(|_| unavailable())?
         .ok_or_else(|| error(409, NOT_CONNECTED))?;
+    // Only a written change supersedes a connect that is still calling the provider.
+    ledger.advance(&provider.id);
     Ok(ok(json!({ "provider_id": provider.id, "applied": true })))
 }
 
