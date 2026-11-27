@@ -206,8 +206,9 @@ def native_render_cli(
         return None
     document = payload.get("response")
     rendered = (str(outcome), dict(document) if isinstance(document, dict) else None)
-    if kind == "structured_outage" and isinstance(payload.get("native_policy_status"), str):
-        return (*rendered, payload["native_policy_status"])
+    native_policy_status = payload.get("native_policy_status")
+    if kind == "structured_outage" and isinstance(native_policy_status, str):
+        return (*rendered, native_policy_status)
     return rendered
 
 
