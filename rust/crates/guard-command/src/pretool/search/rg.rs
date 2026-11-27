@@ -436,7 +436,6 @@ fn rg_arguments_pass(
             // `auth.*provider` matches nothing now, but which files it
             // selects is the question the screen above refused to answer.
             if allow_absent
-                && !super::literal_glob_names_sensitive_path(argument)
                 && !guard_secure_fs::credential_named_path(std::path::Path::new(argument))
                 && super::grep::unmatched_glob(argument, context)
             {
