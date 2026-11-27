@@ -1186,6 +1186,7 @@ mod protect_request_op;
 mod protection_health_report_op;
 pub mod provider_integration_secret;
 pub mod provider_integration_store;
+pub mod provider_integration_worker;
 mod proxy_credentials;
 mod publication_inverse_claims;
 mod supply_chain_bundle_cache_op;
