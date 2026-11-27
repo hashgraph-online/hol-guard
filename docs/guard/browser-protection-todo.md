@@ -572,7 +572,7 @@ transcript in the pull request (after BP-T052).
 
 ### Routes, CLI, dashboard
 
-- [ ] **BP-T130** Routes from PRD 6.9 in `daemon_route_paths.rs`, `daemon_edge_route_calls.rs` and a
+- [x] **BP-T130** Routes from PRD 6.9 in `daemon_route_paths.rs`, `daemon_edge_route_calls.rs` and a
   new `daemon_edge_integrations.rs`: header token plus dashboard session, hosted dashboard origins
   refused, preview plus one-use proof on connect, settings and disconnect, rate limit on test.
   Contract tests for every error code.
@@ -600,7 +600,11 @@ transcript in the pull request (after BP-T052).
     refused key answers `provider_key_invalid` and stops calls. The answer carries codes and the
     mapped signal, never the origin, the key or provider text, and is never
     cached, so a test cannot change a later decision.
-  - [ ] The compiled-provider loader (the shipped set is empty until a reviewed pack lands).
+  - [x] Compiled-provider loader (`provider_integration_shipped.rs`): every manifest under
+    `contributions/provider-integrations/` is embedded at build time and compiled once with the
+    contributed-set rules and the maintainer-owned verified list. A set that does not compile serves
+    no provider. A test holds the embedded list to the directory. The shipped set is empty until a
+    reviewed pack lands.
 - [ ] **BP-T131** CLI `hol-guard integrations list|status|connect|disconnect|test|settings`. The key is
   read from a prompt or stdin, never an argument, never echoed. Python is glue only, modeled on
   `cli/approval_pulse_commands.py` and `cli/approval_pulse_parser.py`.

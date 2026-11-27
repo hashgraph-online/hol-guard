@@ -58,3 +58,8 @@ Include the new binding file in the same pull request.
 
 This directory ships in the wheel under
 `codex_plugin_scanner/guard/contracts/data/provider_integrations/contributions`.
+
+The native runtime embeds each manifest at build time. Add a line for the file to `SHIPPED` in
+`rust/crates/guard-runtime/src/provider_integration_shipped.rs` in the same pull request; a test
+fails when a manifest here is missing from that list. A `verified` claim is honoured only for ids
+in that module's `VERIFIED` list, which maintainers own.
