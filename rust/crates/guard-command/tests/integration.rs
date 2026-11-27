@@ -222,6 +222,7 @@ pub mod pretool_grep_committed_screenshot;
 pub mod pretool_grep_escaped_alternatives;
 pub mod pretool_grep_include_large_tree;
 pub mod pretool_grep_late_exclusions;
+pub mod pretool_grep_glob_pattern_clearance;
 pub mod pretool_grep_pattern_clearance;
 pub mod pretool_grep_quoted_backslash_patterns;
 pub mod pretool_grep_reader_glob;

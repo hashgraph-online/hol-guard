@@ -690,6 +690,7 @@
       "src/pretool/search/git_metadata.rs",
       "src/pretool/search/glob_class.rs",
       "src/pretool/search/glob_expand.rs",
+      "src/pretool/search/glob_search_cleared.rs",
       "src/pretool/search/glob_scope.rs",
       "src/pretool/search/grep.rs",
       "src/pretool/search/grep/exclusion.rs",

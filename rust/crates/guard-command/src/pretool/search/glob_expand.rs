@@ -149,7 +149,7 @@ fn named_entries(directory: &Path, pattern: &str) -> Option<Vec<PathBuf>> {
 /// anywhere below the directory refuses as well: the walk that proves a
 /// recursive search skips links, but the shell hands a matching link to the
 /// search as an operand, and the search follows it.
-fn search_glob_directory(
+pub(super) fn search_glob_directory(
     value: &str,
     context: ReadContext<'_>,
 ) -> Option<(PathBuf, Option<String>)> {

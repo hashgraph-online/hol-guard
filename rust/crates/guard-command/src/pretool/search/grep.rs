@@ -162,6 +162,9 @@ fn scan_into(
     let mut includes_present = false;
     let mut includes = includes::Includes::default();
     let mut positional_started = false;
+    // Glob operands only the pattern clearance can prove, which is known
+    // once every pattern is read.
+    let mut cleared_globs: Vec<&str> = Vec::new();
     for argument in arguments {
         if let Some(proven) = exclusions.take_value(argument) {
             if !proven {
@@ -311,7 +314,10 @@ fn scan_into(
                 || sibling::named_path(argument, context, absent.plain)
                 || (absent.plain && missing::missing_operand(argument, context));
             if !proven && unsafe_search_value(SearchValueRole::Path, argument, context) {
-                return false;
+                if !argument.contains(['*', '?', '[']) {
+                    return false;
+                }
+                cleared_globs.push(argument.as_str());
             }
         } else {
             // The first positional is the pattern, and it meets the same
@@ -347,6 +353,11 @@ fn scan_into(
         .map(|name| (*name).to_owned())
         .collect();
     let clearance = scan.clearance();
+    let cleared_glob = |target: &str| {
+        clearance
+            .as_ref()
+            .is_some_and(|clearance| tree::safe_glob_search_cleared(target, context, clearance))
+    };
     pending_value.is_none()
         && !exclusions.pending()
         // Include/exclude precedence differs across grep implementations. Do not
@@ -357,6 +368,7 @@ fn scan_into(
         && (!includes_present || exclusions.leave_includes_exact())
         && includes.scope_proven(&targets, context)
         && (!stdin_only || (pattern_supplied && !recursive))
+        && cleared_globs.iter().all(|glob| cleared_glob(glob))
         && (!recursive || {
             let proven = |target: &str| {
                 tree::safe_recursive_target_excluding(
@@ -390,6 +402,8 @@ fn scan_into(
                             clearance,
                         )
                     })
+                    // A glob reads a subset of the directory it expands below.
+                    || (!dereference && cleared_glob(target))
                     // An include opens only the files its globs select. This
                     // walks the tree again, so it is asked last: every reading
                     // above answers the same question without it.
