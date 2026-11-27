@@ -587,6 +587,33 @@ def test_self_uninstall_forgets_provider_integrations_before_the_package_goes(
     assert payload["provider_integrations"] == {"keys_deleted": 0, "providers_forgotten": 0}
 
 
+def test_self_uninstall_reports_a_store_it_could_not_clear_without_blaming_the_keys(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    _quiet_uninstall(monkeypatch, context)
+    monkeypatch.setattr(
+        uninstall_commands,
+        "forget_provider_integrations",
+        lambda _guard_home: {"error": "provider_store_not_purged"},
+    )
+    monkeypatch.setattr(
+        uninstall_commands.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 0, stdout="", stderr=""),
+    )
+
+    payload, _exit_code = uninstall_commands.run_guard_self_uninstall(
+        dry_run=False, context=context, store=store, now="2026-06-18T00:00:00Z"
+    )
+
+    assert payload["provider_integrations"] == {"error": "provider_store_not_purged"}
+    assert any("keys were deleted" in note for note in payload["notes"])
+    assert not any("Could not delete provider integration keys" in note for note in payload["notes"])
+
+
 def test_self_uninstall_reports_provider_keys_it_could_not_delete(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

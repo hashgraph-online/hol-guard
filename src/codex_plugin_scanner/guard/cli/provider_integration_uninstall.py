@@ -11,13 +11,19 @@ from .update_retirement import resident_stop_executable
 PROVIDER_PURGE_NOTE = (
     "Could not delete provider integration keys. Disconnect each provider in the dashboard, or run the uninstall again."
 )
+PROVIDER_STORE_NOTE = (
+    "Provider integration keys were deleted, but their connection records could not be cleared. "
+    "Run the uninstall again to clear them."
+)
+STORE_NOT_PURGED = "provider_store_not_purged"
 
 
 def forget_provider_integrations(guard_home: Path) -> dict[str, object] | None:
     """Delete every provider key and provider row under ``guard_home``.
 
     Uninstall calls this while the package, and so the runtime, is still installed. Returns the
-    runtime's counts, or ``None`` when the purge could not run or did not finish.
+    runtime's counts, ``{"error": "provider_store_not_purged"}`` when the keys were deleted but the
+    store could not be cleared, or ``None`` when the keys may still be there.
     """
 
     if not guard_home.is_dir():
@@ -28,7 +34,10 @@ def forget_provider_integrations(guard_home: Path) -> dict[str, object] | None:
     except (OSError, subprocess.SubprocessError):
         return None
     if result.returncode != 0:
-        return None
+        # The runtime deletes keys before it touches the store, so a store-only failure means the
+        # keys are gone. Any other exit leaves the keys in doubt.
+        last_line = (result.stderr or "").strip().splitlines()[-1:]
+        return {"error": STORE_NOT_PURGED} if last_line == [STORE_NOT_PURGED] else None
     try:
         purge = json.loads(result.stdout)
     except ValueError:

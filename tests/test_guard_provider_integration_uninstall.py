@@ -17,11 +17,11 @@ def _fixture_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(purge, "resident_stop_executable", lambda: RUNTIME)
 
 
-def _answer(monkeypatch: pytest.MonkeyPatch, calls: list[list[str]], code: int, stdout: str) -> None:
+def _answer(monkeypatch: pytest.MonkeyPatch, calls: list[list[str]], code: int, stdout: str, stderr: str = "") -> None:
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(command)
         assert kwargs.get("timeout"), "the purge never waits forever"
-        return subprocess.CompletedProcess(command, code, stdout=stdout, stderr="")
+        return subprocess.CompletedProcess(command, code, stdout=stdout, stderr=stderr)
 
     monkeypatch.setattr(purge.subprocess, "run", fake_run)
 
@@ -41,6 +41,16 @@ def test_a_purge_that_did_not_finish_is_reported(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, code: int, stdout: str
 ) -> None:
     _answer(monkeypatch, [], code, stdout)
+    assert purge.forget_provider_integrations(tmp_path) is None
+
+
+def test_a_store_only_failure_says_the_keys_are_gone(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _answer(monkeypatch, [], 2, "", "provider_store_not_purged\n")
+    assert purge.forget_provider_integrations(tmp_path) == {"error": "provider_store_not_purged"}
+
+
+def test_a_key_failure_leaves_the_keys_in_doubt(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _answer(monkeypatch, [], 2, "", "provider_keys_not_deleted\n")
     assert purge.forget_provider_integrations(tmp_path) is None
 
 
