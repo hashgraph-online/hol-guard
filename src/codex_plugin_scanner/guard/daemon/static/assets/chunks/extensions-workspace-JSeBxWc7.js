@@ -1,4 +1,4 @@
-import { r as reactExports, cK as fetchExtensionCatalog, cL as ExtensionControlApiError, cM as normalizeExtensionCatalogSummary, cN as normalizeExtensionPermission, cO as ExtensionControlProtocolError, cP as normalizeExtensionCatalogItem, cQ as guardApiCacheScope, cR as fetchExtensionCatalogV2Api, cS as localPermissionDraftState, cT as setLocalPermissionDraftState, cU as extensionPolicyAuthorityUnchanged, cV as newExtensionPolicyDraftIdentity, cW as extensionPolicyDraftIsDirty, cX as setLocalPermissionDraftStates, cY as buildExtensionPolicyDraftMutation, cZ as fetchEffectiveExtensionControls, c_ as previewExtensionMutation, c$ as isCurrentExtensionPolicyDraft, d0 as applyExtensionMutation, d1 as fetchExtensionControlHistory, j as jsxRuntimeExports, d2 as managedPermissionState, aj as HiMiniSparkles, G as HiMiniCheckCircle, z as HiMiniNoSymbol, K as HiMiniLockClosed, aq as HiMiniExclamationTriangle, d3 as controlProvenance, d4 as treatmentLabel, br as isApprovalProofSubmitDisabled, ak as HiMiniXMark, bq as ApprovalProofFieldInputs, d5 as useResolvedApprovalGate, d6 as groupPermissionsByFamily, k as HiMiniArrowPath, ad as HiMiniShieldCheck, d7 as HiMiniInformationCircle, bs as buildApprovalProofCredentials, d8 as LocalCliApiError, d9 as hasSuggestedRules, da as approvalProofRecentlySatisfied, h as HiMiniMagnifyingGlass, db as StyledSelect, dc as bulkCommandState, q as HiMiniChevronRight, dd as fetchLocalCliApi, de as ExtensionBrandMark, x as HiMiniChevronDown, df as fetchMcpProviderActions, dg as connectorSetupReady, dh as shortIdentity, di as customExtensionDisplayName, dj as previewLocalCliMutation, dk as applyLocalCliMutation, dl as LOCAL_CLI_CAPABILITIES, dm as loadLocalCliCommands, dn as DiscoveryFailure, dp as readJson, dq as enrollablePackageScriptCommands, dr as seenSuggestionMeta, H as HiMiniPlus, ds as looksLikeProjectRelocatePaste, dt as packageScriptFilterNeedle, y as HiMiniCheck, du as initialAddCommand, dv as suggestedPackageScriptExtensions, dw as filterExtensionSuggestions, dx as suggestedHarnessExtensions, dy as suggestedSeenExtensions, dz as keepsPackageScriptCatalog, dA as prefillSuggestedStates, dB as recognizeLocalCli, dC as preferredPackageScriptExtension, dD as looksLikePackageScriptPaste, dE as enrollmentCommandStates, dF as isBulkApproveGateReady, bZ as HiMiniArrowLeft, dG as fetchLocalCliList, dH as normalizeLocalCliList, dI as unreviewedToolChangeCount, dJ as connectorSetupMatch, dK as refreshMcpInventory, dL as connectorGroupOutcome, dM as allowedEarlierVersion, dN as startGuardCloudConnect, dO as extensionEffectiveState, dP as permissionEffectiveState, bv as HiMiniArrowTopRightOnSquare, an as HiMiniCloud, dQ as fetchExtensionControlApi, dR as permissionForRule, dS as refreshEffectiveExtensionControls, aV as HiMiniClipboardDocumentCheck, aW as HiMiniClipboard, aY as ApprovalProofModal, dT as fetchExtensionDiscoveryApi, I as HiMiniArrowRight, bO as HiMiniClock, R as createCommandActivityClient, U as fetchCommandActivityApi, dU as startCancelableDiscoveryJob, dV as waitForMcpDiscoveryJob, dW as isLocalCliId, cc as guardAwareHref, dX as localCliHref, bI as isGuardDemoMode, dY as fetchPluginUpdatesApi, dZ as filterCodexHostApps, d_ as connectorWorkspaceItems, d$ as customExtensionNeedsReview, e0 as profileSetupCommand, e1 as customExtensionBadge, bn as HiMiniAdjustmentsHorizontal, e2 as extensionDisplayName, e3 as catalogRowSecondLine, e4 as extensionStateLabel, e5 as HiMiniGlobeAlt, e6 as HiMiniFunnel, e7 as discoveryFailureMessage, cC as WorkspacePageHeader, e8 as refreshCodexHostInventory, e9 as CODEX_HOST_FALLBACK, ea as CONFIGURED_CONNECTIONS_FALLBACK, eb as loadCurrentDashboardBuild, ec as canonicalExtensionId, ed as extensionDetailHref, ee as DEFAULT_EXTENSION_DETAIL_URL_STATE, ef as addCustomExtensionPrefillHref, eg as acknowledgeDegradedExtensionControlAuthority, eh as recoverExtensionControlAuthority, ei as connectorSetupLinkFromSearch, ej as readExtensionDetailUrlState, ek as parseProtectionRoute, el as addCustomExtensionHref } from "../guard-dashboard.js";
+import { r as reactExports, cK as fetchExtensionCatalog, cL as ExtensionControlApiError, cM as normalizeExtensionCatalogSummary, cN as normalizeExtensionPermission, cO as ExtensionControlProtocolError, cP as normalizeExtensionCatalogItem, cQ as guardApiCacheScope, cR as fetchExtensionCatalogV2Api, cS as localPermissionDraftState, cT as setLocalPermissionDraftState, cU as extensionPolicyAuthorityUnchanged, cV as newExtensionPolicyDraftIdentity, cW as extensionPolicyDraftIsDirty, cX as setLocalPermissionDraftStates, cY as buildExtensionPolicyDraftMutation, cZ as fetchEffectiveExtensionControls, c_ as previewExtensionMutation, c$ as isCurrentExtensionPolicyDraft, d0 as applyExtensionMutation, d1 as fetchExtensionControlHistory, j as jsxRuntimeExports, d2 as managedPermissionState, aj as HiMiniSparkles, G as HiMiniCheckCircle, z as HiMiniNoSymbol, K as HiMiniLockClosed, aq as HiMiniExclamationTriangle, d3 as controlProvenance, d4 as treatmentLabel, br as isApprovalProofSubmitDisabled, ak as HiMiniXMark, bq as ApprovalProofFieldInputs, d5 as useResolvedApprovalGate, d6 as groupPermissionsByFamily, k as HiMiniArrowPath, ad as HiMiniShieldCheck, d7 as HiMiniInformationCircle, bs as buildApprovalProofCredentials, d8 as LocalCliApiError, d9 as hasSuggestedRules, da as approvalProofRecentlySatisfied, h as HiMiniMagnifyingGlass, db as StyledSelect, dc as bulkCommandState, q as HiMiniChevronRight, dd as fetchLocalCliApi, de as ExtensionBrandMark, x as HiMiniChevronDown, df as fetchMcpProviderActions, dg as connectorSetupReady, dh as shortIdentity, di as customExtensionDisplayName, dj as previewLocalCliMutation, dk as applyLocalCliMutation, dl as LOCAL_CLI_CAPABILITIES, dm as loadLocalCliCommands, dn as DiscoveryFailure, dp as readJson, dq as enrollablePackageScriptCommands, dr as seenSuggestionMeta, H as HiMiniPlus, ds as looksLikeProjectRelocatePaste, dt as packageScriptFilterNeedle, y as HiMiniCheck, du as initialAddCommand, dv as suggestedPackageScriptExtensions, dw as filterExtensionSuggestions, dx as suggestedHarnessExtensions, dy as suggestedSeenExtensions, dz as keepsPackageScriptCatalog, dA as prefillSuggestedStates, dB as recognizeLocalCli, dC as preferredPackageScriptExtension, dD as looksLikePackageScriptPaste, dE as enrollmentCommandStates, dF as isBulkApproveGateReady, bZ as HiMiniArrowLeft, dG as fetchLocalCliList, dH as normalizeLocalCliList, dI as unreviewedToolChangeCount, dJ as connectorSetupMatch, dK as refreshMcpInventory, dL as connectorGroupOutcome, dM as allowedEarlierVersion, dN as startGuardCloudConnect, dO as extensionEffectiveState, dP as permissionEffectiveState, bv as HiMiniArrowTopRightOnSquare, an as HiMiniCloud, dQ as fetchExtensionControlApi, dR as permissionForRule, dS as refreshEffectiveExtensionControls, aV as HiMiniClipboardDocumentCheck, aW as HiMiniClipboard, aY as ApprovalProofModal, dT as fetchExtensionDiscoveryApi, I as HiMiniArrowRight, bO as HiMiniClock, R as createCommandActivityClient, U as fetchCommandActivityApi, dU as startCancelableDiscoveryJob, dV as waitForMcpDiscoveryJob, dW as isLocalCliId, cc as guardAwareHref, dX as localCliHref, bI as isGuardDemoMode, dY as fetchPluginUpdatesApi, dZ as filterCodexHostApps, d_ as connectorWorkspaceItems, d$ as customExtensionNeedsReview, e0 as profileSetupCommand, e1 as customExtensionBadge, bn as HiMiniAdjustmentsHorizontal, e2 as extensionDisplayName, e3 as catalogRowSecondLine, e4 as extensionStateLabel, e5 as HiMiniGlobeAlt, e6 as HiMiniFunnel, e7 as loadCurrentDashboardBuild, e8 as fetchProviderIntegrationApi, e9 as discoveryFailureMessage, cC as WorkspacePageHeader, ea as refreshCodexHostInventory, eb as CODEX_HOST_FALLBACK, ec as CONFIGURED_CONNECTIONS_FALLBACK, ed as readExtensionDetailUrlState, ee as parseProtectionRoute, ef as canonicalExtensionId, eg as extensionDetailHref, eh as DEFAULT_EXTENSION_DETAIL_URL_STATE, ei as addCustomExtensionPrefillHref, ej as acknowledgeDegradedExtensionControlAuthority, ek as recoverExtensionControlAuthority, el as connectorSetupLinkFromSearch, em as addCustomExtensionHref, en as HiMiniCheckBadge } from "../guard-dashboard.js";
 import { u as useConfirmDialog } from "./confirm-dialog-C1Asj0OK.js";
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -69,7 +69,7 @@ const CATALOG_PREPARATION_FAILED = "catalog_read_preparation_failed";
 class CatalogV2UnsupportedError extends ExtensionControlApiError {
 }
 const readCache = /* @__PURE__ */ new Map();
-function isRecord$1(value) {
+function isRecord$2(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function protocolError(message, code) {
@@ -92,13 +92,13 @@ async function readOnce(path, ifNoneMatch, signal) {
     payload = void 0;
   }
   if (!response.ok) {
-    const code = isRecord$1(payload) && typeof payload.error === "string" ? payload.error : void 0;
+    const code = isRecord$2(payload) && typeof payload.error === "string" ? payload.error : void 0;
     if (UNSUPPORTED.has(`${response.status}:${code ?? ""}`)) {
       throw new CatalogV2UnsupportedError("Guard does not serve the v2 catalog", response.status, code);
     }
     throw new ExtensionControlApiError(code ?? `Request failed (${response.status})`, response.status, code);
   }
-  if (!isRecord$1(payload)) throw protocolError(`Guard returned invalid JSON (${response.status})`);
+  if (!isRecord$2(payload)) throw protocolError(`Guard returned invalid JSON (${response.status})`);
   return { status: 200, etag, payload, size };
 }
 function waitBeforeRetry(delayMs, signal) {
@@ -154,7 +154,7 @@ async function readSized(route, query, signal) {
 }
 function pageFields(page) {
   const { snapshot_id, native_catalog_digest, total_count, items, next_cursor } = page;
-  if (typeof snapshot_id !== "string" || typeof native_catalog_digest !== "string" || !Number.isSafeInteger(total_count) || !Array.isArray(items) || !items.every(isRecord$1) || !(next_cursor === null || next_cursor === void 0 || typeof next_cursor === "string")) {
+  if (typeof snapshot_id !== "string" || typeof native_catalog_digest !== "string" || !Number.isSafeInteger(total_count) || !Array.isArray(items) || !items.every(isRecord$2) || !(next_cursor === null || next_cursor === void 0 || typeof next_cursor === "string")) {
     throw protocolError("Guard returned an invalid catalog page");
   }
   return { snapshot_id, digest: native_catalog_digest, total: total_count, items, next: next_cursor ?? null };
@@ -216,7 +216,7 @@ function requireSnapshot(observed, expected) {
 async function v2Detail(extensionId, snapshotId) {
   const detail = (await readSized(extensionRoute(extensionId), "")).payload;
   const { extension, collections } = detail;
-  if (typeof detail.snapshot_id !== "string" || !isRecord$1(extension) || !isRecord$1(collections) || !isRecord$1(extension.catalog_defaults)) {
+  if (typeof detail.snapshot_id !== "string" || !isRecord$2(extension) || !isRecord$2(collections) || !isRecord$2(extension.catalog_defaults)) {
     throw protocolError("Guard returned an invalid catalog detail");
   }
   requireSnapshot(detail.snapshot_id, snapshotId);
@@ -8012,14 +8012,14 @@ function SkillPreflightPreview({ plan }) {
 }
 const FALLBACK_FAILURE = "Guard could not check for plugin updates. Try again in a minute.";
 const MAX_UPDATES = 200;
-function isRecord(value) {
+function isRecord$1(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function text(value) {
+function text$1(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 512 ? value : null;
 }
 function safeReleasesUrl(value) {
-  const raw = text(value);
+  const raw = text$1(value);
   if (!raw) return null;
   try {
     const url = new URL(raw);
@@ -8029,11 +8029,11 @@ function safeReleasesUrl(value) {
   }
 }
 function parsePluginUpdate(value) {
-  if (!isRecord(value)) return null;
-  const slug = text(value.slug);
-  const runtime = text(value.runtime);
-  const installedVersion = text(value.installedVersion);
-  const latestVersion = text(value.latestVersion);
+  if (!isRecord$1(value)) return null;
+  const slug = text$1(value.slug);
+  const runtime = text$1(value.runtime);
+  const installedVersion = text$1(value.installedVersion);
+  const latestVersion = text$1(value.latestVersion);
   if (!slug || !runtime || !installedVersion || !latestVersion) return null;
   const reason = value.reason === "security_fix" || value.reason === "installed_high_severity" ? value.reason : null;
   return {
@@ -8049,7 +8049,7 @@ function parsePluginUpdate(value) {
 async function failureMessage(response) {
   try {
     const payload = await response.json();
-    if (isRecord(payload) && typeof payload.message === "string" && payload.message.length <= 300) {
+    if (isRecord$1(payload) && typeof payload.message === "string" && payload.message.length <= 300) {
       return payload.message;
     }
   } catch {
@@ -8067,7 +8067,7 @@ async function checkPluginUpdates(signal) {
   }
   if (!response.ok) return { status: "failed", message: await failureMessage(response) };
   const payload = await response.json().catch(() => null);
-  if (!isRecord(payload) || !Array.isArray(payload.updates)) {
+  if (!isRecord$1(payload) || !Array.isArray(payload.updates)) {
     return { status: "failed", message: FALLBACK_FAILURE };
   }
   const updates = payload.updates.slice(0, MAX_UPDATES).map(parsePluginUpdate).filter((update) => update !== null).sort((left, right) => Number(right.urgent) - Number(left.urgent) || left.slug.localeCompare(right.slug));
@@ -9570,6 +9570,153 @@ function ConnectorDiscoveryNotice(props) {
     )
   ] }) : null });
 }
+function pushExtensionHistory(href) {
+  const target = guardAwareHref(href);
+  if (loadCurrentDashboardBuild(target)) return;
+  window.history.pushState({}, "", target);
+}
+function replaceExtensionHistory(href) {
+  window.history.replaceState({}, "", guardAwareHref(href));
+}
+class ProviderIntegrationApiError extends Error {
+  code;
+  status;
+  constructor(code, status) {
+    super(code);
+    this.name = "ProviderIntegrationApiError";
+    this.code = code;
+    this.status = status;
+  }
+}
+const STATES$1 = ["not_connected", "connected", "key_invalid", "disabled"];
+const EFFECTS$1 = ["observe", "tighten", "enforce"];
+const PROVIDER_ID = /^provider\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function strings(value) {
+  if (!Array.isArray(value)) throw new Error("Invalid provider list field");
+  return value.map((item) => {
+    if (typeof item !== "string") throw new Error("Invalid provider list item");
+    return item;
+  });
+}
+function text(value) {
+  if (typeof value !== "string") throw new Error("Invalid provider text field");
+  return value;
+}
+function optionalText(value) {
+  return value === null || value === void 0 ? null : text(value);
+}
+function safeHttpsUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+function isProviderId(value) {
+  return PROVIDER_ID.test(value);
+}
+function normalizeProviderSummary(value) {
+  if (!isRecord(value)) throw new Error("Invalid provider summary");
+  const id = text(value.id);
+  if (!isProviderId(id)) throw new Error("Invalid provider id");
+  const state = text(value.state);
+  if (!STATES$1.includes(state)) throw new Error("Invalid provider state");
+  if (typeof value.verified !== "boolean") throw new Error("Invalid provider verification");
+  return {
+    id,
+    name: text(value.name),
+    summary: text(value.summary),
+    verified: value.verified,
+    state,
+    capabilities: strings(value.capabilities)
+  };
+}
+function normalizeProviderList(value) {
+  if (!isRecord(value) || !Array.isArray(value.providers)) throw new Error("Invalid provider list");
+  return value.providers.map(normalizeProviderSummary);
+}
+function normalizeSetting(value) {
+  if (!isRecord(value)) throw new Error("Invalid provider setting");
+  const effect = text(value.effect);
+  if (!EFFECTS$1.includes(effect)) throw new Error("Invalid provider effect");
+  if (typeof value.require_fresh_check !== "boolean") throw new Error("Invalid fresh-check setting");
+  return { capability: text(value.capability), effect, requireFreshCheck: value.require_fresh_check };
+}
+function normalizeProviderDetail(value) {
+  if (!isRecord(value)) throw new Error("Invalid provider detail");
+  if (!Array.isArray(value.settings)) throw new Error("Invalid provider settings");
+  const verifiedAt = value.last_verified_at_ms;
+  return {
+    summary: normalizeProviderSummary(value.summary),
+    publisherName: text(value.publisher_name),
+    publisherUrl: safeHttpsUrl(optionalText(value.publisher_url)),
+    surfaces: strings(value.surfaces),
+    hosts: strings(value.hosts),
+    privacyUrl: text(value.privacy_url),
+    termsUrl: text(value.terms_url),
+    obtainUrl: safeHttpsUrl(optionalText(value.obtain_url)),
+    shares: strings(value.shares),
+    enabledOptInFacts: strings(value.enabled_opt_in_facts),
+    settings: value.settings.map(normalizeSetting),
+    lastVerifiedAtMs: typeof verifiedAt === "number" && Number.isFinite(verifiedAt) ? verifiedAt : null
+  };
+}
+async function readProviderJson(response) {
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const code = isRecord(payload) && typeof payload.error === "string" ? payload.error : "provider_request_failed";
+    throw new ProviderIntegrationApiError(code, response.status);
+  }
+  return payload;
+}
+async function fetchProviderList() {
+  return normalizeProviderList(await readProviderJson(await fetchProviderIntegrationApi("/v1/integrations/providers")));
+}
+async function fetchProviderDetail(providerId) {
+  if (!isProviderId(providerId)) throw new ProviderIntegrationApiError("provider_not_found", 404);
+  const response = await fetchProviderIntegrationApi(`/v1/integrations/providers/${providerId}`);
+  return normalizeProviderDetail(await readProviderJson(response));
+}
+const INTEGRATIONS_HREF = "/extensions/integrations";
+function parseIntegrationsRoute(pathname) {
+  const path = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
+  if (path === INTEGRATIONS_HREF) return { kind: "integrations" };
+  if (!path.startsWith("/extensions/provider.")) return null;
+  let providerId;
+  try {
+    providerId = decodeURIComponent(path.slice("/extensions/".length)).trim().toLowerCase();
+  } catch {
+    return null;
+  }
+  return isProviderId(providerId) ? { kind: "provider", providerId } : null;
+}
+function providerHref(providerId) {
+  return `/extensions/${providerId}`;
+}
+function navigateExtensions(href) {
+  pushExtensionHistory(href);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+function IntegrationsHeaderLink() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "a",
+    {
+      className: "guard-extensions-chip",
+      "data-testid": "integrations-action",
+      href: INTEGRATIONS_HREF,
+      onClick: (event) => {
+        event.preventDefault();
+        navigateExtensions(INTEGRATIONS_HREF);
+      },
+      children: "Integrations"
+    }
+  );
+}
 function ExtensionsOverview(props) {
   const fetchPlacements = reactExports.useCallback(
     () => fetchExtensionDiscoveryApi("/v1/discovery/extensions/placements"),
@@ -9754,18 +9901,21 @@ function ExtensionsOverview(props) {
         eyebrow: "On this device",
         title: PROTECTION_TERMS.pageTitle,
         description: "Choose an Extension to review its permissions and effective protection.",
-        actions: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "a",
-          {
-            className: "guard-extensions-chip",
-            "data-testid": "sponsor-extension-action",
-            href: "https://hol.org/guard/extensions/advertise?source=guard_local&intent=extension-promotion&placement=extensions_header",
-            target: "_blank",
-            rel: "noopener noreferrer",
-            referrerPolicy: "no-referrer",
-            children: "Sponsor an extension"
-          }
-        )
+        actions: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(IntegrationsHeaderLink, {}),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "a",
+            {
+              className: "guard-extensions-chip",
+              "data-testid": "sponsor-extension-action",
+              href: "https://hol.org/guard/extensions/advertise?source=guard_local&intent=extension-promotion&placement=extensions_header",
+              target: "_blank",
+              rel: "noopener noreferrer",
+              referrerPolicy: "no-referrer",
+              children: "Sponsor an extension"
+            }
+          )
+        ] })
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-testid": "extensions-surface", children: [
@@ -9928,14 +10078,6 @@ function ExtensionsOverview(props) {
       ] })
     ] })
   ] });
-}
-function pushExtensionHistory(href) {
-  const target = guardAwareHref(href);
-  if (loadCurrentDashboardBuild(target)) return;
-  window.history.pushState({}, "", target);
-}
-function replaceExtensionHistory(href) {
-  window.history.replaceState({}, "", guardAwareHref(href));
 }
 function deriveProtectionStatus(effective) {
   if (effective.global_lockdown) {
@@ -10502,8 +10644,287 @@ function ProtectionCenterWorkspace(props) {
     ) : null
   ] });
 }
+const CAPABILITIES = {
+  "browser.origin-reputation": {
+    label: "Site reputation",
+    checks: "Whether a website is known for phishing, malware or scams before an agent acts on it."
+  },
+  "browser.script-integrity": {
+    label: "Script integrity",
+    checks: "Whether scripts loaded on a page match known-bad or tampered versions."
+  },
+  "browser.page-data-risk": {
+    label: "Page data risk",
+    checks: "Whether a page asks for data it should not, such as credentials on a look-alike site."
+  },
+  "browser.download-reputation": {
+    label: "Download reputation",
+    checks: "Whether a file an agent downloads is known to be harmful."
+  },
+  "browser.site-policy": {
+    label: "Site policy",
+    checks: "Whether your organization allows agents to use a website."
+  }
+};
+const FACTS = {
+  "target.origin": "The website's address without a path, such as https://shop.example",
+  "target.site_group": "The registrable domain the website belongs to",
+  "target.path_prefix": "The first part of the page path",
+  "action.verb": "The kind of action, such as navigate or submit",
+  "action.intent": "A short label for what the agent is trying to do",
+  "page.script_hashes": "Fingerprints of the scripts on the page, never their contents",
+  "download.sha256": "The fingerprint of a downloaded file, never the file",
+  "guard.version": "The HOL Guard version"
+};
+const STATES = {
+  not_connected: "Not connected",
+  connected: "Connected",
+  key_invalid: "Key rejected",
+  disabled: "Turned off"
+};
+const EFFECTS = {
+  observe: "Record findings only",
+  tighten: "Ask before risky actions",
+  enforce: "Block dangerous sites"
+};
+const SURFACES = {
+  browser: "Browser"
+};
+function capabilityLabel(capability) {
+  return CAPABILITIES[capability]?.label ?? capability;
+}
+function capabilityChecks(capability) {
+  return CAPABILITIES[capability]?.checks ?? null;
+}
+function factDescription(fact) {
+  return FACTS[fact] ?? fact;
+}
+function providerStateLabel(state) {
+  return STATES[state];
+}
+function effectLabel(effect) {
+  return EFFECTS[effect];
+}
+function surfaceLabel(surface) {
+  return SURFACES[surface] ?? surface;
+}
+function providerErrorMessage(code) {
+  switch (code) {
+    case "provider_not_found":
+      return "Guard does not ship this provider.";
+    case "provider_capability_unavailable":
+      return "Provider integrations are turned off on this device.";
+    case "provider_managed_policy_unavailable":
+      return "Guard could not read your organization's policy, so integrations are paused.";
+    default:
+      return "Guard could not load provider integrations.";
+  }
+}
+function useLoad(read) {
+  const [state, setState] = reactExports.useState({ kind: "loading" });
+  const [attempt, setAttempt] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    let live = true;
+    setState({ kind: "loading" });
+    read().then(
+      (value) => live && setState({ kind: "ready", value }),
+      (error) => live && setState({ kind: "error", code: error instanceof ProviderIntegrationApiError ? error.code : "provider_request_failed" })
+    );
+    return () => {
+      live = false;
+    };
+  }, [read, attempt]);
+  return [state, reactExports.useCallback(() => setAttempt((value) => value + 1), [])];
+}
+function BackLink(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "a",
+    {
+      href: props.href,
+      onClick: (event) => {
+        event.preventDefault();
+        navigateExtensions(props.href);
+      },
+      className: "inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-brand-blue",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { className: "size-4", "aria-hidden": "true" }),
+        props.label
+      ]
+    }
+  );
+}
+const STATE_TONE = {
+  connected: "guard-extensions-tone-safe",
+  not_connected: "",
+  key_invalid: "guard-extensions-tone-danger",
+  disabled: "guard-extensions-tone-attention"
+};
+function ProviderStateChip(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${EXTENSION_CHIP_CLASS} ${STATE_TONE[props.state]}`, children: providerStateLabel(props.state) });
+}
+function VerificationLabel(props) {
+  if (props.verified) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 text-sm text-brand-dark/80", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckBadge, { className: "size-4 text-brand-blue", "aria-hidden": "true" }),
+      props.publisher ? `Verified publisher: ${props.publisher}` : "Verified publisher"
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark/70", children: props.publisher ? `Published by ${props.publisher}. HOL has not verified this publisher.` : "Unverified publisher" });
+}
+function ProviderListView(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto max-w-4xl space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(BackLink, { href: "/extensions", label: "Extensions" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold text-brand-dark", children: "Integrations" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: "Connect a security provider to add its checks to Guard. Guard sends a provider only the facts its page lists." })
+    ] }),
+    props.providers.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: EXTENSION_PANEL_CLASS, children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: "No provider integrations ship with this version of Guard yet." }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "integrations-browser", className: EXTENSION_PANEL_CLASS, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "integrations-browser", className: "text-base font-semibold text-brand-dark", children: surfaceLabel("browser") }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-2", children: props.providers.map((provider) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "a",
+        {
+          href: providerHref(provider.id),
+          onClick: (event) => {
+            event.preventDefault();
+            navigateExtensions(providerHref(provider.id));
+          },
+          className: `${EXTENSION_ROW_CLASS} flex min-h-11 flex-wrap items-center justify-between gap-3`,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block font-medium text-brand-dark", children: provider.name }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm text-brand-dark/70", children: provider.summary }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs text-brand-dark/60", children: provider.capabilities.map(capabilityLabel).join(", ") })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderStateChip, { state: provider.state })
+          ]
+        }
+      ) }, provider.id)) })
+    ] })
+  ] });
+}
+function ExternalLink(props) {
+  const href = safeHttpsUrl(props.href);
+  if (!href) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href, target: "_blank", rel: "noopener noreferrer", className: "inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-blue", children: [
+    props.label,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+  ] });
+}
+function ProviderDetailView(props) {
+  const { detail } = props;
+  const { summary } = detail;
+  const [showCli, setShowCli] = reactExports.useState(false);
+  const optional = detail.enabledOptInFacts.filter((fact) => !detail.shares.includes(fact));
+  const connectLabel = summary.state === "connected" ? "Replace key" : "Connect";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto max-w-4xl space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(BackLink, { href: INTEGRATIONS_HREF, label: "Integrations" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-semibold text-brand-dark", children: summary.name }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: summary.summary }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(VerificationLabel, { verified: summary.verified, publisher: detail.publisherName }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderStateChip, { state: summary.state }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => props.onConnect ? props.onConnect() : setShowCli(true),
+            className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white",
+            children: connectLabel
+          }
+        )
+      ] })
+    ] }),
+    showCli && !props.onConnect ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: EXTENSION_PANEL_CLASS, role: "status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: "Connect from a terminal. Guard asks for the key there and never shows it again." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { className: "mt-2 block font-mono text-sm break-all text-brand-dark", children: [
+        "hol-guard integrations connect ",
+        summary.id
+      ] })
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "provider-checks", className: EXTENSION_PANEL_CLASS, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "provider-checks", className: "text-base font-semibold text-brand-dark", children: "What it checks" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: detail.settings.map((setting) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: capabilityLabel(setting.capability) }),
+        capabilityChecks(setting.capability) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: capabilityChecks(setting.capability) }) : null,
+        summary.state === "connected" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-brand-dark/60", children: [
+          effectLabel(setting.effect),
+          setting.requireFreshCheck ? " · waits for a fresh check" : ""
+        ] }) : null
+      ] }, setting.capability)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "provider-shares", className: EXTENSION_PANEL_CLASS, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "provider-shares", className: "text-base font-semibold text-brand-dark", children: "What leaves this device" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/70", children: "Each lookup sends only these facts. Page contents, form data and keys stay here." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("ul", { className: "mt-3 list-disc space-y-1 pl-5 text-sm text-brand-dark", children: [
+        detail.shares.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: factDescription(fact) }, fact)),
+        optional.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+          factDescription(fact),
+          " (you turned this on)"
+        ] }, fact))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-sm text-brand-dark/70", children: [
+        "Guard calls only ",
+        detail.hosts.length === 1 ? "this host" : "these hosts",
+        ":",
+        " ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono break-all", children: detail.hosts.join(", ") })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "provider-publisher", className: EXTENSION_PANEL_CLASS, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "provider-publisher", className: "text-base font-semibold text-brand-dark", children: "Publisher and terms" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-brand-dark/80", children: detail.publisherName }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-wrap gap-x-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { href: detail.publisherUrl, label: "Publisher site" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { href: detail.privacyUrl, label: "Privacy policy" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ExternalLink, { href: detail.termsUrl, label: "Terms" })
+      ] })
+    ] })
+  ] });
+}
+function IntegrationsListPage() {
+  const [state, retry] = useLoad(fetchProviderList);
+  if (state.kind === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading integrations" });
+  if (state.kind === "error") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadError, { title: "Integrations unavailable", detail: providerErrorMessage(state.code), onRetry: retry });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderListView, { providers: state.value });
+}
+function ProviderDetailPage(props) {
+  const read = reactExports.useCallback(() => fetchProviderDetail(props.providerId), [props.providerId]);
+  const [state, retry] = useLoad(read);
+  if (state.kind === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading provider" });
+  if (state.kind === "error" && state.code === "provider_not_found") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ExtensionsNotFound,
+      {
+        title: "Provider not found",
+        detail: providerErrorMessage(state.code),
+        onBack: () => navigateExtensions(INTEGRATIONS_HREF)
+      }
+    );
+  }
+  if (state.kind === "error") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadError, { title: "Provider unavailable", detail: providerErrorMessage(state.code), onRetry: retry });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderDetailView, { detail: state.value });
+}
+function IntegrationsWorkspace(props) {
+  return props.route.kind === "integrations" ? /* @__PURE__ */ jsxRuntimeExports.jsx(IntegrationsListPage, {}) : /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderDetailPage, { providerId: props.route.providerId }, props.route.providerId);
+}
+function ExtensionsRouteSwitch(props) {
+  const [route, setRoute] = reactExports.useState(() => parseIntegrationsRoute(window.location.pathname));
+  reactExports.useEffect(() => {
+    const onPopState = () => setRoute(parseIntegrationsRoute(window.location.pathname));
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  return route ? /* @__PURE__ */ jsxRuntimeExports.jsx(IntegrationsWorkspace, { route }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionCenterWorkspace, { ...props });
+}
 export {
-  ProtectionCenterWorkspace as ExtensionsWorkspace,
+  ExtensionsRouteSwitch as ExtensionsWorkspace,
   ProtectionAuthorityNotice,
   ReviewModal,
   authorityActionErrorMessage,
