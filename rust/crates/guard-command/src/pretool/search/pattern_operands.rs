@@ -56,6 +56,15 @@ pub(crate) fn search_patterns(executable: &str, arguments: &[String]) -> Option<
     while index < arguments.len() {
         let argument = &arguments[index];
         index += 1;
+        if options_enabled
+            && argument.starts_with('\\')
+            && argument.replace('\\', "").starts_with('-')
+        {
+            // Where the shell drops the backslash, `\--` ends the options and
+            // `\-e` takes the next word; where it keeps it, both are plain
+            // words. Either reading could move a path into the pattern slot.
+            return None;
+        }
         if !options_enabled || argument == "-" || !argument.starts_with('-') {
             positionals.push(argument.clone());
             continue;
@@ -208,14 +217,35 @@ mod tests {
             let arguments: Vec<String> = line.split_whitespace().map(str::to_owned).collect();
             super::search_patterns(executable, &arguments)
         };
-        let glob = reading("rg", r"-g -e \-f.env src").unwrap();
-        assert_eq!(glob.words, vec![r"\-f.env".to_owned()]);
+        let glob = reading("rg", r"-g -e word src").unwrap();
+        assert_eq!(glob.words, vec!["word".to_owned()]);
         assert!(!glob.from_options);
-        let exclude = reading("grep", r"--exclude -e \-f.env src").unwrap();
+        let exclude = reading("grep", r"--exclude -e word src").unwrap();
         assert!(!exclude.from_options);
+        // An escaped option word after it has no single reading.
+        assert_eq!(reading("rg", r"-g -e \-f.env src"), None);
+        assert_eq!(reading("grep", r"--exclude -e \-f.env src"), None);
         let regexp = reading("rg", r"-e \-f.env src").unwrap();
         assert_eq!(regexp.words, vec![r"\-f.env".to_owned()]);
         assert!(regexp.from_options);
+    }
+
+    #[test]
+    fn an_escaped_option_word_reads_no_pattern() {
+        // Kept backslashes, as a Windows build tokenizes them: the shell runs
+        // `grep -- -e .env`, which searches `.env` for `-e`.
+        assert_eq!(words("grep", r"\-- -e \.env"), None);
+        assert_eq!(words("grep", r"\-\- -e \.env"), None);
+        // `grep -e -e .env` searches `.env` for `-e`.
+        assert_eq!(words("grep", r"\-e -e .env"), None);
+        assert_eq!(words("rg", r"-n \-f.env src"), None);
+        // A value an option takes keeps its backslash reading.
+        assert_eq!(
+            words("grep", r"-e \-f.env src"),
+            Some(vec![r"\-f.env".into()])
+        );
+        // After a real terminator every word is a plain operand.
+        assert_eq!(words("grep", r"-- \-x src"), Some(vec![r"\-x".into()]));
     }
 
     #[test]

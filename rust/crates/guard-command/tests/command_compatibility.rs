@@ -497,6 +497,10 @@ fn a_search_pattern_beside_a_stderr_redirect_names_no_credential() {
         // the backslash: `-f.env` reads a pattern file.
         "grep \\-f.env src 2>/dev/null",
         "grep -n \\-\\-file=.env src 2>/dev/null",
+        // An escaped terminator still ends the options where the shell drops
+        // the backslash, so `-e` is the pattern and `.env` the file.
+        "grep \\-- -e \\.env 2>/dev/null",
+        "grep \\-e -e .env 2>/dev/null",
         // A literal `-e` another option took as its value supplies no
         // pattern, so the escaped word after it is still an option.
         "rg -g -e \\-f.env src 2>/dev/null",
