@@ -187,6 +187,22 @@ def test_attention_policy_opens_critical_request_without_delay(tmp_path: Path) -
     assert opened_urls == ["http://127.0.0.1:5474/requests/pending"]
 
 
+def test_attention_policy_opens_nothing_while_a_browser_session_holds_the_page(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.runtime import approval_attention
+
+    store, runtime, result = _queue_operation(tmp_path, harness="pi", severity="critical")
+    monkeypatch.setattr(approval_attention, "approval_page_held", lambda _home: True)
+    now = [100.0]
+    opened_urls: list[str] = []
+    coordinator = _schedule(store, runtime, result, now=now, opened_urls=opened_urls)
+
+    coordinator.process_due()
+
+    assert opened_urls == []
+
+
 def test_attention_policy_does_not_reopen_same_critical_request(tmp_path: Path) -> None:
     store, runtime, result = _queue_operation(tmp_path, harness="pi", severity="critical")
     now = [100.0]

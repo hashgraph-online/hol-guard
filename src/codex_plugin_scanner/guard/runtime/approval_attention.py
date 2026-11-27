@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import final
 
+from ..approval_browser_surface import approval_page_held
 from ..config import GuardConfig, load_guard_config
 from ..native_directory_trust import NativeDirectoryTrustError, native_directory_trust
 from ..store import GuardStore
@@ -184,6 +185,8 @@ class ApprovalAttentionCoordinator:
             # without terminating the attention loop.
             return
         if config.approval_surface_policy != "attention-aware":
+            return
+        if approval_page_held(self._store.guard_home):
             return
         open_key = f"approval-request:{item.request_ids[0]}"
         if self._runtime.has_surface_opened("approval-center", open_key):

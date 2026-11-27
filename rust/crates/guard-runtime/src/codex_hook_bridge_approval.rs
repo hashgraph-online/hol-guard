@@ -283,6 +283,9 @@ fn open_pending_with_source(
         );
         return;
     }
+    if crate::approval_browser_surface::withheld(home, url, &mut std::io::stderr()) {
+        return;
+    }
     let browser_url = now_micros().and_then(|now| {
         crate::native_review_link::approval_browser_url(
             url,

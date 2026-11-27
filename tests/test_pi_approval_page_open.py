@@ -69,9 +69,7 @@ def _policy_body(policy: object) -> bytes:
     return json.dumps({"settings": {"approval_surface_policy": policy}}).encode("utf-8")
 
 
-def _open_twice(
-    tmp_path: Path, connection: dict[str, object] | None, harness_name: str = "omp"
-) -> dict[str, object]:
+def _open_twice(tmp_path: Path, connection: dict[str, object] | None, harness_name: str = "omp") -> dict[str, object]:
     """Pause twice on one approval center and report what the extension spawned."""
 
     harness = tmp_path / "open.ts"
@@ -132,6 +130,34 @@ def test_never_open_a_browser_keeps_the_page_closed(
     assert settings.reads == [{"path": "/v1/settings", "token": TOKEN}] * 2
 
 
+@pytest.mark.parametrize("harness_name", ["pi", "omp"])
+def test_a_browser_session_holding_the_page_keeps_it_closed(
+    tmp_path: Path, daemon: tuple[_Settings, int], harness_name: str
+) -> None:
+    settings, port = daemon
+    settings.body = json.dumps(
+        {"settings": {"approval_surface_policy": "attention-aware"}, "approval_page_held": True}
+    ).encode("utf-8")
+
+    result = _open_twice(tmp_path, _connection(port), harness_name)
+
+    assert result == {"calls": [], "opened": []}
+    # Each pause asks again, so the page opens once the browser session ends.
+    assert settings.reads == [{"path": "/v1/settings", "token": TOKEN}] * 2
+
+
+@pytest.mark.parametrize("held", [False, None, "true", 1])
+def test_an_unheld_page_opens_once(tmp_path: Path, daemon: tuple[_Settings, int], held: object) -> None:
+    settings, port = daemon
+    settings.body = json.dumps(
+        {"settings": {"approval_surface_policy": "attention-aware"}, "approval_page_held": held}
+    ).encode("utf-8")
+
+    result = _open_twice(tmp_path, _connection(port))
+
+    assert len(_calls(result)) == 1
+
+
 @pytest.mark.parametrize("policy", ["attention-aware", "approval-center", None, ["native-only"]])
 def test_any_other_setting_opens_the_page_once(tmp_path: Path, daemon: tuple[_Settings, int], policy: object) -> None:
     settings, port = daemon
@@ -174,7 +200,9 @@ def test_no_reachable_daemon_keeps_the_page_closed(tmp_path: Path, daemon: tuple
     assert settings.reads == []
 
 
-def test_stalled_settings_read_keeps_the_page_closed_within_timeout(tmp_path: Path, daemon: tuple[_Settings, int]) -> None:
+def test_stalled_settings_read_keeps_the_page_closed_within_timeout(
+    tmp_path: Path, daemon: tuple[_Settings, int]
+) -> None:
     settings, port = daemon
     settings.delay = 8.0
     settings.body = _policy_body("native-only")

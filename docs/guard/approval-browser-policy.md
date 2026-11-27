@@ -15,3 +15,20 @@ setting change takes effect without restarting the session. Every Pi-family
 open can therefore wait up to 1.5 seconds for that read. If it fails or times
 out, they retain their previous browser-opening behavior. Other policies retain
 their existing timing and deduplication rules.
+
+## While an agent drives your browser
+
+When an agent drives a browser through your own profile, an approval page that
+opens on its own would land in the browser the agent controls. The agent could
+then read or click it. So while any browser session Guard recorded in the last
+two hours uses a `shared`, `remote-debugging` or `unknown` profile, Guard opens
+no approval page automatically, whatever the setting above says. Sessions with
+an `isolated` or `dedicated` profile do not hold the page.
+
+Guard still pauses the action. The request stays on every surface that is not a
+browser, and the hook prints the approval link so you can open it yourself.
+Opening a request or the dashboard by hand still works. The Codex native bridge,
+the shared daemon, the attention timer, Pi and Oh My Pi all check the same
+sessions table. Pi and Oh My Pi read it through the `approval_page_held` field
+of `/v1/settings`, so the page opens again at the next pause once the session
+goes idle.

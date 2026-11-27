@@ -425,10 +425,14 @@ transcript in the pull request (after BP-T052).
   `BROWSER_SCOPE_KEYS` in `rust/crates/guard-policy-bundle/src/policy_bundle_v1_rules.rs`, update
   `spec/guard-policy/v1alpha1/schema.json`, `docs/policy/schema-reference.md`, and
   `tests/test_guard_policy_bundle_browser_scopes.py`.
-- [ ] **BP-T070** R-SURFACE: surface resolution in the resident beside `approval_surface_policy`. For
+- [x] **BP-T070** R-SURFACE: surface resolution in the resident beside `approval_surface_policy`. For
   `shared` and `remote-debugging` sessions never auto-open a browser approval page; show the request
   on every non-browser surface and print the link for the user. Extend
   `approval_browser_policy_tests.rs`. Update `docs/guard/approval-browser-policy.md`.
+  - Done: `approval_browser_surface.rs` answers whether a live `shared`, `remote-debugging` or
+    `unknown` session holds the page. The Codex bridge prints the link instead of opening it; the
+    daemon surface, the attention timer and Pi/Oh My Pi (via `approval_page_held` on
+    `/v1/settings`) open nothing. Explicit opens still work.
 - [ ] **BP-T071** R-GATE: setup prompt on the browser card when a shared or remote-debugging session
   has no approval gate. The two required choices stay.
 - [ ] **BP-T072** Agent-facing hook text for browser holds and denials: names the site and the wait,
