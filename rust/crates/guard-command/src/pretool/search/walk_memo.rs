@@ -184,14 +184,12 @@ pub(super) fn cleared(
     (git_metadata, follow_links, skip_hidden): (bool, bool, bool),
     clearance: &crate::pretool::search_pattern_clearance::PatternClearance,
 ) -> bool {
-    let (spent, files) = clearance.charged();
     let key = format!(
         "cleared\0{root:?}\0{excluded_files:?}\0{excluded_directories:?}\0\
-         {git_metadata}\0{follow_links}\0{skip_hidden}\0{spent}\0{files}\0{}",
-        clearance.expression()
+         {git_metadata}\0{follow_links}\0{skip_hidden}"
     );
-    let (proven, spent, files) = memoized_charged(key, || {
-        let proven = super::tree::walk_uncached(
+    memoized_cleared(key, clearance, || {
+        super::tree::walk_uncached(
             root,
             excluded_files,
             excluded_directories,
@@ -199,7 +197,22 @@ pub(super) fn cleared(
             follow_links,
             Some(clearance),
             skip_hidden,
-        );
+        )
+    })
+}
+
+/// A proof that charges `clearance`, once per evaluation for each `key`,
+/// pattern and clearance count, leaving the counters where the proof itself
+/// would have.
+pub(super) fn memoized_cleared(
+    key: String,
+    clearance: &crate::pretool::search_pattern_clearance::PatternClearance,
+    prove: impl FnOnce() -> bool,
+) -> bool {
+    let (spent, files) = clearance.charged();
+    let key = format!("{key}\0{spent}\0{files}\0{}", clearance.expression());
+    let (proven, spent, files) = memoized_charged(key, || {
+        let proven = prove();
         let (spent, files) = clearance.charged();
         (proven, spent, files)
     });
