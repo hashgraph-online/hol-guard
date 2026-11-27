@@ -418,7 +418,7 @@ kind but cannot load a callback.
 | Hook | Input | Allowed provider effect |
 | --- | --- | --- |
 | `pre_tool.secret_request` | Provider id, reference digest, capability, destination class, workspace digest | Add metadata or require fresh state when policy already permits it |
-| `pre_exec.secret_delivery` | Destination process identity, sink kind, reference digest, lease request | Allow or require review under Guard policy |
+| `pre_exec.secret_delivery` | Destination process identity, sink kind, reference digest, lease request | Add metadata, require fresh state, or mark the read unavailable. Guard policy alone decides allow or review |
 | `post_tool.output` | Bounded output bytes after local redaction, no provider call by default | Redact known values or record a local finding |
 | `lease.expiring` | Lease digest, expiry, provider id | Schedule a bounded refresh or show a notice |
 | `provider.revoked` | Provider connection id and reason code | Mark connection invalid and stop new materialization |
