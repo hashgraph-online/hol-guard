@@ -38085,6 +38085,74 @@
       "expect": "allow"
     },
     {
+      "id": "absent-temporary-listing-then-hop-git-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -d /tmp/hg-gate-absent-build-output 2>&1 | head; cd src && git log --oneline -1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "absent-temporary-read-then-hop-git-diff",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat /tmp/hg-gate-absent-build-output.log 2>/dev/null; cd src && git diff --stat"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-absent-temporary-listing-hop-then-rename-into-it",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -d /tmp/hg-gate-absent-build-output; cd src && mv ../README.md /tmp/hg-gate-absent-build-output; cat /tmp/hg-gate-absent-build-output"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-absent-temporary-listing-hop-then-secret-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -d /tmp/hg-gate-absent-build-output 2>&1 | head; cd ~/.ssh && cat id_ed25519"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "yq-eval-subcommand",
       "fix_area": "read",
       "harnesses": [
