@@ -72,6 +72,7 @@ pub(in crate::pretool) use writes_nothing::creates_nothing;
 mod exclusion;
 mod includes;
 mod missing;
+pub(super) use missing::unmatched_glob;
 mod reach;
 mod writes_nothing;
 pub(in crate::pretool) use reach::sensitive_reach_reason;

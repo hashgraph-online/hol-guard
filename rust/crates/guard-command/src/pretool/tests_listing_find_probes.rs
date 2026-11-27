@@ -471,6 +471,11 @@ fn rg_glob_operands_are_proven_by_their_expansion() {
         "rg -n alpha app/**/page.tsx",
         "ls app/*/page.tsx",
         "ls app/**/page.tsx",
+        // Below a folder that is not there the glob matches nothing: `rg`
+        // gets the literal word, which names no file, or under `nullglob` no
+        // root and walks the working directory, which `rg -n main` proves.
+        "rg -n main",
+        "rg -n main nothing/**/*.ts",
     ] {
         assert!(allowed_in(&fixture, ws, command), "{command}");
     }
@@ -479,8 +484,7 @@ fn rg_glob_operands_are_proven_by_their_expansion() {
         "rg -n plan docs/**/*.md",
         "rg -n key keys/**",
         "rg -n key **/*.pem",
-        // No expansion, an escape, or a pattern the shell may read differently.
-        "rg -n main nothing/**/*.ts",
+        // An escape, or a pattern the shell may read differently.
         "rg -n main ../**/*.ts",
         "rg -n main src/**/*.t#",
         "rg --hidden -n main src/**/*.ts",

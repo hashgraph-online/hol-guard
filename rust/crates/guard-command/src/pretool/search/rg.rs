@@ -419,6 +419,7 @@ fn rg_arguments_pass(
     } else {
         super::rg_exclusions::excluded_names(&globs)
     };
+    let mut unmatched_globs: Vec<&str> = Vec::new();
     for &argument in &roots {
         if unsafe_search_value(SearchValueRole::Path, argument, context)
             && !tree::rg_root_inside_cwd(argument, context)
@@ -431,14 +432,34 @@ fn rg_arguments_pass(
                 || tree::glob_may_name_an_option(argument, context)
                 || !tree::safe_glob_search_operand(argument, context))
         {
-            unproven_roots.push(argument);
+            if allow_absent && super::grep::unmatched_glob(argument, context) {
+                unmatched_globs.push(argument);
+            } else {
+                unproven_roots.push(argument);
+            }
         }
     }
+    // A glob that matches nothing reaches `rg` as the literal word under
+    // bash, which names no file, and fails the command under zsh's
+    // `nomatch`: `rg -ln KEY handlers_*.rs` after a `cd` that may not have
+    // happened reads nothing, and no ignore file can re-include anything
+    // below it. The roots `rg` walks are the rest. Under `nullglob` the
+    // word disappears instead, and once every root is gone `rg` walks the
+    // working directory, which an empty list of walked roots proves.
+    let walked_roots: Vec<&str> = roots
+        .iter()
+        .copied()
+        .filter(|root| !unmatched_globs.contains(root))
+        .collect();
     // An inherited RIPGREP_CONFIG_PATH prepends its lines to these
     // arguments, so `--pre`, `--hidden` or `--no-ignore` there would undo
     // every check above. A stdin filter walks no files, so the config's
     // file options have nothing to act on.
-    let scope: &[&str] = if roots.is_empty() { &["."] } else { &roots };
+    let scope: &[&str] = if walked_roots.is_empty() {
+        &["."]
+    } else {
+        &walked_roots
+    };
     // An option that takes a value and gets none (`rg PATTERN src -r`) is a
     // usage error: rg exits before it opens anything. That holds only for the
     // options whose value never names a pattern, path or glob.
@@ -454,7 +475,7 @@ fn rg_arguments_pass(
         && (stdin_only
             || paths_only
             || !prove_roots
-            || rg_whitelist::roots_proven(&roots, &narrowing_globs(arguments), context))
+            || rg_whitelist::roots_proven(&walked_roots, &narrowing_globs(arguments), context))
         && (unscreened_globs.is_empty()
             || super::super::search_scope::rg_glob_scope_proven(
                 scope,
