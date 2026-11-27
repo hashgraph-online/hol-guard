@@ -71,3 +71,128 @@ fn a_submission_walks_each_include_tree_once() {
         distinct.len()
     );
 }
+
+/// `rg -g` proves the tree under its globs for every reading of the
+/// submission too. Unshared, a search of a large application tree walked
+/// it once per floor and ran past the hook's decision budget.
+#[test]
+fn a_submission_walks_each_rg_glob_tree_once() {
+    let root = tempfile::Builder::new()
+        .prefix("guard-repeat-rg-walk")
+        .tempdir()
+        .expect("temp root");
+    let home = std::fs::canonicalize(root.path()).expect("canonical home");
+    let worktree = home.join("projects").join("storefront");
+    for (path, body) in [
+        ("app/items/page.tsx", "export const Page = () => null;\n"),
+        (
+            "app/items/__tests__/page.test.tsx",
+            "test('page', () => {});\n",
+        ),
+        ("src/lib/consent.ts", "export const showBanner = true;\n"),
+        ("src/lib/notes.md", "# notes\n"),
+    ] {
+        let file = worktree.join(path);
+        std::fs::create_dir_all(file.parent().expect("parent")).expect("directory");
+        std::fs::write(file, body).expect("fixture file");
+    }
+    let command = format!(
+        "cd {} && rg -n \"showBanner|hideBanner\" -g '*.ts*' -g '!__tests__/**' app src | head -30",
+        worktree.display()
+    );
+    take_walks();
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+        "claude-code",
+        "PreToolUse",
+        &serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": worktree.to_str().expect("cwd text"),
+        }),
+        None,
+        None,
+        home.to_str(),
+        worktree.to_str(),
+    );
+    let walks = take_walks();
+    assert_eq!(
+        (result.minimum_action.as_str(), result.reason_code.as_str()),
+        ("allow", "native_exact_safe_command"),
+        "walks: {walks:?}"
+    );
+    let glob_walks: Vec<_> = walks
+        .iter()
+        .filter(|walk| walk.starts_with("rg-glob-walk "))
+        .cloned()
+        .collect();
+    let mut distinct = glob_walks.clone();
+    distinct.sort();
+    distinct.dedup();
+    assert_eq!(distinct.len(), 2, "one walk per root: {glob_walks:?}");
+    assert_eq!(
+        glob_walks.len(),
+        distinct.len(),
+        "{} walks for {} distinct trees: {distinct:?}",
+        glob_walks.len(),
+        distinct.len()
+    );
+}
+
+/// A content search over shell globs expands and screens each glob once per
+/// submission. Expanded again for every reading, `grep -rn` over a test
+/// tree's `*.py` globs ran past the hook's decision budget.
+#[test]
+fn a_submission_expands_each_search_glob_once() {
+    let root = tempfile::Builder::new()
+        .prefix("guard-repeat-glob")
+        .tempdir()
+        .expect("temp root");
+    let home = std::fs::canonicalize(root.path()).expect("canonical home");
+    let worktree = home.join("projects").join("storefront");
+    for (path, body) in [
+        ("tests/test_items.py", "def test_items():\n    pass\n"),
+        ("tests/unit/test_cart.py", "def test_cart():\n    pass\n"),
+        ("tests/unit/test_notes.py", "def test_notes():\n    pass\n"),
+    ] {
+        let file = worktree.join(path);
+        std::fs::create_dir_all(file.parent().expect("parent")).expect("directory");
+        std::fs::write(file, body).expect("fixture file");
+    }
+    let command = format!(
+        "cd {} && grep -rn \"test_cart\\|test_notes\" tests/*.py tests/**/*.py 2>/dev/null | head -20",
+        worktree.display()
+    );
+    take_walks();
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+        "claude-code",
+        "PreToolUse",
+        &serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": worktree.to_str().expect("cwd text"),
+        }),
+        None,
+        None,
+        home.to_str(),
+        worktree.to_str(),
+    );
+    let expansions: Vec<_> = take_walks()
+        .into_iter()
+        .filter(|walk| walk.starts_with("glob-search-operand "))
+        .collect();
+    let mut distinct = expansions.clone();
+    distinct.sort();
+    distinct.dedup();
+    assert!(
+        !distinct.is_empty(),
+        "no glob was expanded: {}",
+        result.reason_code
+    );
+    assert_eq!(
+        expansions.len(),
+        distinct.len(),
+        "{} expansions for {} distinct globs: {distinct:?}",
+        expansions.len(),
+        distinct.len()
+    );
+}
