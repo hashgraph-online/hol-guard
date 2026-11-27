@@ -20,6 +20,11 @@ use crate::pyjson::PyVal;
 const SETTINGS_FILE: &str = "settings.json";
 const LEGACY_OMP_NOTE: &str =
     "Guard also removed the verified legacy Oh My Pi extension from the combined Pi install.";
+/// Oh My Pi launch flags that start a session without discovered extensions,
+/// so Guard's extension does not load and Guard sees none of its tool calls.
+const OMP_LAUNCH_FLAGS_NOTE: &str =
+    "Oh My Pi skips this extension in sessions started with --no-tools, or with --no-extensions \
+     or --trusted-extension unless the command names it. Guard does not review those sessions.";
 
 struct Family {
     config_dir: &'static str,
@@ -263,7 +268,11 @@ fn prepare_install(spec: &Spec, ctx: &Ctx, fields: &Map<String, Value>) -> Step<
         "Guard installed a managed {display_name} extension that reviews prompts and tool calls \
          before {display_name} executes them."
     );
-    let manifest = adapter_result(spec.harness, true, &extension, &shim, vec![text(note)]);
+    let mut notes = vec![text(note)];
+    if spec.harness == "omp" {
+        notes.push(text(OMP_LAUNCH_FLAGS_NOTE));
+    }
+    let manifest = adapter_result(spec.harness, true, &extension, &shim, notes);
     Ok(json!({
         "files": changes.iter().map(Change::wire).collect::<Vec<_>>(),
         "manifest": render(&manifest.value())?,
