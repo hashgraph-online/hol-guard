@@ -21,6 +21,7 @@ guard-cigar-native = { path = "../guard-cigar-native" }
 guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }
 guard-yanez-pulse = { path = "../guard-yanez-pulse" }
+guard-provider-integrations = { path = "../guard-provider-integrations" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-policy-bundle = { path = "../guard-policy-bundle" }
@@ -102,6 +103,7 @@ zbus = { version = "=5.19.0", default-features = false }
 fuzzing = []
 
 [dev-dependencies]
+guard-provider-integrations = { path = "../guard-provider-integrations", features = ["testkit"] }
 guard-yanez-pulse = { path = "../guard-yanez-pulse", features = ["testkit"] }
 tempfile = "3.10"
 
