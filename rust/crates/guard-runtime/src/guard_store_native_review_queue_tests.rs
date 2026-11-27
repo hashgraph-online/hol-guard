@@ -129,7 +129,12 @@ fn a_prompted_review_becomes_the_plain_queue_write() {
 
 #[test]
 fn a_review_without_a_policy_snapshot_falls_back_to_a_silent_block() {
-    let delegated = delegate(&args(json!({"respond": {"native_review": {}}}))).unwrap();
+    let guard_home = tempfile::tempdir().unwrap();
+    let workspace = tempfile::tempdir().unwrap();
+    let mut call = args(json!({"respond": {"native_review": {}}}));
+    call["review"]["guard_home"] = json!(guard_home.path().to_string_lossy());
+    call["review"]["envelope"]["workspace"] = json!(workspace.path().to_string_lossy());
+    let delegated = delegate(&call).unwrap();
     assert_eq!(
         delegated.method,
         "add_silent_native_review_approval_request"
