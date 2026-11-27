@@ -18,6 +18,8 @@ use crate::managed_policy_load::ManagedPolicySource;
 
 /// The queue write's argument naming the waiting hook's raw facts.
 pub(crate) const FACTS_KEY: &str = "codex_live_wait_facts";
+/// Raw hook payloads the daemon fallback forwards for Rust-side extraction.
+pub(crate) const PAYLOAD_KEY: &str = "codex_live_wait_payload";
 /// Set in place of the link when the facts name no live, bounded wait.
 pub(crate) const NOT_LIVE_KEY: &str = "codex_live_wait_not_live";
 
@@ -42,11 +44,25 @@ pub(crate) fn prepare(
     ) {
         return None;
     }
-    let facts = args.get(FACTS_KEY)?;
     let mut prepared = args.clone();
     prepared.remove(FACTS_KEY);
+    prepared.remove(PAYLOAD_KEY);
     prepared.remove("codex_live_wait");
-    let built = build(facts, args, guard_home);
+    let facts = match args.get(FACTS_KEY).cloned().or_else(|| payload_facts(args)) {
+        Some(facts) => facts,
+        None if args.contains_key(PAYLOAD_KEY)
+            && args
+                .get("request")
+                .and_then(Value::as_object)
+                .and_then(|request| request.get("harness"))
+                .and_then(Value::as_str)
+                == Some("codex") =>
+        {
+            return Some(prepared);
+        }
+        None => return None,
+    };
+    let built = build(&facts, args, guard_home);
     match (built, prepared.get_mut("request")) {
         (Some((link, snapshot)), Some(Value::Object(request))) => {
             request.insert("continuation_snapshot".to_owned(), snapshot);
@@ -61,6 +77,28 @@ pub(crate) fn prepare(
         }
     }
     Some(prepared)
+}
+
+/// Extract the bridge facts from the raw hook payload without asking Python to
+/// decide whether a wait is present. The payload is dropped before the store
+/// write, so only the bounded process identity and timeout reach the wait
+/// validator.
+fn payload_facts(args: &Map<String, Value>) -> Option<Value> {
+    let request = args.get("request")?.as_object()?;
+    if request.get("harness").and_then(Value::as_str) != Some("codex") {
+        return None;
+    }
+    let payload = args.get(PAYLOAD_KEY)?.as_object()?;
+    let process = payload.get(crate::codex_hook_bridge::BROWSER_WAIT_PROCESS_KEY);
+    let timeout_seconds = payload.get(crate::codex_hook_bridge::BROWSER_WAIT_TIMEOUT_KEY);
+    if process.is_none() && timeout_seconds.is_none() {
+        return None;
+    }
+    Some(json!({
+        "process": process,
+        "timeout_seconds": timeout_seconds,
+        "workspace": request.get("workspace").cloned().unwrap_or(Value::Null),
+    }))
 }
 
 fn build(facts: &Value, args: &Map<String, Value>, guard_home: &Path) -> Option<(Value, Value)> {
