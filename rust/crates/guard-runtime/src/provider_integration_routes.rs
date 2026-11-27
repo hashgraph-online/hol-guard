@@ -19,9 +19,8 @@
 
 use guard_command::provider_integration_compile::CompiledProviderIntegrationV1;
 use guard_contracts::{
-    ProviderCapabilitySettingsV1, ProviderConnectPreviewV1, ProviderConnectionStateV1,
-    ProviderDisconnectRequestV1, ProviderIntegrationErrorV1, ProviderSettingsRequestV1,
-    ProviderShareableFactV1,
+    ProviderCapabilitySettingsV1, ProviderConnectionStateV1, ProviderDisconnectRequestV1,
+    ProviderIntegrationErrorV1, ProviderSettingsRequestV1, ProviderShareableFactV1,
 };
 use guard_provider_integrations::parse::parse_strict_bounded;
 use rusqlite::Connection;
@@ -36,8 +35,8 @@ pub use crate::provider_integration_proof::{
 };
 use crate::provider_integration_secret::delete_provider_key;
 use crate::provider_integration_store::{
-    forget_provider, provider_connection, put_capability_setting, put_connection,
-    CapabilitySetting, ProviderConnection,
+    forget_provider, in_write_savepoint, provider_connection, put_capability_setting,
+    put_connection, CapabilitySetting, ProviderConnection, ProviderStoreResult,
 };
 
 /// The rollback switch.
@@ -155,27 +154,6 @@ fn route(path: &str) -> Option<Route<'_>> {
     Some(Route::Post(parts[0], action))
 }
 
-/// Spends a `connect/preview` challenge for the connect route, which stores the key only when this
-/// is true. The challenge is bound to what the preview showed: the shared facts and hosts.
-pub fn spend_connect_proof(
-    ledger: &mut ProofLedger,
-    proof: &str,
-    provider: &CompiledProviderIntegrationV1,
-    now_ms: u64,
-) -> bool {
-    ledger.spend(
-        proof,
-        &provider.id,
-        ProofAction::Connect,
-        connect_digest(provider),
-        now_ms,
-    )
-}
-
-fn connect_digest(provider: &CompiledProviderIntegrationV1) -> [u8; 32] {
-    digest_of(&json!([provider.id, shares(provider), provider.hosts]).to_string())
-}
-
 /// `POST .../settings/preview` body: the settings the person wants.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -211,6 +189,9 @@ fn fact_rank(fact: ProviderShareableFactV1) -> usize {
 }
 
 fn read_body<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, RouteAnswer> {
+    if body.len() > MAX_ROUTE_BODY_BYTES {
+        return Err(error(400, INVALID_REQUEST));
+    }
     let value = if body.iter().all(u8::is_ascii_whitespace) {
         json!({})
     } else {
@@ -286,40 +267,6 @@ fn issue(
     ledger
         .issue(provider_id, action, body_digest, context.now_ms)
         .ok_or_else(unavailable)
-}
-
-fn connect_preview(
-    ledger: &mut ProofLedger,
-    context: &RouteContext<'_>,
-    provider: &CompiledProviderIntegrationV1,
-    body: &[u8],
-) -> Result<RouteAnswer, RouteAnswer> {
-    let _: serde_json::Map<String, Value> = read_body(body)?;
-    let shares = shares(provider);
-    let opt_in_facts: Vec<ProviderShareableFactV1> = shares
-        .iter()
-        .copied()
-        .filter(|fact| fact.opt_in_only())
-        .collect();
-    let (challenge, expires_at_ms) = issue(
-        ledger,
-        context,
-        &provider.id,
-        ProofAction::Connect,
-        connect_digest(provider),
-    )?;
-    let preview = ProviderConnectPreviewV1 {
-        provider_id: provider.id.clone(),
-        shares: shares
-            .into_iter()
-            .filter(|fact| !fact.opt_in_only())
-            .collect(),
-        opt_in_facts,
-        hosts: provider.hosts.clone(),
-        challenge,
-        expires_at_ms,
-    };
-    Ok(ok(serde_json::to_value(preview).map_err(|_| unavailable())?))
 }
 
 fn connected(
@@ -426,10 +373,16 @@ fn settings_apply(
     }
     // Managed policy may have changed since the preview.
     let change = checked_change(context, provider, change)?;
-    let mut stored = connected(context, &provider.id)?;
-    stored.opt_in_facts = change.enabled_opt_in_facts.clone();
-    stored.updated_at_ms = context.now_ms;
-    let write = || -> crate::provider_integration_store::ProviderStoreResult<()> {
+    // The connection read and every write are one change: a failure leaves nothing applied. The
+    // proof stays spent.
+    let write = || -> ProviderStoreResult<Option<()>> {
+        let Some(mut stored) = provider_connection(context.connection, &provider.id)?
+            .filter(|stored| stored.state != ProviderConnectionStateV1::NotConnected)
+        else {
+            return Ok(None);
+        };
+        stored.opt_in_facts = change.enabled_opt_in_facts.clone();
+        stored.updated_at_ms = context.now_ms;
         for setting in &change.settings {
             put_capability_setting(
                 context.connection,
@@ -441,9 +394,11 @@ fn settings_apply(
                 },
             )?;
         }
-        put_connection(context.connection, &stored)
+        put_connection(context.connection, &stored).map(Some)
     };
-    write().map_err(|_| unavailable())?;
+    in_write_savepoint(context.connection, write)
+        .map_err(|_| unavailable())?
+        .ok_or_else(|| error(409, NOT_CONNECTED))?;
     Ok(ok(json!({ "provider_id": provider.id, "applied": true })))
 }
 
@@ -489,6 +444,11 @@ fn disconnect(
         "disconnected": was_connected,
     })))
 }
+
+#[path = "provider_integration_routes_connect.rs"]
+mod connect;
+use connect::connect_preview;
+pub use connect::spend_connect_proof;
 
 #[path = "provider_integration_routes_reads.rs"]
 mod reads;

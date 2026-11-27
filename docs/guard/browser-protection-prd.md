@@ -921,7 +921,7 @@ refused. Register in `rust/crates/guard-runtime/src/daemon_route_paths.rs` and
 | `/v1/integrations/providers/<id>/connect/preview` | POST | Returns the exact share set and a proof challenge. |
 | `/v1/integrations/providers/<id>/connect` | POST | Key plus one-use proof. Verifies, stores, enables. |
 | `/v1/integrations/providers/<id>/settings/preview` | POST | Checks the requested settings against the manifest and managed policy, returns them and a proof challenge bound to them. |
-| `/v1/integrations/providers/<id>/settings` | POST | Preview plus proof. Effect level per capability, enforcement and fresh-check toggles, fact toggles, quieted reason codes. Applies exactly the previewed body. |
+| `/v1/integrations/providers/<id>/settings` | POST | Preview plus proof. Effect level per capability, enforcement and fresh-check toggles, fact toggles. Applies exactly the previewed body. Quieted reason codes are deferred: a non-empty list is refused with `400 invalid_request` until they are stored and read back. |
 | `/v1/integrations/providers/<id>/disconnect/preview` | POST | Returns a proof challenge. |
 | `/v1/integrations/providers/<id>/disconnect` | POST | Proof. Deletes secret and cache. |
 | `/v1/integrations/providers/<id>/test` | POST | One live call for a user-typed public origin. Rate limited. |

@@ -1,7 +1,7 @@
 use guard_command::provider_integration_compile::compile_provider_integration;
 use guard_contracts::{
-    ProviderCapabilityV1 as Cap, ProviderConnectionStateV1 as State, ProviderDetailV1,
-    ProviderEffectLevelV1 as Level,
+    ProviderCapabilityV1 as Cap, ProviderConnectPreviewV1, ProviderConnectionStateV1 as State,
+    ProviderDetailV1, ProviderEffectLevelV1 as Level,
 };
 use serde_json::Map;
 use zeroize::Zeroizing;
@@ -476,4 +476,53 @@ fn the_ledger_stays_bounded() {
     fixture.now_ms = NOW + PROOF_TTL_MS;
     fixture.call("POST", &path("/disconnect/preview"), Value::Null);
     assert_eq!(fixture.ledger.pending(), 1);
+}
+
+#[test]
+fn an_oversized_body_is_refused_even_when_it_is_only_whitespace() {
+    let mut fixture = Fixture::connected();
+    let secrets = EncryptedFileSecretStore::new(fixture.home.path());
+    let context = RouteContext {
+        enabled: true,
+        providers: &fixture.providers,
+        connection: &fixture.connection,
+        managed: &fixture.managed,
+        secrets: &secrets,
+        now_ms: NOW,
+    };
+    let route = path("/disconnect/preview");
+    let blank = vec![b' '; MAX_ROUTE_BODY_BYTES];
+    let answered = answer(&mut fixture.ledger, &context, "POST", &route, &blank).unwrap();
+    assert_eq!(answered.status, 200);
+    let oversized = vec![b' '; MAX_ROUTE_BODY_BYTES + 1];
+    let answered = answer(&mut fixture.ledger, &context, "POST", &route, &oversized).unwrap();
+    assert_eq!((answered.status, code(&answered)), (400, INVALID_REQUEST));
+    assert_eq!(fixture.ledger.pending(), 1);
+}
+
+#[test]
+fn a_failed_settings_apply_leaves_nothing_applied() {
+    let mut fixture = Fixture::connected();
+    let change = enforce_change();
+    let proof = fixture
+        .call("POST", &path("/settings/preview"), change.clone())
+        .body["challenge"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The connection row is written last; make that write fail.
+    fixture
+        .connection
+        .execute_batch(
+            "create trigger refuse_connection_write before insert on provider_connections \
+             begin select raise(abort, 'refused'); end;
+             create trigger refuse_connection_update before update on provider_connections \
+             begin select raise(abort, 'refused'); end;",
+        )
+        .unwrap();
+    let answer = fixture.call("POST", &path("/settings"), with_proof(&change, &proof));
+    assert_eq!(answer.status, 503, "{}", answer.body);
+    assert_eq!(stored_setting(&fixture), UNCHANGED);
+    let again = fixture.call("POST", &path("/settings"), with_proof(&change, &proof));
+    assert_eq!(code(&again), PROOF_INVALID, "the proof stays spent");
 }
