@@ -64,11 +64,37 @@ pub(in crate::pretool) fn creation_chain(model: &CanonicalCommandV1) -> bool {
 /// resolves, and no peer renames or moves a file, so no earlier step can
 /// place the only copy of anything at a name a later `rm` clears. Each
 /// segment is still proven on its own against the files on disk.
+///
+/// A Git read may follow the clean-up, as in `rm -f /tmp/notes.txt; git log
+/// --oneline -1`, on the terms [`mkdir_chain`] sets: no copy, and only Git
+/// subcommands that never write the work tree. With a Git step in the
+/// chain, each `rm` must also leave the configuration the read loads:
+/// every operand is absent or a small plain file outside the read's
+/// directory that holds no configuration section and is no dotfile.
 pub(in crate::pretool) fn removal_chain(
     model: &CanonicalCommandV1,
     context: crate::pretool::PathContext<'_>,
 ) -> bool {
-    if model.segments.len() < 2 || !super::plain_chain(model, &["mkdir", "touch", "rm"]) {
+    let runs = |name: &str| {
+        model
+            .segments
+            .iter()
+            .any(|segment| segment.executable.as_deref() == Some(name))
+    };
+    let git_read = || {
+        !runs("cp")
+            && super::plain_chain(model, &["mkdir", "touch", "rm", "git"])
+            && model.segments.iter().all(|segment| {
+                leaves_work_tree(segment)
+                    && (segment.executable.as_deref() != Some("rm")
+                        || crate::pretool::safe_links::temporary_removal_leaves_git_config(
+                            segment, context,
+                        ))
+            })
+    };
+    if model.segments.len() < 2
+        || !(super::plain_chain(model, &["mkdir", "touch", "rm"]) || git_read())
+    {
         return false;
     }
     model

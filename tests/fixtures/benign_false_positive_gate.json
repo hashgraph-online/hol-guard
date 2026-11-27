@@ -17244,6 +17244,74 @@
       "expect": "not_allow"
     },
     {
+      "id": "rm-own-temporary-file-then-git-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f ${PRIVATE_TMP}/notes.txt; git log --oneline -1"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "rm-absent-temporary-file-then-git-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f /tmp/hg-gate-absent-scratch-output.log; git log --oneline -1"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "rm-absent-temporary-file-quiet-then-git-status",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f /tmp/hg-gate-absent-scratch-output.log 2>/dev/null && git status --short"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-rm-temporary-config-section-file-then-git-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rm -f ${PRIVATE_TMP}/pager-settings.conf; git log --oneline -1"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-mkdir-home-deliverables",
       "fix_area": "queue",
       "harnesses": [

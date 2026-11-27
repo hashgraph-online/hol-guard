@@ -284,6 +284,65 @@ fn temporary_removal_segment(
     operands > 0
 }
 
+/// Whether this step is a temporary-file removal (see
+/// [`temporary_removal_segments`]) that leaves Git's configuration as the
+/// probe read it, so a Git read after it keeps its own helper proof.
+///
+/// Git reads a configuration entry only below a `[section]` header, so a
+/// file with no `[` in it adds nothing to a configuration that includes it,
+/// and removing it changes none. A dotfile, a file below a `.git` directory
+/// or below the directory the read runs in can be an attributes, ignore or
+/// mailmap file that steers what the read runs, so those keep the review. A
+/// name that is already gone removes nothing.
+pub(super) fn temporary_removal_leaves_git_config(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    const MAX_SCANNED_BYTES: u64 = 64 * 1024;
+    let read_root = context.cwd.and_then(|cwd| std::fs::canonicalize(cwd).ok());
+    temporary_removal_segment(segment, context)
+        && removal_operands(&segment.arguments).all(|operand| {
+            let path = std::path::Path::new(operand);
+            let metadata = match path.symlink_metadata() {
+                Err(error) => return error.kind() == std::io::ErrorKind::NotFound,
+                Ok(metadata) => metadata,
+            };
+            let Ok(canonical) = std::fs::canonicalize(path) else {
+                return false;
+            };
+            metadata.file_type().is_file()
+                && metadata.len() <= MAX_SCANNED_BYTES
+                && !path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_none_or(|name| name.starts_with('.'))
+                && !canonical
+                    .components()
+                    .any(|part| part.as_os_str().eq_ignore_ascii_case(".git"))
+                && read_root
+                    .as_ref()
+                    .is_none_or(|root| !canonical.starts_with(root))
+                && std::fs::read(&canonical).is_ok_and(|bytes| !bytes.contains(&b'['))
+        })
+}
+
+/// The operands of an `rm` the temporary-removal proof accepted: every word
+/// after its `-f`, `--force` and `--` options.
+fn removal_operands(arguments: &[String]) -> impl Iterator<Item = &String> {
+    let mut options = true;
+    arguments.iter().filter(move |argument| {
+        if options && argument.as_str() == "--" {
+            options = false;
+            return false;
+        }
+        if options && matches!(argument.as_str(), "-f" | "--force") {
+            return false;
+        }
+        options = false;
+        true
+    })
+}
+
 fn removable_regular_file(value: &str, context: super::PathContext<'_>) -> bool {
     let expanded =
         expand_home_read_path(value, context.home_dir).unwrap_or_else(|| value.to_owned());
