@@ -29,6 +29,10 @@ mod wiped_read;
 #[path = "shell_reference_tests.rs"]
 mod shell_reference_tests;
 
+#[cfg(test)]
+#[path = "empty_assignment_tests.rs"]
+mod empty_assignment_tests;
+
 pub use match_spans::scan_match_spans;
 pub use payment_key::holds_live_payment_key;
 
@@ -170,7 +174,14 @@ const PATTERNS: &[PatternDef] = &[
         // `pass` and `pwd` count only after `_` or `-` (`DB_PASS`, `WEBDAV_PWD`), so
         // `bypass`, `compass`, test tallies (`"pass": 12`) and the shell's
         // `PWD=`/`OLDPWD=` paths stay clean.
-        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password|passwd|passphrase|access[_-]?key|[_-]pass|[_-]pwd)\b[\"']?\s*[:=]\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
+        //
+        // After `=`, a quoted value may start on the next line, where a
+        // formatter wraps a long string below its name, but an unquoted one
+        // must start on the separator's own line: in an environment template,
+        // `API_TOKEN=` followed by `NODE_ENV=development` leaves the token
+        // empty, and the next line is its own setting. After `:` an unquoted
+        // value may still sit on the next line, where YAML indents it.
+        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password|passwd|passphrase|access[_-]?key|[_-]pass|[_-]pwd)\b[\"']?\s*(?::\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)|=(?:\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+')|[ \t]*[^ \t\r\n\"',}]+))"#,
         case_insensitive: true,
         multi_line: true,
     },

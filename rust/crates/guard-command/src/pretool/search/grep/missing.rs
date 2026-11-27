@@ -20,13 +20,33 @@ pub(super) fn missing_operand(value: &str, context: ReadContext<'_>) -> bool {
 }
 
 /// A `*` or `?` glob, outside any bracket class, that the strict expansion
-/// proves matches nothing in a real directory. A `~` glob counts only while
-/// the shell's home is the declared one.
+/// proves matches nothing in a real directory, or that sits below a directory
+/// that is not there. A `~` glob counts only while the shell's home is the
+/// declared one.
 fn unmatched_glob(value: &str, context: ReadContext<'_>) -> bool {
     value.contains(['*', '?'])
         && !value.contains(['[', ']'])
         && (!value.starts_with('~') || context.shell_home_matches)
-        && tree::safe_unmatched_glob_operand(value, context, false)
+        && (tree::safe_unmatched_glob_operand(value, context, false)
+            || below_absent_directory(value, context))
+}
+
+/// `tools/*.py` with no `tools`: no shell option makes a pattern match below
+/// a directory that does not exist, as `grep -rn KEY src/*.py tools/*.py`
+/// shows when an agent searches a fixed list of places. The literal directory
+/// before the first pattern component has to clear the rule a missing literal
+/// root clears, so a credential store stays refused. An extended-glob group
+/// such as `+(a)` can match a real directory, so a parenthesis keeps the
+/// review.
+fn below_absent_directory(value: &str, context: ReadContext<'_>) -> bool {
+    let first_pattern = value.find(['*', '?']).unwrap_or(value.len());
+    value[..first_pattern]
+        .rsplit_once('/')
+        .is_some_and(|(directory, _)| {
+            !directory.is_empty()
+                && !directory.contains(['(', ')'])
+                && super::absent_target(directory, context)
+        })
 }
 
 /// Every recursive root is proven or missing (`grep -rn x src tests` with no
