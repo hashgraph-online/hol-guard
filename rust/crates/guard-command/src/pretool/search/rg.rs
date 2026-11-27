@@ -432,7 +432,14 @@ fn rg_arguments_pass(
                 || tree::glob_may_name_an_option(argument, context)
                 || !tree::safe_glob_search_operand(argument, context))
         {
-            if allow_absent && super::grep::unmatched_glob(argument, context) {
+            // A glob that could name a credential file keeps its review:
+            // `auth.*provider` matches nothing now, but which files it
+            // selects is the question the screen above refused to answer.
+            if allow_absent
+                && !super::literal_glob_names_sensitive_path(argument)
+                && !guard_secure_fs::credential_named_path(std::path::Path::new(argument))
+                && super::grep::unmatched_glob(argument, context)
+            {
                 unmatched_globs.push(argument);
             } else {
                 unproven_roots.push(argument);

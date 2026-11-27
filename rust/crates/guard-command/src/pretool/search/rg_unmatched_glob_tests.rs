@@ -62,6 +62,10 @@ fn a_root_glob_that_matches_nothing_reads_nothing() {
         ),
         // An unquoted bracket class is not a `*` or `?` glob this proof reads.
         ("rg -ln run handlers_[ab]*.rs".to_owned(), false),
+        // A glob that could select a credential name keeps its review even
+        // when it matches nothing.
+        ("rg -n run auth.*provider".to_owned(), false),
+        ("rg -n run src secrets_*.json".to_owned(), false),
     ] {
         assert_eq!(decide(&command, context), allowed, "{command}");
     }
