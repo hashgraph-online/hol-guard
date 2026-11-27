@@ -87,7 +87,7 @@ pub(in crate::pretool) fn removal_chain(
             && model.segments.iter().all(|segment| {
                 leaves_work_tree(segment)
                     && (segment.executable.as_deref() != Some("rm")
-                        || crate::pretool::safe_links::temporary_removal_leaves_git_config(
+                        || crate::pretool::removal_git_state::temporary_removal_leaves_git_config(
                             segment, context,
                         ))
             })

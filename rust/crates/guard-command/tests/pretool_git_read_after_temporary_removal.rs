@@ -102,3 +102,74 @@ fn a_temporary_file_removal_before_a_git_read_keeps_its_proof() {
         assert_ne!(action, "allow", "{command}: {reason}");
     }
 }
+
+#[test]
+fn a_removal_inside_the_git_directory_or_of_an_attributes_file_keeps_the_review() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/pretool-git-read-after-git-directory-removal")
+        .join(std::process::id().to_string());
+    let _ = std::fs::remove_dir_all(&root);
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home, &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+
+    // The repository keeps its Git directory in the temporary folder.
+    let scratch = PathBuf::from(format!("/tmp/hg-git-dir-removal-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir(&scratch).unwrap();
+    std::fs::set_permissions(&scratch, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let _scratch = Scratch(scratch.clone());
+    let admin = scratch.join("admin");
+    fixture::git(
+        &home,
+        &repository,
+        &[
+            "init",
+            "--quiet",
+            "--separate-git-dir",
+            admin.to_str().unwrap(),
+        ],
+    );
+    fixture::git(
+        &home,
+        &repository,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    fixture::git(&home, &repository, &["config", "user.name", "fixture"]);
+    std::fs::write(repository.join("package.json"), "{}\n").unwrap();
+    fixture::git(&home, &repository, &["add", "-A"]);
+    fixture::git(&home, &repository, &["commit", "--quiet", "-m", "fixture"]);
+    std::fs::create_dir_all(admin.join("info")).unwrap();
+    std::fs::set_permissions(&admin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::set_permissions(admin.join("info"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::write(admin.join("info").join("attributes"), "*.json text\n").unwrap();
+    std::fs::write(scratch.join("notes.txt"), "draft commit message\n").unwrap();
+    // A global attributes file can unset a filter the read relied on.
+    std::fs::write(scratch.join("attributes.txt"), "* -filter\n").unwrap();
+    std::fs::write(scratch.join("drivers.txt"), "*.json diff=json\n").unwrap();
+    let scratch = scratch.display();
+    let admin = admin.display();
+
+    let command = format!("rm -f {scratch}/notes.txt; git log --oneline -1");
+    let (action, reason) = evaluate(&home, &repository, &command);
+    assert_eq!(
+        (action.as_str(), reason.as_str()),
+        ("allow", "native_exact_safe_command"),
+        "{command}"
+    );
+
+    for command in [
+        format!("rm -f {admin}/info/attributes; git status --short"),
+        format!("rm -f {admin}/description; git log --oneline -1"),
+        format!("rm -f {scratch}/attributes.txt; git status --short"),
+        format!("rm -f {scratch}/drivers.txt; git diff --stat"),
+    ] {
+        let (action, reason) = evaluate(&home, &repository, &command);
+        assert_ne!(action, "allow", "{command}: {reason}");
+    }
+}

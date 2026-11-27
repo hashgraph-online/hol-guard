@@ -273,6 +273,7 @@ mod restricted_test_commands;
 pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_script_task};
 mod rust_toolchain;
 mod rustfmt_writes;
+mod removal_git_state;
 mod safe_links;
 pub(crate) use safe_links::{every_removal_temporary, temporary_removal_segments};
 pub(crate) mod safe_reads;
