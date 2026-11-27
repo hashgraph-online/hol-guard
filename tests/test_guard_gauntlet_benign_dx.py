@@ -547,6 +547,13 @@ def test_waiting_on_a_guard_review_is_not_a_detour_from_the_scenario() -> None:
         "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8",
         "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json",
         "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/guard-home",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/guard@%+=,home",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home '/tmp/guard @%+=,home'",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home {{fixture}}/guard-home",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home {{home}}/guard-home",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home {{workspace}}/guard-home",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home '/tmp/{1..3}'",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home '/tmp/{a,b}'",
     ):
         assert without_approval_waits([_bash(standalone, "wait")]) == []
     stopped = [first, wait]
@@ -567,6 +574,16 @@ def test_waiting_on_a_guard_review_is_not_a_detour_from_the_scenario() -> None:
         "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json extra",
         "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json\necho unrelated",
         "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home $(pwd)",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/{1..3}",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/{a,b}",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/{{unknown}}",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/{fixture,home}",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/guard;echo x",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/guard | cat",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/guard > out",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/guard extra",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/guard*",
+        "hol-guard approvals wait 8852272a566b4f7ca98bf1ec252352f8 --json --home /tmp/guard[ab]",
     ):
         kept = without_approval_waits([first, _bash(other, "other")])
         assert native_tools_scope_error(scenario, kept, {}, guard_denied=True) == (

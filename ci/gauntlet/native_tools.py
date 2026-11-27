@@ -736,7 +736,8 @@ def _route_segment_glob_error(calls: list[dict[str, Any]]) -> str | None:
 # A prefix match could discard another command from the benchmark trace.
 APPROVAL_WAIT_COMMAND = re.compile(
     r"hol-guard approvals wait [0-9a-f]{32}(?: --json)?"
-    r"(?: --home (?:'[A-Za-z0-9_./\\:{} -]+'|[A-Za-z0-9_./\\:{}-]+))?"
+    r"(?: --home (?:'[A-Za-z0-9_./\\:{}@%+=, -]+'"
+    r"|(?:[A-Za-z0-9_./\\:@%+=,-]|\{\{(?:fixture|home|workspace)\}\})+))?"
 )
 
 
