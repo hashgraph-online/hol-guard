@@ -567,8 +567,12 @@ transcript in the pull request (after BP-T052).
   the caps of BP-T176, and is a finding only from any other provider; `danger` suspends grants for
   that subject while fresh. Needs BP-T060; until then the decide step applies to exact and category
   grants.
-- [ ] **BP-T128** Lifecycle: disconnect deletes secret and cached signals; uninstall and
+- [x] **BP-T128** Lifecycle: disconnect deletes secret and cached signals; uninstall and
   forget-device flows delete all provider secrets. Tests.
+  - `provider_integration_purge.rs` deletes every provider key, then every connection, setting and
+    cached signal. `hol-guard uninstall --self` runs it before the package goes. A disconnect also
+    drops the worker's pacing for that provider.
+  - [ ] Guard has no "forget this device" flow yet; when it lands it calls the same purge.
 
 ### Routes, CLI, dashboard
 
