@@ -429,8 +429,11 @@ transcript in the pull request (after BP-T052).
   `shared` and `remote-debugging` sessions never auto-open a browser approval page; show the request
   on every non-browser surface and print the link for the user. Extend
   `approval_browser_policy_tests.rs`. Update `docs/guard/approval-browser-policy.md`.
-- [ ] **BP-T071** R-GATE: setup prompt on the browser card when a shared or remote-debugging session
+- [x] **BP-T071** R-GATE: setup prompt on the browser card when a shared or remote-debugging session
   has no approval gate. The two required choices stay.
+  - Done: `browser-call/browser-gate-prompt.tsx` adds one line linking to approval setup when the
+    card's profile is `shared` or `remote-debugging` and no password, authenticator or Pulse is ready.
+    The general setup notice is not repeated below it, and the choices are untouched.
 - [ ] **BP-T072** Agent-facing hook text for browser holds and denials: names the site and the wait,
   tells the agent not to retry in a loop, omits the approval link for shared profiles.
 - [ ] **BP-T073** Daemon routes `/v1/browser/sessions`, `/v1/browser/sites`, `/v1/browser/grants` in
