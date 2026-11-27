@@ -104,13 +104,14 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
     // runs in the caller environment, so a search path of `.` or an empty
     // entry can load a library the probe never saw. A search path declared by
     // name only, without a stamped value, stays unproven. The Windows loader
-    // never reads these search paths, so there they leave the proof intact.
+    // never reads these search paths, and macOS dyld never reads
+    // `LD_LIBRARY_PATH`, so there they leave the proof intact.
     for name in guard_contracts::LIBRARY_SEARCH_PATH_NAMES {
         let mut loader = context.clone();
         loader.environment_names.push((*name).into());
         assert_eq!(
             evaluate(&loader).decision == "allow",
-            cfg!(windows),
+            cfg!(windows) || (cfg!(target_os = "macos") && *name == "LD_LIBRARY_PATH"),
             "{name}"
         );
     }
@@ -214,7 +215,15 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             below_shared,
             missing_home_lib,
         ] {
-            assert_ne!(stamped(&[("LD_LIBRARY_PATH", value)]), "allow", "{value:?}");
+            // dyld reads only the DYLD_* paths, so on macOS the same values
+            // are checked through one of those.
+            for name in ["LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"] {
+                assert_eq!(
+                    stamped(&[(name, value)]) == "allow",
+                    cfg!(target_os = "macos") && name == "LD_LIBRARY_PATH",
+                    "{name}={value:?}"
+                );
+            }
         }
         // Injection variables are never stamped by value, so a value for one
         // makes the whole context invalid.

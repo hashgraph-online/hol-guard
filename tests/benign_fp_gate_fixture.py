@@ -41,6 +41,7 @@ import json
 import os
 import secrets
 import shutil
+import socket
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -107,6 +108,7 @@ class BenignFixture:
     def cleanup(self) -> None:
         """Remove the directories this fixture created outside its own root."""
         shutil.rmtree(self.private_tmp, ignore_errors=True)
+        shutil.rmtree(self.postgres_run, ignore_errors=True)
         shutil.rmtree(self.contained_requests, ignore_errors=True)
         shutil.rmtree(self.tmp_worktree.parent, ignore_errors=True)
         shutil.rmtree(self.user_tmp_worktree.parent, ignore_errors=True)
@@ -120,6 +122,11 @@ class BenignFixture:
     def scratch_patch(self) -> Path:
         """A patch kept straight in /tmp, as agents keep one to check before applying."""
         return Path(f"{self.scratch}-fix.patch")
+
+    @property
+    def postgres_run(self) -> Path:
+        """A private PostgreSQL socket directory beside the scratch directory, outside every walked tree."""
+        return Path(f"{self.private_tmp}-pg")
 
     @property
     def scratch_copy(self) -> Path:
@@ -139,6 +146,7 @@ class BenignFixture:
             "${NESTED}": str(self.nested),
             "${GITLINK_REPO}": str(self.gitlink_repo),
             "${PRIVATE_TMP}": str(self.private_tmp),
+            "${PG_RUN}": str(self.postgres_run),
             "${ORG}": str(self.org),
             "${ORG_WT}": str(self.org.parent / "app-portal-fix"),
             "${ORG_CLONE}": str(self.org.parent / "app-portal-clone"),
@@ -341,6 +349,14 @@ def build_fixture(root: Path) -> BenignFixture:
     # A running local Postgres leaves its socket and lock beside it, which is
     # what a session lists when it checks whether the server is up.
     _write(private_tmp / ".s.PGSQL.5432.lock", "4242\n")
+    if hasattr(socket, "AF_UNIX"):
+        # The socket itself, which `ls -la` stats without opening. It sits in
+        # its own private directory so the recursive walks of the scratch
+        # directory never meet a special file.
+        postgres_run = Path(f"{private_tmp}-pg")
+        postgres_run.mkdir(mode=0o700)
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+            server.bind(str(postgres_run / ".s.PGSQL.5432"))
     # Files a session preserved before resetting its checkout, copied back by glob.
     _write(private_tmp / "preserved" / "src" / "discovery" / "catalog.ts", "export const catalog = [];\n")
     _write(private_tmp / "preserved" / "src" / "discovery" / "rank.ts", "export const rank = 1;\n")

@@ -363,12 +363,28 @@
    "body": "9f8991e701d1"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no Unix domain socket or named pipe entry that `ls` lists as one, so the stub returns `false` and a listing of such an entry keeps the review it had before. The caller only admits more on Unix; off Unix nothing changes.",
+   "file": "rust/crates/guard-command/src/pretool/listing_metadata.rs",
+   "item": "fn special_file(_file_type: &std::fs::FileType) -> bool",
+   "cfg": "not(unix)",
+   "body": "6916690bca7b"
+  },
+  {
    "verdict": "windows-permissive",
    "note": "The Unix arm reads the mode bits and returns `true` for a world-writable directory, which makes the caller keep a glob below it reviewed: anyone can plant a matching link between the screen and the shell's expansion. The non-Unix stub returns `false`, so that check never fires on Windows and a glob under a shared writable root such as `C:\\Windows\\Temp` can be admitted where Unix reviews it. Nothing exercises the stub off Unix. Closing it means reading the directory's DACL for a write grant to a group wider than the owner, next to the ownership queries `guard-runtime-windows-process` already makes.",
    "file": "rust/crates/guard-command/src/pretool/listing_temporary.rs",
    "item": "pub(super) fn writable_by_anyone(_directory: &std::path::Path) -> bool",
    "cfg": "not(unix)",
    "body": "c9deb6aa42df"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no sticky, system-owned shared temporary root such as `/tmp`; the user's temporary folder is inside the profile and is already handled by the private temporary rules. The stub returns `false`, so a missing dot name below a Windows directory keeps the review it had before.",
+   "file": "rust/crates/guard-command/src/pretool/listing_temporary.rs",
+   "item": "pub(super) fn shared_temporary_root(_directory: &std::path::Path) -> bool",
+   "cfg": "not(unix)",
+   "body": "183f9cc2819a"
   },
   {
    "verdict": "windows-unsupported",

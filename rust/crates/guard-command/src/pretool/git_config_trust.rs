@@ -42,10 +42,11 @@ pub(in crate::pretool) fn clean_environment(
             .collect(),
     };
     !names.iter().any(|name| {
-        // Unix loader search paths are inert on Windows. Elsewhere a search
-        // path the hook stamped is checked entry by entry; every other loader
+        // A search path the platform's loader never reads is inert (the Unix
+        // ones on Windows, LD_LIBRARY_PATH on macOS). Otherwise a search path
+        // the hook stamped is checked entry by entry; every other loader
         // variable, including injection, stays a refusal.
-        if crate::pretool::trusted_location::inert_loader_search_path(name, cfg!(windows))
+        if crate::pretool::trusted_location::inert_loader_search_path(name, std::env::consts::OS)
             || execution_environment.is_some_and(|context| {
                 context.library_search_paths.get(name).is_some_and(|value| {
                     crate::pretool::trusted_location::trusted_library_search_path(value, home, cwd)

@@ -14,7 +14,9 @@ use std::path::{Component, Path, PathBuf};
 
 #[path = "listing_metadata.rs"]
 mod metadata;
-pub(super) use metadata::{credential_file_metadata_operand, global_package_listing_operand};
+pub(super) use metadata::{
+    credential_file_metadata_operand, global_package_listing_operand, special_file_metadata_operand,
+};
 
 /// Home components holding a `bin` directory of installed tools.
 const TOOL_ROOTS: [&str; 7] = [
