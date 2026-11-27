@@ -64,11 +64,29 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     }
     let request: LoadRequest =
         serde_json::from_slice(&bytes).map_err(|_| "guard_config_request_invalid".to_owned())?;
+    respond(&request)
+}
+
+/// The resident `guard_config_load` operation advertises this feature.
+pub(crate) const RESIDENT_FEATURE: &str = "guard-config-load-resident-v1";
+
+/// The `guard-config-load --stdin` answer, given inside the resident.
+///
+/// The dispatcher pins `guard_home` to the resident's own Guard home before
+/// this runs, so a resident only loads the configuration of the home it
+/// serves. The reads and trust checks are the one-shot command's own.
+pub(crate) fn evaluate_resident(request: &Value) -> Result<Vec<u8>, String> {
+    let request =
+        LoadRequest::deserialize(request).map_err(|_| "guard_config_request_invalid".to_owned())?;
+    respond(&request)
+}
+
+fn respond(request: &LoadRequest) -> Result<Vec<u8>, String> {
     if request.schema != SCHEMA {
         return Err("guard_config_request_invalid".to_owned());
     }
     // A load failure is data, not a crash: the caller maps it to its own error.
-    let response = match load(&request) {
+    let response = match load(request) {
         Ok(config) => json!({"ok": true, "config": python_view(config)}),
         Err(reason) => json!({"ok": false, "error": reason}),
     };

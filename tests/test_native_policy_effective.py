@@ -270,3 +270,85 @@ def test_publish_refuses_mapping_configs_before_spawning(monkeypatch) -> None:
     with pytest.raises(NativePolicySnapshotError, match="native_policy_snapshot_policy_invalid"):
         client.compose_native_publication(())
     assert seen == []
+
+
+def _resident(monkeypatch: pytest.MonkeyPatch, reply: bytes | None) -> list[dict[str, Any]]:
+    from codex_plugin_scanner.guard import native_resident_client
+
+    sent: list[dict[str, Any]] = []
+
+    def request(**kwargs: Any) -> bytes | None:
+        assert kwargs["idle_only"] is True
+        assert kwargs["guard_home"] == Path("/guard-home")
+        sent.append(json.loads(kwargs["payload"]))
+        return reply
+
+    monkeypatch.setattr(native_resident_client, "native_resident_client_request", request)
+    return sent
+
+
+_RESIDENT_STATUS = (
+    client.POLICY_EFFECTIVE_FEATURE,
+    client.POLICY_PUBLISH_FEATURE,
+    client.POLICY_EFFECTIVE_RESIDENT_FEATURE,
+)
+_PUBLISHED = {
+    "ok": True,
+    "policy": {"default_action": "warn"},
+    "views": {"blocked_request_mode": None, "mcp_relay_harnesses": {}},
+}
+
+
+def test_publication_takes_an_idle_resident_answer_without_spawning(monkeypatch) -> None:
+    spawned = _install(monkeypatch, None, status=_status(features=_RESIDENT_STATUS))
+    sent = _resident(monkeypatch, json.dumps(_PUBLISHED).encode())
+
+    policy, mode, harnesses = client.compose_native_publication(
+        (GuardConfig(guard_home=Path("/guard-home"), workspace=None),), guard_home=Path("/guard-home")
+    )
+
+    assert (policy, mode, harnesses) == ({"default_action": "warn"}, None, {})
+    assert spawned == []
+    assert [envelope["operation"] for envelope in sent] == ["policy_effective"]
+    assert sent[0]["request"]["op"] == "publish"
+
+
+@pytest.mark.parametrize("reply", [None, b'{"error":"native_request_schema_unsupported"}', b"not json"])
+def test_publication_spawns_when_the_resident_cannot_answer(monkeypatch, reply: bytes | None) -> None:
+    spawned = _install(monkeypatch, _PUBLISHED, status=_status(features=_RESIDENT_STATUS))
+    _resident(monkeypatch, reply)
+
+    policy, _mode, _harnesses = client.compose_native_publication(
+        (GuardConfig(guard_home=Path("/guard-home"), workspace=None),), guard_home=Path("/guard-home")
+    )
+
+    assert policy == {"default_action": "warn"}
+    assert [request["op"] for request in spawned] == ["publish"]
+
+
+def test_resident_is_not_asked_without_its_feature_or_a_guard_home(monkeypatch) -> None:
+    spawned = _install(
+        monkeypatch,
+        _PUBLISHED,
+        status=_status(features=(client.POLICY_EFFECTIVE_FEATURE, client.POLICY_PUBLISH_FEATURE)),
+    )
+    sent = _resident(monkeypatch, json.dumps(_PUBLISHED).encode())
+    client.compose_native_publication(
+        (GuardConfig(guard_home=Path("/guard-home"), workspace=None),), guard_home=Path("/guard-home")
+    )
+    client._MEMO.clear()
+    _install(monkeypatch, _PUBLISHED, status=_status(features=_RESIDENT_STATUS))
+    client.compose_native_publication((GuardConfig(guard_home=Path("/guard-home"), workspace=None),))
+
+    assert sent == []
+    assert len(spawned) == 1
+
+
+def test_a_failed_resident_composition_is_reported_like_the_command(monkeypatch) -> None:
+    _install(monkeypatch, None, status=_status(features=_RESIDENT_STATUS))
+    _resident(monkeypatch, b'{"ok":false,"error":"native_policy_snapshot_policy_invalid"}')
+
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_snapshot_policy_invalid"):
+        client.compose_native_publication(
+            (GuardConfig(guard_home=Path("/guard-home"), workspace=None),), guard_home=Path("/guard-home")
+        )

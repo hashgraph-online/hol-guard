@@ -19,6 +19,11 @@ pub(super) fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&s
         ResidentOperationV1::CatalogPrepareV1(request) => request.guard_home.to_str(),
         ResidentOperationV1::CatalogReadPreparedV1(request) => request.guard_home.to_str(),
         ResidentOperationV1::WindowsPrivateState(request) => Some(&request.guard_home),
+        // Pinned even when the field is missing or not text: a request the
+        // resident cannot bind to its own home is refused, never loaded.
+        ResidentOperationV1::GuardConfigLoad(request) => {
+            Some(request["guard_home"].as_str().unwrap_or(""))
+        }
         ResidentOperationV1::NativeBashPrepare(request) => Some(&request.capture.guard_home),
         ResidentOperationV1::NativeBashExecute(request) => Some(&request.capture.guard_home),
         ResidentOperationV1::NativeBashCancel(request) => Some(&request.guard_home),

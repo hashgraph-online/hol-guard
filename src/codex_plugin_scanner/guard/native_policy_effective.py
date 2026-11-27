@@ -21,12 +21,15 @@ from .native_policy_snapshot_constants import NativePolicySnapshotError
 from .native_policy_snapshot_harness_postures import HARNESS_POSTURES_BINDING_KEY
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from .config import GuardConfig
     from .native_runtime_values import NativeRuntimeIdentity
 
 POLICY_EFFECTIVE_COMMAND = "policy-effective"
 POLICY_EFFECTIVE_FEATURE = "native-policy-effective-v1"
 POLICY_PUBLISH_FEATURE = "native-policy-effective-publish-v1"
+POLICY_EFFECTIVE_RESIDENT_FEATURE = "policy-effective-resident-v1"
 POLICY_EFFECTIVE_SCHEMA = "guard-effective-policy.v1"
 POLICY_EFFECTIVE_TIMEOUT_SECONDS = 10.0
 _UNAVAILABLE = "native_policy_effective_unavailable"
@@ -98,7 +101,9 @@ def _call(
     guard_config: bool,
     observed: Mapping[str, object] | None = None,
     deadline_monotonic: float | None = None,
+    guard_home: Path | None = None,
 ) -> dict[str, Any]:
+    from .native_resident_command import resident_command_answer
     from .native_runtime import _MAX_RESPONSE_BYTES, _run_native_process
 
     request: dict[str, object] = {
@@ -132,19 +137,34 @@ def _call(
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise NativePolicySnapshotError(_UNAVAILABLE)
-    output = _run_native_process(
-        path,
-        (POLICY_EFFECTIVE_COMMAND, "--stdin"),
-        input_text=text,
-        timeout_seconds=remaining,
-        output_limit=_MAX_RESPONSE_BYTES + (_PUBLISH_VIEW_BYTES if op == "publish" else 0),
-    )
-    if output is None:
-        raise NativePolicySnapshotError(_UNAVAILABLE)
-    try:
-        response = json.loads(output)
-    except ValueError as error:
-        raise NativePolicySnapshotError(_INVALID) from error
+    # Composition is pure, so an idle resident gives the command's exact
+    # answer without a process spawn; the command stays the fallback.
+    response: object = None
+    if guard_home is not None:
+        response = resident_command_answer(
+            operation="policy_effective",
+            feature=POLICY_EFFECTIVE_RESIDENT_FEATURE,
+            guard_home=guard_home,
+            request=json.loads(text),
+            deadline_monotonic=deadline,
+        )
+    if response is None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise NativePolicySnapshotError(_UNAVAILABLE)
+        output = _run_native_process(
+            path,
+            (POLICY_EFFECTIVE_COMMAND, "--stdin"),
+            input_text=text,
+            timeout_seconds=remaining,
+            output_limit=_MAX_RESPONSE_BYTES + (_PUBLISH_VIEW_BYTES if op == "publish" else 0),
+        )
+        if output is None:
+            raise NativePolicySnapshotError(_UNAVAILABLE)
+        try:
+            response = json.loads(output)
+        except ValueError as error:
+            raise NativePolicySnapshotError(_INVALID) from error
     if not isinstance(response, dict):
         raise NativePolicySnapshotError(_INVALID)
     if response.get("ok") is not True:
@@ -231,6 +251,7 @@ def compose_native_publication(
     *,
     observed: Mapping[str, object] | None = None,
     deadline_monotonic: float | None = None,
+    guard_home: Path | None = None,
 ) -> tuple[dict[str, object], str | None, dict[str, object]]:
     """Compose loaded configs and derive the direct-lane views beside them.
 
@@ -247,6 +268,7 @@ def compose_native_publication(
         guard_config=True,
         observed=observed,
         deadline_monotonic=deadline_monotonic,
+        guard_home=guard_home,
     )
     views = response["views"]
     return (

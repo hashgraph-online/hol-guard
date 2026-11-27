@@ -316,7 +316,9 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 observed["mcp_provider_catalog_hash"] = provider_hash
         # Rust derives the blocked-request mode and the MCP relay harness views
         # from the same request that composes the policy.
-        policy, blocked_request_mode, harnesses = compose_native_publication(tuple(configs), observed=observed)
+        policy, blocked_request_mode, harnesses = compose_native_publication(
+            tuple(configs), observed=observed, guard_home=self.guard_home
+        )
         self._compiled_blocked_request_mode = blocked_request_mode
         self._compiled_structured_output_view = uniform_structured_output_view(configs)
         self._compiled_mcp_relay_harnesses = harnesses

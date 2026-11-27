@@ -337,3 +337,66 @@ def test_a_well_formed_overlay_answer_is_applied(tmp_path: Path, monkeypatch: py
     _answer_with(monkeypatch, {"config": {**_overlay_answer(config), "mode": "enforce"}})
 
     assert overlay_synced_guard_policy(config, {}).mode == "enforce"
+
+
+def _resident_double(monkeypatch: pytest.MonkeyPatch, reply: bytes | None) -> tuple[list[dict], list[str]]:
+    from codex_plugin_scanner.guard import native_resident_client, native_runtime
+
+    sent: list[dict] = []
+    spawned: list[str] = []
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=Path("/runtime"), sha256="a" * 64),
+        capabilities=SimpleNamespace(
+            features=(
+                native_guard_config.GUARD_CONFIG_LOAD_FEATURE,
+                native_guard_config.GUARD_CONFIG_LOAD_RESIDENT_FEATURE,
+            )
+        ),
+    )
+    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_: status)
+
+    def request(**kwargs: object) -> bytes | None:
+        assert kwargs["idle_only"] is True
+        sent.append(json.loads(kwargs["payload"]))  # type: ignore[arg-type]
+        return reply
+
+    def run(_path: Path, args: tuple[str, ...], *, input_text: str, **_kwargs: object) -> str:
+        spawned.append(args[0])
+        return json.dumps({"ok": True, "config": {"mode": "spawned"}})
+
+    monkeypatch.setattr(native_resident_client, "native_resident_client_request", request)
+    monkeypatch.setattr(native_runtime, "_run_native_process", run)
+    return sent, spawned
+
+
+def test_an_idle_resident_loads_the_config_without_a_spawn(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sent, spawned = _resident_double(monkeypatch, b'{"ok":true,"config":{"mode":"resident"}}')
+
+    config = load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
+
+    assert config == {"mode": "resident"}
+    assert spawned == []
+    assert sent[0]["operation"] == "guard_config_load"
+    assert sent[0]["request"]["guard_home"] == str(tmp_path)
+
+
+@pytest.mark.parametrize("reply", [None, b'{"error":"native_guard_config_resident_required"}', b"[]"])
+def test_the_loader_spawns_when_the_resident_cannot_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reply: bytes | None
+) -> None:
+    _sent, spawned = _resident_double(monkeypatch, reply)
+
+    config = load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
+
+    assert config == {"mode": "spawned"}
+    assert spawned == [native_guard_config.GUARD_CONFIG_LOAD_COMMAND]
+
+
+def test_a_resident_load_failure_fails_closed_like_the_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _sent, spawned = _resident_double(monkeypatch, b'{"ok":false,"error":"config_malformed"}')
+
+    with pytest.raises(ConfigFileTrustError, match="config_malformed"):
+        load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
+    assert spawned == []
