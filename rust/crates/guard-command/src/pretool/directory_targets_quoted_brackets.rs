@@ -30,7 +30,15 @@ pub(in crate::pretool) fn verified_segment_cwd_target(
 /// Whether every `[` and `]` in the text sits inside single or double
 /// quotes. A backslash-escaped bracket outside quotes counts as unquoted;
 /// the escape is rare and the directory proof refuses backslashes anyway.
+///
+/// An ANSI-C `$'...'` word ends at a different apostrophe than a plain
+/// single-quoted one, because a backslash escapes `'` inside it, and a
+/// `$"..."` word is translated before use. This scanner models neither, so a
+/// segment that holds either keeps its review.
 fn brackets_quoted(text: &str) -> bool {
+    if text.contains("$'") || text.contains("$\"") {
+        return false;
+    }
     let mut quote = None;
     let mut escaped = false;
     for character in text.chars() {
@@ -71,6 +79,9 @@ mod tests {
             r#"cd "app/items/"[slug]"#,
             r"cd app/items/\[slug\]",
             r#"cd "app/items/[slug]"#,
+            // `$'a\'b'` is one word, so `[x]` is an unquoted glob class.
+            r#"cd $'a\'b'[x]"'""#,
+            r#"cd $"app/items/[slug]""#,
         ] {
             assert!(!brackets_quoted(text), "{text}");
         }
