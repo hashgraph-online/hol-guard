@@ -31,6 +31,39 @@ use serde_json::{json, Value};
 
 use crate::package_authority_op::request_digest_with_limit;
 
+fn native_structured_output_binding() -> (Option<Value>, bool) {
+    let state = crate::managed_policy_load::load_managed_policy(
+        &crate::managed_policy_load::ManagedPolicySource::native(),
+    );
+    if state.status == crate::managed_policy_load::ManagedPolicyStatus::Absent {
+        return (None, true);
+    }
+    let Some(policy) = state.policy else {
+        return (None, false);
+    };
+    let policy_hash = policy.content_hash.clone();
+    let locked_settings = policy.locked_settings.iter().cloned().collect::<Vec<_>>();
+    let settings = policy
+        .settings
+        .get("data_control")
+        .and_then(Value::as_object)
+        .and_then(|control| control.get("structured_output"))
+        .map(|structured| json!({"data_control": {"structured_output": structured}}))
+        .unwrap_or_else(|| json!({}));
+    (
+        Some(json!({
+            "managed_policy_status": state.status.as_str(),
+            "managed_policy_hash": policy_hash,
+            "managed_locked_settings": locked_settings,
+            "managed_policy": {
+                "content_hash": policy.content_hash,
+                "settings": settings,
+            },
+        })),
+        true,
+    )
+}
+
 #[path = "hook_render_saved_approval.rs"]
 mod saved_approval;
 
@@ -128,11 +161,17 @@ fn render(
             .and_then(Value::as_str)
             .ok_or("native_hook_render_invalid")?;
         let explicit_view = params.get("view").cloned();
-        let binding_known = explicit_view.is_none()
-            && store.is_some_and(crate::policy_store::PolicySnapshotStore::has_direct_lane_binding);
-        let view = explicit_view.or_else(|| {
-            store.and_then(crate::policy_store::PolicySnapshotStore::structured_output_config)
-        });
+        let (view, binding_known) = if explicit_view.is_some() {
+            (explicit_view, false)
+        } else if let Some(store) = store {
+            if store.has_direct_lane_binding() {
+                (store.structured_output_config(), true)
+            } else {
+                native_structured_output_binding()
+            }
+        } else {
+            (None, false)
+        };
         return Ok(cli_payload(CliOutcome::Document(if binding_known {
             crate::hook_direct::pi::outage_overlay_with_binding(harness, event, view.as_ref(), true)
         } else {
