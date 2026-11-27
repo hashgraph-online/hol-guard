@@ -399,3 +399,30 @@ fn a_tool_call_to_a_recorded_port_is_held() {
     );
     assert_eq!(reached.reason_code, DEBUG_PORT_REVIEW);
 }
+
+#[test]
+fn recording_a_launch_drops_idle_sessions() {
+    let home = tempfile::tempdir().unwrap();
+    run(home.path(), &bash("session-a", LAUNCH), "allow");
+    let later = NOW + BROWSER_SESSION_IDLE_SECONDS + 60;
+    apply(
+        home.path(),
+        HARNESS,
+        &bash("session-b", LAUNCH),
+        later,
+        result("allow"),
+    );
+    let connection = Connection::open(home.path().join(STORE_FILE_NAME)).unwrap();
+    let rows: i64 = connection
+        .query_row("select count(*) from guard_browser_sessions", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(rows, 1, "the idle session of session-a is pruned");
+    let ports: i64 = connection
+        .query_row("select count(*) from guard_browser_session_ports", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(ports, 1, "its port rows go with it");
+}
