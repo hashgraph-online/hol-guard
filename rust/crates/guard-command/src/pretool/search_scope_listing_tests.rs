@@ -4,7 +4,7 @@
 use super::super::search_scope_ignore::{
     load_ignore_file, IgnoreTiers, ScopeUnproven, MAX_IGNORE_RULES,
 };
-use super::{inherited_tiers, listing_may_hold};
+use super::{inherited_tiers, listing_may_hold, read_listing, with_listings, Listed};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -25,11 +25,8 @@ fn scratch(name: &str) -> Scratch {
     Scratch(root)
 }
 
-fn listing(directory: &Path) -> Vec<std::fs::DirEntry> {
-    std::fs::read_dir(directory)
-        .unwrap()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap()
+fn listing(directory: &Path) -> Rc<[Listed]> {
+    read_listing(directory, usize::MAX).unwrap()
 }
 
 fn rules(
@@ -127,4 +124,41 @@ fn inherited_rules_past_the_cap_leave_the_scope_unproven() {
         inherited_tiers(&parent, false, added),
         Err(ScopeUnproven)
     ));
+}
+
+#[test]
+fn an_evaluation_reads_each_listing_once() {
+    // Two walks prove one `rg` over the same tree. Each listed every
+    // directory again, and on a large tree the second listing pushed the
+    // decision toward the hook's deadline.
+    let scratch = scratch("shared");
+    std::fs::write(scratch.0.join("index.ts"), "").unwrap();
+    with_listings(|| {
+        assert_eq!(listing(&scratch.0).len(), 1);
+        std::fs::write(scratch.0.join("page.ts"), "").unwrap();
+        // The evaluation keeps the listing it read first.
+        assert_eq!(listing(&scratch.0).len(), 1);
+    });
+    // The next evaluation reads the directory again.
+    with_listings(|| assert_eq!(listing(&scratch.0).len(), 2));
+    // Outside an evaluation nothing is kept.
+    std::fs::write(scratch.0.join("view.ts"), "").unwrap();
+    assert_eq!(listing(&scratch.0).len(), 3);
+}
+
+#[test]
+fn a_read_past_an_earlier_limit_lists_the_directory_again() {
+    let scratch = scratch("limits");
+    for name in ["a.ts", "b.ts", "c.ts"] {
+        std::fs::write(scratch.0.join(name), "").unwrap();
+    }
+    with_listings(|| {
+        // A walk with one entry of budget left reads no further than that.
+        assert_eq!(read_listing(&scratch.0, 1).unwrap().len(), 1);
+        // A later walk with room for every entry must see all of them, not
+        // the shorter listing the first walk stopped at.
+        assert_eq!(read_listing(&scratch.0, 10).unwrap().len(), 3);
+        // A whole listing serves any limit after it.
+        assert_eq!(read_listing(&scratch.0, 2).unwrap().len(), 3);
+    });
 }

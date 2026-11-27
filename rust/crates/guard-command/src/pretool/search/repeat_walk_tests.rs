@@ -138,6 +138,73 @@ fn a_submission_walks_each_rg_glob_tree_once() {
     );
 }
 
+/// `rg -g` is proven by two walks of the same tree: the content walk under
+/// its globs and the walk for ignore rules that re-include hidden entries.
+/// Each listed every directory, so a large application tree was read twice
+/// over and the decision ran close to the hook's deadline. The walks share
+/// one listing of each directory.
+#[test]
+fn a_submission_lists_each_rg_directory_once() {
+    let root = tempfile::Builder::new()
+        .prefix("guard-repeat-rg-listing")
+        .tempdir()
+        .expect("temp root");
+    let home = std::fs::canonicalize(root.path()).expect("canonical home");
+    let worktree = home.join("projects").join("storefront");
+    for (path, body) in [
+        ("app/items/page.tsx", "export const Page = () => null;\n"),
+        ("app/items/view.tsx", "export const View = () => null;\n"),
+        ("src/lib/consent.ts", "export const showBanner = true;\n"),
+        ("src/lib/format/date.ts", "export const day = 1;\n"),
+    ] {
+        let file = worktree.join(path);
+        std::fs::create_dir_all(file.parent().expect("parent")).expect("directory");
+        std::fs::write(file, body).expect("fixture file");
+    }
+    let command = format!(
+        "cd {} && rg -n \"showBanner\" app src -g '*.ts*' | head",
+        worktree.display()
+    );
+    take_walks();
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_context(
+        "claude-code",
+        "PreToolUse",
+        &serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+            "cwd": worktree.to_str().expect("cwd text"),
+        }),
+        None,
+        None,
+        home.to_str(),
+        worktree.to_str(),
+    );
+    let walks = take_walks();
+    assert_eq!(
+        (result.minimum_action.as_str(), result.reason_code.as_str()),
+        ("allow", "native_exact_safe_command"),
+        "walks: {walks:?}"
+    );
+    let listings: Vec<_> = walks
+        .iter()
+        .filter(|walk| walk.starts_with("dir-listing "))
+        .cloned()
+        .collect();
+    let mut distinct = listings.clone();
+    distinct.sort();
+    distinct.dedup();
+    // Both roots and every directory below them: app, app/items, src,
+    // src/lib and src/lib/format.
+    assert!(distinct.len() >= 5, "listed: {distinct:?}");
+    assert_eq!(
+        listings.len(),
+        distinct.len(),
+        "{} listings of {} directories: {listings:?}",
+        listings.len(),
+        distinct.len()
+    );
+}
+
 /// A content search over shell globs expands and screens each glob once per
 /// submission. Expanded again for every reading, `grep -rn` over a test
 /// tree's `*.py` globs ran past the hook's decision budget.
