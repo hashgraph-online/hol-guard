@@ -38,7 +38,7 @@ const LEASE_DEFINITE_PROBE_BUDGET: Duration = Duration::from_millis(100);
 #[path = "managed_resident_lease_owner.rs"]
 mod owner;
 use owner::deadline_for_timeout;
-pub(super) use owner::ClientLease;
+pub(super) use owner::{ClientLease, WarmResident};
 #[path = "managed_resident_lease_record.rs"]
 mod record;
 use record::{
