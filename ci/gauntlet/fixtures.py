@@ -465,6 +465,12 @@ def create_fixture(
             path = workspace / folder
             if path.exists() or path.is_symlink():
                 raise ValueError(f"Expected absent search root: {path}")
+    if scenario_id == "omp-native-shell-rg-wildcard-extension-glob":
+        # Make the exclusion observable: the first search must omit this
+        # ordinary declaration while the second must find it.
+        (workspace / "src/gauntlet-types.d.ts").write_bytes(
+            b"export declare const gauntletType: string;\n"
+        )
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     workspace = linked_rg_workspace(workspace, scenario_id)
