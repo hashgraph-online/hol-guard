@@ -345,6 +345,30 @@ def cwd_argument_error(scenario: Scenario, calls: list[dict[str, Any]]) -> str |
 
 def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
     """A successful host status cannot replace the required read, search or transformation."""
+    if scenario.id == "omp-native-shell-rg-wildcard-extension-glob":
+        # head can succeed without rg; require the actual matched lines.
+        # The declaration is excluded only in the first search.
+        ordinary = {
+            "password-reset-email.tsx:1:export const mail = 1;",
+            "settings.ts:1:export const settings = {",
+        }
+        declaration = "gauntlet-types.d.ts:1:export declare const gauntletType: string;"
+        expected = (
+            {"src/" + row for row in ordinary},
+            {"./" + row for row in ordinary | {declaration}},
+        )
+        if len(calls) != len(expected):
+            return False
+        for call, wanted in zip(calls, expected, strict=True):
+            rows = (_text(call) or "").splitlines()
+            # Normalize only the filename, not its matched source text.
+            rows = [
+                path.replace("\\", "/") + sep + rest
+                for path, sep, rest in (row.partition(":") for row in rows)
+            ]
+            if len(rows) != len(wanted) or set(rows) != wanted:
+                return False
+        return True
     if scenario.id == "omp-native-shell-cd-quoted-route-folder-then-grep":
         # The final head may succeed even when grep found no matching page.
         return len(calls) == 1 and _text(calls[0]) == "1:export default 1;\n"
