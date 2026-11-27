@@ -14,7 +14,7 @@ const SHIELD: &str = "provider.exampleshield";
 const NOW: u64 = 50_000_000;
 const KEY: &str = "fixture-key-aaaaaaaaaaaaaaaaaaaaaaaa";
 
-fn provider() -> CompiledProviderIntegrationV1 {
+pub(crate) fn provider() -> CompiledProviderIntegrationV1 {
     let manifest = json!({
         "schemaVersion": "guard.provider-integration.v1",
         "id": SHIELD,

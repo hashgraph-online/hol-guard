@@ -941,6 +941,12 @@ that managed policy would change answers `409 provider_setting_managed`; managed
 again at apply time. Other route codes: `404 provider_not_found`, `409 provider_not_connected`,
 `403 provider_proof_invalid`, `400 invalid_request`.
 
+The daemon edge answers these routes itself; they are never relayed. A caller needs the daemon's
+header token or a local dashboard session, and hosted dashboard origins are refused. When managed
+policy failed closed, or its `provider_integrations` value does not parse, every route answers
+`503 provider_managed_policy_unavailable` rather than guess at a floor; a store that cannot be opened
+answers `503 provider_store_unavailable`.
+
 ### 6.10 Sponsors and discovery
 
 - Extend the discovery placement id namespace to accept `browser.` and `provider.` in

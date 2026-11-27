@@ -456,4 +456,4 @@ use reads::{detail, list, shares};
 
 #[cfg(test)]
 #[path = "provider_integration_routes_tests.rs"]
-mod tests;
+pub(crate) mod tests;
