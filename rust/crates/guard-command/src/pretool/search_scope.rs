@@ -102,16 +102,27 @@ pub(super) fn rg_glob_scope_proven(
                 ) else {
                     return false;
                 };
+                // Every reading of the submission asks the same tree with the
+                // same globs from the same base, so the walk runs once. The
+                // walk has no clock of its own, so its refusal is kept too.
+                let key = format!(
+                    "rg-glob-walk\0{root:?}\0{}\0{base:?}\0{home_dir:?}",
+                    globs.join("\0")
+                );
                 !super::read_paths::inside_agent_state_tree(&root, home_dir)
-                    && walk_scope(
-                        &root,
-                        &filter.rooted_at(base),
-                        Ignores::RipgrepGlob,
-                        false,
-                        home_dir,
-                        &mut None,
-                    )
-                    .is_ok()
+                    && super::search::memoized_keyed(key, || {
+                        #[cfg(test)]
+                        super::search::count_walk("rg-glob-walk", &root);
+                        walk_scope(
+                            &root,
+                            &filter.rooted_at(base),
+                            Ignores::RipgrepGlob,
+                            false,
+                            home_dir,
+                            &mut None,
+                        )
+                        .is_ok()
+                    })
             }
             None => cwd.is_some_and(|cwd| {
                 std::fs::symlink_metadata(Path::new(cwd).join(target))
