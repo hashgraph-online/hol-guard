@@ -159,7 +159,7 @@ def native_render_cli(
     *,
     guard_home: Path | None = None,
     deadline: float | None = None,
-) -> tuple[str, dict[str, object] | None] | None:
+) -> tuple[str, dict[str, object] | None] | tuple[str, dict[str, object] | None, str] | None:
     """Render the in-process CLI hook outcome; ``None`` when the resident cannot answer.
 
     ``kind`` is ``cli_response`` or ``cli_document``. The result is the outcome
@@ -205,7 +205,10 @@ def native_render_cli(
     if payload is None or outcome not in {"document", "silent", "fallback"}:
         return None
     document = payload.get("response")
-    return str(outcome), dict(document) if isinstance(document, dict) else None
+    rendered = (str(outcome), dict(document) if isinstance(document, dict) else None)
+    if kind == "structured_outage" and isinstance(payload.get("native_policy_status"), str):
+        return (*rendered, payload["native_policy_status"])
+    return rendered
 
 
 def native_cursor_shell_route(

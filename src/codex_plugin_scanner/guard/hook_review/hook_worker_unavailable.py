@@ -90,7 +90,12 @@ def structured_outage_overlay(
     if rendered is not None and rendered[0] == "document":
         overlay = rendered[1]
         if overlay is not None and not overlay:
-            if configured is not None and getattr(configured, "managed_policy", None) is not None:
+            native_status = rendered[2] if len(rendered) > 2 else None
+            if (
+                configured is not None
+                and getattr(configured, "managed_policy", None) is not None
+                and native_status == "absent"
+            ):
                 return withhold
             return {}
         if overlay is not None and overlay != withhold:
