@@ -223,6 +223,14 @@ fn in_savepoint<T>(
     outcome
 }
 
+/// Runs several store writes as one change: all of them land or none do.
+pub fn in_write_savepoint<T>(
+    connection: &Connection,
+    body: impl FnOnce() -> ProviderStoreResult<T>,
+) -> ProviderStoreResult<T> {
+    in_savepoint(connection, WRITE_SAVEPOINT, body)
+}
+
 /// The serde name of a contract enum, which is the text stored for it.
 fn enum_text<T: Serialize>(value: &T) -> String {
     match serde_json::to_value(value) {
