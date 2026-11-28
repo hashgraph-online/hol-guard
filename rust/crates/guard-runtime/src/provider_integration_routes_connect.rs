@@ -26,8 +26,8 @@ use super::{
 };
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
 use crate::provider_integration_secret::{
-    check_key_format, delete_provider_key, load_provider_key, restore_provider_key,
-    store_provider_key, ProviderKey,
+    check_key_format, delete_provider_key_runtime, load_provider_key_runtime,
+    restore_provider_key_runtime, store_provider_key_runtime, ProviderKey,
 };
 use crate::provider_integration_store::{
     in_write_savepoint, provider_connection, put_connection, ProviderConnection,
@@ -225,8 +225,10 @@ pub fn finish_connect(
     }
     ledger.advance(&provider.id);
     let mut secrets = EncryptedFileSecretStore::new(context.guard_home);
-    let previous = load_provider_key(&mut secrets, &provider.id);
-    if store_provider_key(&mut secrets, &provider.id, &prepared.key, &provider.auth).is_err() {
+    let previous = load_provider_key_runtime(&mut secrets, &provider.id);
+    if store_provider_key_runtime(&mut secrets, &provider.id, &prepared.key, &provider.auth)
+        .is_err()
+    {
         return unavailable();
     }
     let write = || {
@@ -247,10 +249,11 @@ pub fn finish_connect(
         )
     };
     if in_write_savepoint(context.connection, write).is_err() {
-        let restored = previous
-            .is_some_and(|key| restore_provider_key(&mut secrets, &provider.id, &key).is_ok());
+        let restored = previous.is_some_and(|key| {
+            restore_provider_key_runtime(&mut secrets, &provider.id, &key).is_ok()
+        });
         if !restored {
-            let _ = delete_provider_key(&secrets, &provider.id);
+            let _ = delete_provider_key_runtime(&secrets, &provider.id);
         }
         return unavailable();
     }

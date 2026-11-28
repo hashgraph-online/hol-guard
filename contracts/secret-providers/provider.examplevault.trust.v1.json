@@ -1,0 +1,14 @@
+{
+  "schema": "guard.secret-provider-trust.v1",
+  "provider_id": "provider.examplevault",
+  "publisher_id": "publisher.example-org",
+  "manifest_digest": "e4a14bb59bfd26f0546dc35eac20ae1e6304c045a60e4d9d8f9adaf62427d638",
+  "schema_version": "guard.secret-provider.v1",
+  "adapter_version": "vault-kv-v2-1",
+  "status": "external",
+  "default_enabled": false,
+  "local_enablement_required": true,
+  "supported_capabilities": ["secret.metadata", "secret.resolve", "secret.verify"],
+  "supported_platforms": ["macos", "linux", "windows"],
+  "conformance_digest": "e4bbb7f1f002a5edce063585b9de2c5685d5777e8603ec86c9283e1ea7d7fecb"
+}

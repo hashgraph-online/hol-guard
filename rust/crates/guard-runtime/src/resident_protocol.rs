@@ -225,6 +225,8 @@ pub(crate) enum ResidentOperationV1 {
     WorkspaceReviewLocalQueue(WorkspaceReviewLocalQueueRequestV1),
     WorkspaceReviewDecision(WorkspaceReviewDecisionRequestV1),
     ContextDigest(ContextDigestRequestV1),
+    SecretBroker(crate::secret_broker::Request),
+    SecretHook(crate::secret_hook::Request),
     DirectoryTrust(crate::directory_trust::DirectoryTrustRequestV1),
     CommandEffectDecide(CommandEffectRequestV1),
     CommandEffectDecideBatch(CommandEffectBatchRequestV1),

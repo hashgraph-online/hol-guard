@@ -1,0 +1,49 @@
+{
+  "schema": "guard.secret-provider.v1",
+  "id": "provider.examplevault",
+  "publisher": {
+    "id": "publisher.example-org",
+    "display_name": "Example Org"
+  },
+  "display_name": "Example Vault",
+  "status": "external",
+  "default_enabled": false,
+  "connection": {
+    "auth": ["api_token", "oidc_workload"],
+    "credential_scope": "provider.examplevault.connection"
+  },
+  "endpoints": [
+    {
+      "scheme": "https",
+      "host": "vault.example.test",
+      "port": 443,
+      "paths": ["/v1/fixture/data/team/token"],
+      "redirects": false
+    }
+  ],
+  "capabilities": ["secret.metadata", "secret.resolve", "secret.verify"],
+  "references": {
+    "scope_pattern": "^[a-z0-9][a-z0-9._-]{0,62}$",
+    "name_pattern": "^[a-z0-9][a-z0-9._-]{0,62}$",
+    "fields": ["value"],
+    "versions": ["latest", "pinned"]
+  },
+  "limits": {
+    "request_bytes": 8192,
+    "response_bytes": 1048576,
+    "json_depth": 8,
+    "timeout_ms": 3000,
+    "retries": 1
+  },
+  "delivery": ["environment", "stdin", "file_descriptor"],
+  "responses": {
+    "metadata_pointer": "/data/metadata",
+    "value_pointer": "/data/data/value",
+    "version_pointer": "/data/metadata/version"
+  },
+  "privacy": {
+    "shares": ["provider_id", "capability", "reference_digest", "version_digest", "outcome"],
+    "shares_secret_values": false,
+    "shares_connection_credentials": false
+  }
+}

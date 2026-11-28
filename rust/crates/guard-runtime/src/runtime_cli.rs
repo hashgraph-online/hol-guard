@@ -26,6 +26,30 @@ pub(super) fn run() -> Result<(), String> {
             let bytes = read_stdin_bounded()?;
             write_json(&provider_conformance_command::run_command(&bytes))
         }
+        [command, flag] if command == secret_command::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&secret_command::run_command(&bytes))
+        }
+        [command, flag, reference]
+            if command == secret_command::COMMAND && flag == "--prompt" =>
+        {
+            write_json(&secret_command::run_prompt(reference))
+        }
+        [command, flag, reference]
+            if command == secret_command::COMMAND && flag == "--stdin-value" =>
+        {
+            write_json(&secret_command::run_stdin_value(reference))
+        }
+        [command, flag] if command == secret_exec::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&secret_exec::run_command(&bytes))
+        }
+        [command, flag]
+            if command == secret_provider_conformance::COMMAND && flag == "--stdin" =>
+        {
+            let bytes = read_stdin_bounded()?;
+            write_json(&secret_provider_conformance::run_command(&bytes))
+        }
         [command, flag] if command == browser_report_prompt_command::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&browser_report_prompt_command::run_command(&bytes))

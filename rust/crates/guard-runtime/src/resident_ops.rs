@@ -303,6 +303,12 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ContextDigest(request) => {
                 crate::context_digest::evaluate_context_digest_request(&request)
             }
+            ResidentOperationV1::SecretBroker(request) => {
+                crate::secret_broker::evaluate(&request).and_then(|value| encode_response(&value))
+            }
+            ResidentOperationV1::SecretHook(request) => {
+                crate::secret_hook::evaluate(&request).and_then(|value| encode_response(&value))
+            }
             ResidentOperationV1::NativeBashPrepare(request) => {
                 let store = policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
                 crate::native_exact_action_op::prepare_bash_request(&request, store)

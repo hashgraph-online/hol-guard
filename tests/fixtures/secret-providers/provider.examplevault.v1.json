@@ -1,0 +1,28 @@
+{
+  "provider_id": "provider.examplevault",
+  "host": "vault.example.test",
+  "reference": "guard-secret://provider.examplevault/team/token#value?version=2",
+  "request": {
+    "method": "POST",
+    "path": "/v1/fixture/data/team/token",
+    "body": {"version": "2"}
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "data": {
+        "data": {"value": "fixture-value-7"},
+        "metadata": {"version": 2}
+      }
+    }
+  },
+  "expected": {
+    "state": "available",
+    "version": "2",
+    "secret_debug": "REDACTED"
+  },
+  "privacy": {
+    "value_in_outward_response": false,
+    "value_in_journal": false
+  }
+}

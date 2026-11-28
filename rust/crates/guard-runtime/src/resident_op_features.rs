@@ -17,6 +17,8 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::ARCHIVE_ACQUISITION_FEATURE,
     guard_contracts::MANAGED_CONTENT_FETCH_FEATURE,
     guard_contracts::CONTEXT_DIGEST_FEATURE,
+    crate::secret_broker::FEATURE,
+    crate::secret_hook::FEATURE,
     guard_contracts::NATIVE_BASH_REPLY_VALIDATION_FEATURE,
     guard_contracts::COMMAND_EFFECT_FEATURE,
     guard_contracts::COMMAND_EFFECT_BATCH_FEATURE,

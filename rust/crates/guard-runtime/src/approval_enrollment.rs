@@ -59,6 +59,32 @@ pub(super) fn write_platform_secret_for_workspace_review(
     write_platform_secret_for_state(state_base, account, value, max_bytes)
 }
 
+/// Read a user secret from a platform store using a caller-owned namespace.
+///
+/// Approval enrollment keeps its own fixed namespace. User-managed secrets
+/// must never share those records, so this wrapper exposes the same bounded
+/// platform primitives with an explicit service or target namespace.
+pub(crate) fn read_native_secret(
+    namespace: &str,
+    account: &str,
+    max_bytes: usize,
+) -> Result<Option<String>, String> {
+    platform::read_platform_secret_for_namespace(namespace, account, max_bytes)
+}
+
+pub(crate) fn write_native_secret(
+    namespace: &str,
+    account: &str,
+    value: &str,
+    max_bytes: usize,
+) -> Result<(), String> {
+    platform::write_platform_secret_for_namespace(namespace, account, value, max_bytes)
+}
+
+pub(crate) fn delete_native_secret(namespace: &str, account: &str) -> Result<(), String> {
+    platform::delete_platform_secret_for_namespace(namespace, account)
+}
+
 const STATE_VERSION: u16 = 4;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 const SERVICE_NAME: &str = "org.hashgraphonline.hol-guard.native-approval-enrollment.v1";
