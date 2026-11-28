@@ -7,6 +7,10 @@ shows up on the pull request that causes it. Modeled on ``test_gauntlet_native_c
 Some quiet cases need a state preset the gate cannot seed yet. ``AWAITING_STATE`` lists them with
 the preset they wait for; a listed case that gains its row, or a preset that gets wired, fails here
 so the entry is removed.
+
+``AWAITING_PAGE_ORIGIN`` lists quiet cases whose preset is wired but whose calls carry no URL. A
+site grant covers such a call only once the hook knows the page's current origin (BP-T062). A listed
+case that gains its rows fails here so the entry is removed.
 """
 
 from __future__ import annotations
@@ -21,7 +25,10 @@ from tests.benign_fp_gate_mcp import McpCase, mcp_cases
 _GATE = Path(__file__).resolve().parent / "fixtures" / "benign_false_positive_gate.json"
 
 # Quiet case id -> the state preset it needs before its gate row can run.
-AWAITING_STATE = {
+AWAITING_STATE: dict[str, str] = {}
+
+# Quiet case id -> the wired state preset it runs under, until the hook knows the page origin.
+AWAITING_PAGE_ORIGIN = {
     "browser-quiet-read-only-tools": "site-grant",
 }
 
@@ -60,7 +67,8 @@ def test_the_catalog_has_quiet_browser_cases() -> None:
 
 
 def test_every_quiet_browser_call_has_an_allow_row_in_the_gate() -> None:
-    missing = {case_id: calls for case_id, calls in _unpaired().items() if case_id not in AWAITING_STATE}
+    awaiting = set(AWAITING_STATE) | set(AWAITING_PAGE_ORIGIN)
+    missing = {case_id: calls for case_id, calls in _unpaired().items() if case_id not in awaiting}
     assert not missing, f"add allow rows (server, tool, state) to the gate's mcp_cases: {missing}"
 
 
@@ -72,6 +80,14 @@ def test_a_case_awaits_only_an_unwired_preset_it_actually_uses() -> None:
         assert {call[2] for call in calls[case_id]} == {state}, f"{case_id} does not run under {state}"
 
 
+def test_a_case_awaiting_the_page_origin_runs_under_a_wired_preset() -> None:
+    calls = _quiet_calls()
+    for case_id, state in AWAITING_PAGE_ORIGIN.items():
+        assert case_id in calls, f"{case_id} is no longer a quiet browser case; remove it"
+        assert state in WIRED_STATES, f"{state} is not wired; list {case_id} in AWAITING_STATE instead"
+        assert {call[2] for call in calls[case_id]} == {state}, f"{case_id} does not run under {state}"
+
+
 def test_an_awaiting_case_that_gained_its_rows_is_removed() -> None:
-    stale = sorted(set(AWAITING_STATE) - set(_unpaired()))
+    stale = sorted((set(AWAITING_STATE) | set(AWAITING_PAGE_ORIGIN)) - set(_unpaired()))
     assert not stale, f"these cases now have allow rows; remove them from AWAITING_STATE: {stale}"

@@ -44,6 +44,8 @@ from tests.benign_fp_gate_browser import (
     BROWSER_SERVERS,
     PENDING_SAME_CALL,
     browser_server_command,
+    row_counts,
+    seed_call,
     start_page,
     unwired_state,
     validate_browser_fields,
@@ -421,23 +423,15 @@ def replay(
     if case.server == READY_SERVER:
         allow_ready_server(store, identity)
     command = _relay_command(case, fixture)
-    before = {
-        str(row.get("request_id")): int(row.get("dedupe_count") or 1)
-        for row in store.list_approval_requests(status=None, limit=500)
-        if isinstance(row, dict) and row.get("request_id")
-    }
-    known = set(before)
+    before = row_counts(store)
     with start_page(fixture.home, case.page):
-        if case.state == PENDING_SAME_CALL:
-            # The same call is made once first and left unanswered, so the measured call is a retry.
-            seed = _decide(command, fixture, case)
-            if "relay_defer" in seed:
-                return seed, [], identity.identity_hash
-            await_rows(store, known, waiting="error" in seed, changed_from=before)
+        seed, before = seed_call(case, store, before, lambda seeded: _decide(command, fixture, seeded))
+        if seed is not None:
+            return seed, [], identity.identity_hash
         response = _decide(command, fixture, case)
     rows = await_rows(
         store,
-        known,
+        set(before),
         waiting="error" in response,
         retried=case.state == PENDING_SAME_CALL,
         changed_from=before,

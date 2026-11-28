@@ -199,6 +199,41 @@ pub fn observe_driver_tool(
     })
 }
 
+/// The hash a grant covering `call` is filed under, read without writing, for
+/// a decision taken on a read-only snapshot. Unlike `observe_driver_tool` it
+/// answers `None` for a tool the ledger has not recorded with this schema
+/// hash: a new tool, or a changed schema whose recording would end the
+/// driver's grants. Such a call is reviewed, and filing it records it.
+pub fn covering_driver_hash(
+    connection: &Connection,
+    identity: &DriverIdentity<'_>,
+    call: &DriverToolCall<'_>,
+) -> BrowserSessionResult<Option<String>> {
+    let key = driver_key(identity)?;
+    if !bounded_name(call.tool_name) {
+        return Err(BrowserSessionStoreError::Invalid("tool_name"));
+    }
+    if !call.profiled {
+        return Ok(None);
+    }
+    let current = epoch(connection, &key)?;
+    let Some(schema_hash) = call.schema_hash else {
+        return Ok(Some(driver_identity_hash(&key, current)));
+    };
+    if !is_digest(schema_hash) {
+        return Err(BrowserSessionStoreError::Invalid("schema_hash"));
+    }
+    let seen: Option<String> = connection
+        .query_row(
+            "select schema_hash from guard_browser_driver_tools \
+             where driver_key = ?1 and tool_name = ?2",
+            params![key, call.tool_name],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok((seen.as_deref() == Some(schema_hash)).then(|| driver_identity_hash(&key, current)))
+}
+
 fn record(
     connection: &Connection,
     key: &str,

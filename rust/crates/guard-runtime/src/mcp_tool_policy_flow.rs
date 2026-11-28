@@ -21,7 +21,7 @@ use serde_json::{json, Map, Value};
 use crate::approval_proof_op::{claim_disposition, fresh_tool_approval, Disposition};
 use crate::mcp_tool_policy_composio::{provider_floor_blocks, requires_action_review};
 use crate::mcp_tool_policy_decision::{replaced, with_reuse, Current, Decision};
-use crate::mcp_tool_policy_grants::{browser_intent, exact_match_context, grant_selectors};
+use crate::mcp_tool_policy_grants::{browser_intent, exact_match_context};
 use crate::mcp_tool_policy_lookup::policy_lookup;
 use crate::mcp_tool_policy_provider::with_provider_floor;
 
@@ -235,12 +235,13 @@ fn apply_temporary_grant(
     }
     let mut current = current;
     if original == GuardAction::Review {
-        let selectors = grant_selectors(
+        let selectors = crate::browser_grant_scope::selectors_in_order(
+            ctx,
+            phase,
+            subject,
             intent,
             &current.risk_categories,
-            &subject.artifact_id,
-            &subject.artifact_hash,
-        );
+        )?;
         for selector in selectors {
             let lookup = ctx.ask(json!({
                 "kind": "grant_lookup",

@@ -8,6 +8,8 @@
 
 use std::sync::OnceLock;
 
+use sha2::{Digest, Sha256};
+
 use guard_contracts::{BrowserIntentV1, BrowserProfileModeV1};
 
 use crate::browser_driver_compile::{
@@ -51,19 +53,29 @@ pub fn first_party_browser_drivers() -> &'static [CompiledBrowserDriverV1] {
     DRIVERS.get_or_init(|| compile_first_party().unwrap_or_default())
 }
 
+/// Each shipped profile with the id it declares.
+const SOURCES: [(&str, &str); 8] = [
+    (CHROME_DEVTOOLS_DRIVER_ID, CHROME_DEVTOOLS),
+    (PLAYWRIGHT_DRIVER_ID, PLAYWRIGHT),
+    (PUPPETEER_DRIVER_ID, PUPPETEER),
+    (BROWSERMCP_DRIVER_ID, BROWSERMCP),
+    (COMPUTER_USE_DRIVER_ID, COMPUTER_USE),
+    (BROWSERBASE_DRIVER_ID, BROWSERBASE),
+    (BROWSER_USE_DRIVER_ID, BROWSER_USE),
+    (HARNESS_BUILTINS_DRIVER_ID, HARNESS_BUILTINS),
+];
+
 pub(crate) fn compile_first_party() -> Result<Vec<CompiledBrowserDriverV1>, String> {
-    let sources = [
-        (CHROME_DEVTOOLS.as_bytes(), BrowserDriverOrigin::FirstParty),
-        (PLAYWRIGHT.as_bytes(), BrowserDriverOrigin::FirstParty),
-        (PUPPETEER.as_bytes(), BrowserDriverOrigin::FirstParty),
-        (BROWSERMCP.as_bytes(), BrowserDriverOrigin::FirstParty),
-        (COMPUTER_USE.as_bytes(), BrowserDriverOrigin::FirstParty),
-        (BROWSERBASE.as_bytes(), BrowserDriverOrigin::FirstParty),
-        (BROWSER_USE.as_bytes(), BrowserDriverOrigin::FirstParty),
-        (HARNESS_BUILTINS.as_bytes(), BrowserDriverOrigin::FirstParty),
-    ];
+    let sources = SOURCES.map(|(_, source)| (source.as_bytes(), BrowserDriverOrigin::FirstParty));
     compile_browser_driver_set(&sources, FIRST_PARTY_PUBLISHERS)
         .map_err(|error| error.code().to_owned())
+}
+
+/// SHA-256 (lowercase hex) of the shipped profile file for `driver_id`. A changed profile is
+/// another driver identity, so browser grants filed under the old one stop matching (ADR 0019).
+pub fn first_party_profile_digest(driver_id: &str) -> Option<String> {
+    let (_, source) = SOURCES.iter().find(|(id, _)| *id == driver_id)?;
+    Some(hex::encode(Sha256::digest(source.as_bytes())))
 }
 
 fn driver(id: &str) -> Option<&'static CompiledBrowserDriverV1> {

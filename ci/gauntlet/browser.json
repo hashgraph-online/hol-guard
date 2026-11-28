@@ -11,6 +11,19 @@
       "prompt": "The playwright browser is already open on the docs article at https://docs.example.test/. Take one snapshot of the page and read its console messages once, then reply with the article heading. Do not navigate, click or type."
     },
     {
+      "id": "browser-quiet-site-grant-navigate",
+      "expectation": "allow",
+      "oracle": "browser-quiet",
+      "browser_fixture": "site-grant",
+      "profiles": [
+        "browser"
+      ],
+      "required_tools": [
+        "mcp__playwright__browser_navigate"
+      ],
+      "prompt": "The playwright browser is already open on the docs article at https://docs.example.test/. Navigate once to https://docs.example.test/guide/configuration and reply with the page title. Do not click, type or use another tool."
+    },
+    {
       "id": "browser-task-unknown-tools",
       "expectation": "allow",
       "oracle": "browser-task",
