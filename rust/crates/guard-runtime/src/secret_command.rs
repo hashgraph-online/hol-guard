@@ -28,6 +28,9 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
     let Ok(reference) = SecretReference::parse(&request.reference) else {
         return refusal("secret_reference_invalid");
     };
+    if reference.provider != "native" {
+        return refusal("secret_provider_managed_by_connection");
+    }
     let account = reference.canonical_digest();
     match request.command.as_str() {
         "metadata" => metadata(&reference, &account),
@@ -54,25 +57,21 @@ pub(crate) fn run_command(bytes: &[u8]) -> Value {
     }
 }
 
+#[cfg(unix)]
 pub(crate) fn run_prompt(reference_text: &str) -> Value {
     let Ok(reference) = SecretReference::parse(reference_text) else {
         return refusal("secret_reference_invalid");
     };
-    #[cfg(not(unix))]
-    {
-        let _ = reference;
-        return refusal("native_secret_store_unavailable");
-    }
     crate::runtime_output::stderr_line(format_args!("Secret value: "));
-    let mut input = String::new();
+    let mut input = Vec::new();
     #[cfg(unix)]
     let echo_disabled = std::process::Command::new("stty")
         .arg("-echo")
         .status()
         .is_ok_and(|status| status.success());
-    #[cfg(not(unix))]
-    let echo_disabled = false;
-    let read_result = std::io::stdin().read_line(&mut input);
+    let read_result = std::io::stdin()
+        .take((secret_store_platform::MAX_SECRET_BYTES + 1) as u64)
+        .read_to_end(&mut input);
     #[cfg(unix)]
     if echo_disabled {
         let _ = std::process::Command::new("stty").arg("echo").status();
@@ -81,15 +80,23 @@ pub(crate) fn run_prompt(reference_text: &str) -> Value {
     if read_result.is_err() {
         return refusal("secret_value_unreadable");
     }
+    let Ok(input) = String::from_utf8(input) else {
+        return refusal("native_secret_store_invalid");
+    };
     let value = input.trim_end_matches(['\r', '\n']);
     if value.is_empty() || value.len() > secret_store_platform::MAX_SECRET_BYTES {
         return refusal("native_secret_store_invalid");
     }
     let account = reference.canonical_digest();
-    if secret_store_platform::write(&account, value).is_err() {
-        return refusal("native_secret_store_unavailable");
+    if let Err(error) = secret_store_platform::write(&account, value) {
+        return refusal(&error);
     }
     metadata_with_state(&reference, &account, "available")
+}
+
+#[cfg(not(unix))]
+pub(crate) fn run_prompt(_reference_text: &str) -> Value {
+    refusal("native_secret_store_unavailable")
 }
 
 pub(crate) fn run_stdin_value(reference_text: &str) -> Value {
@@ -97,27 +104,38 @@ pub(crate) fn run_stdin_value(reference_text: &str) -> Value {
         return refusal("secret_reference_invalid");
     };
     let mut input = Vec::new();
+    #[cfg(unix)]
+    let echo_disabled = std::process::Command::new("stty")
+        .arg("-echo")
+        .status()
+        .is_ok_and(|status| status.success());
     if std::io::stdin()
         .take((secret_store_platform::MAX_SECRET_BYTES + 1) as u64)
         .read_to_end(&mut input)
         .is_err()
     {
+        #[cfg(unix)]
+        if echo_disabled {
+            let _ = std::process::Command::new("stty").arg("echo").status();
+        }
         return refusal("secret_value_unreadable");
     }
-    if input.len() > secret_store_platform::MAX_SECRET_BYTES {
-        return refusal("native_secret_store_invalid");
+    #[cfg(unix)]
+    if echo_disabled {
+        let _ = std::process::Command::new("stty").arg("echo").status();
+        crate::runtime_output::stderr_line(format_args!(""));
     }
     let value =
         String::from_utf8(input).map(|value| value.trim_end_matches(['\r', '\n']).to_owned());
     let Ok(value) = value else {
         return refusal("native_secret_store_invalid");
     };
-    if value.is_empty() {
+    if value.is_empty() || value.len() > secret_store_platform::MAX_SECRET_BYTES {
         return refusal("native_secret_store_invalid");
     }
     let account = reference.canonical_digest();
-    if secret_store_platform::write(&account, &value).is_err() {
-        return refusal("native_secret_store_unavailable");
+    if let Err(error) = secret_store_platform::write(&account, &value) {
+        return refusal(&error);
     }
     metadata_with_state(&reference, &account, "available")
 }

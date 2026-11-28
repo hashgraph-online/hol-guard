@@ -2,6 +2,7 @@
 
 use zeroize::Zeroizing;
 
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 use crate::policy_store::approval_enrollment::{
     delete_native_secret, read_native_secret, write_native_secret,
 };
@@ -33,10 +34,17 @@ impl std::fmt::Debug for NativeSecret {
     }
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 pub(crate) fn read(account: &str) -> Result<Option<NativeSecret>, String> {
     validate_account(account)?;
     read_native_secret(USER_SECRET_NAMESPACE, account, MAX_SECRET_BYTES)
         .map(|value| value.map(NativeSecret::new))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+pub(crate) fn read(account: &str) -> Result<Option<NativeSecret>, String> {
+    validate_account(account)?;
+    Err("native_secret_store_unavailable".to_owned())
 }
 
 pub(crate) fn write(account: &str, value: &str) -> Result<(), String> {
@@ -47,9 +55,16 @@ pub(crate) fn write(account: &str, value: &str) -> Result<(), String> {
     write_native_secret(USER_SECRET_NAMESPACE, account, value, MAX_SECRET_BYTES)
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 pub(crate) fn delete(account: &str) -> Result<(), String> {
     validate_account(account)?;
     delete_native_secret(USER_SECRET_NAMESPACE, account)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+pub(crate) fn delete(account: &str) -> Result<(), String> {
+    validate_account(account)?;
+    Err("native_secret_store_unavailable".to_owned())
 }
 
 fn validate_account(account: &str) -> Result<(), String> {

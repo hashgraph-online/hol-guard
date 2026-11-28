@@ -41,8 +41,7 @@ pub(super) fn run() -> Result<(), String> {
             write_json(&secret_command::run_stdin_value(reference))
         }
         [command, flag] if command == secret_exec::COMMAND && flag == "--stdin" => {
-            let bytes = read_stdin_bounded()?;
-            write_json(&secret_exec::run_command(&bytes))
+            write_json(&secret_exec::unavailable())
         }
         [command, flag]
             if command == secret_provider_conformance::COMMAND && flag == "--stdin" =>

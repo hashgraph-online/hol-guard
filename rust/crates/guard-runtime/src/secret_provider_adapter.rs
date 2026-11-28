@@ -108,14 +108,14 @@ impl VaultKvV2Adapter {
         if version.is_some_and(|value| !valid_segment(value)) {
             return Err(AdapterError::InvalidReference);
         }
-        let body = version.map(|value| format!(r#"{{"version":"{value}"}}"#));
         let request = ProviderRequest {
-            method: ProviderMethod::Post,
+            method: ProviderMethod::Get,
             host: HOST.to_owned(),
             path: format!("/v1/{}/data/{scope}/{name}", self.mount),
+            query: version.map(|value| format!("version={value}")),
             header: "x-vault-token".to_owned(),
             key: token,
-            body,
+            body: None,
         };
         transport
             .send(
@@ -160,7 +160,9 @@ mod tests {
             assert_eq!(request.host, HOST);
             assert_eq!(request.path, "/v1/fixture/data/team/token");
             assert_eq!(request.header, "x-vault-token");
-            assert_eq!(request.body.as_deref(), Some(r#"{"version":"2"}"#));
+            assert_eq!(request.method, ProviderMethod::Get);
+            assert_eq!(request.query.as_deref(), Some("version=2"));
+            assert!(request.body.is_none());
             Ok(ProviderResponse {
                 status: 200,
                 body: br#"{"data":{"data":{"value":"fixture-value-7"},"metadata":{"version":2}}}"#

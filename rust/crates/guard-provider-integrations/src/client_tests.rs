@@ -19,6 +19,7 @@ fn request(host: &str, path: &str) -> ProviderRequest {
         method: ProviderMethod::Post,
         host: host.to_owned(),
         path: path.to_owned(),
+        query: None,
         header: "x-api-key".to_owned(),
         key: Zeroizing::new(KEY.to_owned()),
         body: Some(r#"{"target":"https://shop.example.test/basket"}"#.to_owned()),
@@ -89,6 +90,25 @@ fn the_path_is_a_literal_absolute_path() {
             checked_url(&request(HOST, path), &pinned),
             Err(ProviderClientError::PathInvalid),
             "{path}"
+        );
+    }
+}
+
+#[test]
+fn a_bounded_noncredential_query_is_allowed_but_secret_queries_are_refused() {
+    let pinned = vec![HOST.to_owned()];
+    let mut request = request(HOST, "/v1/check");
+    request.query = Some("version=2".to_owned());
+    assert_eq!(
+        checked_url(&request, &pinned),
+        Ok(format!("https://{HOST}/v1/check?version=2"))
+    );
+    for query in ["token=fixture", "version", "version=", "version=2%00"] {
+        request.query = Some(query.to_owned());
+        assert_eq!(
+            checked_url(&request, &pinned),
+            Err(ProviderClientError::PathInvalid),
+            "{query}"
         );
     }
 }

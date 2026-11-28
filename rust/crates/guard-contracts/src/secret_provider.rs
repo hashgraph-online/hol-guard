@@ -10,9 +10,13 @@ pub enum SecretProviderStatusV1 {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SecretCapabilityV1 {
+    #[serde(rename = "secret.metadata")]
     Metadata,
+    #[serde(rename = "secret.resolve")]
     Resolve,
+    #[serde(rename = "secret.lease")]
     Lease,
+    #[serde(rename = "secret.verify")]
     Verify,
 }
 

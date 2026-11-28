@@ -182,6 +182,7 @@ fn request(host: &str) -> ProviderRequest {
         method: ProviderMethod::Post,
         host: host.to_owned(),
         path: "/v1/check".to_owned(),
+        query: None,
         header: "x-api-key".to_owned(),
         key: Zeroizing::new(KEY.to_owned()),
         body: Some(r#"{"target":"https://shop.example.test/basket"}"#.to_owned()),

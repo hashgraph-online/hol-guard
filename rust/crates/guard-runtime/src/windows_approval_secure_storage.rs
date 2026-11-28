@@ -403,7 +403,7 @@ pub(super) fn read_direct(account: &str, max_bytes: usize) -> Result<Option<Stri
         guard_runtime_windows_process::secure_zero(&mut bytes);
         return Err(invalid());
     }
-    let trimmed = value.trim().to_owned();
+    let trimmed = value.strip_suffix('\n').unwrap_or(&value).to_owned();
     let mut bytes = value.into_bytes();
     guard_runtime_windows_process::secure_zero(&mut bytes);
     Ok(Some(trimmed))

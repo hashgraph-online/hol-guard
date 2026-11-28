@@ -222,14 +222,19 @@ pub fn load_provider_key(
 
 #[cfg(not(test))]
 pub fn load_provider_key_runtime(
-    _store: &mut EncryptedFileSecretStore,
+    store: &mut EncryptedFileSecretStore,
     provider_id: &str,
 ) -> Option<ProviderKey> {
     let account = native_account(provider_id)?;
-    secret_store_platform::read(&account)
-        .ok()
-        .flatten()
-        .map(|secret| ProviderKey::new(secret.into_inner()))
+    if let Some(secret) = secret_store_platform::read(&account).ok().flatten() {
+        return Some(ProviderKey::new(secret.into_inner()));
+    }
+    let secret_id = provider_secret_id(provider_id)?;
+    let legacy = store.get_secret(&secret_id)?;
+    let key = ProviderKey::new(Zeroizing::new(legacy));
+    let _ = secret_store_platform::write(&account, key.expose());
+    let _ = delete_provider_key(store, provider_id);
+    Some(key)
 }
 
 #[cfg(test)]
@@ -258,13 +263,15 @@ pub fn delete_provider_key(
 
 #[cfg(not(test))]
 pub fn delete_provider_key_runtime(
-    _store: &EncryptedFileSecretStore,
+    store: &EncryptedFileSecretStore,
     provider_id: &str,
 ) -> std::io::Result<()> {
     let Some(account) = native_account(provider_id) else {
         return Ok(());
     };
-    secret_store_platform::delete(&account).map_err(std::io::Error::other)
+    let native = secret_store_platform::delete(&account).map_err(std::io::Error::other);
+    let legacy = delete_provider_key(store, provider_id);
+    native.and(legacy)
 }
 
 #[cfg(test)]

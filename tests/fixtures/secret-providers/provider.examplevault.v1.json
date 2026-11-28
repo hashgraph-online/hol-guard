@@ -3,9 +3,9 @@
   "host": "vault.example.test",
   "reference": "guard-secret://provider.examplevault/team/token#value?version=2",
   "request": {
-    "method": "POST",
+    "method": "GET",
     "path": "/v1/fixture/data/team/token",
-    "body": {"version": "2"}
+    "query": "version=2"
   },
   "response": {
     "status": 200,

@@ -36,6 +36,8 @@ pub struct ProviderRequest {
     pub method: ProviderMethod,
     pub host: String,
     pub path: String,
+    /// A bounded, already-encoded query string without the leading `?`.
+    pub query: Option<String>,
     pub header: String,
     pub key: Zeroizing<String>,
     pub body: Option<String>,
@@ -149,6 +151,28 @@ fn is_header_value(value: &str) -> bool {
         && value.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
 }
 
+fn is_query(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 256
+        && value.split('&').all(|pair| {
+            let Some((key, value)) = pair.split_once('=') else {
+                return false;
+            };
+            !key.is_empty()
+                && !value.is_empty()
+                && !matches!(
+                    key,
+                    "token" | "secret" | "password" | "api_key" | "authorization"
+                )
+                && key.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b'~')
+                })
+                && value.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b'~')
+                })
+        })
+}
+
 /// The URL for a checked request: only the scheme, the pinned host and the literal path.
 pub(crate) fn checked_url(
     request: &ProviderRequest,
@@ -163,7 +187,19 @@ pub(crate) fn checked_url(
     if !is_header_name(&request.header) || !is_header_value(&request.key) {
         return Err(ProviderClientError::CredentialInvalid);
     }
-    Ok(format!("https://{}{}", request.host, request.path))
+    let query = request
+        .query
+        .as_deref()
+        .map(|query| {
+            if is_query(query) {
+                Ok(format!("?{query}"))
+            } else {
+                Err(ProviderClientError::PathInvalid)
+            }
+        })
+        .transpose()?
+        .unwrap_or_default();
+    Ok(format!("https://{}{}{}", request.host, request.path, query))
 }
 
 /// Map a refused exchange onto a provider error. The outcome's own text never leaves here.

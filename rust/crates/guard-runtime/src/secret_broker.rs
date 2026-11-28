@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::secret_reference::SecretReference;
-use crate::secret_store_platform::{self, NativeSecret};
+use crate::secret_store_platform;
 
 pub(crate) const SCHEMA: &str = "guard.secret-broker-request.v1";
 pub(crate) const FEATURE: &str = "secret-broker-v1";
@@ -28,8 +28,6 @@ pub(crate) struct Request {
     pub(crate) purpose: String,
     pub(crate) policy_digest: String,
     pub(crate) extension_digest: String,
-    #[serde(default)]
-    pub(crate) approval_binding: Option<String>,
     #[serde(default)]
     pub(crate) version: Option<String>,
 }
@@ -74,21 +72,6 @@ impl Binding {
     }
 }
 
-pub(crate) struct BrokerSecret {
-    pub(crate) value: NativeSecret,
-    pub(crate) binding: Binding,
-}
-
-impl std::fmt::Debug for BrokerSecret {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("BrokerSecret")
-            .field("binding_digest", &self.binding.digest())
-            .field("value", &"REDACTED")
-            .finish()
-    }
-}
-
 pub(crate) fn evaluate(request: &Request) -> Result<Value, String> {
     let (reference, binding) = validate_request(request)?;
     match request.operation.as_str() {
@@ -98,34 +81,15 @@ pub(crate) fn evaluate(request: &Request) -> Result<Value, String> {
     }
 }
 
-pub(crate) fn resolve_native(request: &Request) -> Result<BrokerSecret, String> {
-    let (reference, binding) = validate_request(request)?;
-    if request.operation != "resolve" && request.operation != "materialize" {
-        return Err("secret_broker_operation_invalid".to_owned());
-    }
-    let expected = binding.digest();
-    if request.approval_binding.as_deref() != Some(expected.as_str()) {
-        return Err("secret_approval_required".to_owned());
-    }
-    if binding.sink == "agent_text"
-        || binding.sink == "arguments"
-        || binding.sink == "url"
-        || binding.sink == "clipboard"
-        || binding.sink == "workspace_file"
-    {
-        return Err("secret_sink_refused".to_owned());
-    }
-    let value = secret_store_platform::read(&reference.canonical_digest())?
-        .ok_or_else(|| "secret_reference_missing".to_owned())?;
-    Ok(BrokerSecret { value, binding })
-}
-
 fn validate_request(request: &Request) -> Result<(SecretReference, Binding), String> {
     if request.schema != SCHEMA {
         return Err("secret_broker_schema_invalid".to_owned());
     }
     let reference = SecretReference::parse(&request.reference)
         .map_err(|_| "secret_reference_invalid".to_owned())?;
+    if reference.provider != "native" {
+        return Err("secret_provider_unavailable".to_owned());
+    }
     for value in [
         request.capability.as_str(),
         request.sink.as_str(),
@@ -210,7 +174,6 @@ mod tests {
             purpose: "fixture".to_owned(),
             policy_digest: "c".repeat(64),
             extension_digest: "d".repeat(64),
-            approval_binding: None,
             version: Some("v1".to_owned()),
         }
     }

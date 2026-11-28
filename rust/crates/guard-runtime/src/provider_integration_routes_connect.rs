@@ -178,6 +178,7 @@ pub fn verify_connect(
         },
         host: verify.host.clone(),
         path: verify.path.clone(),
+        query: None,
         header: provider.auth.header.clone(),
         key: Zeroizing::new(prepared.key.expose().to_owned()),
         body: None,

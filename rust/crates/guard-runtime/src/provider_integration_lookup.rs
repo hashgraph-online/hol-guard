@@ -301,6 +301,7 @@ pub fn run_lookup(
         },
         host: capability.request.host.clone(),
         path: capability.request.path.clone(),
+        query: None,
         header: manifest.auth.header.clone(),
         key: Zeroizing::new(key.expose().to_owned()),
         body: Some(body),

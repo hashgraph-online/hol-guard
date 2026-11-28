@@ -862,6 +862,7 @@ mod runtime_output_directory;
 mod secret_audit;
 mod secret_broker;
 mod secret_command;
+#[allow(dead_code)]
 mod secret_delivery;
 mod secret_exec;
 #[allow(dead_code)]
