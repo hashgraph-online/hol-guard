@@ -4,12 +4,14 @@
 
 | Version | Supported |
 |---------|-----------|
-| 2.x     | Yes       |
-| 1.x     | No        |
+| 3.x     | Yes       |
+| < 3.0   | No        |
+
+Security fixes ship in the latest 3.x release. Run `hol-guard update` or upgrade from PyPI to stay current.
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in `ai-plugin-scanner`, please report it privately:
+If you discover a security vulnerability in HOL Guard (`hol-guard`) or `plugin-scanner`, please report it privately:
 
 1. Do not open a public issue for the vulnerability.
 2. Email `security@hol.org`.
