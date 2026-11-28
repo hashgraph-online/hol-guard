@@ -164,7 +164,8 @@ pub(super) fn safe_git_arguments(
             }
             // The pattern is search text, not a path: only the revisions and
             // pathspecs pass the path screen. Grep pages by default, so the
-            // configuration probe has to clear the pager first.
+            // configuration probe has to clear the pager first. A plain
+            // exclusion pathspec after `--` only narrows the search.
             Some((subcommand, rest)) if subcommand == "grep" => {
                 return leading_safe
                     && allow_helper_context
@@ -175,10 +176,12 @@ pub(super) fn safe_git_arguments(
                         // `--cached`, which searches the index instead.
                         let working_tree = targets.first().is_some_and(|first| first == "--")
                             && !rest.iter().any(|argument| argument == "--cached");
-                        !targets.iter().any(|value| {
-                            value.starts_with(':')
-                                || (super::sensitive_read_path_argument(value)
-                                    && !(working_tree && tracked_target(value, leading, context)))
+                        !targets.iter().enumerate().any(|(index, value)| {
+                            !exclusion_pathspec(targets, index)
+                                && (value.starts_with(':')
+                                    || (super::sensitive_read_path_argument(value)
+                                        && !(working_tree
+                                            && tracked_target(value, leading, context))))
                         })
                     });
             }

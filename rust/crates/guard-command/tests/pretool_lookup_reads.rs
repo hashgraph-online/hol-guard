@@ -319,6 +319,9 @@ fn git_grep_searches_proceed() {
             "git grep -in -e one --or -e two HEAD | head -5",
             "git grep -c one; echo ---; git grep -l one HEAD -- src",
             "git log --oneline -1 && git grep -l one HEAD",
+            "git grep -n one -- ':!src/two.ts' | grep -v \"^docs/\" | head",
+            "git grep -n \"one\\|two\" -- . ':^dist' ':(exclude)*.lock'",
+            "git grep -l one HEAD -- src ':^dist'",
             routed.as_str(),
         ] {
             let result = classify(&home, harness, command);
@@ -400,6 +403,11 @@ fn git_searches_of_credential_paths_still_ask() {
         for command in [
             "git grep foo -- .env",
             "git grep foo .env",
+            "git grep foo ':!src'",
+            "git grep foo -- ':!/src'",
+            "git grep foo -- ':(exclude,glob)**/x'",
+            "git grep foo -- ':(top).env'",
+            "git grep foo -- .env ':!src'",
             "git grep -f .env",
             "git grep -e .env -- src/.env.local",
             "git log -p -S process.env -- .env",

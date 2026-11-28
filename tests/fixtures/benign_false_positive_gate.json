@@ -22519,6 +22519,40 @@
       "expect": "allow"
     },
     {
+      "id": "git-grep-exclusion-pathspec-filtered",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git grep -n \"export\" -- ':!package-lock.json' | grep -v \"^docs/\" | head"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-grep-revision-exclusion-pathspecs",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git grep -l \"import\" HEAD -- . ':^dist' ':(exclude)bun.lock'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "git-worktree-log-then-status",
       "fix_area": "git",
       "harnesses": [
