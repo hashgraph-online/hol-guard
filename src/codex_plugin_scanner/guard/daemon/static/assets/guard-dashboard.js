@@ -35847,8 +35847,9 @@ function browserGateNeedsSetup(profile, gate) {
   return SHARED_PROFILES.has(profile) && gate != null && !isBulkApproveGateReady(gate);
 }
 function browserGatePromptShown(item, gate) {
+  if (item.native_business_review_display_only === true) return false;
   const card = parseBrowserCard(item.browser_card);
-  return card !== null && browserGateNeedsSetup(card.profile_line, gate);
+  return card !== null && explainMcpCall(item) !== null && browserGateNeedsSetup(card.profile_line, gate);
 }
 function BrowserGatePrompt() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(

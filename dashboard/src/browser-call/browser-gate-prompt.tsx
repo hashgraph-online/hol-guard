@@ -3,14 +3,15 @@ import { approvalGateProofReady } from "../approval-proof-inline";
 import { guardAwareHref } from "../guard-api";
 import type { GuardApprovalGatePublicConfig, GuardApprovalRequest, GuardBrowserProfileLineV1 } from "../guard-types";
 import { parseBrowserCard } from "../mcp-call/browser-card";
+import { explainMcpCall } from "../mcp-call/explain-mcp-call";
 
-/** Profiles the agent shares with the person, so a page it opens there is one it can reach. */
 /** The approval setup page, with the Guard session when a browser renders it. */
 function approvalSetupHref(): string {
   const href = "/settings?section=approval";
   return typeof window === "undefined" ? href : guardAwareHref(href);
 }
 
+/** Profiles the agent shares with the person, so a page it opens there is one it can reach. */
 const SHARED_PROFILES: ReadonlySet<GuardBrowserProfileLineV1> = new Set(["shared", "remote-debugging"]);
 
 /**
@@ -24,13 +25,18 @@ export function browserGateNeedsSetup(
   return SHARED_PROFILES.has(profile) && gate != null && !approvalGateProofReady(gate);
 }
 
-/** Whether this request's browser card already carries the setup prompt. */
+/**
+ * Whether this request's browser card is on screen and carries the setup prompt. It follows the
+ * render path: a display-only review, or one with no MCP explanation, draws no browser card, so the
+ * general setup notice stays.
+ */
 export function browserGatePromptShown(
   item: GuardApprovalRequest,
   gate: GuardApprovalGatePublicConfig | null | undefined,
 ): boolean {
+  if (item.native_business_review_display_only === true) return false;
   const card = parseBrowserCard(item.browser_card);
-  return card !== null && browserGateNeedsSetup(card.profile_line, gate);
+  return card !== null && explainMcpCall(item) !== null && browserGateNeedsSetup(card.profile_line, gate);
 }
 
 /** One line that links to approval setup. It never replaces or hides a choice. */

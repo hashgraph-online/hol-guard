@@ -247,4 +247,13 @@ const render = (request: GuardApprovalRequest) => renderToStaticMarkup(PrimaryAc
     !browserGatePromptShown({ ...plain, browser_card: null }, gate(false)),
     "T-BCC-27: a request without a browser card never claims the prompt",
   );
+  assert(
+    !browserGatePromptShown({ ...plain, action_envelope_json: null }, gate(false)),
+    "T-BCC-27b: a card the decision view cannot draw leaves the general notice",
+  );
+  assert(
+    !browserGatePromptShown({ ...plain, native_business_review_display_only: true }, gate(false)),
+    "T-BCC-27c: a display-only review leaves the general notice",
+  );
+  assert(browserGatePromptShown(plain, gate(false)), "T-BCC-27d: a drawn shared card carries the prompt");
 }
