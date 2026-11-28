@@ -179,8 +179,8 @@ place to put its cases.
   - Rust side landed in `guard-provider-integrations/src/fixture_origin.rs`: the loopback-only
     origin parser, the `provider.fixture-` route that never reroutes another provider and has no
     route without an origin, and a transport that always sends the literal fixture key (proven
-    against a loopback stub). Still open: the compiler refusal under `contributions/`, the
-    resident wiring, the Integrations page mark and the Gauntlet stub.
+    against a loopback stub). The compiler refusal under `contributions/` landed with the manifest
+    compiler. Still open: the resident wiring, the Integrations page mark and the Gauntlet stub.
 - [ ] **BP-T180** Conformance kit: `conformance.rs` and `hol-guard integrations conformance
   <manifest>` (PRD 6.12), runnable from the released CLI. Five checks: compile and labels, recorded
   responses, share set, no added prompt, bounded prompt. CI runs it for every manifest under
@@ -591,6 +591,14 @@ transcript in the pull request (after BP-T052).
     `401`/`403`, `429` and every other failure go to `ProviderWorker::record`.
   - [ ] Daemon scheduling: a background loop that picks subjects from the hook path's queue and runs
     the executor with the pinned HTTPS client, off the decision path (with BP-T124).
+    - [x] Queue and pass: `provider_integration_queue.rs` keeps short-lived lookup requests apart
+      from the digest-only provider tables (public canonical origins only, one per provider and
+      subject, 5 minute lifetime, at most 256, dropped on disconnect and purge, digest re-checked
+      when taken). `provider_integration_schedule.rs` drains up to eight per pass through the
+      executor, skipping unshipped providers and subjects with a fresh answer. The hot-path test
+      lists the pass as an owner.
+    - [ ] Still open: the hook queues a request when it has no fresh answer, and a daemon thread
+      runs the pass with the HTTPS client under the managed network policy.
 - [x] **BP-T123** `provider_integration_decide.rs`: cache read only, applies PRD 6.6. Property test:
   for any signal set the decision is never weaker than the decision with no provider.
   - [x] Wire `decide` into the hook and relay decision paths (with BP-T124's hot-path proof).

@@ -197,6 +197,9 @@ pub fn ensure_provider_integration_schema(connection: &Connection) -> ProviderSt
             .try_for_each(|statement| connection.execute_batch(statement))
             .map_err(ProviderStoreError::from)
             .and_then(|()| validate_objects(connection))
+            .and_then(|()| {
+                crate::provider_integration_queue::ensure_lookup_queue_schema(connection)
+            })
     })
 }
 
@@ -653,11 +656,12 @@ pub fn prune_expired_signals(connection: &Connection, now_ms: u64) -> ProviderSt
     )?)
 }
 
-/// Disconnect (PRD 6.7): drops the connection row, its settings and every cached signal of the
-/// provider in one savepoint. The secret is deleted by the secret store (BP-T120). Returns whether
+/// Disconnect (PRD 6.7): drops the connection row, its settings, every cached signal and every queued
+/// lookup of the provider in one savepoint. The secret is deleted by the secret store (BP-T120). Returns whether
 /// the provider was connected.
 pub fn forget_provider(connection: &Connection, provider_id: &str) -> ProviderStoreResult<bool> {
     in_savepoint(connection, WRITE_SAVEPOINT, || {
+        crate::provider_integration_queue::forget_queued_lookups(connection, Some(provider_id))?;
         connection.execute(
             "delete from provider_signals where provider_id = ?1",
             [provider_id],

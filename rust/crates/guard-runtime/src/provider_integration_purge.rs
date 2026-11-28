@@ -41,13 +41,14 @@ pub(crate) fn has_provider_tables(connection: &Connection) -> rusqlite::Result<b
         .map(|found| found.is_some())
 }
 
-/// Drops every provider connection, setting and cached signal in one savepoint. Returns how many
+/// Drops every provider connection, setting, cached signal and queued lookup in one savepoint. Returns how many
 /// providers were connected. A store without the provider tables is left untouched.
 pub fn forget_all_providers(connection: &Connection) -> ProviderStoreResult<usize> {
     if !has_provider_tables(connection)? {
         return Ok(0);
     }
     in_write_savepoint(connection, || {
+        crate::provider_integration_queue::forget_queued_lookups(connection, None)?;
         let mut forgotten = 0;
         for table in PURGED_TABLES {
             let removed = connection.execute(&format!("delete from {table}"), [])?;
