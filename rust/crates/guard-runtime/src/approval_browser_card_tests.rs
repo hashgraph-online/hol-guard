@@ -1,6 +1,9 @@
 use serde_json::{json, Value};
 
-use super::approval_browser_card;
+/// The card with no provider cache.
+fn approval_browser_card(envelope: &Value, harness: &str) -> Option<Value> {
+    super::approval_browser_card(envelope, harness, &|_| Vec::new())
+}
 
 fn hook_envelope(tool: &str, input: Value) -> Value {
     json!({

@@ -48,10 +48,11 @@ pub(crate) fn get_approval_request(
         payloads(
             vec![(&row, projection)],
             args.opt_str("cwd")?,
+            connection,
             owner.map(|owner| (connection, owner)),
         )?
     } else {
-        let (mut payload, contract_error) = draft(&row, &projection)?;
+        let (mut payload, contract_error) = draft(&row, &projection, connection)?;
         if let Some(error) = contract_error {
             payload.insert("decision_contract_error".to_owned(), Value::String(error));
         }
@@ -152,6 +153,7 @@ pub(crate) fn list_approval_requests(
         let item = payloads(
             vec![(row, projection)],
             cwd,
+            connection,
             owner.map(|owner| (connection, owner)),
         )?
         .remove(0);
@@ -180,11 +182,12 @@ pub(crate) fn continuation(row: &Row) -> Value {
 pub(crate) fn payloads(
     rows: Vec<(&Row, Value)>,
     cwd: Option<&str>,
+    store: &Connection,
     owner: Option<(&Connection, &crate::policy_store::PolicySnapshotStore)>,
 ) -> StoreResult<Vec<Map<String, Value>>> {
     let drafts = rows
         .iter()
-        .map(|(row, projection)| draft(row, projection))
+        .map(|(row, projection)| draft(row, projection, store))
         .collect::<StoreResult<Vec<_>>>()?;
     let contracts = drafts
         .iter()

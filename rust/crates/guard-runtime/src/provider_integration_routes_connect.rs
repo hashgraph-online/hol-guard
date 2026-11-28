@@ -230,7 +230,18 @@ pub fn finish_connect(
         return unavailable();
     }
     let write = || {
-        let connected_at_ms = provider_connection(context.connection, &provider.id)?
+        let stored = provider_connection(context.connection, &provider.id)?;
+        // Answers cached under another manifest would show beside this manifest's labels.
+        if stored
+            .as_ref()
+            .is_some_and(|stored| stored.manifest_digest != provider.manifest_digest)
+        {
+            context.connection.execute(
+                "delete from provider_signals where provider_id = ?1",
+                [&provider.id],
+            )?;
+        }
+        let connected_at_ms = stored
             .filter(|stored| stored.state != ProviderConnectionStateV1::NotConnected)
             .map_or(context.now_ms, |stored| stored.connected_at_ms);
         put_connection(

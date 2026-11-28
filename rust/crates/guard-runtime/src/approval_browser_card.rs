@@ -14,7 +14,13 @@ use guard_command::browser_action_project::{
 use guard_command::browser_card::browser_card;
 use guard_command::browser_driver_match::{match_browser_driver, BrowserToolCallIdentity};
 use guard_command::browser_first_party_drivers::first_party_browser_drivers;
-use guard_contracts::{BrowserCardRequestV1, BrowserInputPreviewClassV1};
+use guard_contracts::{
+    BrowserCardProviderFindingV1, BrowserCardRequestV1, BrowserInputPreviewClassV1,
+};
+
+/// The cached provider rows for one origin. The approval read model passes the provider cache;
+/// a caller without one passes a closure that lists nothing.
+pub(crate) type ProviderRows<'a> = &'a dyn Fn(&str) -> Vec<BrowserCardProviderFindingV1>;
 
 /// Where the harness payload keeps the tool input, in the order the dashboard reads them.
 const TOOL_INPUT_KEYS: [&str; 4] = ["tool_input", "toolInput", "toolArgs", "arguments"];
@@ -82,7 +88,11 @@ fn agent_name(harness: &str) -> &'static str {
 }
 
 /// The card for one stored approval, or `None` when no first-party profile classifies the call.
-pub(crate) fn approval_browser_card(envelope: &Value, harness: &str) -> Option<Value> {
+pub(crate) fn approval_browser_card(
+    envelope: &Value,
+    harness: &str,
+    provider_rows: ProviderRows<'_>,
+) -> Option<Value> {
     let envelope = envelope.as_object()?;
     let tool_name = envelope_text(envelope, "tool_name");
     let mcp_server = envelope_text(envelope, "mcp_server");
@@ -114,13 +124,18 @@ pub(crate) fn approval_browser_card(envelope: &Value, harness: &str) -> Option<V
             input.preview_class = BrowserInputPreviewClassV1::LooksLikeSecret;
         }
     }
+    let provider_findings = action
+        .target
+        .origin
+        .as_deref()
+        .map(provider_rows)
+        .unwrap_or_default();
     let request = BrowserCardRequestV1 {
         action: *action,
         agent: agent_name(harness).to_owned(),
         first_visit_in_task: false,
         left_granted_site: false,
-        // Provider rows join once the lookup cache is wired to the approval path.
-        provider_findings: Vec::new(),
+        provider_findings,
     };
     let mut card = browser_card(&request).ok()?;
     if redacted {
