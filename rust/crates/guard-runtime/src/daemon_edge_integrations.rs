@@ -34,9 +34,9 @@ use serde_json::{json, Value};
 use super::super::http::Request;
 use super::{authorize_origin, authorize_token, json_response, refusals, NativeReads, ReadConfig};
 use crate::hook_evidence_store_gate::hold_storage_gate;
-use crate::managed_policy_floor::effective_managed_policy;
-use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource, ManagedPolicyState};
-use crate::provider_integration_managed::{ManagedProviderSettings, PROVIDER_INTEGRATIONS_SETTING};
+use crate::managed_policy_load::{load_managed_policy, ManagedPolicySource};
+use crate::provider_integration_managed::managed_settings;
+use crate::provider_integration_managed::ManagedProviderSettings;
 use crate::provider_integration_routes::{
     self as routes, PreparedConnect, ProofLedger, RouteAnswer, RouteContext, WithTransport,
 };
@@ -115,22 +115,6 @@ pub(super) fn response(
         body,
     );
     json_response(status, &answer, build, caller.cors_origin.as_deref(), false)
-}
-
-/// The managed provider settings, or `None` when they cannot be known: a
-/// policy that failed closed, or a `provider_integrations` value that does not
-/// parse. Guard then refuses the routes rather than guess at a floor.
-pub(super) fn managed_settings(state: &ManagedPolicyState) -> Option<ManagedProviderSettings> {
-    if state.policy.is_none() && state.status.fails_closed() {
-        return None;
-    }
-    let Some(policy) = effective_managed_policy(state) else {
-        return Some(ManagedProviderSettings::none());
-    };
-    let locked = policy
-        .locked_settings
-        .contains(PROVIDER_INTEGRATIONS_SETTING);
-    ManagedProviderSettings::from_settings(&policy.settings, locked).ok()
 }
 
 /// Checks a prepared connect's key with the provider.

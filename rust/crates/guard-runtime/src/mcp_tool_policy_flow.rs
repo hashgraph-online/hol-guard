@@ -20,9 +20,10 @@ use serde_json::{json, Map, Value};
 
 use crate::approval_proof_op::{claim_disposition, fresh_tool_approval, Disposition};
 use crate::mcp_tool_policy_composio::{provider_floor_blocks, requires_action_review};
-use crate::mcp_tool_policy_decision::{with_reuse, Current, Decision};
+use crate::mcp_tool_policy_decision::{replaced, with_reuse, Current, Decision};
 use crate::mcp_tool_policy_grants::{browser_intent, exact_match_context};
 use crate::mcp_tool_policy_lookup::policy_lookup;
+use crate::mcp_tool_policy_provider::with_provider_floor;
 
 #[path = "mcp_tool_policy_memo.rs"]
 mod memo;
@@ -68,6 +69,7 @@ pub(crate) struct Ctx<'a> {
     /// What this call's passes over one subject share (`PassMemo`).
     pub(crate) memo: Option<&'a PassMemo<'a>>,
     pub(crate) catalog: Option<&'a crate::contributed_mcp_decision_op::Catalog<'a>>,
+    pub(crate) provider_store: Option<&'a rusqlite::Connection>,
 }
 
 impl Ctx<'_> {
@@ -171,15 +173,6 @@ pub(crate) fn evaluate_current(subject: &McpToolPolicySubjectV1) -> Flow<Current
             .to_owned(),
         risk_categories: strings(field(&evidence, "risk_categories")?)?,
     })
-}
-
-fn replaced(current: Current, action: GuardAction, source: &str, summary: &str) -> Current {
-    Current {
-        action,
-        source: source.to_owned(),
-        summary: summary.to_owned(),
-        ..current
-    }
 }
 
 /// Provider floor, extension choice, then bounded temporary grants.
@@ -406,6 +399,7 @@ pub(crate) fn evaluate_pass(
     let intent = browser_intent(subject)?;
     let current = memo::current(ctx.memo, subject)?;
     let current = apply_temporary_grant(ctx, phase, subject, intent.as_ref(), current)?;
+    let current = with_provider_floor(ctx.provider_store, intent.as_ref(), current);
     let command = subject.artifact.command.as_deref().unwrap_or("");
     let composio = requires_action_review(command);
     let finish = |decision: Decision| Ok(Pass::Final(Box::new(decision)));

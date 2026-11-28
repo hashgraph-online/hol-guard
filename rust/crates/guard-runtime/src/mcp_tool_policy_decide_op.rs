@@ -19,6 +19,7 @@ use crate::browser_grant_scope;
 
 use crate::mcp_tool_policy_decision::Decision;
 use crate::mcp_tool_policy_flow::{evaluate_pass, Ctx, Flow, Pass, Phase, Stop};
+use crate::mcp_tool_policy_provider::open_provider_store;
 use crate::mcp_tool_policy_revalidate::revalidate;
 
 const ERR_INVALID: &str = "native_mcp_tool_policy_decide_request_invalid";
@@ -76,11 +77,13 @@ fn decide_pass(
     if request.observations.len() > MCP_TOOL_POLICY_DECIDE_MAX_OBSERVATIONS {
         return Err(Stop::Fail(ERR_TOO_LARGE));
     }
+    let provider_store = open_provider_store(request.lookup.as_ref());
     let ctx = Ctx {
         observations,
         lookup: request.lookup.as_ref(),
         memo: None,
         catalog,
+        provider_store: provider_store.as_ref(),
     };
     match evaluate_pass(
         &ctx,

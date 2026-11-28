@@ -37,6 +37,7 @@ pub(super) fn run_policy(
             lookup: None,
             memo: Some(&memo),
             catalog: Some(catalog),
+            provider_store: connection,
         };
         match evaluate_pass(&ctx, subject, Phase::Initial, false) {
             Ok(Pass::Final(decision)) => return Ok(*decision),

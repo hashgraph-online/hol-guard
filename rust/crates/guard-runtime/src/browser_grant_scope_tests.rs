@@ -185,6 +185,7 @@ fn selectors_with(observations: &[McpToolPolicyObservationV1]) -> Flow<Vec<Strin
         lookup: None,
         memo: None,
         catalog: None,
+        provider_store: None,
     };
     let risks = vec!["browser_interaction".to_owned()];
     selectors_in_order(&ctx, Phase::Initial, &subject, Some(&intent), &risks)

@@ -605,7 +605,13 @@ transcript in the pull request (after BP-T052).
     the executor with the pinned HTTPS client, off the decision path (with BP-T124).
 - [x] **BP-T123** `provider_integration_decide.rs`: cache read only, applies PRD 6.6. Property test:
   for any signal set the decision is never weaker than the decision with no provider.
-  - [ ] Wire `decide` into the hook and relay decision paths (with BP-T124's hot-path proof).
+  - [x] Wire `decide` into the hook and relay decision paths (with BP-T124's hot-path proof).
+    `mcp_tool_policy_provider.rs` applies the cached answers for a browser call's target origin to
+    Guard's recommendation inside the MCP tool-call policy pass, before saved authority is
+    composed. The hook's in-process lookup opens the store only when a provider ships; the relay
+    reuses the connection it holds. A provider review stays approvable and an enforced block wins
+    over a saved approval. Open: a per-session noise ledger (each pass admits every signal, which
+    can only add reviews).
 - [x] **BP-T124** Hot path proof: a test that fails if the hook or relay decision path performs
   network I/O or waits on the worker. Latency evidence in `scripts/native_slo_contract.py`.
   - `provider_integration_hot_path_tests.rs`: only the lookup and worker modules may name an item
@@ -622,7 +628,8 @@ transcript in the pull request (after BP-T052).
     unlocked entry is a floor; with `provider_integrations` in `lockedSettings` it replaces the
     fields it names. A malformed value is an error. `decide` applies the composed setting. Open:
     the protected local mutation (preview plus one-use proof) lands with the BP-T130 settings
-    route, and the resident loads `ManagedProviderSettings` when it wires `decide`.
+    route. The policy pass loads `ManagedProviderSettings` from managed policy when it applies
+    `decide`.
 - [ ] **BP-T126** Saved approval interaction: a `danger` signal reviews again and shows the saved
   approval as paused; it does not delete it. With enforcement on, the block wins. Tests for both.
 - [ ] **BP-T127** Grant interaction: `caution` from a verified provider reviews once per subject inside
