@@ -440,3 +440,54 @@ fn a_refused_settings_change_does_not_supersede_a_connect() {
         "the connect still lands"
     );
 }
+
+fn cached_signals(fixture: &Fixture) -> i64 {
+    fixture
+        .connection
+        .query_row("select count(*) from provider_signals", [], |row| {
+            row.get(0)
+        })
+        .unwrap()
+}
+
+#[test]
+fn a_reconnect_under_another_manifest_drops_the_old_cached_answers() {
+    use guard_contracts::{
+        ProviderCapabilityV1, ProviderInventoryV1, ProviderSignalStateV1, ProviderSignalV1,
+        ProviderSubjectKindV1, ProviderSubjectV1, ProviderVerdictV1, PROVIDER_SIGNAL_V1_VERSION,
+    };
+    let mut fixture = Fixture::new();
+    let providers = fixture.providers.clone();
+    let first = fixture.prepare(&providers, &key());
+    assert_eq!(fixture.finish(first, true).status, 200);
+    crate::provider_integration_store::put_signal(
+        &fixture.connection,
+        &ProviderSignalV1 {
+            version: PROVIDER_SIGNAL_V1_VERSION,
+            provider_id: SHIELD.to_owned(),
+            capability: ProviderCapabilityV1::OriginReputation,
+            subject: ProviderSubjectV1 {
+                kind: ProviderSubjectKindV1::Origin,
+                digest: "a".repeat(64),
+            },
+            verdict: ProviderVerdictV1::Danger,
+            reason_codes: vec!["phishing".to_owned()],
+            observed_at_ms: NOW,
+            expires_at_ms: NOW + 60_000,
+            inventory: ProviderInventoryV1::ProviderSide,
+            state: ProviderSignalStateV1::Fresh,
+        },
+    )
+    .unwrap();
+
+    let same = fixture.prepare(&providers, &key());
+    assert_eq!(fixture.finish(same, true).status, 200);
+    assert_eq!(cached_signals(&fixture), 1, "the same manifest keeps them");
+
+    let mut changed = providers;
+    changed[0].manifest_digest = format!("{:064x}", 9);
+    fixture.providers = changed.clone();
+    let other = fixture.prepare(&changed, &key());
+    assert_eq!(fixture.finish(other, true).status, 200);
+    assert_eq!(cached_signals(&fixture), 0);
+}

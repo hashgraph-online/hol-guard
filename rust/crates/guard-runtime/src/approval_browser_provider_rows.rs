@@ -53,8 +53,10 @@ pub(crate) fn provider_rows(
             else {
                 continue;
             };
-            let Ok(Some(connected)) = provider_connection(connection, &provider.id) else {
-                continue;
+            let connected = match provider_connection(connection, &provider.id) {
+                Ok(Some(connected)) => connected,
+                Ok(None) => continue,
+                Err(_) => return Vec::new(),
             };
             if connected.state != ProviderConnectionStateV1::Connected
                 || connected.manifest_digest != provider.manifest_digest
