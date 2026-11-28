@@ -20,6 +20,21 @@ pub(crate) struct Current {
     pub(crate) risk_categories: Vec<String>,
 }
 
+/// `current` with its action, source and summary replaced.
+pub(crate) fn replaced(
+    current: Current,
+    action: GuardAction,
+    source: &str,
+    summary: &str,
+) -> Current {
+    Current {
+        action,
+        source: source.to_owned(),
+        summary: summary.to_owned(),
+        ..current
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Decision {
     pub(crate) action: GuardAction,
