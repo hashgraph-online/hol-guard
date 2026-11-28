@@ -365,6 +365,8 @@ class HookWorkerNativeMixin:
                     exact_command_block=edge.get("exact_command_block"),
                     review_evidence=cast("Mapping[str, object] | None", edge.get("review_evidence")),
                 )
+                # A paused review is still the edge's decision: the harness gets its receipt stamp.
+                response = _attach_transition_observation(dict(response), edge)
                 if defer_accepted_recording:
                     return response, True
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
@@ -381,15 +383,18 @@ class HookWorkerNativeMixin:
                         guard_home,
                         deadline,
                     )
+                block = _attach_transition_observation(
+                    dict(cast("Mapping[str, object]", custom_block["harness_response"])), edge
+                )
                 return (
                     (
-                        dict(cast("Mapping[str, object]", custom_block["harness_response"]))
+                        block
                         if defer_accepted_recording
                         else _record_native_pre_activity(
                             self,
                             native_harness,
                             payload,
-                            dict(cast("Mapping[str, object]", custom_block["harness_response"])),
+                            block,
                             accepted_receipt,
                             recorded=recorded,
                         )
@@ -439,6 +444,7 @@ class HookWorkerNativeMixin:
                     deadline=deadline,
                 )
                 if command_block is not None:
+                    command_block = _attach_transition_observation(dict(command_block), edge)
                     return (
                         command_block
                         if defer_accepted_recording
