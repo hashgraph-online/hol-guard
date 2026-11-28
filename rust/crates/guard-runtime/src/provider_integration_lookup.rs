@@ -46,7 +46,7 @@ use serde_json::Value;
 use zeroize::Zeroizing;
 
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
-use crate::provider_integration_secret::load_provider_key;
+use crate::provider_integration_secret::load_provider_key_runtime;
 use crate::provider_integration_store::{
     provider_connection, put_signal, ProviderStoreResult, PutSignalOutcome,
 };
@@ -279,7 +279,7 @@ pub fn run_lookup(
         Ok(body) => body,
         Err(_) => return not_sent(NotSent::BodyInvalid),
     };
-    let Some(key) = load_provider_key(secrets, &manifest.id) else {
+    let Some(key) = load_provider_key_runtime(secrets, &manifest.id) else {
         return not_sent(NotSent::KeyMissing);
     };
     let digest = job.subject.digest.as_str();
@@ -301,6 +301,7 @@ pub fn run_lookup(
         },
         host: capability.request.host.clone(),
         path: capability.request.path.clone(),
+        query: None,
         header: manifest.auth.header.clone(),
         key: Zeroizing::new(key.expose().to_owned()),
         body: Some(body),

@@ -3,6 +3,8 @@
 Status: proposed. This document describes a product and implementation plan. It does not claim that
 the provider contract, CLI, dashboard, or cloud service already exists.
 
+The accepted v1 custody and delivery decisions are recorded in the [implementation ADR](secret-management-adr.md).
+
 Companion documents are the [TODO](secret-management-todo.md), [takeaway prompt](secret-management-takeaway-prompt.md),
 [threat model](secret-management-threat-model.md), [provider matrix](secret-management-provider-matrix.md),
 [contract proposal](secret-management-provider-contract.md), [contribution guide](secret-management-provider-contributing.md),

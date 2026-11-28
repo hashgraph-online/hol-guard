@@ -28,6 +28,7 @@ fn request(path: &str) -> ProviderRequest {
         method: ProviderMethod::Post,
         host: "api.provider.exampleshield.test".to_owned(),
         path: path.to_owned(),
+        query: None,
         header: "x-api-key".to_owned(),
         key: Zeroizing::new(STORED.to_owned()),
         body: Some(r#"{"target":"https://storefront.example.com/"}"#.to_owned()),

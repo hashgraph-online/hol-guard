@@ -48,6 +48,12 @@ def configure_guard_integrations_parser(
     )
     conformance.add_argument("--json", action="store_true", help="Print the native answer as JSON")
     configure_provider_subcommands(commands)
+    secret_conformance = commands.add_parser(
+        "secret-conformance",
+        help="Validate a secret-provider manifest without connecting to its provider",
+    )
+    secret_conformance.add_argument("manifest", help="Path to the secret-provider manifest")
+    secret_conformance.add_argument("--json", action="store_true", help="Print the native answer as JSON")
 
 
 def run_integrations_command(
@@ -58,13 +64,13 @@ def run_integrations_command(
 ) -> int:
     stream = output_stream if output_stream is not None else sys.stdout
     errors = error_stream if error_stream is not None else sys.stderr
-    if getattr(args, "integrations_command", None) != "conformance":
+    if getattr(args, "integrations_command", None) not in {"conformance", "secret-conformance"}:
         from .integrations_providers_command import run_provider_command
 
         return run_provider_command(args, output_stream=stream, error_stream=errors)
     as_json = bool(getattr(args, "json", False))
     try:
-        result = _conformance(args)
+        result = _secret_conformance(args) if args.integrations_command == "secret-conformance" else _conformance(args)
     except IntegrationsCommandError as exc:
         if as_json:
             print(json.dumps({"ok": False, "error": {"code": exc.code, "message": str(exc)}}), file=stream)
@@ -97,7 +103,16 @@ def _conformance(args: argparse.Namespace) -> dict[str, object]:
     return {key: value for key, value in reply.items() if key != "ok"}
 
 
-def _native_request(line: str) -> dict[str, object]:
+def _secret_conformance(args: argparse.Namespace) -> dict[str, object]:
+    request = {"manifest": _absolute(args.manifest)}
+    reply = _native_request(json.dumps(request, separators=(",", ":")), command="secret-provider-conformance")
+    if reply.get("ok") is not True:
+        error = str(reply.get("error") or "secret_provider_conformance")
+        raise IntegrationsCommandError(error, "The secret-provider manifest could not be checked.")
+    return {key: value for key, value in reply.items() if key != "ok"}
+
+
+def _native_request(line: str, *, command: str = "provider-conformance") -> dict[str, object]:
     from ..native_runtime import _run_native_process, native_runtime_status
 
     status = native_runtime_status()
@@ -105,7 +120,7 @@ def _native_request(line: str) -> dict[str, object]:
         raise IntegrationsCommandError("native_runtime_unavailable", "The HOL Guard native runtime is required.")
     output = _run_native_process(
         status.identity.path,
-        ("provider-conformance", "--stdin"),
+        (command, "--stdin"),
         input_text=line,
         timeout_seconds=_NATIVE_TIMEOUT_SECONDS,
     )
@@ -120,6 +135,9 @@ def _native_request(line: str) -> dict[str, object]:
 
 def _print(result: dict[str, object], stream: TextIO) -> None:
     provider = result.get("provider_id") or "The manifest"
+    if "passed" not in result:
+        print(f"{provider} secret-provider manifest passes.", file=stream)
+        return
     verdict = "passes" if result.get("passed") is True else "fails"
     print(
         f"{provider} {verdict} conformance "

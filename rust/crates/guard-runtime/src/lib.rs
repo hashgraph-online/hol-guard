@@ -865,6 +865,24 @@ mod provider_conformance_command;
 mod pyyaml_dump;
 mod runtime_output;
 mod runtime_output_directory;
+#[allow(dead_code)]
+mod secret_audit;
+mod secret_broker;
+mod secret_command;
+#[allow(dead_code)]
+mod secret_delivery;
+mod secret_exec;
+#[allow(dead_code)]
+mod secret_hook;
+#[allow(dead_code)]
+mod secret_lease;
+#[allow(dead_code)]
+mod secret_policy;
+#[allow(dead_code)]
+mod secret_provider_adapter;
+mod secret_provider_conformance;
+mod secret_reference;
+mod secret_store_platform;
 mod swarm_op;
 mod sync_state_ledger;
 // The seams the evidence writer runs on. Each is reached through

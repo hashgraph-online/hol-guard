@@ -62,6 +62,7 @@ const OWNERS: &[&str] = &[
     "provider_integration_routes_lookup_tests.rs",
     "provider_integration_worker.rs",
     "provider_integration_worker_tests.rs",
+    "secret_provider_adapter.rs",
 ];
 
 /// The only lines of `lib.rs` that may name an owner module.

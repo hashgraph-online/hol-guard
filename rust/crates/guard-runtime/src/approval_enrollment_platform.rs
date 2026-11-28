@@ -9,13 +9,24 @@ mod windows_secure_storage;
 
 #[path = "approval_enrollment_platform_dispatch.rs"]
 mod dispatch;
+#[path = "secret_store_platform_backend.rs"]
+mod secret_store_platform_backend;
 #[cfg(not(test))]
 pub(super) use dispatch::read_platform_secret_for_state;
 pub(super) use dispatch::write_platform_secret_for_state;
+pub(super) use dispatch::{
+    delete_platform_secret_for_namespace, read_platform_secret_for_namespace,
+    write_platform_secret_for_namespace,
+};
 #[cfg(target_os = "windows")]
 pub(super) use dispatch::{read_platform_secret, write_platform_secret};
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 pub(super) use dispatch::{read_platform_secret, write_platform_secret};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(super) use secret_store_platform_backend::{
+    delete_platform_secret_with_service, read_platform_secret_with_service,
+    read_platform_secret_with_service_trim, write_platform_secret_with_service,
+};
 
 #[cfg(any(target_os = "linux", all(test, unix)))]
 mod bounded_transport {
@@ -311,9 +322,26 @@ mod bounded_transport {
         })
     }
 
+    #[allow(dead_code)]
     pub(super) fn classify_lookup(
         completed: Completed,
         max_bytes: usize,
+    ) -> Result<Option<String>, String> {
+        classify_lookup_with_trim(completed, max_bytes, true)
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn classify_lookup_preserving_value(
+        completed: Completed,
+        max_bytes: usize,
+    ) -> Result<Option<String>, String> {
+        classify_lookup_with_trim(completed, max_bytes, false)
+    }
+
+    fn classify_lookup_with_trim(
+        completed: Completed,
+        max_bytes: usize,
+        trim_value: bool,
     ) -> Result<Option<String>, String> {
         if !completed.status.success() {
             // secret-tool uses status 1 with no output for a missing item. Any
@@ -331,11 +359,15 @@ mod bounded_transport {
         }
         let value = String::from_utf8(completed.stdout)
             .map_err(|_| super::SECURE_STATE_INVALID.to_owned())?;
-        let value = value.trim();
+        let value = if trim_value {
+            value.trim().to_owned()
+        } else {
+            value.strip_suffix('\n').unwrap_or(&value).to_owned()
+        };
         if value.len() > max_bytes {
             return Err(super::SECURE_STATE_INVALID.to_owned());
         }
-        Ok(Some(value.to_owned()))
+        Ok(Some(value))
     }
 }
 
@@ -354,23 +386,7 @@ pub(super) fn read_platform_secret_with_limit(
     account: &str,
     max_bytes: usize,
 ) -> Result<Option<String>, String> {
-    use security_framework::passwords::generic_password;
-
-    let value = match generic_password(
-        security_framework::passwords::PasswordOptions::new_generic_password(SERVICE_NAME, account),
-    ) {
-        Ok(value) => value,
-        // Security.framework's stable errSecItemNotFound value. Do not turn
-        // any other keychain failure into an apparent unenrolled state.
-        Err(error) if error.code() == -25300 => return Ok(None),
-        Err(error) => return Err(map_keychain_error(error)),
-    };
-    let value =
-        String::from_utf8(value).map_err(|_| "native_approval_secure_state_invalid".to_owned())?;
-    if value.len() > max_bytes {
-        return Err("native_approval_secure_state_invalid".to_owned());
-    }
-    Ok(Some(value.trim().to_owned()))
+    read_platform_secret_with_service_trim(SERVICE_NAME, account, max_bytes)
 }
 
 #[cfg(target_os = "macos")]
@@ -384,17 +400,7 @@ pub(super) fn write_platform_secret_with_limit(
     value: &str,
     max_bytes: usize,
 ) -> Result<(), String> {
-    use security_framework::passwords::set_generic_password;
-
-    if value.len() > max_bytes {
-        return Err("native_approval_secure_state_invalid".to_owned());
-    }
-    set_generic_password(SERVICE_NAME, account, value.as_bytes()).map_err(map_keychain_error)
-}
-
-#[cfg(target_os = "macos")]
-fn map_keychain_error(_error: security_framework::base::Error) -> String {
-    "native_approval_secure_state_unavailable".to_owned()
+    write_platform_secret_with_service(SERVICE_NAME, account, value, max_bytes)
 }
 
 #[cfg(target_os = "linux")]
@@ -407,14 +413,7 @@ pub(super) fn read_platform_secret_with_limit(
     account: &str,
     max_bytes: usize,
 ) -> Result<Option<String>, String> {
-    let output = bounded_transport::run_helper(
-        std::path::Path::new("/usr/bin/secret-tool"),
-        &["lookup", "service", SERVICE_NAME, "account", account],
-        None,
-        max_bytes.saturating_add(1),
-        bounded_transport::DEFAULT_TIMEOUT,
-    )?;
-    bounded_transport::classify_lookup(output, max_bytes)
+    read_platform_secret_with_service_trim(SERVICE_NAME, account, max_bytes)
 }
 
 #[cfg(target_os = "linux")]
@@ -428,29 +427,7 @@ pub(super) fn write_platform_secret_with_limit(
     value: &str,
     max_bytes: usize,
 ) -> Result<(), String> {
-    if value.len() > max_bytes {
-        return Err(SECURE_STATE_INVALID.to_owned());
-    }
-    let output = bounded_transport::run_helper(
-        std::path::Path::new("/usr/bin/secret-tool"),
-        &[
-            "store",
-            "--label",
-            "HOL Guard native approval enrollment",
-            "service",
-            SERVICE_NAME,
-            "account",
-            account,
-        ],
-        Some(value.as_bytes()),
-        max_bytes,
-        bounded_transport::DEFAULT_TIMEOUT,
-    )?;
-    if output.status.success() && output.stdout.is_empty() && !output.stderr_seen {
-        Ok(())
-    } else {
-        Err(SECURE_STATE_UNAVAILABLE.to_owned())
-    }
+    write_platform_secret_with_service(SERVICE_NAME, account, value, max_bytes)
 }
 
 #[cfg(all(test, unix))]

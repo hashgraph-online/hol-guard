@@ -18,6 +18,10 @@ use guard_contracts::{provider_id_is_valid, PROVIDER_KEY_MAX_BYTES};
 use zeroize::Zeroizing;
 
 use crate::encrypted_secret_store::EncryptedFileSecretStore;
+#[cfg(not(test))]
+use crate::secret_reference::SecretReference;
+#[cfg(not(test))]
+use crate::secret_store_platform;
 
 const SECRET_PREFIX: &str = "provider:";
 const SECRET_SUFFIX: &str = ":api-key";
@@ -82,6 +86,13 @@ pub fn provider_secret_id(provider_id: &str) -> Option<String> {
         .then(|| format!("{SECRET_PREFIX}{provider_id}{SECRET_SUFFIX}"))
 }
 
+#[cfg(not(test))]
+fn native_account(provider_id: &str) -> Option<String> {
+    let reference =
+        SecretReference::parse(&format!("guard-secret://{provider_id}/connection/api-key")).ok()?;
+    Some(reference.canonical_digest())
+}
+
 fn charset_allows(charset: ProviderKeyCharsetV1, key: &str) -> bool {
     let bytes = key.as_bytes();
     let body_end = match charset {
@@ -139,6 +150,31 @@ pub fn store_provider_key(
         .map_err(|_| ProviderSecretError::StoreUnavailable)
 }
 
+/// Production provider-key write. The file-store argument remains in the route API for
+/// compatibility, but provider credentials are stored in the native OS secret store.
+#[cfg(not(test))]
+pub fn store_provider_key_runtime(
+    _store: &mut EncryptedFileSecretStore,
+    provider_id: &str,
+    key: &ProviderKey,
+    auth: &CompiledProviderAuthV1,
+) -> Result<(), ProviderSecretError> {
+    check_key_format(key.expose(), auth)?;
+    let account = native_account(provider_id).ok_or(ProviderSecretError::ProviderIdInvalid)?;
+    secret_store_platform::write(&account, key.expose())
+        .map_err(|_| ProviderSecretError::StoreUnavailable)
+}
+
+#[cfg(test)]
+pub fn store_provider_key_runtime(
+    store: &mut EncryptedFileSecretStore,
+    provider_id: &str,
+    key: &ProviderKey,
+    auth: &CompiledProviderAuthV1,
+) -> Result<(), ProviderSecretError> {
+    store_provider_key(store, provider_id, key, auth)
+}
+
 /// Puts back a key Guard stored earlier, without checking it against the current manifest's
 /// `keyFormat`: a rollback must not lose a key because the format changed since it was stored.
 pub fn restore_provider_key(
@@ -153,6 +189,26 @@ pub fn restore_provider_key(
         .map_err(|_| ProviderSecretError::StoreUnavailable)
 }
 
+#[cfg(not(test))]
+pub fn restore_provider_key_runtime(
+    _store: &mut EncryptedFileSecretStore,
+    provider_id: &str,
+    key: &ProviderKey,
+) -> Result<(), ProviderSecretError> {
+    let account = native_account(provider_id).ok_or(ProviderSecretError::ProviderIdInvalid)?;
+    secret_store_platform::write(&account, key.expose())
+        .map_err(|_| ProviderSecretError::StoreUnavailable)
+}
+
+#[cfg(test)]
+pub fn restore_provider_key_runtime(
+    store: &mut EncryptedFileSecretStore,
+    provider_id: &str,
+    key: &ProviderKey,
+) -> Result<(), ProviderSecretError> {
+    restore_provider_key(store, provider_id, key)
+}
+
 /// The stored key, or `None` when the provider has none or the id is outside the contract.
 pub fn load_provider_key(
     store: &mut EncryptedFileSecretStore,
@@ -162,6 +218,31 @@ pub fn load_provider_key(
     store
         .get_secret(&secret_id)
         .map(|key| ProviderKey::new(Zeroizing::new(key)))
+}
+
+#[cfg(not(test))]
+pub fn load_provider_key_runtime(
+    store: &mut EncryptedFileSecretStore,
+    provider_id: &str,
+) -> Option<ProviderKey> {
+    let account = native_account(provider_id)?;
+    if let Some(secret) = secret_store_platform::read(&account).ok().flatten() {
+        return Some(ProviderKey::new(secret.into_inner()));
+    }
+    let secret_id = provider_secret_id(provider_id)?;
+    let legacy = store.get_secret(&secret_id)?;
+    let key = ProviderKey::new(Zeroizing::new(legacy));
+    let _ = secret_store_platform::write(&account, key.expose());
+    let _ = delete_provider_key(store, provider_id);
+    Some(key)
+}
+
+#[cfg(test)]
+pub fn load_provider_key_runtime(
+    store: &mut EncryptedFileSecretStore,
+    provider_id: &str,
+) -> Option<ProviderKey> {
+    load_provider_key(store, provider_id)
 }
 
 /// Disconnect: deletes one provider's key file. The store's encryption is not set up first, so an
@@ -178,6 +259,27 @@ pub fn delete_provider_key(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         result => result,
     }
+}
+
+#[cfg(not(test))]
+pub fn delete_provider_key_runtime(
+    store: &EncryptedFileSecretStore,
+    provider_id: &str,
+) -> std::io::Result<()> {
+    let Some(account) = native_account(provider_id) else {
+        return Ok(());
+    };
+    let native = secret_store_platform::delete(&account).map_err(std::io::Error::other);
+    let legacy = delete_provider_key(store, provider_id);
+    native.and(legacy)
+}
+
+#[cfg(test)]
+pub fn delete_provider_key_runtime(
+    store: &EncryptedFileSecretStore,
+    provider_id: &str,
+) -> std::io::Result<()> {
+    delete_provider_key(store, provider_id)
 }
 
 /// Uninstall and "forget this device": deletes every provider key under `guard_home`. Other

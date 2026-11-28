@@ -85,6 +85,17 @@ fn target_for_device(account: &str) -> String {
     format!("org.hashgraphonline.hol-guard.native-approval.v1.device.{account}")
 }
 
+fn target_for_namespaced_device(namespace: &str, account: &str) -> String {
+    let mut material = Vec::with_capacity(namespace.len() + account.len() + 1);
+    material.extend_from_slice(namespace.as_bytes());
+    material.push(0);
+    material.extend_from_slice(account.as_bytes());
+    format!(
+        "org.hashgraphonline.hol-guard.native-secret.v1.device.{}",
+        digest_bytes(&material)
+    )
+}
+
 fn entropy_for(account: &str) -> Vec<u8> {
     let mut entropy = Vec::with_capacity(ENTROPY_DOMAIN.len() + account.len());
     entropy.extend_from_slice(ENTROPY_DOMAIN);
@@ -392,7 +403,7 @@ pub(super) fn read_direct(account: &str, max_bytes: usize) -> Result<Option<Stri
         guard_runtime_windows_process::secure_zero(&mut bytes);
         return Err(invalid());
     }
-    let trimmed = value.trim().to_owned();
+    let trimmed = value.strip_suffix('\n').unwrap_or(&value).to_owned();
     let mut bytes = value.into_bytes();
     guard_runtime_windows_process::secure_zero(&mut bytes);
     Ok(Some(trimmed))
@@ -404,6 +415,57 @@ pub(super) fn write_direct(account: &str, value: &str, max_bytes: usize) -> Resu
     }
     guard_runtime_windows_process::credential_write(&target_for_device(account), value.as_bytes())
         .map_err(map_storage_error)
+}
+
+pub(super) fn read_direct_namespaced(
+    namespace: &str,
+    account: &str,
+    max_bytes: usize,
+) -> Result<Option<String>, String> {
+    let target = target_for_namespaced_device(namespace, account);
+    let Some(bytes) =
+        guard_runtime_windows_process::credential_read(&target).map_err(map_storage_error)?
+    else {
+        return Ok(None);
+    };
+    let value = match String::from_utf8(bytes) {
+        Ok(value) => value,
+        Err(error) => {
+            let mut bytes = error.into_bytes();
+            guard_runtime_windows_process::secure_zero(&mut bytes);
+            return Err(invalid());
+        }
+    };
+    if value.len() > max_bytes {
+        let mut bytes = value.into_bytes();
+        guard_runtime_windows_process::secure_zero(&mut bytes);
+        return Err(invalid());
+    }
+    let trimmed = value.trim().to_owned();
+    let mut bytes = value.into_bytes();
+    guard_runtime_windows_process::secure_zero(&mut bytes);
+    Ok(Some(trimmed))
+}
+
+pub(super) fn write_direct_namespaced(
+    namespace: &str,
+    account: &str,
+    value: &str,
+    max_bytes: usize,
+) -> Result<(), String> {
+    if value.len() > max_bytes {
+        return Err(invalid());
+    }
+    let target = target_for_namespaced_device(namespace, account);
+    guard_runtime_windows_process::credential_write(&target, value.as_bytes())
+        .map_err(map_storage_error)
+}
+
+pub(super) fn delete_direct_namespaced(namespace: &str, account: &str) -> Result<(), String> {
+    let target = target_for_namespaced_device(namespace, account);
+    guard_runtime_windows_process::credential_delete(&target)
+        .map_err(map_storage_error)
+        .map(|_| ())
 }
 
 pub(super) fn read(

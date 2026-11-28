@@ -1591,6 +1591,7 @@ dependencies = [
  "nix",
  "pbkdf2",
  "pep440_rs",
+ "percent-encoding",
  "regex",
  "ring",
  "roxmltree 0.21.1",

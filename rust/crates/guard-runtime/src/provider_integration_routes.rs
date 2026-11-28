@@ -34,7 +34,7 @@ use crate::provider_integration_managed::ManagedProviderSettings;
 pub use crate::provider_integration_proof::{
     ProofAction, ProofLedger, MAX_PENDING_PROOFS, PROOF_TTL_MS,
 };
-use crate::provider_integration_secret::delete_provider_key;
+use crate::provider_integration_secret::delete_provider_key_runtime;
 use crate::provider_integration_store::{
     forget_provider, in_write_savepoint, provider_connection, put_capability_setting,
     put_connection, CapabilitySetting, ProviderConnection, ProviderStoreResult,
@@ -315,7 +315,7 @@ fn disconnect(
     ledger.advance(&provider.id);
     // The key goes first: a connection row without a key is harmless, a key without one is not.
     let secrets = EncryptedFileSecretStore::new(context.guard_home);
-    delete_provider_key(&secrets, &provider.id).map_err(|_| unavailable())?;
+    delete_provider_key_runtime(&secrets, &provider.id).map_err(|_| unavailable())?;
     let was_connected =
         forget_provider(context.connection, &provider.id).map_err(|_| unavailable())?;
     Ok(ok(json!({

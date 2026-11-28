@@ -2787,6 +2787,14 @@
    "body": "945ea068fd97"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The Windows native credential backend is supported, but interactive hidden prompting is unavailable without a platform console API. Windows setup uses the explicit stdin-value path, which keeps the value on the native process stdin and returns unavailable for an interactive prompt.",
+   "file": "rust/crates/guard-runtime/src/secret_command.rs",
+   "item": "pub(crate) fn run_prompt(_reference_text: &str) -> Value",
+   "cfg": "not(unix)",
+   "body": "6cf90207e6aa"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/shell_request_inspection_host.rs",
    "item": "fn current_uid -- non-Unix block",
    "verdict": "posix-primitive",

@@ -230,6 +230,10 @@ def _dispatch_guard_command(
         from .integrations_command import run_integrations_command
 
         return run_integrations_command(args, output_stream=output_stream, error_stream=error_stream)
+    if args.guard_command == "secrets":
+        from .secrets_command import run_secrets_command
+
+        return run_secrets_command(args, output_stream=output_stream, error_stream=error_stream)
     if args.guard_command == "policy":
         from .commands_dispatch_policy_dx import FILE_COMMANDS, run_policy_file_command
 
