@@ -119,6 +119,8 @@ pub(crate) fn approval_browser_card(envelope: &Value, harness: &str) -> Option<V
         agent: agent_name(harness).to_owned(),
         first_visit_in_task: false,
         left_granted_site: false,
+        // Provider rows join once the lookup cache is wired to the approval path.
+        provider_findings: Vec::new(),
     };
     let mut card = browser_card(&request).ok()?;
     if redacted {

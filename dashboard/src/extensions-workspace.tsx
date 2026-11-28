@@ -4,8 +4,8 @@ export {
   authorityActionErrorMessage,
   buildExtensionMutation,
   currentExtensionRouteState,
-  ProtectionCenterWorkspace as ExtensionsWorkspace,
   requiresExtensionRecoveryApproval,
 } from "./protection-center/protection-center-workspace";
+export { ExtensionsRouteSwitch as ExtensionsWorkspace } from "./integrations/extensions-route-switch";
 export { ReviewModal, type ProtectionPendingChange } from "./protection-center/protection-change-review";
 export { ProtectionAuthorityNotice } from "./protection-center/components/protection-authority-notice";

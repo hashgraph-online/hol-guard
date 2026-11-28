@@ -216,9 +216,15 @@ pub(super) fn serve(
             Ok(verified) => verified,
             Err(answer) => return split(answer),
         };
-        return with_store(config, served, managed, |context| {
+        let provider_id = prepared.provider().id.clone();
+        let answer = with_store(config, served, managed, |context| {
             routes::finish_connect(&mut lock_ledger(), context, prepared, verified)
         });
+        if answer.0 == 200 {
+            // A new key starts with no pacing left over from the old one.
+            lock_worker().forget(&provider_id);
+        }
+        return answer;
     }
     if routes::is_test(method, path) {
         return with_store(config, served, managed, |context| {
@@ -231,12 +237,26 @@ pub(super) fn serve(
             )
         });
     }
-    with_store(config, served, managed, |context| {
+    let answer = with_store(config, served, managed, |context| {
         routes::answer(&mut lock_ledger(), context, method, path, body).unwrap_or(RouteAnswer {
             status: 404,
             body: json!({"error": "not_found"}),
         })
-    })
+    });
+    if let Some(provider_id) = disconnected_provider(&answer) {
+        lock_worker().forget(provider_id);
+    }
+    answer
+}
+
+/// The provider a successful disconnect answered for. Its pacing and negative cache go with the
+/// key and the cached signals, so nothing about the old connection is left in this process.
+fn disconnected_provider(answer: &(u16, Value)) -> Option<&str> {
+    let (status, body) = answer;
+    if *status != 200 || body.get("disconnected").is_none() {
+        return None;
+    }
+    body.get("provider_id").and_then(Value::as_str)
 }
 
 /// Runs `answer` against the daemon store, opened under the storage gate.

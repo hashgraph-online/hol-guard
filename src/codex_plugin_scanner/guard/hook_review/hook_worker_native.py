@@ -32,13 +32,24 @@ from .hook_worker_native_review import (
 from .hook_worker_unavailable import structured_outage_overlay
 
 
+def _attach_transition_observation(response: dict[str, object], edge: Mapping[str, object]) -> dict[str, object]:
+    """Carry the Rust edge's validated transition observation to the harness."""
+
+    transition = edge.get("transition_hook_observation")
+    if isinstance(transition, Mapping):
+        observation = transition.get("observation")
+        if isinstance(observation, Mapping):
+            response["guard_transition_observation"] = dict(observation)
+    return response
+
+
 def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
     """The harness response Rust rendered for the edge decision."""
 
     rendered = edge["harness_response"]
     if not isinstance(rendered, dict):
         raise ValueError("native_hook_edge_invalid_response")
-    return {str(key): value for key, value in rendered.items()}
+    return _attach_transition_observation({str(key): value for key, value in rendered.items()}, edge)
 
 
 # `containment_rewrite` answers the edge gives once it rewrote a sink route.

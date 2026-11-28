@@ -2,6 +2,9 @@ use super::*;
 
 static EDGE_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+#[path = "edge_transition_tests.rs"]
+mod transition_tests;
+
 #[test]
 fn yield_report_scan_is_bound_into_the_pre_tool_receipt() {
     for (text, minimum) in [
@@ -483,18 +486,13 @@ fn evaluates_generic_pretool_for_supported_harness_aliases() {
 
 #[path = "edge_payload_tests.rs"]
 mod payload_tests;
-
-#[path = "edge_request_identity_tests.rs"]
-mod request_identity_tests;
-
-#[path = "edge_review_anchor_tests.rs"]
-mod review_anchor_tests;
-
 #[path = "edge_prompt_notice_tests.rs"]
 mod prompt_notice_tests;
-
-#[path = "edge_watch_tests.rs"]
-mod watch_tests;
-
+#[path = "edge_request_identity_tests.rs"]
+mod request_identity_tests;
 #[path = "edge_result_check_tests.rs"]
 mod result_check_tests;
+#[path = "edge_review_anchor_tests.rs"]
+mod review_anchor_tests;
+#[path = "edge_watch_tests.rs"]
+mod watch_tests;

@@ -9,6 +9,7 @@ use guard_contracts::{
 };
 use serde_json::{json, Value};
 
+use super::settings::settings_baseline;
 use super::{error, fact_rank, ok, unavailable, RouteAnswer, RouteContext, NOT_FOUND};
 use crate::provider_integration_store::{
     capability_settings, provider_connection, provider_connections, ProviderConnection,
@@ -105,6 +106,13 @@ pub(super) fn detail(context: &RouteContext<'_>, provider_id: &str) -> RouteAnsw
             }
             Ok(ProviderDetailV1 {
                 summary: summary(provider, stored.as_ref()),
+                publisher_name: provider.publisher_name.clone(),
+                publisher_url: provider.publisher_url.clone(),
+                surfaces: provider.surfaces.clone(),
+                hosts: provider.hosts.clone(),
+                privacy_url: provider.privacy_url.clone(),
+                terms_url: provider.terms_url.clone(),
+                obtain_url: provider.obtain_url.clone(),
                 auth_kind: ProviderAuthKindV1::ApiKey,
                 shares: shares(provider),
                 enabled_opt_in_facts: stored
@@ -114,6 +122,7 @@ pub(super) fn detail(context: &RouteContext<'_>, provider_id: &str) -> RouteAnsw
                 settings,
                 last_verified_at_ms: stored.and_then(|stored| stored.last_verified_at_ms),
                 cache_counts,
+                settings_baseline: settings_baseline(context.connection, provider_id)?,
             })
         };
     match read() {

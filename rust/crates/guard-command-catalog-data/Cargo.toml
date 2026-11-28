@@ -9,6 +9,7 @@ publish = false
 [build-dependencies]
 guard-command-build = { path = "../guard-command-build" }
 hex.workspace = true
+idna.workspace = true
 ruzstd.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

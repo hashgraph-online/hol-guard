@@ -53,6 +53,7 @@ pub const NOT_CONNECTED: &str = "provider_not_connected";
 pub const SETTING_MANAGED: &str = "provider_setting_managed";
 pub const INVALID_REQUEST: &str = "invalid_request";
 pub const CONNECT_SUPERSEDED: &str = "provider_connect_superseded";
+pub const SETTINGS_CHANGED: &str = "provider_settings_changed";
 
 /// Whether the rollback switch leaves provider integrations on.
 pub fn provider_integrations_enabled(value: Option<&str>) -> bool {
@@ -159,33 +160,6 @@ fn route(path: &str) -> Option<Route<'_>> {
         _ => return None,
     };
     Some(Route::Post(parts[0], action))
-}
-
-/// `POST .../settings/preview` body: the settings the person wants.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-struct SettingsChange {
-    settings: Vec<ProviderCapabilitySettingsV1>,
-    enabled_opt_in_facts: Vec<ProviderShareableFactV1>,
-}
-
-impl SettingsChange {
-    /// Sorted, so the same change previews and applies to the same digest.
-    fn normalized(mut self) -> Self {
-        self.settings
-            .sort_by(|left, right| left.capability.cmp(&right.capability));
-        for setting in &mut self.settings {
-            setting.quieted_reason_codes.sort();
-        }
-        self.enabled_opt_in_facts
-            .sort_by_key(|fact| fact_rank(*fact));
-        self.enabled_opt_in_facts.dedup();
-        self
-    }
-
-    fn digest(&self) -> [u8; 32] {
-        Sha256::digest(serde_json::to_vec(self).unwrap_or_default()).into()
-    }
 }
 
 fn fact_rank(fact: ProviderShareableFactV1) -> usize {
@@ -305,130 +279,6 @@ fn connected(
     }
 }
 
-/// Refuses a change that names an undeclared capability or fact, or that managed policy would
-/// change. Returns the change sorted for its digest.
-fn checked_change(
-    context: &RouteContext<'_>,
-    provider: &CompiledProviderIntegrationV1,
-    change: SettingsChange,
-) -> Result<SettingsChange, RouteAnswer> {
-    let change = change.normalized();
-    let declared = |capability| {
-        provider
-            .capabilities
-            .iter()
-            .any(|declared| declared.capability == capability)
-    };
-    let mut seen = Vec::new();
-    for setting in &change.settings {
-        if !declared(setting.capability) {
-            return Err(error(
-                422,
-                ProviderIntegrationErrorV1::ProviderCapabilityUnavailable.code(),
-            ));
-        }
-        if seen.contains(&setting.capability) || !setting.quieted_reason_codes.is_empty() {
-            return Err(error(400, INVALID_REQUEST));
-        }
-        seen.push(setting.capability);
-        let requested = CapabilitySetting {
-            effect_level: setting.effect,
-            require_fresh: setting.require_fresh_check,
-        };
-        if context
-            .managed
-            .effective(&provider.id, setting.capability, requested)
-            != requested
-        {
-            return Err(error(409, SETTING_MANAGED));
-        }
-    }
-    let offered = shares(provider);
-    if change
-        .enabled_opt_in_facts
-        .iter()
-        .any(|fact| !fact.opt_in_only() || !offered.contains(fact))
-    {
-        return Err(error(400, INVALID_REQUEST));
-    }
-    Ok(change)
-}
-
-fn settings_preview(
-    ledger: &mut ProofLedger,
-    context: &RouteContext<'_>,
-    provider: &CompiledProviderIntegrationV1,
-    body: &[u8],
-) -> Result<RouteAnswer, RouteAnswer> {
-    let change = checked_change(context, provider, read_body(body)?)?;
-    connected(context, &provider.id)?;
-    let (challenge, expires_at_ms) = issue(
-        ledger,
-        context,
-        &provider.id,
-        ProofAction::Settings,
-        change.digest(),
-    )?;
-    let mut answer = challenge_body(&provider.id, challenge, expires_at_ms);
-    answer["settings"] = json!(change.settings);
-    answer["enabled_opt_in_facts"] = json!(change.enabled_opt_in_facts);
-    Ok(ok(answer))
-}
-
-fn settings_apply(
-    ledger: &mut ProofLedger,
-    context: &RouteContext<'_>,
-    provider: &CompiledProviderIntegrationV1,
-    body: &[u8],
-) -> Result<RouteAnswer, RouteAnswer> {
-    let request: ProviderSettingsRequestV1 = read_apply(ledger, body)?;
-    let change = SettingsChange {
-        settings: request.settings,
-        enabled_opt_in_facts: request.enabled_opt_in_facts,
-    }
-    .normalized();
-    if !ledger.spend(
-        &request.proof,
-        &provider.id,
-        ProofAction::Settings,
-        change.digest(),
-        context.now_ms,
-    ) {
-        return Err(error(403, PROOF_INVALID));
-    }
-    // Managed policy may have changed since the preview.
-    let change = checked_change(context, provider, change)?;
-    // The connection read and every write are one change: a failure leaves nothing applied. The
-    // proof stays spent.
-    let write = || -> ProviderStoreResult<Option<()>> {
-        let Some(mut stored) = provider_connection(context.connection, &provider.id)?
-            .filter(|stored| stored.state != ProviderConnectionStateV1::NotConnected)
-        else {
-            return Ok(None);
-        };
-        stored.opt_in_facts = change.enabled_opt_in_facts.clone();
-        stored.updated_at_ms = context.now_ms;
-        for setting in &change.settings {
-            put_capability_setting(
-                context.connection,
-                &provider.id,
-                setting.capability,
-                CapabilitySetting {
-                    effect_level: setting.effect,
-                    require_fresh: setting.require_fresh_check,
-                },
-            )?;
-        }
-        put_connection(context.connection, &stored).map(Some)
-    };
-    in_write_savepoint(context.connection, write)
-        .map_err(|_| unavailable())?
-        .ok_or_else(|| error(409, NOT_CONNECTED))?;
-    // Only a written change supersedes a connect that is still calling the provider.
-    ledger.advance(&provider.id);
-    Ok(ok(json!({ "provider_id": provider.id, "applied": true })))
-}
-
 fn disconnect_preview(
     ledger: &mut ProofLedger,
     context: &RouteContext<'_>,
@@ -488,6 +338,10 @@ mod connect_tests;
 #[path = "provider_integration_routes_lookup.rs"]
 mod lookup;
 pub use lookup::{is_test, origin_subject, run_test, WithTransport};
+
+#[path = "provider_integration_routes_settings.rs"]
+mod settings;
+use settings::{settings_apply, settings_preview};
 
 #[path = "provider_integration_routes_reads.rs"]
 mod reads;

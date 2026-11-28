@@ -384,6 +384,12 @@ transcript in the pull request (after BP-T052).
   chain, with session digest, harness, driver identity hash, profile mode, first and last seen, known
   debugging ports, current origin. Module `rust/crates/guard-runtime/src/browser_session_store.rs`.
   Sessions expire with the harness session or after an idle bound.
+  - Landed: the store and its tables in `browser_session_store.rs` (keyed per harness session).
+    Recording a debugging-port launch now drops sessions idle past the two-hour bound, so the table
+    stays bounded without a sweeper. The idempotent schema step runs on every native write.
+  - Open: expiry when the harness session ends (`expire_harness_session` has no caller because the
+    runtime receives no session-end event yet), and moving the schema step into the native
+    `ensure_schema` op, which does not exist yet.
 - [ ] **BP-T060** Add targets `site-category`, `site`, `site-group`, `session-site` and duration
   `session` to `rust/crates/guard-runtime/src/temporary_mcp_grant.rs` with the selectors in PRD 5.5.
   Extend `guard_store_temporary_mcp.rs` (`covers`, `covered_request_ids`, `resolve_covered`) with
@@ -419,8 +425,12 @@ transcript in the pull request (after BP-T052).
   `temporary-mcp-approval-controls.tsx` and `buildTemporaryMcpResolutionFields` for the new targets and
   durations, driven by the native options. Default preselection `site-category` for 15 minutes when
   eligible. "Block on this site" under More choices.
-- [ ] **BP-T068** Public-suffix snapshot for `site-group` in `guard-command-catalog-data` with a
+- [x] **BP-T068** Public-suffix snapshot for `site-group` in `guard-command-catalog-data` with a
   refresh script and a pinned digest (D5). Until it lands, `site-group` is not offered.
+  - Landed: the snapshot and its SHA-256 pin in `guard-command-catalog-data/public-suffix/` (the
+    build refuses a list that differs from the pin), `scripts/refresh_public_suffix_snapshot.py`
+    with an offline `--check`, and native `guard_command::public_suffix::registrable_domain`. The
+    browser target's `site_group` now uses it.
 - [x] **BP-T069** Policy bundle: add `browserVerb`, `siteGroup`, `browserDriver` to
   `BROWSER_SCOPE_KEYS` in `rust/crates/guard-policy-bundle/src/policy_bundle_v1_rules.rs`, update
   `spec/guard-policy/v1alpha1/schema.json`, `docs/policy/schema-reference.md`, and
@@ -429,10 +439,14 @@ transcript in the pull request (after BP-T052).
     `browserVerbs`, `browserDrivers` and `siteGroups` matchers in the canonical schema and policy
     document, and the regenerated schema reference. A rule scoped by them is skipped when decisions
     are saved, like every other browser scope, so it never widens into a broad allow.
-- [ ] **BP-T070** R-SURFACE: surface resolution in the resident beside `approval_surface_policy`. For
+- [x] **BP-T070** R-SURFACE: surface resolution in the resident beside `approval_surface_policy`. For
   `shared` and `remote-debugging` sessions never auto-open a browser approval page; show the request
   on every non-browser surface and print the link for the user. Extend
   `approval_browser_policy_tests.rs`. Update `docs/guard/approval-browser-policy.md`.
+  - Done: `approval_browser_surface.rs` answers whether a live `shared`, `remote-debugging` or
+    `unknown` session holds the page. The Codex bridge prints the link instead of opening it; the
+    daemon surface, the attention timer and Pi/Oh My Pi (via `approval_page_held` on
+    `/v1/settings`) open nothing. Explicit opens still work.
 - [ ] **BP-T071** R-GATE: setup prompt on the browser card when a shared or remote-debugging session
   has no approval gate. The two required choices stay.
 - [ ] **BP-T072** Agent-facing hook text for browser holds and denials: names the site and the wait,
@@ -571,8 +585,12 @@ transcript in the pull request (after BP-T052).
   the caps of BP-T176, and is a finding only from any other provider; `danger` suspends grants for
   that subject while fresh. Needs BP-T060; until then the decide step applies to exact and category
   grants.
-- [ ] **BP-T128** Lifecycle: disconnect deletes secret and cached signals; uninstall and
+- [x] **BP-T128** Lifecycle: disconnect deletes secret and cached signals; uninstall and
   forget-device flows delete all provider secrets. Tests.
+  - `provider_integration_purge.rs` deletes every provider key, then every connection, setting and
+    cached signal. `hol-guard uninstall --self` runs it before the package goes. A disconnect also
+    drops the worker's pacing for that provider.
+  - [ ] Guard has no "forget this device" flow yet; when it lands it calls the same purge.
 
 ### Routes, CLI, dashboard
 
@@ -609,18 +627,33 @@ transcript in the pull request (after BP-T052).
     contributed-set rules and the maintainer-owned verified list. A set that does not compile serves
     no provider. A test holds the embedded list to the directory. The shipped set is empty until a
     reviewed pack lands.
-- [ ] **BP-T131** CLI `hol-guard integrations list|status|connect|disconnect|test|settings`. The key is
+- [x] **BP-T131** CLI `hol-guard integrations list|status|connect|disconnect|test|settings`. The key is
   read from a prompt or stdin, never an argument, never echoed. Python is glue only, modeled on
   `cli/approval_pulse_commands.py` and `cli/approval_pulse_parser.py`.
-- [ ] **BP-T132** Integrations page `/extensions/integrations` and provider detail
+  - [x] `cli/integrations_providers_command.py` calls the daemon routes. Connect, disconnect and
+    settings show the daemon preview and ask (or need `--yes`) before spending its proof; the key is
+    read with `getpass` or one line of `--key-stdin` and sent only in the connect body.
+- [x] **BP-T132** Integrations page `/extensions/integrations` and provider detail
   `/extensions/provider.<slug>`: capability text, "What leaves this device" rendered from `shares`,
   privacy and terms links, publisher verification state, Connect.
-- [ ] **BP-T133** Connect dialog modeled on `dashboard/src/pulse-setup-modal.tsx` and
+  - [x] The provider detail route now carries the publisher, surfaces, hosts and the privacy, terms and
+    key links from the compiled manifest. Connect opened the CLI hint until BP-T133 replaced it with the dialog.
+    The sponsor label waits for discovery v2 (BP-T140).
+- [x] **BP-T133** Connect dialog modeled on `dashboard/src/pulse-setup-modal.tsx` and
   `pulse-connect-step.tsx`: write-only key field, per-fact toggles, one-use proof, verify, state
   display. "Get a key" link with a static referral parameter and no user data.
-- [ ] **BP-T134** Card finding row (PRD 6.8): provider name, capability label, verdict chip, up to
+  - [x] The dialog replaces the CLI hint on the provider page. A proof near expiry is fetched again
+    before the key is sent, and a replacement that shares different facts or calls different hosts
+    is shown for review instead of being sent. A refused connect spends its proof, so the next try
+    starts from a fresh preview.
+- [x] **BP-T134** Card finding row (PRD 6.8): provider name, capability label, verdict chip, up to
   three reason labels, age. Never reorders or restyles Guard's own findings. Subscribes to a late
   signal on an open card.
+  - [x] `BrowserCardV1.provider_findings` carries typed rows built by `provider_finding_row` from the
+    compiled manifest, so the name and reason labels are manifest text. The card orders fresh
+    verdicts first and never touches Guard's own facts or choices. The approval queue's poll redraws
+    an open card, so a late answer appears once the approval path passes cached signals in (the
+    hook wiring item below).
 - [ ] **BP-T135** Playwright specs for the Integrations page, the connect dialog and the finding row
   at the contract widths, with the testkit provider.
 

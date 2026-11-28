@@ -1225,6 +1225,18 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
   return fetchWithGuardAuth(input, init);
 }
 
+/** Provider integration routes: the list, one provider, and its preview/apply/test actions. */
+export async function fetchProviderIntegrationApi(input: string, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    /^\/v1\/integrations\/providers(?:\/provider\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\/(?:connect|settings|disconnect)(?:\/preview)?|\/test)?)?$/.test(
+      input,
+    );
+  if (!approvedPath) {
+    throw new Error("Invalid provider integration API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 export async function fetchExtensionCatalogV2Api(input: string, init?: RequestInit): Promise<Response> {
   const approvedPath =
     /^\/v2\/extension-controls\/catalog\/(?:index|permissions|extensions\/command\.[a-z0-9.-]+(?:\/(?:permissions|rules|mcp-tools))?)(?:\?[^#]*)?$/.test(

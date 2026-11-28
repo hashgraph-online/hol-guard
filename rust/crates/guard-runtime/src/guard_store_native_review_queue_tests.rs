@@ -127,6 +127,21 @@ fn a_prompted_review_becomes_the_plain_queue_write() {
     assert_eq!(delegated.args["cwd"], "/work");
 }
 
+#[test]
+fn a_review_without_a_policy_snapshot_falls_back_to_a_silent_block() {
+    let guard_home = tempfile::tempdir().unwrap();
+    let workspace = tempfile::tempdir().unwrap();
+    let mut call = args(json!({"respond": {"native_review": {}}}));
+    call["review"]["guard_home"] = json!(guard_home.path().to_string_lossy());
+    call["review"]["envelope"]["workspace"] = json!(workspace.path().to_string_lossy());
+    let delegated = delegate(&call).unwrap();
+    assert_eq!(
+        delegated.method,
+        "add_silent_native_review_approval_request"
+    );
+    assert_eq!(delegated.args["daemon"], true);
+}
+
 fn paused_with(extensions: Value) -> Value {
     let mut review = query(shell());
     review["result"]["command_extensions"] = extensions;
@@ -371,6 +386,11 @@ fn a_paused_review_is_rendered_with_its_stored_row() {
         .with_response(stored_reply(), NO_TOKEN_HOME);
     assert_eq!(reply["row"], stored_reply()["row"]);
     assert!(reply["response"].to_string().contains("Deletes files."));
+    assert_eq!(
+        reply["response"]["approval_center_url"],
+        "http://127.0.0.1:4781/approvals"
+    );
+    assert_eq!(reply["response"]["prompted"], true);
     assert!(reply.get("connector_setup").is_none());
 }
 

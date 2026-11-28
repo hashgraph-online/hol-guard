@@ -31,6 +31,7 @@ pub mod benign_request_api;
 pub mod browser_action_project;
 pub(crate) mod browser_action_target;
 pub mod browser_card;
+pub mod browser_card_provider;
 pub mod browser_driver_compile;
 pub mod browser_driver_enablement;
 pub mod browser_driver_match;
@@ -305,6 +306,7 @@ mod protection_health_facts_tests;
 mod protection_health_tests;
 pub mod provider_integration_compile;
 pub mod provider_origin_share;
+pub mod public_suffix;
 pub mod pytest_argv;
 #[cfg(test)]
 mod pytest_argv_tests;

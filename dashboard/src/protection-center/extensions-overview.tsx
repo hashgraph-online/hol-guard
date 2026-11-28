@@ -52,6 +52,7 @@ import {
   ConnectorDiscoveryNotice,
   PaidCatalogRow,
 } from "./extensions-catalog-rows";
+import { IntegrationsHeaderLink } from "../integrations/integrations-header-link";
 
 export function ExtensionsOverview(props: {
   catalogExtensions: readonly ExtensionCatalogSummary[];
@@ -299,6 +300,8 @@ export function ExtensionsOverview(props: {
         title={PROTECTION_TERMS.pageTitle}
         description="Choose an Extension to review its permissions and effective protection."
         actions={
+          <>
+          <IntegrationsHeaderLink />
           <a
             className="guard-extensions-chip"
             data-testid="sponsor-extension-action"
@@ -309,6 +312,7 @@ export function ExtensionsOverview(props: {
           >
             Sponsor an extension
           </a>
+          </>
         }
       />
       <div data-testid="extensions-surface">

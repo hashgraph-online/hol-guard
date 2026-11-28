@@ -6,7 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{BrowserIntentV1, BrowserProfileModeV1, BrowserSensitiveSurfaceV1};
+use crate::{
+    BrowserIntentV1, BrowserProfileModeV1, BrowserSensitiveSurfaceV1, ProviderCapabilityV1,
+    ProviderSignalStateV1, ProviderVerdictV1,
+};
 
 /// Schema version carried in [`BrowserActionV2::version`].
 pub const BROWSER_ACTION_V2_VERSION: u32 = 2;
@@ -349,6 +352,34 @@ pub struct BrowserCardRequestV1 {
     pub first_visit_in_task: bool,
     #[serde(default)]
     pub left_granted_site: bool,
+    /// Rows already projected from fresh or expected provider signals. Empty when no provider is
+    /// connected.
+    #[serde(default)]
+    pub provider_findings: Vec<BrowserCardProviderFindingV1>,
+}
+
+/// Most reason labels one provider finding row shows.
+pub const BROWSER_CARD_MAX_REASON_LABELS: usize = 3;
+
+/// One provider finding on a browser card (PRD 6.8). Every text field comes from the compiled
+/// manifest; nothing the provider sent reaches the card as text.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserCardProviderFindingV1 {
+    pub provider_id: String,
+    /// The manifest's display name.
+    pub provider_name: String,
+    pub capability: ProviderCapabilityV1,
+    pub verdict: ProviderVerdictV1,
+    pub state: ProviderSignalStateV1,
+    /// Manifest labels for the signal's declared reason codes, at most
+    /// [`BROWSER_CARD_MAX_REASON_LABELS`].
+    pub reason_labels: Vec<String>,
+    /// When the provider answered. The card shows the age, never a provider timestamp.
+    pub observed_at_ms: u64,
+    /// The discovery feed marks the listing as paid. Shown as "Sponsor" beside the name.
+    #[serde(default)]
+    pub sponsored: bool,
 }
 
 /// Native card projection every approval surface renders.
@@ -363,8 +394,8 @@ pub struct BrowserCardV1 {
     pub profile_line: BrowserCardProfileLineV1,
     pub detail: BrowserCardDetailV1,
     pub risk_chips: Vec<BrowserSensitiveSurfaceV1>,
-    /// Provider finding ids, rendered through manifest-declared labels.
-    pub provider_findings: Vec<String>,
+    /// Provider finding rows, after Guard's own facts. They never reorder or restyle those.
+    pub provider_findings: Vec<BrowserCardProviderFindingV1>,
     pub choices: Vec<BrowserCardChoiceV1>,
     /// Coalesced steps when the card covers a burst. Empty for a single action.
     pub steps: Vec<String>,

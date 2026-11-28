@@ -15,12 +15,10 @@ import pytest
 
 from codex_plugin_scanner.guard.hook_review.hook_worker_unavailable import (
     MEDIATION_FIELD,
-    read_structured_view,
     structured_outage_overlay,
     withhold_structured_destination,
     withholds_structured_destination,
 )
-from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_structured import structured_output_view
 from tests.structured_output_mediation_support import (
     _config,
     _mediation,
@@ -80,21 +78,6 @@ def test_the_unavailable_withhold_keeps_the_answer_and_names_no_receipt() -> Non
     assert MEDIATION_FIELD not in response
 
 
-def test_a_view_is_read_from_the_config_and_an_unreadable_config_reads_as_empty() -> None:
-    config = _config()
-    assert read_structured_view(lambda: config) == structured_output_view(config)
-
-    def broken() -> object:
-        raise OSError("machine policy unavailable")
-
-    assert read_structured_view(broken) == {}
-    assert read_structured_view(lambda: None) == {}
-    # A config whose view cannot be sent unchanged binds nothing.
-    unsendable = _config()
-    unsendable.managed_policy.settings["data_control"]["structured_output"]["onMatch"] = 1.5
-    assert read_structured_view(lambda: unsendable) == {}
-
-
 @pytest.mark.parametrize(
     ("answer", "withholds"),
     [
@@ -128,7 +111,7 @@ def test_only_a_native_answer_that_requires_nothing_leaves_the_destination_open(
         harness="omp", event_name="PostToolUse", guard_home=tmp_path, deadline=deadline, load_config=_config
     )
     assert overlay == (withhold_structured_destination({}) if withholds else {})
-    params = {"event_name": "PostToolUse", "view": structured_output_view(_config())}
+    params = {"event_name": "PostToolUse"}
     assert seen == [("structured_outage", "omp", params, tmp_path, deadline)]
 
 

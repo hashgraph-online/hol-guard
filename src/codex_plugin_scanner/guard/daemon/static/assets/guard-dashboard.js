@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-CdVksrz9.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-aUrRL07j.js","assets/chunks/home-protection-module-2ljOU6I5.js","assets/chunks/supply-chain-protection-stats-BfWBBkPj.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-D6aqOZsz.js","assets/chunks/harness-version-label-BurcXmYS.js","assets/chunks/connect-guard-cloud-button-Cc2GZ_t7.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-C7_KJc3T.js","assets/chunks/confirm-dialog-C1Asj0OK.js","assets/chunks/extensions-workspace-B9m9ICz8.js","assets/chunks/app-detail-workspace-WVe37kGf.js","assets/chunks/harness-action-errors-BMFGvfEG.js","assets/chunks/supply-chain-hub-workspace-BAc95i7H.js","assets/chunks/policy-workspace-page-B3mQX5sw.js","assets/chunks/about-workspace-CuJmJCRM.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/swarm-workspace-DpTtZDf_.js","assets/chunks/swarm-handoff-BIqKreGh.js","assets/swarm-workspace.css","assets/chunks/home-dashboard-B20RtTw5.js","assets/chunks/home-protection-module-DOwQHQkj.js","assets/chunks/supply-chain-protection-stats-B87Hyags.js","assets/chunks/workspace-model-hR3eI7UO.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-Ca_M7GbC.js","assets/chunks/fleet-workspace-ufcvnSV6.js","assets/chunks/harness-version-label-BZzL6N7v.js","assets/chunks/connect-guard-cloud-button-BQdiKzoF.js","assets/chunks/guard-repair-control-91tBByHP.js","assets/chunks/settings-workspace-DWexRuxx.js","assets/chunks/pulse-setup-parts-DumagxlL.js","assets/chunks/extensions-workspace-D77jSwTO.js","assets/chunks/app-detail-workspace-DbE8QCXd.js","assets/chunks/harness-action-errors-gSKzCk2t.js","assets/chunks/supply-chain-hub-workspace-B6kUtbCC.js","assets/chunks/policy-workspace-page-BzB6sFbJ.js","assets/chunks/about-workspace-B5Egd2Ab.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -13503,6 +13503,80 @@ function buildDecisionPayload(input) {
 function willPersistExactAction(item, action, scope, requested) {
   return requested && normalizeDecisionScope(item, action, scope) === "artifact" && item.exact_action_persistence_eligible === true;
 }
+const PROVIDER_ID = /^provider\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const MAX_REASON_LABELS = 3;
+const MAX_TEXT$1 = 80;
+const VERDICT_TEXT = {
+  danger: "Flagged as dangerous",
+  caution: "Flagged for caution",
+  ok: "No problems found",
+  unknown: "No verdict"
+};
+const STATE_TEXT = {
+  stale: "Answer out of date",
+  unavailable: "Could not reach the provider",
+  rate_limited: "Provider is limiting requests",
+  key_invalid: "Provider rejected the key",
+  disabled: "Provider turned off"
+};
+const CAPABILITY_TEXT = {
+  "browser.origin-reputation": "Site reputation",
+  "browser.script-integrity": "Script integrity",
+  "browser.page-data-risk": "Page data risk",
+  "browser.download-reputation": "Download reputation",
+  "browser.site-policy": "Site policy"
+};
+function isRecord$e(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function plainText(value) {
+  if (typeof value !== "string") return null;
+  const text2 = value.trim();
+  if (text2.length === 0 || text2.length > MAX_TEXT$1 || /[\p{Cc}\p{Cf}]/u.test(text2)) return null;
+  return text2;
+}
+function parseRow(value) {
+  if (!isRecord$e(value)) return null;
+  const id2 = value.provider_id;
+  const name = plainText(value.provider_name);
+  const capability = value.capability;
+  const verdict = value.verdict;
+  const state = value.state;
+  const observed = value.observed_at_ms;
+  if (typeof id2 !== "string" || !PROVIDER_ID.test(id2) || name === null) return null;
+  if (typeof capability !== "string" || !Object.hasOwn(CAPABILITY_TEXT, capability)) return null;
+  if (typeof verdict !== "string" || !Object.hasOwn(VERDICT_TEXT, verdict)) return null;
+  if (typeof state !== "string" || state !== "fresh" && !Object.hasOwn(STATE_TEXT, state)) return null;
+  if (typeof observed !== "number" || !Number.isSafeInteger(observed) || observed < 0) return null;
+  const labels = Array.isArray(value.reason_labels) ? value.reason_labels.map(plainText) : [];
+  return {
+    provider_id: id2,
+    provider_name: name,
+    capability,
+    verdict,
+    state,
+    reason_labels: [...new Set(labels.filter((label) => label !== null))].slice(0, MAX_REASON_LABELS),
+    observed_at_ms: observed,
+    sponsored: value.sponsored === true
+  };
+}
+function parseProviderFindings(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(parseRow).filter((row) => row !== null);
+}
+function providerCapabilityText(capability) {
+  return CAPABILITY_TEXT[capability] ?? "Provider check";
+}
+function checkedAgo(observedAtMs, nowMs) {
+  const seconds = Math.max(0, Math.floor((nowMs - observedAtMs) / 1e3));
+  if (seconds < 5) return "checked just now";
+  if (seconds < 60) return `checked ${seconds} s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `checked ${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `checked ${hours} h ago`;
+  return `checked ${Math.floor(hours / 24)} d ago`;
+}
 const MCP_EFFECT_COPY = {
   // Only a built-in agent-app tool gets this; no name is read as in-app on its own.
   "in-app": { label: "Only in the app", meaning: "It changes what the agent app shows you and nothing else." },
@@ -14654,7 +14728,7 @@ function parseBrowserCard(value) {
       input_masked: detail.input_masked === true
     },
     risk_chips: [...new Set(chips)],
-    provider_findings: [],
+    provider_findings: parseProviderFindings(value.provider_findings),
     choices: Array.isArray(value.choices) ? value.choices.filter((choice) => typeof choice === "string") : [],
     steps: []
   };
@@ -20332,6 +20406,15 @@ async function fetchExtensionControlApi(input, init) {
   const approvedPath = typeof input === "string" && /^\/v1\/extension-controls\/(?:catalog|effective|history|preview|test|apply|refresh|recover-authority|acknowledge-degraded)$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid extension-control API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+async function fetchProviderIntegrationApi(input, init) {
+  const approvedPath = /^\/v1\/integrations\/providers(?:\/provider\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\/(?:connect|settings|disconnect)(?:\/preview)?|\/test)?)?$/.test(
+    input
+  );
+  if (!approvedPath) {
+    throw new Error("Invalid provider integration API path");
   }
   return fetchWithGuardAuth(input, init);
 }
@@ -35797,6 +35880,50 @@ function BrowserProfileLine({ profile }) {
     reach !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1.5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Flag, { tone: "attention", children: reach }) })
   ] });
 }
+const CHIP = "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium text-brand-dark";
+const VERDICT_TONE = {
+  danger: "border-brand-danger/30 bg-brand-danger/[0.08]",
+  caution: "border-brand-attention/30 bg-brand-attention/[0.08]",
+  ok: "border-brand-green/30 bg-brand-green/[0.08]",
+  unknown: "border-slate-200 bg-slate-50"
+};
+function VerdictChip({ row }) {
+  if (row.state !== "fresh") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `${CHIP} ${VERDICT_TONE.unknown}`, children: STATE_TEXT[row.state] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { "data-provider-verdict": row.verdict, className: `${CHIP} ${VERDICT_TONE[row.verdict]}`, children: VERDICT_TEXT[row.verdict] });
+}
+function ProviderFindingRow({ row, nowMs }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { "data-provider-finding": row.provider_id, className: "py-2 first:pt-0 last:pb-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-x-2 gap-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: row.provider_name }),
+      row.sponsored && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-dark/60", children: "Sponsor" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-brand-dark/60", children: providerCapabilityText(row.capability) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(VerdictChip, { row })
+    ] }),
+    row.state === "fresh" && row.reason_labels.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-1 flex flex-wrap gap-1.5", "aria-label": "Reasons", children: row.reason_labels.map((label) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "text-xs text-brand-dark/80", children: label }, label)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs text-brand-dark/50", children: checkedAgo(row.observed_at_ms, nowMs) })
+  ] });
+}
+function useNow(intervalMs, enabled) {
+  const [now2, setNow] = reactExports.useState(() => Date.now());
+  reactExports.useEffect(() => {
+    if (!enabled) return void 0;
+    const id2 = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id2);
+  }, [intervalMs, enabled]);
+  return now2;
+}
+function BrowserProviderFindings(props) {
+  const labelId = reactExports.useId();
+  const ticking = useNow(1e4, props.nowMs === void 0 && props.findings.length > 0);
+  if (props.findings.length === 0) return null;
+  const nowMs = props.nowMs ?? ticking;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-t border-slate-100 px-4 py-2.5 sm:px-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: labelId, className: "text-xs font-medium text-brand-dark/60", children: "Provider findings" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { "aria-labelledby": labelId, className: "mt-1.5 divide-y divide-slate-100", children: props.findings.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderFindingRow, { row, nowMs }, `${row.provider_id}:${row.capability}`)) })
+  ] });
+}
 function BrowserRiskChips({ chips }) {
   const labelId = reactExports.useId();
   const unique2 = [...new Set(chips)];
@@ -35850,6 +35977,7 @@ function BrowserCallCard(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserInputPreview, { card }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRiskChips, { chips: card.risk_chips })
         ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserProviderFindings, { findings: card.provider_findings }),
         explanation.code !== null && explanation.code.collapsed !== true && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) }),
         explanation.code !== null && explanation.code.collapsed === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer select-none text-sm font-medium text-brand-dark/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/30", children: "See the code it runs" }),
@@ -42601,7 +42729,7 @@ function WatchProtectionBanner(props) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-D6ExxcQr.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-jb1FPMPK.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot, onRestored } = props;
@@ -43341,35 +43469,35 @@ function PulseApprovalOverlay() {
   )) });
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-CdVksrz9.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-aUrRL07j.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-D6aqOZsz.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-C7_KJc3T.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const SwarmWorkspace = lazyWorkspace("swarm-workspace", () => __vitePreload(() => import("./chunks/swarm-workspace-DpTtZDf_.js").then((n) => n.b), true ? __vite__mapDeps([0,1,2]) : void 0).then((m) => ({ default: m.SwarmWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-B20RtTw5.js"), true ? __vite__mapDeps([3,4,5,6,7,8,9]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-ufcvnSV6.js"), true ? __vite__mapDeps([10,11,12,9,13]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-DWexRuxx.js"), true ? __vite__mapDeps([14,13,9,15,12,1,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-B9m9ICz8.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-D77jSwTO.js"), true ? __vite__mapDeps([16,15]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-WVe37kGf.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-DbE8QCXd.js"), true ? __vite__mapDeps([17,18,11]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-CtJlE48x.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BAc95i7H.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-B6kUtbCC.js").then((n) => n.d), true ? __vite__mapDeps([19,18]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-B3mQX5sw.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-BzB6sFbJ.js"), true ? __vite__mapDeps([20,12]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-CuJmJCRM.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-B5Egd2Ab.js"), true ? __vite__mapDeps([21,7,8,22]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-DWNMbsSN.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-BP-eJ2Ie.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-Bkym75PI.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-DZ7rfYw7.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -44598,7 +44726,7 @@ export {
   suggestedSeenExtensions as dy,
   keepsPackageScriptCatalog as dz,
   HiMiniSquares2X2 as e,
-  runPackageSync as e$,
+  resolveSupplyChainAuditFailure as e$,
   profileSetupCommand as e0,
   customExtensionBadge as e1,
   extensionDisplayName as e2,
@@ -44606,107 +44734,108 @@ export {
   extensionStateLabel as e4,
   HiMiniGlobeAlt as e5,
   HiMiniFunnel as e6,
-  discoveryFailureMessage as e7,
-  refreshCodexHostInventory as e8,
-  CODEX_HOST_FALLBACK as e9,
-  computeMetrics as eA,
-  CommandActivityWorkspace as eB,
-  EvidenceFilterBar as eC,
-  EvidenceInsightStrip as eD,
-  EvidenceActionList as eE,
-  EvidenceActionDetail as eF,
-  policyIdentityKey as eG,
-  clearLabelForScope as eH,
-  HiMiniChartBar as eI,
-  HiMiniCheckBadge as eJ,
-  isSupplyChainAuditIncomplete as eK,
-  isSupplyChainAuditEvidence as eL,
-  readString$1 as eM,
-  IconActionButton as eN,
-  HiMiniBeaker as eO,
-  HiMiniBugAnt as eP,
-  ActivationSummary as eQ,
-  ActionResultPanel as eR,
-  fetchSupplyChainBundle as eS,
-  closeOnEscape as eT,
-  ConnectFlowCard as eU,
-  ApprovalProofInline as eV,
-  HiMiniCloudArrowDown as eW,
-  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eX,
-  fetchPackageFirewallStatus as eY,
-  runPackageAudit as eZ,
-  resolveSupplyChainAuditFailure as e_,
-  CONFIGURED_CONNECTIONS_FALLBACK as ea,
-  loadCurrentDashboardBuild as eb,
-  canonicalExtensionId as ec,
-  extensionDetailHref as ed,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as ee,
-  addCustomExtensionPrefillHref as ef,
-  acknowledgeDegradedExtensionControlAuthority as eg,
-  recoverExtensionControlAuthority as eh,
-  connectorSetupLinkFromSearch as ei,
-  readExtensionDetailUrlState as ej,
-  parseProtectionRoute as ek,
-  addCustomExtensionHref as el,
-  runHarnessAction as em,
-  GuardHarnessActionError as en,
-  HiMiniRocketLaunch as eo,
-  HiMiniTrash as ep,
-  fetchGuardApi as eq,
-  formatHarnessCommand as er,
-  appModes as es,
-  fetchApprovalPage as et,
-  fetchPolicy as eu,
-  appSetupTarget as ev,
-  guardActionPresentation as ew,
-  DEFAULT_FILTER_STATE as ex,
-  filterEvidence as ey,
-  sortEvidence as ez,
+  loadCurrentDashboardBuild as e7,
+  fetchProviderIntegrationApi as e8,
+  discoveryFailureMessage as e9,
+  filterEvidence as eA,
+  sortEvidence as eB,
+  computeMetrics as eC,
+  CommandActivityWorkspace as eD,
+  EvidenceFilterBar as eE,
+  EvidenceInsightStrip as eF,
+  EvidenceActionList as eG,
+  EvidenceActionDetail as eH,
+  policyIdentityKey as eI,
+  clearLabelForScope as eJ,
+  HiMiniChartBar as eK,
+  isSupplyChainAuditIncomplete as eL,
+  isSupplyChainAuditEvidence as eM,
+  readString$1 as eN,
+  IconActionButton as eO,
+  HiMiniBeaker as eP,
+  HiMiniBugAnt as eQ,
+  ActivationSummary as eR,
+  ActionResultPanel as eS,
+  fetchSupplyChainBundle as eT,
+  closeOnEscape as eU,
+  ConnectFlowCard as eV,
+  ApprovalProofInline as eW,
+  HiMiniCloudArrowDown as eX,
+  SUPPLY_CHAIN_SYNC_TIMEOUT_MS as eY,
+  fetchPackageFirewallStatus as eZ,
+  runPackageAudit as e_,
+  refreshCodexHostInventory as ea,
+  CODEX_HOST_FALLBACK as eb,
+  CONFIGURED_CONNECTIONS_FALLBACK as ec,
+  readExtensionDetailUrlState as ed,
+  parseProtectionRoute as ee,
+  canonicalExtensionId as ef,
+  extensionDetailHref as eg,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as eh,
+  addCustomExtensionPrefillHref as ei,
+  acknowledgeDegradedExtensionControlAuthority as ej,
+  recoverExtensionControlAuthority as ek,
+  connectorSetupLinkFromSearch as el,
+  addCustomExtensionHref as em,
+  HiMiniCheckBadge as en,
+  runHarnessAction as eo,
+  GuardHarnessActionError as ep,
+  HiMiniRocketLaunch as eq,
+  HiMiniTrash as er,
+  fetchGuardApi as es,
+  formatHarnessCommand as et,
+  appModes as eu,
+  fetchApprovalPage as ev,
+  fetchPolicy as ew,
+  appSetupTarget as ex,
+  guardActionPresentation as ey,
+  DEFAULT_FILTER_STATE as ez,
   fetchWithGuardAuth as f,
-  GuardOperationTimeoutError as f0,
-  startPackageFirewallConnect as f1,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f2,
-  repairSupplyChainProtection as f3,
-  runPackageFirewallAction as f4,
-  parseInterceptProofSnapshot as f5,
-  activatePackageFirewallRuntime as f6,
-  EntitlementNotice as f7,
-  chooseSupplyChainAuditFolder as f8,
-  fetchReceipts as f9,
-  HiMiniArrowUpRight as fA,
-  HiMiniArrowUp as fB,
-  HiMiniChevronLeft as fC,
-  HiMiniArrowDown as fD,
-  runAuditRemediation as fE,
-  isBlockedGuardAction as fF,
-  isSupplyChainScannerEvidence as fG,
-  HiMiniSignal as fH,
-  lazyWorkspace as fa,
-  scopeLabel as fb,
-  HiMiniCloudArrowUp as fc,
-  HiMiniCodeBracket as fd,
-  HiMiniUsers as fe,
-  HiMiniIdentification as ff,
-  policyActionLabel as fg,
-  createCloudExceptionRequest as fh,
-  HiMiniPuzzlePiece as fi,
-  fetchCloudExceptions as fj,
-  fetchCloudExceptionRequests as fk,
-  PaginationControls as fl,
-  PolicyStatField as fm,
-  HiMiniInbox as fn,
-  HiMiniQueueList as fo,
-  Surface as fp,
-  HiMiniEllipsisHorizontal as fq,
-  HiMiniMinus as fr,
-  HiMiniWrench as fs,
-  HiMiniArrowLongRight as ft,
-  HiMiniArrowUpCircle as fu,
-  fetchReleaseFeedApi as fv,
-  fetchMcpPolicyRequest as fw,
-  resolveMcpPolicyRequest as fx,
-  HiMiniDocumentPlus as fy,
-  HiMiniKey as fz,
+  runPackageSync as f0,
+  GuardOperationTimeoutError as f1,
+  startPackageFirewallConnect as f2,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as f3,
+  repairSupplyChainProtection as f4,
+  runPackageFirewallAction as f5,
+  parseInterceptProofSnapshot as f6,
+  activatePackageFirewallRuntime as f7,
+  EntitlementNotice as f8,
+  chooseSupplyChainAuditFolder as f9,
+  HiMiniKey as fA,
+  HiMiniArrowUpRight as fB,
+  HiMiniArrowUp as fC,
+  HiMiniChevronLeft as fD,
+  HiMiniArrowDown as fE,
+  runAuditRemediation as fF,
+  isBlockedGuardAction as fG,
+  isSupplyChainScannerEvidence as fH,
+  HiMiniSignal as fI,
+  fetchReceipts as fa,
+  lazyWorkspace as fb,
+  scopeLabel as fc,
+  HiMiniCloudArrowUp as fd,
+  HiMiniCodeBracket as fe,
+  HiMiniUsers as ff,
+  HiMiniIdentification as fg,
+  policyActionLabel as fh,
+  createCloudExceptionRequest as fi,
+  HiMiniPuzzlePiece as fj,
+  fetchCloudExceptions as fk,
+  fetchCloudExceptionRequests as fl,
+  PaginationControls as fm,
+  PolicyStatField as fn,
+  HiMiniInbox as fo,
+  HiMiniQueueList as fp,
+  Surface as fq,
+  HiMiniEllipsisHorizontal as fr,
+  HiMiniMinus as fs,
+  HiMiniWrench as ft,
+  HiMiniArrowLongRight as fu,
+  HiMiniArrowUpCircle as fv,
+  fetchReleaseFeedApi as fw,
+  fetchMcpPolicyRequest as fx,
+  resolveMcpPolicyRequest as fy,
+  HiMiniDocumentPlus as fz,
   HiMiniComputerDesktop as g,
   HiMiniMagnifyingGlass as h,
   HiMiniListBullet as i,

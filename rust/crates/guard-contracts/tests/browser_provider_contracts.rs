@@ -462,3 +462,24 @@ fn integration_error_codes_match_wire_names() {
         assert_eq!(serde_json::to_value(error).unwrap(), json!(error.code()));
     }
 }
+
+#[test]
+fn provider_finding_row_round_trips_and_refuses_provider_text() {
+    let row = json!({
+        "provider_id": "provider.exampleshield",
+        "provider_name": "ExampleShield",
+        "capability": "browser.origin-reputation",
+        "verdict": "danger",
+        "state": "fresh",
+        "reason_labels": ["Reported for phishing"],
+        "observed_at_ms": 1_000
+    });
+    let parsed: BrowserCardProviderFindingV1 = serde_json::from_value(row.clone()).unwrap();
+    assert!(
+        !parsed.sponsored,
+        "a row is not sponsored unless discovery says so"
+    );
+    let mut free_text = row;
+    free_text["message"] = json!("Provider says this site is fine");
+    assert!(serde_json::from_value::<BrowserCardProviderFindingV1>(free_text).is_err());
+}
