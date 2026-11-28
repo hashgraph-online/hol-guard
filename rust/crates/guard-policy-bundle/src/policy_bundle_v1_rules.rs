@@ -16,13 +16,16 @@ pub(crate) const MATCHER_FAMILIES: [&str; 7] = [
     "prompt-env-read",
     "tool-action",
 ];
-pub(crate) const BROWSER_SCOPE_KEYS: [&str; 6] = [
+pub(crate) const BROWSER_SCOPE_KEYS: [&str; 9] = [
+    "browserDriver",
     "browserIntent",
     "browserOperation",
     "browserProfile",
+    "browserVerb",
     "origin",
     "pathPrefix",
     "sensitiveSurface",
+    "siteGroup",
 ];
 const OTHER_SCOPE_KEYS: [&str; 6] = [
     "agents",
@@ -75,6 +78,11 @@ fn all_in(value: &Value, allowed: &[&str]) -> bool {
             .all(|item| item.as_str().is_some_and(|name| allowed.contains(&name))),
         _ => false,
     }
+}
+
+/// A verb the browser action contract names (`BrowserVerbV1`, snake case).
+fn is_browser_verb(value: &Value) -> bool {
+    serde_json::from_value::<guard_contracts::BrowserVerbV1>(value.clone()).is_ok()
 }
 
 /// `_policy_bundle_rule_is_valid`.
@@ -138,6 +146,11 @@ fn scope_is_valid(scope: Option<&Value>) -> bool {
                     return false;
                 }
             }
+        }
+    }
+    if let Some(Value::Array(verbs)) = scope.get("browserVerb") {
+        if !verbs.iter().all(is_browser_verb) {
+            return false;
         }
     }
     true
@@ -231,3 +244,7 @@ pub(crate) fn cloud_exceptions_are_valid(bundle: &Obj) -> bool {
         Some(_) => false,
     }
 }
+
+#[cfg(test)]
+#[path = "policy_bundle_v1_rules_tests.rs"]
+mod tests;

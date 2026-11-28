@@ -78,6 +78,26 @@ class TestBrowserScopeValidation:
         rule["scope"]["browserProfile"] = ["bogus-profile"]
         assert _policy_bundle_rule_is_valid(rule) is False
 
+    def test_verb_site_group_and_driver_scopes_accepted(self) -> None:
+        """BP-T069: Verb, site group and driver scopes accepted."""
+        rule = _valid_base_rule()
+        rule["scope"]["browserVerb"] = ["click", "type", "cookie_read"]
+        rule["scope"]["siteGroup"] = ["example-org.co.uk"]
+        rule["scope"]["browserDriver"] = ["playwright-mcp"]
+        assert _policy_bundle_rule_is_valid(rule) is True
+
+    def test_unknown_browser_verb_rejected(self) -> None:
+        """BP-T069: A verb outside the browser action contract is rejected."""
+        rule = _valid_base_rule()
+        rule["scope"]["browserVerb"] = ["press"]
+        assert _policy_bundle_rule_is_valid(rule) is False
+
+    def test_site_group_must_be_a_string_list(self) -> None:
+        """BP-T069: A bare string site group is rejected."""
+        rule = _valid_base_rule()
+        rule["scope"]["siteGroup"] = "example-org.com"
+        assert _policy_bundle_rule_is_valid(rule) is False
+
     def test_legacy_bundle_without_browser_fields_still_valid(self) -> None:
         """HGBM074: Backwards compatibility — no browser fields needed."""
         rule = _valid_base_rule()
@@ -399,6 +419,28 @@ class TestBrowserScopeDecisionNarrowing:
         bundle = _valid_bundle_with_rules([rule])
         decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
         assert decisions == []
+
+    def test_rule_with_only_verb_site_group_or_driver_skipped(self) -> None:
+        """BP-T069: Verb, site group and driver scopes never widen into a broad allow."""
+        from codex_plugin_scanner.guard.runtime.runner import _build_policy_bundle_decisions
+
+        for key, value in (
+            ("browserVerb", ["click"]),
+            ("siteGroup", ["example-org.com"]),
+            ("browserDriver", ["playwright-mcp"]),
+        ):
+            rule = self._local_match_rule()
+            rule["artifactType"] = "package_request"
+            rule["matcherFamilies"] = ["package-request"]
+            rule["scope"]["ecosystems"] = []
+            control = _build_policy_bundle_decisions(
+                _valid_bundle_with_rules([rule]), device_id="device-1", device_name="dev"
+            )
+            assert len(control) == 1 and control[0].scope == "harness", key
+            rule["scope"][key] = value
+            bundle = _valid_bundle_with_rules([rule])
+            decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
+            assert decisions == [], key
 
     def test_rule_with_only_origin_skipped(self) -> None:
         """A rule with only origin scope is skipped (no broad allow)."""

@@ -446,10 +446,14 @@ transcript in the pull request (after BP-T052).
     build refuses a list that differs from the pin), `scripts/refresh_public_suffix_snapshot.py`
     with an offline `--check`, and native `guard_command::public_suffix::registrable_domain`. The
     browser target's `site_group` now uses it.
-- [ ] **BP-T069** Policy bundle: add `browserVerb`, `siteGroup`, `browserDriver` to
+- [x] **BP-T069** Policy bundle: add `browserVerb`, `siteGroup`, `browserDriver` to
   `BROWSER_SCOPE_KEYS` in `rust/crates/guard-policy-bundle/src/policy_bundle_v1_rules.rs`, update
   `spec/guard-policy/v1alpha1/schema.json`, `docs/policy/schema-reference.md`, and
   `tests/test_guard_policy_bundle_browser_scopes.py`.
+  - Landed: the three bundle keys (a `browserVerb` must name a `BrowserVerbV1` value), the plural
+    `browserVerbs`, `browserDrivers` and `siteGroups` matchers in the canonical schema and policy
+    document, and the regenerated schema reference. A rule scoped by them is skipped when decisions
+    are saved, like every other browser scope, so it never widens into a broad allow.
 - [x] **BP-T070** R-SURFACE: surface resolution in the resident beside `approval_surface_policy`. For
   `shared` and `remote-debugging` sessions never auto-open a browser approval page; show the request
   on every non-browser surface and print the link for the user. Extend
