@@ -57,15 +57,24 @@ fn policy_source_fence_has_fixed_retry_window() {
 
 #[test]
 fn transient_publication_errors_wait_for_a_fresh_ack() {
-    assert!(waits_for_ack(Some("native_policy_snapshot_resident_changed"), 0));
+    assert!(waits_for_ack(
+        Some("native_policy_snapshot_resident_changed"),
+        0
+    ));
     assert!(waits_for_ack(Some("native_policy_snapshot_expired"), 0));
     assert!(waits_for_ack(Some("native_client_timed_out"), 3));
 }
 
 #[test]
 fn unrecoverable_or_repeated_resident_errors_fail_fast() {
-    assert!(!waits_for_ack(Some("native_policy_snapshot_ack_mismatch"), 0));
-    assert!(!waits_for_ack(Some("native_command_program_binding_mismatch"), 0));
+    assert!(!waits_for_ack(
+        Some("native_policy_snapshot_ack_mismatch"),
+        0
+    ));
+    assert!(!waits_for_ack(
+        Some("native_command_program_binding_mismatch"),
+        0
+    ));
     assert!(!waits_for_ack(Some("native_client_timed_out"), 4));
 }
 
