@@ -3465,7 +3465,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Find which TypeScript sources set the retry limit, then show their timeout lines: run each listed command once, exactly as written, and report the matches.",
+      "prompt": "Show the timeout lines of the TypeScript sources that set the retry limit: run each listed command once, exactly as written, and report the lines each one printed. The printed lines are the whole answer, even when they carry no file name; do not add other calls to find the file.",
       "commands": [
         "rg -ln retryLimit src | xargs rg -n timeoutSeconds",
         "grep -rln retryLimit src | head -20 | xargs grep -n timeoutSeconds",
