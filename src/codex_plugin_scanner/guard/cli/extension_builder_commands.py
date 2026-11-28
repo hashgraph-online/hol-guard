@@ -80,7 +80,9 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
         "validate", help="Rebuild a kit and verify every byte without importing generated code"
     )
     validate.add_argument(
-        "kit", type=Path, help="Kit directory, or a pack, profile or manifest file with --cloud, --browser or --provider"
+        "kit",
+        type=Path,
+        help="Kit directory, or a pack, profile or manifest file with --cloud, --browser or --provider",
     )
     validate.add_argument("--cloud", action="store_true", help="Validate a cloud action pack and run its fixtures")
     validate.add_argument("--browser", action="store_true", help="Compile a browser driver profile as a contribution")

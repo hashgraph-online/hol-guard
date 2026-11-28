@@ -101,9 +101,10 @@ def test_provider_validate_runs_conformance_and_fails_on_a_failed_check(
     assert "FAIL  recordings" in text
     assert "no recording answers ok" in text
 
-    assert run("validate", ["--browser", str(FIXTURE), "--recordings", str(recordings)], capsys)[1]["error"][
-        "code"
-    ] == "builder_mode"
+    assert (
+        run("validate", ["--browser", str(FIXTURE), "--recordings", str(recordings)], capsys)[1]["error"]["code"]
+        == "builder_mode"
+    )
 
 
 def test_provider_generate_and_validate_through_the_native_runtime(
