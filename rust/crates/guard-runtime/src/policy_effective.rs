@@ -467,6 +467,24 @@ pub(crate) fn run_command(reader: impl Read) -> Result<Vec<u8>, String> {
     evaluate(&bytes)
 }
 
+/// The resident `policy_effective` operation advertises this feature.
+pub(crate) const RESIDENT_FEATURE: &str = "policy-effective-resident-v1";
+
+/// The `policy-effective --stdin` answer, given inside the resident.
+///
+/// Composition is pure: it reads no file, store or environment, so the
+/// resident gives the same bytes the one-shot command prints. The publisher
+/// asks here so a new workspace's first publish does not start a process,
+/// which costs over a second on a loaded Windows host.
+pub(crate) fn evaluate_resident(request: &Value) -> Result<Vec<u8>, String> {
+    let bytes =
+        serde_json::to_vec(request).map_err(|_| "policy_effective_request_invalid".to_owned())?;
+    if bytes.len() as u64 > MAX_REQUEST_BYTES {
+        return Err("policy_effective_request_too_large".to_owned());
+    }
+    evaluate(&bytes)
+}
+
 fn evaluate(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let request: Request =
         serde_json::from_slice(bytes).map_err(|_| "policy_effective_request_invalid".to_owned())?;

@@ -170,3 +170,35 @@ fn canonical_workspace_rejects_symlinked_ancestors() {
     assert!(load(&lenient).is_ok());
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn resident_load_answers_with_the_command_bytes() {
+    let root = scratch("resident");
+    fs::write(root.join("home/config.toml"), "mode = \"observe\"\n").unwrap();
+    fs::write(
+        root.join("ws/.hol-guard.toml"),
+        "security_level = \"strict\"\n",
+    )
+    .unwrap();
+    for request in [
+        json!({"schema": SCHEMA, "guard_home": root.join("home")}),
+        json!({"schema": SCHEMA, "guard_home": root.join("home"), "workspace": root.join("ws"),
+            "require_canonical_workspace": false, "managed": null}),
+    ] {
+        let command = run_command(request.to_string().as_bytes()).unwrap();
+        assert_eq!(evaluate_resident(&request).unwrap(), command);
+    }
+    fs::write(root.join("home/config.toml"), "mode = = x").unwrap();
+    let failing = json!({"schema": SCHEMA, "guard_home": root.join("home")});
+    assert_eq!(
+        evaluate_resident(&failing).unwrap(),
+        run_command(failing.to_string().as_bytes()).unwrap()
+    );
+    for invalid in [
+        json!({"schema": "other", "guard_home": root.join("home")}),
+        json!({"schema": SCHEMA, "guard_home": root.join("home"), "extra": 1}),
+    ] {
+        assert!(evaluate_resident(&invalid).is_err());
+    }
+    let _ = fs::remove_dir_all(root);
+}

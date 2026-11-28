@@ -815,6 +815,16 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             }
             // Owner-private Windows state files inside the pinned Guard home,
             // through the same held handles as `windows-private-state --stdin`.
+            // Pure composition, the same bytes `policy-effective --stdin` prints.
+            ResidentOperationV1::PolicyEffective(request) => {
+                crate::policy_effective::evaluate_resident(&request)
+            }
+            // The home's own configuration only: `guard_home` is pinned to
+            // this resident's home above.
+            ResidentOperationV1::GuardConfigLoad(request) => {
+                policy_store.ok_or_else(|| "native_guard_config_resident_required".to_owned())?;
+                crate::guard_config_load::evaluate_resident(&request)
+            }
             ResidentOperationV1::WindowsPrivateState(request) => {
                 policy_store.ok_or_else(|| "native_windows_private_state_resident_required".to_owned())?;
                 crate::windows_private_state::resident::evaluate(&request)
@@ -892,3 +902,6 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
 #[cfg(test)]
 #[path = "catalog_read_op_tests.rs"]
 mod catalog_read_op_tests;
+#[cfg(test)]
+#[path = "resident_command_op_tests.rs"]
+mod resident_command_op_tests;

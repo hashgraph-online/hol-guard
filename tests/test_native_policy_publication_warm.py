@@ -16,6 +16,7 @@ class _Publisher(NativePolicySnapshotPublisherInputs):
         self._condition = threading.Condition()
         self._workspace_paths = {Path("workspace")}
         self._started = started
+        self.guard_home = Path("guard-home")
         self.failure = failure
         self.compiled: list[frozenset[Path] | None] = []
 
@@ -32,7 +33,13 @@ class _Publisher(NativePolicySnapshotPublisherInputs):
 @pytest.fixture
 def effective(monkeypatch: pytest.MonkeyPatch) -> list[object]:
     calls: list[object] = []
-    monkeypatch.setattr(native_policy_effective, "effective_native_policy_v3", lambda config: calls.append(config))
+
+    def record(config: object, *, guard_home: Path | None = None) -> None:
+        # The warm compile offers the publisher's own home to the idle resident.
+        assert guard_home == Path("guard-home")
+        calls.append(config)
+
+    monkeypatch.setattr(native_policy_effective, "effective_native_policy_v3", record)
     return calls
 
 

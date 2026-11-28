@@ -153,6 +153,8 @@ class NativePolicySnapshotPublisher(
         self._published_local_cli_revision: int | None = None
         self._published_policy_fingerprint: tuple[str, str, str] | None = None
         self._observed_policy_fingerprint: tuple[str, str, str] | None = None
+        # Watched-file stats and clock reading of the last full input compile.
+        self._policy_compiled_at: tuple[object, float] | None = None
         self._observe_extension_refresh = False
         self._renewal_due_monotonic: float | None = None
         self._renewal_after_generation: int | None = None

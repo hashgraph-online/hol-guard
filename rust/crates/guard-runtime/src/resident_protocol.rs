@@ -383,6 +383,8 @@ pub(crate) enum ResidentOperationV1 {
     DiscoveryPlacementProject(crate::discovery_placement_op::DiscoveryPlacementProjectRequest),
     ReleaseFeedProject(crate::release_feed_op::ReleaseFeedProjectRequest),
     WindowsPrivateState(crate::windows_private_state::resident::ResidentRequest),
+    PolicyEffective(Value),
+    GuardConfigLoad(Value),
     DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     ToolActionRequestIdentity(guard_contracts::ToolActionRequestIdentityRequestV1),
     RuntimeArtifactIdentity(guard_contracts::RuntimeArtifactIdentityRequestV1),

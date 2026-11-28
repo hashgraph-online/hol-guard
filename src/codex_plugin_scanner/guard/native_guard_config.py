@@ -24,6 +24,7 @@ from .config_file_io import ConfigFileTrustError
 GUARD_CONFIG_LOAD_COMMAND = "guard-config-load"
 GUARD_CONFIG_LOAD_FEATURE = "native-guard-config-load-v1"
 GUARD_CONFIG_LOAD_SCHEMA = "guard-config-load.v1"
+GUARD_CONFIG_LOAD_RESIDENT_FEATURE = "guard-config-load-resident-v1"
 GUARD_CONFIG_LOAD_TIMEOUT_SECONDS = 10.0
 GUARD_CONFIG_UPDATE_COMMAND = "guard-config-update"
 GUARD_CONFIG_UPDATE_FEATURE = "native-guard-config-update-v1"
@@ -176,8 +177,18 @@ def _raise_failure(response: Mapping[str, object]) -> None:
     raise ConfigFileTrustError(reason if isinstance(reason, str) and reason else "native_guard_config_invalid")
 
 
-def _spawn(request_text: str, path: Path, deadline_monotonic: float) -> dict[str, Any]:
-    response = _run(GUARD_CONFIG_LOAD_COMMAND, request_text, path, deadline_monotonic)
+def _spawn(request_text: str, path: Path, deadline_monotonic: float, guard_home: Path) -> dict[str, Any]:
+    from .native_resident_command import resident_command_answer
+
+    # An idle resident runs the same loader for its own Guard home without a
+    # process spawn; the command stays the fallback and the authority.
+    response = resident_command_answer(
+        operation="guard_config_load",
+        feature=GUARD_CONFIG_LOAD_RESIDENT_FEATURE,
+        guard_home=guard_home,
+        request=json.loads(request_text),
+        deadline_monotonic=deadline_monotonic,
+    ) or _run(GUARD_CONFIG_LOAD_COMMAND, request_text, path, deadline_monotonic)
     if response.get("ok") is not True:
         _raise_failure(response)
     config = response.get("config")
@@ -307,7 +318,7 @@ def load_native_guard_config(
     path, runtime_sha = _runtime_identity(deadline)
     before = _signatures(guard_home, workspace)
     if before is None:
-        return _spawn(request_text, path, deadline)
+        return _spawn(request_text, path, deadline, guard_home)
     key = f"{runtime_sha}\0{path}\0{request_text}\0{before!r}"
     cached = _memo_get(key)
     if cached is not None:
@@ -328,9 +339,9 @@ def load_native_guard_config(
         cached = _memo_get(key)
         if cached is not None:
             return cached
-        return _spawn(request_text, path, deadline)
+        return _spawn(request_text, path, deadline, guard_home)
     try:
-        config = _spawn(request_text, path, deadline)
+        config = _spawn(request_text, path, deadline, guard_home)
         if _signatures(guard_home, workspace) == before:
             flight.config = cast("dict[str, Any]", json.loads(json.dumps(config)))
             with _MEMO_LOCK:
