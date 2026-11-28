@@ -386,6 +386,7 @@ fn scan_into(
                         &exclusions.files,
                         &exclusions.directories,
                         true,
+                        None,
                     ) || proven_glob(target, context)))
                     // `app/[slug]/route.ts` names one route when its class
                     // matches nothing, and is walked as that path.
@@ -401,7 +402,15 @@ fn scan_into(
                             &exclusions.directories,
                             dereference,
                             clearance,
-                        )
+                        ) || (!dereference
+                            && sibling::grep_walk_root(
+                                target,
+                                context,
+                                &exclusions.files,
+                                &exclusions.directories,
+                                true,
+                                Some(clearance),
+                            ))
                     })
                     // A glob reads a subset of the directory it expands below.
                     || (!dereference && cleared_glob(target))
@@ -459,6 +468,9 @@ fn proven_glob(value: &str, context: ReadContext<'_>) -> bool {
 #[cfg(test)]
 #[path = "grep_include_tests.rs"]
 mod include_tests;
+#[cfg(test)]
+#[path = "grep_parent_root_tests.rs"]
+mod parent_root_tests;
 #[cfg(test)]
 #[path = "grep_tests.rs"]
 mod tests;

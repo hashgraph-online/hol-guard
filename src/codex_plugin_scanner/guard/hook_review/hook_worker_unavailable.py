@@ -77,6 +77,10 @@ def structured_outage_overlay(
         overlay = rendered[1]
         if overlay is not None and not overlay:
             native_status = rendered[2] if len(rendered) > 2 else None
+            # Preserve the local GuardConfig floor for an explicitly absent
+            # machine policy. Rust owns native authority status, while this
+            # compatibility check keeps a configured local managed policy
+            # fail-closed when the native loader cannot see it yet.
             if native_status == "absent" and callable(load_config):
                 try:
                     configured = load_config()

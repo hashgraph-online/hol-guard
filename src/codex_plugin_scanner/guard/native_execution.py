@@ -76,6 +76,7 @@ def _resident_request(
     record_success: bool = True,
     record_resilience: bool = True,
     status: NativeRuntimeStatus | None = None,
+    diagnostic: bool = False,
 ) -> dict[str, object] | None:
     """Envelope + transport shared by all contained-execution ops.
 
@@ -116,6 +117,7 @@ def _resident_request(
         environment=environment,
         payload=payload,
         timeout_seconds=timeout_seconds,
+        diagnostic=diagnostic,
     )
     if response is None:
         if record_resilience:
@@ -149,6 +151,7 @@ def _resident_request(
         "hook_payload_facts": "guard-hook-payload-facts-result.v1",
         "hook_connector_facts": "guard-hook-connector-facts-result.v1",
         "hook_policy_fence_window": "guard-hook-policy-fence-window-result.v1",
+        "hook_policy_admission": "guard-hook-policy-admission-result.v1",
         "hook_review_binding": "guard-hook-review-binding-result.v1",
     }.get(operation)
     if operation == "hook_direct":
