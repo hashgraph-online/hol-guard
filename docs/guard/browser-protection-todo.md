@@ -671,6 +671,10 @@ transcript in the pull request (after BP-T052).
     verdicts first and never touches Guard's own facts or choices. The approval queue's poll redraws
     an open card, so a late answer appears once the approval path passes cached signals in (the
     hook wiring item below).
+  - [x] The approval read model now fills those rows from the provider signal cache for the card's
+    origin. It reads only cached answers, lists a provider only while it stays connected to the
+    same compiled manifest, shows an answer past its expiry as stale, and leaves the card without
+    provider rows when the cache cannot be read.
 - [ ] **BP-T135** Playwright specs for the Integrations page, the connect dialog and the finding row
   at the contract widths, with the testkit provider.
 

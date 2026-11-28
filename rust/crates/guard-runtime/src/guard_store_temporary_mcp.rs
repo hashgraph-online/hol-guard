@@ -185,6 +185,7 @@ fn covered_request_ids(
             payloads(
                 vec![(row, projection)],
                 None,
+                connection,
                 owner.map(|owner| (connection, owner)),
             )?
             .remove(0),
