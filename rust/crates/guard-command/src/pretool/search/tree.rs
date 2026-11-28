@@ -166,7 +166,24 @@ pub(super) fn safe_recursive_target_cleared(
 pub(in crate::pretool) use super::roots::parent_root_inside_repository;
 pub(in crate::pretool) use super::roots::{listing_root_below_home, rg_root_inside_cwd};
 
+#[cfg(test)]
+thread_local! {
+    /// Paths [`inside_agent_state`] resolved on this thread.
+    pub(super) static AGENT_STATE_RESOLVED: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Runs once after a glob proof resolves the directory of its named
+    /// entries, so a test can replace that directory mid-proof.
+    pub(super) static AFTER_ENTRIES_DIRECTORY_RESOLVED: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 pub(super) fn inside_agent_state(path: &std::path::Path, context: ReadContext<'_>) -> bool {
+    #[cfg(test)]
+    AGENT_STATE_RESOLVED.with(|resolved| resolved.set(resolved.get() + 1));
     std::fs::canonicalize(path).is_ok_and(|canonical| {
         super::super::read_paths::inside_agent_state_tree(&canonical, context.home_dir)
     })
@@ -396,9 +413,36 @@ fn glob_search_operand_uncached(value: &str, context: ReadContext<'_>) -> bool {
         GlobSearch::Matches(matches) => !matches.is_empty() && matches.into_iter().all(searched),
         GlobSearch::Capped(directory) => searched(directory),
         // Each named file meets the screen the directory walk gives it.
-        GlobSearch::Entries(directory, entries) => entries
-            .into_iter()
-            .all(|entry| descendant_allowed(&entry, &directory, true) && searched(entry)),
+        GlobSearch::Entries(directory, entries) => {
+            // Every entry is a regular file directly in `directory`, so its
+            // canonical path is the directory's with its name joined. A
+            // directory of thousands of matches resolves once, not once per
+            // match.
+            let base = std::fs::canonicalize(&directory).ok();
+            #[cfg(test)]
+            if let Some(hook) =
+                AFTER_ENTRIES_DIRECTORY_RESOLVED.with(|hook| hook.borrow_mut().take())
+            {
+                hook();
+            }
+            let screened = entries.into_iter().all(|entry| {
+                let agent_state = match (&base, entry.file_name()) {
+                    (Some(base), Some(name)) => super::super::read_paths::inside_agent_state_tree(
+                        &base.join(name),
+                        context.home_dir,
+                    ),
+                    _ => inside_agent_state(&entry, context),
+                };
+                descendant_allowed(&entry, &directory, true)
+                    && !agent_state
+                    && walk(entry, &[], &[], false, false)
+            });
+            // The names were screened under the path the directory had at
+            // the start. A directory replaced since then, for example by a
+            // link into agent state, resolves elsewhere now and proves
+            // nothing.
+            screened && std::fs::canonicalize(&directory).ok() == base
+        }
         GlobSearch::Refused => false,
     }
 }

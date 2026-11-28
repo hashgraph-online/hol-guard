@@ -155,3 +155,58 @@ export async function fetchProviderDetail(providerId: string): Promise<ProviderD
   const response = await fetchProviderIntegrationApi(`/v1/integrations/providers/${providerId}`);
   return normalizeProviderDetail(await readProviderJson(response));
 }
+
+/** Mirrors `ProviderConnectPreviewV1`: the exact share set and a one-use proof. */
+export type ProviderConnectPreview = {
+  providerId: string;
+  shares: string[];
+  optInFacts: string[];
+  hosts: string[];
+  challenge: string;
+  expiresAtMs: number;
+};
+
+export function normalizeConnectPreview(value: unknown): ProviderConnectPreview {
+  if (!isRecord(value)) throw new Error("Invalid connect preview");
+  const challenge = text(value.challenge);
+  const expiresAtMs = value.expires_at_ms;
+  if (!challenge || typeof expiresAtMs !== "number" || !Number.isFinite(expiresAtMs)) {
+    throw new Error("Invalid connect preview proof");
+  }
+  return {
+    providerId: text(value.provider_id),
+    shares: strings(value.shares),
+    optInFacts: strings(value.opt_in_facts),
+    hosts: strings(value.hosts),
+    challenge,
+    expiresAtMs,
+  };
+}
+
+function postJson(path: string, body: unknown): Promise<Response> {
+  return fetchProviderIntegrationApi(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function previewProviderConnect(providerId: string): Promise<ProviderConnectPreview> {
+  if (!isProviderId(providerId)) throw new ProviderIntegrationApiError("provider_not_found", 404);
+  const response = await postJson(`/v1/integrations/providers/${providerId}/connect/preview`, {});
+  return normalizeConnectPreview(await readProviderJson(response));
+}
+
+/** Sends the key once, with the preview's proof. The answer is the provider detail, never the key. */
+export async function connectProvider(
+  providerId: string,
+  request: { key: string; proof: string; enabledOptInFacts: string[] },
+): Promise<ProviderDetail> {
+  if (!isProviderId(providerId)) throw new ProviderIntegrationApiError("provider_not_found", 404);
+  const response = await postJson(`/v1/integrations/providers/${providerId}/connect`, {
+    key: request.key,
+    proof: request.proof,
+    enabled_opt_in_facts: request.enabledOptInFacts,
+  });
+  return normalizeProviderDetail(await readProviderJson(response));
+}

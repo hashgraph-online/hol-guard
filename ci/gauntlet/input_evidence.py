@@ -184,6 +184,11 @@ def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     return actual == enriched
 
 
+# An OMP internal document address such as `help://eval`. `file://` and any
+# address with a backslash, whitespace or a further selector colon are not.
+INTERNAL_READ_URL = re.compile(r"(?!file://)[a-z][a-z0-9+.-]*://[A-Za-z0-9_./-]+")
+
+
 def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str, Any], result: Any = None) -> bool:
     """Bind resolved read paths without accepting a different target or read options."""
     if reviewed == completed:
@@ -217,9 +222,13 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
             return False
         meta, display = details.get("meta"), details.get("displayContent")
         source = meta.get("source") if isinstance(meta, dict) else None
+        # OMP's own documents (`help://eval`) resolve to an internal source,
+        # not a file. The eval prelude reads them with `:raw`, so the selector
+        # is stripped from exactly that address and nothing else.
+        internal = INTERNAL_READ_URL.fullmatch(resolved) is not None
         if (
             not isinstance(source, dict)
-            or source != {"type": "path", "value": resolved}
+            or source != {"type": "internal" if internal else "path", "value": resolved}
             or not isinstance(display, dict)
             or display.get("startLine") != int(first)
         ):
@@ -227,6 +236,10 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
         # The actual SDK result proves it resolved a selector rather than read
         # a literal colon-named file. Guard alone cannot supply that proof.
         original = base
+        if internal:
+            return original == resolved and all(
+                completed[other] == reviewed[other] for other in reviewed if other != key
+            )
     # Windows agents resolve with backslash separators. Accept them only when
     # the whole resolved path is in that form and the reviewed path has no
     # backslash, so a POSIX name containing one never matches a different file.

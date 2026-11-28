@@ -76,7 +76,7 @@ assert.match(list, /Site reputation/);
 assert.match(list, /Not connected/);
 assert.match(renderToStaticMarkup(createElement(ProviderListView, { providers: [] })), /No provider integrations ship/);
 
-const page = renderToStaticMarkup(createElement(ProviderDetailView, { detail }));
+const page = renderToStaticMarkup(createElement(ProviderDetailView, { detail, onConnect: () => undefined }));
 assert.match(page, /What it checks/);
 assert.match(page, /known for phishing, malware or scams/);
 assert.match(page, /What leaves this device/);
@@ -86,6 +86,7 @@ assert.equal(page.match(/The first part of the page path/g)?.length, 1, "a decla
 assert.doesNotMatch(page, /keys stay here/, "the key goes to the provider, so the page never says it stays");
 const notEnabled = renderToStaticMarkup(createElement(ProviderDetailView, {
   detail: normalizeProviderDetail({ ...rawDetail, enabled_opt_in_facts: [] }),
+  onConnect: () => undefined,
 }));
 assert.match(notEnabled, /The first part of the page path \(only if you turn it on\)/);
 assert.match(page, /api\.exampleshield\.example/);
@@ -95,7 +96,7 @@ assert.doesNotMatch(page, /javascript:/, "a non-https terms link is never render
 assert.match(page, />Connect</);
 
 const connected = normalizeProviderDetail({ ...rawDetail, summary: { ...summary, state: "connected", verified: true } });
-const connectedPage = renderToStaticMarkup(createElement(ProviderDetailView, { detail: connected }));
+const connectedPage = renderToStaticMarkup(createElement(ProviderDetailView, { detail: connected, onConnect: () => undefined }));
 assert.match(connectedPage, /Verified publisher: Example Publisher/);
 assert.match(connectedPage, /Ask before risky actions/);
 assert.match(connectedPage, />Replace key</);

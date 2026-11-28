@@ -1,7 +1,7 @@
 import { r as reactExports, aX as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aY as ApprovalProofModal, T as Tag, aZ as PROTECTION_POSTURE_COPY, a_ as POSTURE_OUTCOME_COLUMNS, a$ as harnessPostureRows, b0 as overrideRows, aO as harnessRowTone, b1 as harnessPostureSummary, b2 as joinNames, b3 as sortHarnessRows, b4 as globalPosture, b5 as selectHarnessPosture, b6 as restartHarnessWatch, h as HiMiniMagnifyingGlass, b7 as harnessWatchPrompt, b8 as harnessPostureOptions, b9 as canRestartHarnessWatch, aR as HiMiniEye, ad as HiMiniShieldCheck, aQ as harnessRowStatus, ba as getDefaultExportFromCjs, bb as React, bc as PULSE_FACE_SCAN_OPTIONS, bd as authorizeApprovalGatePulseSetup, be as confirmApprovalGatePulseEnrollment, bf as waitForPulseApproval, f as fetchWithGuardAuth, bg as beginApprovalGatePulseEnrollment, bh as GuardModalLayer, S as SectionLabel, ak as HiMiniXMark, bi as SelectMenu, bj as disableApprovalGatePulse, bk as setApprovalGatePulseShowCommand, bl as recoverApprovalGatePulse, e as HiMiniSquares2X2, K as HiMiniLockClosed, bm as HiMiniBellAlert, bn as HiMiniAdjustmentsHorizontal, d as HiMiniCircleStack, an as HiMiniCloud, bo as TabBar, q as HiMiniChevronRight, ap as useFocusTrap, bp as fetchCloudReviewSettings, k as HiMiniArrowPath, bq as ApprovalProofFieldInputs, br as isApprovalProofSubmitDisabled, bs as buildApprovalProofCredentials, bt as changeCloudReviewSettings, bu as isRecord$1, bv as HiMiniArrowTopRightOnSquare, p as contextStatusCopy, bw as engineLabel, G as HiMiniCheckCircle, aq as HiMiniExclamationTriangle, bx as HiMiniPauseCircle, t as harnessDisplayName, by as listContextAgentSessions, bz as HiMiniLink, bA as SettingsSaveProofModal, bB as revokeContextAgentSession, bC as grantContextWorkspace, bD as authorizeContextAgentSession, bE as ContextAssistanceApiError, bF as ask, bG as parseContextScope, bH as validContextBrokerRevision, bI as isGuardDemoMode, bJ as commitDashboardLocation, bK as HiMiniArrowUturnLeft, E as HiMiniPencilSquare, bL as HiMiniCodeBracketSquare, c as HiMiniFolder, F as HiMiniDocumentText, g as HiMiniComputerDesktop, bM as HiMiniHome, y as HiMiniCheck, bN as HiMiniFolderPlus, bO as HiMiniClock, l as listContextWorkspaces, bP as HiMiniFolderOpen, bQ as refusal, bR as manageContextWorkspace, bS as compileWorkspaceContext, I as HiMiniArrowRight, bT as HiMiniChatBubbleLeftEllipsis, bU as HiMiniDocumentMagnifyingGlass, bV as HiMiniPower, bW as HiMiniEyeSlash, bX as HiMiniCpuChip, bY as HiMiniAcademicCap, ao as HiMiniQuestionMarkCircle, a0 as HiMiniClipboardDocument, bZ as HiMiniArrowLeft, aj as HiMiniSparkles, b_ as subscribeDashboardLocation, b$ as HiMiniChatBubbleLeftRight, c0 as parseContextAssistanceStatus, c1 as fetchContextInstallations, c2 as turnOnJob, c3 as shouldResumeTurnOn, c4 as turnOnRequestedAt, c5 as forgetTurnOn, c6 as rememberTurnOn, c7 as forgetTurnOnClick, c8 as rememberTurnOnJob, a as fetchContextAssistance, o as controlContextAssistance, c9 as HiMiniArrowDownTray, ca as downloadBlob, cb as savedEvidenceCopy, cc as guardAwareHref, cd as fetchContextData, ce as forgetContextHistory, cf as forgetSavedEvidence, cg as resolveProtectionLevelCopy, ch as fetchSettings, ci as fetchRuntimeSnapshot, cj as clearHarnessWatchOverrides, ck as withHarnessPosturePatch, cl as updateSettings, cm as clearPolicy, cn as clearReviewQueue, co as revokeApprovalGateCooldown, cp as disableApprovalGateTotp, cq as importSettings, cr as resetSettings, cs as resolveSettingsSaveProofKind, ct as requiresSettingsSaveProof, cu as enrollApprovalGateTotp, cv as verifyApprovalGateTotp, cw as clearEvidence, cx as exportDiagnostics, cy as repairApprovalCenter, cz as exportSettings, cA as setupDesktopNotifications, al as EmptyState, cB as settingsWatchBannerModel, cC as WorkspacePageHeader, aa as WatchProtectionBanner, cD as navigateFromAnchor, x as HiMiniChevronDown, cE as resolveSettingsSaveProofModalCopy, cF as humanizeList, cG as isProtectionPosture, cH as deriveProtectionPosture, cI as normalizeHarnessPostures, cJ as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, G as GuardRepairControl } from "./guard-repair-control-91tBByHP.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-Ca_M7GbC.js";
-import { C as ConfirmDialog, u as useConfirmDialog } from "./confirm-dialog-C1Asj0OK.js";
+import { F as Field, P as PULSE_INPUT_CLASS, p as pulseCooldownLabel, E as ErrorNote, a as PULSE_SITE_URL, b as PULSE_LABEL_CLASS, C as ConfirmDialog, u as useConfirmDialog } from "./pulse-setup-parts-DumagxlL.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-BQdiKzoF.js";
 import { u as usesPromptContext, s as setSwarmContextTarget, a as useSwarmContextTarget } from "./swarm-handoff-BIqKreGh.js";
 import { C as CIGAR_TABS, a as cigarWaking, b as canStartCigar, c as cigarHomeCopy, d as cigarTabFromSearch } from "./workspace-model-hR3eI7UO.js";
@@ -2347,25 +2347,6 @@ function browserView() {
     innerHeight: window.innerHeight,
     overflowY: (node) => window.getComputedStyle(node).overflowY
   };
-}
-const PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer_id=holguard";
-const PULSE_LABEL_CLASS = "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500";
-const PULSE_INPUT_CLASS = "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
-function pulseCooldownLabel(seconds) {
-  if (seconds === 900) return "15 minutes, same kind of action";
-  if (seconds === 3600) return "1 hour, same kind of action";
-  return "Every action (recommended)";
-}
-function ErrorNote({ message: message2 }) {
-  if (message2 === null) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: message2 });
-}
-function Field(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: PULSE_LABEL_CLASS, children: props.label }),
-    props.children,
-    props.hint ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: props.hint }) : null
-  ] });
 }
 function pulseCooldownFromSeconds(seconds) {
   if (seconds === 900) return 900;
