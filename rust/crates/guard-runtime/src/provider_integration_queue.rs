@@ -21,6 +21,7 @@
 use guard_contracts::{
     provider_id_is_valid, sha256_hex_is_valid, ProviderCapabilityV1, ProviderSubjectV1,
 };
+use rusqlite::types::Value as SqlValue;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::provider_integration_routes::origin_subject;
@@ -78,7 +79,11 @@ pub fn request_lookup(
         return Ok(false);
     };
     let now = ms(now_ms)?;
+    let cutoff = ms(now_ms.saturating_sub(QUEUED_LOOKUP_TTL_MS))?;
     in_write_savepoint(connection, || {
+        // An expired request must not absorb a fresh one for the same subject: the next pass
+        // would drop it as expired and send nothing.
+        expire(connection, cutoff)?;
         let added = connection.execute(
             "insert or ignore into pending_provider_lookups \
              (provider_id, capability, subject_digest, origin, requested_at_ms) \
@@ -111,35 +116,29 @@ pub fn take_lookups(
     let cutoff = ms(now_ms.saturating_sub(QUEUED_LOOKUP_TTL_MS))?;
     let limit = i64::try_from(limit).unwrap_or(i64::MAX);
     in_write_savepoint(connection, || {
-        connection.execute(
-            "delete from pending_provider_lookups where requested_at_ms < ?1",
-            [cutoff],
-        )?;
+        expire(connection, cutoff)?;
         let mut statement = connection.prepare(
             "select rowid, provider_id, capability, subject_digest, origin, requested_at_ms \
              from pending_provider_lookups order by requested_at_ms, rowid limit ?1",
         )?;
-        let rows: Vec<(i64, String, String, String, String, i64)> = statement
+        // Columns are read as raw values: a row written with a non-text value is malformed and
+        // dropped below, not a decode error that fails every later pass.
+        let rows: Vec<(i64, [SqlValue; 4], SqlValue)> = statement
             .query_map([limit], |row| {
                 Ok((
                     row.get(0)?,
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
+                    [row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?],
                     row.get(5)?,
                 ))
             })?
             .collect::<Result<_, _>>()?;
         let mut taken = Vec::with_capacity(rows.len());
-        for (rowid, provider_id, capability, digest, origin, requested_at_ms) in rows {
+        for (rowid, text, requested_at_ms) in rows {
             connection.execute(
                 "delete from pending_provider_lookups where rowid = ?1",
                 [rowid],
             )?;
-            if let Some(lookup) =
-                checked(provider_id, &capability, &digest, &origin, requested_at_ms)
-            {
+            if let Some(lookup) = checked(text, requested_at_ms) {
                 taken.push(lookup);
             }
         }
@@ -147,18 +146,30 @@ pub fn take_lookups(
     })
 }
 
-fn checked(
-    provider_id: String,
-    capability: &str,
-    digest: &str,
-    origin: &str,
-    requested_at_ms: i64,
-) -> Option<QueuedLookup> {
+fn expire(connection: &Connection, cutoff: i64) -> rusqlite::Result<usize> {
+    connection.execute(
+        "delete from pending_provider_lookups where requested_at_ms < ?1",
+        [cutoff],
+    )
+}
+
+fn checked(text: [SqlValue; 4], requested_at_ms: SqlValue) -> Option<QueuedLookup> {
+    let [provider_id, capability, digest, origin] = text.map(|value| match value {
+        SqlValue::Text(text) => Some(text),
+        _ => None,
+    });
+    let provider_id = provider_id?;
+    let capability = capability?;
+    let digest = digest?;
+    let origin = origin?;
+    let SqlValue::Integer(requested_at_ms) = requested_at_ms else {
+        return None;
+    };
     let capability: ProviderCapabilityV1 =
-        serde_json::from_value(serde_json::Value::String(capability.to_owned())).ok()?;
-    let (canonical, subject) = origin_subject(origin)?;
+        serde_json::from_value(serde_json::Value::String(capability)).ok()?;
+    let (canonical, subject) = origin_subject(&origin)?;
     let matches = provider_id_is_valid(&provider_id)
-        && sha256_hex_is_valid(digest)
+        && sha256_hex_is_valid(&digest)
         && subject.digest == digest
         && canonical == origin;
     matches.then(|| QueuedLookup {

@@ -127,6 +127,40 @@ fn a_tampered_row_is_dropped_not_returned() {
 }
 
 #[test]
+fn an_expired_request_does_not_swallow_a_fresh_one() {
+    let connection = queue();
+    assert!(ask(&connection, SHIELD, "https://shop.example.com", NOW));
+    let later = NOW + QUEUED_LOOKUP_TTL_MS + 1;
+    assert!(
+        ask(&connection, SHIELD, "https://shop.example.com", later),
+        "the expired row is replaced"
+    );
+    assert!(!ask(
+        &connection,
+        SHIELD,
+        "https://shop.example.com",
+        later + 1
+    ));
+    let taken = take_lookups(&connection, later + 2, 8).unwrap();
+    assert_eq!(taken.len(), 1);
+    assert_eq!(taken[0].requested_at_ms, later);
+}
+
+#[test]
+fn a_row_with_a_non_text_value_is_dropped_and_the_pass_goes_on() {
+    let connection = queue();
+    assert!(ask(&connection, SHIELD, "https://bad.example.com", NOW));
+    connection
+        .execute("update pending_provider_lookups set origin = x'00ff'", [])
+        .unwrap();
+    assert!(ask(&connection, SHIELD, "https://shop.example.com", NOW + 1));
+    let taken = take_lookups(&connection, NOW + 2, 8).unwrap();
+    assert_eq!(taken.len(), 1);
+    assert_eq!(taken[0].origin, "https://shop.example.com");
+    assert_eq!(count(&connection), 0, "the malformed row is gone too");
+}
+
+#[test]
 fn disconnect_and_purge_drop_queued_requests() {
     let connection = queue();
     ask(&connection, SHIELD, "https://a.example.com", NOW);
