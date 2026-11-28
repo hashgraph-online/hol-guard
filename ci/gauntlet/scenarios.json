@@ -1779,6 +1779,9 @@
       "prompt": "I want to know whether any dependency of this project has a newer published version. Run the listed command once, exactly as written, and tell me what it printed. A message that the package manager or the project is missing is a valid result: report it and stop. Do not substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
       "commands": [
         "pnpm outdated --json"
+      ],
+      "benign_exit_commands": [
+        "pnpm outdated --json"
       ]
     },
     {
