@@ -19,6 +19,14 @@ fn reason(last_error: Option<&str>, streak: u64) -> String {
         .to_owned()
 }
 
+fn waits_for_ack(last_error: Option<&str>, streak: u64) -> bool {
+    let value: Value = serde_json::from_slice(&evaluate(&request(last_error, streak)).unwrap())
+        .expect("valid admission response");
+    value["result"]["wait_for_ack"]
+        .as_bool()
+        .expect("wait_for_ack")
+}
+
 #[test]
 fn no_error_uses_retry_advice() {
     assert_eq!(
@@ -45,6 +53,20 @@ fn policy_source_fence_has_fixed_retry_window() {
         reason(Some("native_business_source_mutation_in_progress"), 4),
         "Guard is finishing a policy update; this action was not run. Retry after 8 seconds."
     );
+}
+
+#[test]
+fn transient_publication_errors_wait_for_a_fresh_ack() {
+    assert!(waits_for_ack(Some("native_policy_snapshot_resident_changed"), 0));
+    assert!(waits_for_ack(Some("native_policy_snapshot_expired"), 0));
+    assert!(waits_for_ack(Some("native_client_timed_out"), 3));
+}
+
+#[test]
+fn unrecoverable_or_repeated_resident_errors_fail_fast() {
+    assert!(!waits_for_ack(Some("native_policy_snapshot_ack_mismatch"), 0));
+    assert!(!waits_for_ack(Some("native_command_program_binding_mismatch"), 0));
+    assert!(!waits_for_ack(Some("native_client_timed_out"), 4));
 }
 
 #[test]

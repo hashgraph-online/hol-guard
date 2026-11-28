@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
+from uuid import uuid4
 
+from ..native_execution import _resident_request
 from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS
 from ..native_policy_snapshot_resident_recovery import (
     RESIDENT_FAIL_FAST_STREAK,
     RESIDENT_NUDGE_MIN_INTERVAL_SECONDS,
     is_resident_class_error,
 )
+from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 
 if TYPE_CHECKING:
     from .hook_worker import HookWorker
@@ -21,6 +24,58 @@ def _resident_streak(publisher: Any) -> int:
     reader = getattr(publisher, "resident_failure_streak", None)
     streak = reader() if callable(reader) else 0
     return streak if isinstance(streak, int) else 0
+
+
+def _native_wait_for_ack(
+    publisher: Any,
+    last_error: object,
+    resident_failure_streak: int,
+    deadline: float,
+) -> bool | None:
+    """Ask Rust whether this publisher state merits another ACK attempt.
+
+    The publisher remains Python-owned transport. Rust owns the bounded error
+    classification so the hook worker does not duplicate the daemon's policy
+    admission rules. ``None`` keeps older residents on the compatibility path.
+    """
+
+    guard_home = getattr(publisher, "guard_home", None)
+    if not isinstance(guard_home, Path):
+        return None
+    timeout_seconds = min(0.1, max(0.0, deadline - time.monotonic()))
+    if timeout_seconds <= 0:
+        return None
+    try:
+        status_reader = getattr(publisher, "current_runtime_status", None)
+        status = cast(NativeRuntimeStatus | None, status_reader() if callable(status_reader) else None)
+        if status is None:
+            status = native_runtime_status(deadline_monotonic=time.monotonic() + timeout_seconds)
+        request_id = f"hook-policy-admission-{uuid4().hex}"
+        request: dict[str, object] = {
+            "schema": "guard-hook-policy-admission-request.v1",
+            "request_id": request_id,
+            "resident_failure_streak": resident_failure_streak,
+        }
+        if isinstance(last_error, str):
+            request["last_error"] = last_error
+        response = _resident_request(
+            operation="hook_policy_admission",
+            request=request,
+            guard_home=guard_home,
+            timeout_seconds=timeout_seconds,
+            required_feature="hook-policy-admission-v1",
+            response_schema="guard-hook-policy-admission-result.v1",
+            record_resilience=False,
+            status=status,
+        )
+        result = response.get("result") if response is not None else None
+        if isinstance(result, dict) and result.get("request_id") == request_id:
+            wait_for_ack = result.get("wait_for_ack")
+            if isinstance(wait_for_ack, bool):
+                return wait_for_ack
+    except (OSError, RuntimeError, TypeError, ValueError):
+        pass
+    return None
 
 
 def _wait_nudging_publisher(
@@ -55,10 +110,15 @@ def _wait_nudging_publisher(
         if getattr(publisher, "closed", False) is True:
             return
         last_error = getattr(publisher, "last_error", None)
-        if last_error in POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS:
+        native_wait = _native_wait_for_ack(publisher, last_error, _resident_streak(publisher), deadline)
+        if native_wait is False:
             return
-        if is_resident_class_error(last_error) and _resident_streak(publisher) >= RESIDENT_FAIL_FAST_STREAK:
-            return
+        # Compatibility path for a resident predating hook-policy-admission-v1.
+        if native_wait is None:
+            if last_error in POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS:
+                return
+            if is_resident_class_error(last_error) and _resident_streak(publisher) >= RESIDENT_FAIL_FAST_STREAK:
+                return
 
 
 def prepare_workspace_policy(
@@ -106,13 +166,21 @@ def prepare_workspace_policy(
             )
         )
         no_publication_error = last_error is None or (isinstance(last_error, str) and not last_error.strip())
+        native_wait = _native_wait_for_ack(
+            worker.policy_snapshot_publisher,
+            last_error,
+            _resident_streak(worker.policy_snapshot_publisher),
+            readiness_deadline,
+        )
         # A file-less directory adds no overlay, so the current ACK already
         # carries its policy unless an unsettled ancestor overlay is about to
         # join it. Hooks right after `cd` into it need not wait for a publish.
         covered = callable(admissible_without_overlay) and admissible_without_overlay(
             workspace, deadline=readiness_deadline
         )
-        if callable(wait_until_ready) and (transient_publication_error or no_publication_error):
+        # Older installed residents do not expose the Rust posture yet.
+        should_wait = native_wait if native_wait is not None else (transient_publication_error or no_publication_error)
+        if callable(wait_until_ready) and should_wait:
             pending = not covered and callable(workspace_pending) and bool(workspace_pending(workspace))
             if callable(getattr(worker.policy_snapshot_publisher, "nudge_retry", None)):
                 _wait_nudging_publisher(
