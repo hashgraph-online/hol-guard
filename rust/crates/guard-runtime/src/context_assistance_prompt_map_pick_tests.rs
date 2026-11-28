@@ -199,10 +199,18 @@ fn a_named_method_points_at_its_override_in_the_same_file() {
     let prompt = "Fix update() ordering to be more consistent with add() ordering";
     let text = prompt_map(home.path(), &root, prompt).unwrap_or_default();
     assert!(text.contains("pkg/sortedlist.py:5-6 def update"), "{text}");
-    let first = text.find("pkg/sortedlist.py:5-6 def update").unwrap_or(usize::MAX);
+    let first = text
+        .find("pkg/sortedlist.py:5-6 def update")
+        .unwrap_or(usize::MAX);
     let other = text.find("pkg/sortedlist.py:10-11 def update").unwrap_or(0);
-    assert!(first < other, "the override follows the method it overrides: {text}");
+    assert!(
+        first < other,
+        "the override follows the method it overrides: {text}"
+    );
     assert!(!text[first..other].contains("def add"), "{text}");
     let after = &text[other..];
-    assert!(after.contains("a change to `SortedList.update` usually belongs here too"), "{text}");
+    assert!(
+        after.contains("a change to `SortedList.update` usually belongs here too"),
+        "{text}"
+    );
 }

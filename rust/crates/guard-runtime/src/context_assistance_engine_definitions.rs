@@ -231,8 +231,7 @@ fn constant(line: &str) -> Option<&str> {
         return None;
     }
     let after = after.trim_start();
-    let capitals =
-        name.chars().any(char::is_uppercase) && !name.chars().any(char::is_lowercase);
+    let capitals = name.chars().any(char::is_uppercase) && !name.chars().any(char::is_lowercase);
     let assigned = |text: &str| text.starts_with('=') && !text.starts_with("==");
     let typed = after
         .strip_prefix(':')

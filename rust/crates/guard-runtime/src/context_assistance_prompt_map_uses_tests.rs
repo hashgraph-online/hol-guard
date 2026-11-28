@@ -102,5 +102,8 @@ export function withBase(input, base) {\n  return base + input;\n}\n";
     assert!(mapped(source, false).is_none_or(|text| !text.contains("src/query.ts:1-3")));
     let lone = source.replace("parseQuery(text)", "parseItems(text)");
     let lone = mapped(&lone, true);
-    assert!(lone.is_none_or(|text| !text.contains("src/query.ts:1-3")), "one is no family");
+    assert!(
+        lone.is_none_or(|text| !text.contains("src/query.ts:1-3")),
+        "one is no family"
+    );
 }

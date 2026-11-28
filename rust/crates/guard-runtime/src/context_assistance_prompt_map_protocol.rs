@@ -16,9 +16,18 @@ const PROTOCOLS: &[(&str, &[&str])] = &[
     ("hash", &["hash"]),
     ("hashing", &["hash"]),
     ("hashable", &["hash"]),
-    ("pickle", &["reduce", "reduceex", "getstate", "setstate", "getnewarg"]),
-    ("pickling", &["reduce", "reduceex", "getstate", "setstate", "getnewarg"]),
-    ("unpickling", &["setstate", "reduce", "reduceex", "getnewarg"]),
+    (
+        "pickle",
+        &["reduce", "reduceex", "getstate", "setstate", "getnewarg"],
+    ),
+    (
+        "pickling",
+        &["reduce", "reduceex", "getstate", "setstate", "getnewarg"],
+    ),
+    (
+        "unpickling",
+        &["setstate", "reduce", "reduceex", "getnewarg"],
+    ),
     ("copy", &["copy", "deepcopy"]),
     ("copying", &["copy", "deepcopy"]),
     ("deepcopy", &["deepcopy"]),
@@ -54,8 +63,9 @@ pub(crate) fn members<'a>(
                 continue;
             };
             let outer = file.parent[at].and_then(|outer| file.sections[outer].name.as_deref());
-            let special = written_name(file.opening(at))
-                .is_some_and(|word| word.len() > 4 && word.starts_with("__") && word.ends_with("__"));
+            let special = written_name(file.opening(at)).is_some_and(|word| {
+                word.len() > 4 && word.starts_with("__") && word.ends_with("__")
+            });
             if wanted.contains(&name)
                 && special
                 && named(outer)

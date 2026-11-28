@@ -73,7 +73,11 @@ pub(super) fn nested(mut done: Rendered, root: &Path) -> Rendered {
         .map(str::to_owned);
     if let Some(first) = first {
         let full = root.join(&first);
-        let line = format!(" Paths start at {}: `{first}` is {}.", root.display(), full.display());
+        let line = format!(
+            " Paths start at {}: `{first}` is {}.",
+            root.display(),
+            full.display()
+        );
         done.text.insert_str(HEADER.len(), &line);
     }
     done

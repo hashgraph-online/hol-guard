@@ -159,7 +159,10 @@ fn many_const_words_on_one_line_are_read_in_linear_time() {
 fn top_level_constants_and_typed_values_are_named_definitions() {
     for (line, name) in [
         ("MAX_INLINE_NESTING = 400", "MAX_INLINE_NESTING"),
-        ("MAX_INLINE_NESTING: Final = sys.getrecursionlimit()", "MAX_INLINE_NESTING"),
+        (
+            "MAX_INLINE_NESTING: Final = sys.getrecursionlimit()",
+            "MAX_INLINE_NESTING",
+        ),
         (
             "_mutable_spec: t.Tuple[t.Tuple[t.Type[t.Any], t.FrozenSet[str]], ...] = (",
             "_mutable_spec",

@@ -155,7 +155,10 @@ pub(super) fn named_definitions(
         let scoped = !unscoped(&pick);
         let source = pick.file;
         let at_pick = pick.at;
-        if let Some(early) = placed.iter_mut().find(|p| p.file == source && p.at == at_pick) {
+        if let Some(early) = placed
+            .iter_mut()
+            .find(|p| p.file == source && p.at == at_pick)
+        {
             // Placed early as an override, it keeps what the prompt gave it.
             *early = pick;
             continue;
@@ -419,5 +422,7 @@ pub(super) fn overriding(files: &[File], before: &[Pick], pick: &Pick) -> Option
     })?;
     let other = file.qualified(earlier.at);
     let said = "usually belongs here too";
-    Some(format!("\n  the same method in another class: a change to `{other}` {said}"))
+    Some(format!(
+        "\n  the same method in another class: a change to `{other}` {said}"
+    ))
 }

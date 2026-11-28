@@ -161,11 +161,16 @@ fn a_called_or_dotted_name_is_written_as_code() {
 fn a_stop_word_written_as_code_is_kept() {
     let found = marked_terms("Fix update() ordering to be more consistent with add() ordering");
     for name in ["update", "add"] {
-        assert!(found.contains(&(name.to_owned(), true)), "{name}: {found:?}");
+        assert!(
+            found.contains(&(name.to_owned(), true)),
+            "{name}: {found:?}"
+        );
     }
     let found = marked_terms("Please update the docs and add a note");
     assert!(
-        !found.iter().any(|(word, _)| word == "update" || word == "add"),
+        !found
+            .iter()
+            .any(|(word, _)| word == "update" || word == "add"),
         "{found:?}"
     );
 }

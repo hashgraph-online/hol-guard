@@ -14,7 +14,10 @@ fn map_of(prompt: &str) -> String {
 #[test]
 fn equality_and_hashing_of_a_named_class_place_its_special_methods() {
     let text = map_of("Fix numeric_range equality and hashing above sys.maxsize");
-    assert!(text.contains("more.py:5-6 def __eq__(self, other):"), "{text}");
+    assert!(
+        text.contains("more.py:5-6 def __eq__(self, other):"),
+        "{text}"
+    );
     assert!(text.contains("more.py:8-9 def __hash__(self):"), "{text}");
     // Only the named class's methods: `other_thing` has an `__eq__` too.
     assert!(!text.contains("more.py:17-18"), "{text}");

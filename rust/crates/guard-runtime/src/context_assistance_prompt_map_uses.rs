@@ -153,7 +153,9 @@ fn family<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<&'a String
     if family.len() < 2 {
         return None;
     }
-    family.into_iter().min_by_key(|name| (name.len(), name.as_str()))
+    family
+        .into_iter()
+        .min_by_key(|name| (name.len(), name.as_str()))
 }
 
 /// Whether `a` and `b` differ by one letter added, dropped or changed, or
