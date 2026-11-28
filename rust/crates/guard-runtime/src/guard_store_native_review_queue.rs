@@ -83,6 +83,7 @@ const REPLY_BUDGET_BYTES: usize = MAX_NATIVE_RESPONSE_BYTES - 128 * 1024;
 const MIN_HINT_BUDGET_MS: u64 = 150;
 /// The `local_cli_hook` action the lookup refines.
 const REVIEW_ACTION: &str = "review";
+const ASK_MODE: &str = "ask";
 
 /// The launch a non-recognition review paused, as the daemon's
 /// `local_cli_setup_connector` named it to the resident.
@@ -128,6 +129,8 @@ impl LookupAsk {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum RespondAsk {
+    /// Let the bound resident review facts choose paused or silent rendering.
+    NativeReview(NativeAsk),
     /// A prompted review.
     PausedReview(PausedAsk),
     /// A review the agent never sees.
@@ -139,6 +142,9 @@ enum RespondAsk {
 /// the connector up itself, so any field is ignored.
 #[derive(Deserialize)]
 struct PausedAsk {}
+
+#[derive(Deserialize)]
+struct NativeAsk {}
 
 /// The silent block's facts that do not come from the review or its row.
 /// The daemon also names the setup and binding facts an older resident
@@ -154,6 +160,7 @@ struct SilentAsk {
 struct Respond {
     ask: RespondAsk,
     harness: String,
+    approval_center_url: String,
     result: Map<String, Value>,
     /// The connector's setup text in place of the review's.
     setup_reason: Option<String>,
@@ -208,8 +215,44 @@ pub(crate) fn delegate(
     let ask: Option<HintAsk> = take_ask(&mut delegated, "hint")?;
     let respond: Option<RespondAsk> = take_ask(&mut delegated, "respond")?;
     let lookup: Option<LookupAsk> = take_ask(&mut delegated, "connector_lookup")?;
-    let silent = take_flag(&mut delegated, "silent")?;
-    let claude_notice = take_flag(&mut delegated, "claude_notice")?;
+    let fallback_mode = delegated
+        .remove("blocked_request_mode")
+        .and_then(|value| value.as_str().map(str::to_owned));
+    let mut silent = take_flag(&mut delegated, "silent")?;
+    let mut claude_notice = take_flag(&mut delegated, "claude_notice")?;
+    let respond = match respond {
+        Some(RespondAsk::NativeReview(NativeAsk {})) => {
+            let mode = owner
+                .and_then(|owner| {
+                    owner.effective_blocked_request_mode(query.envelope.workspace.as_deref())
+                })
+                .or_else(|| {
+                    crate::guard_config_load::blocked_request_mode(
+                        Path::new(&query.guard_home),
+                        query.envelope.workspace.as_deref().map(Path::new),
+                    )
+                    .ok()
+                    .flatten()
+                })
+                .or(fallback_mode)
+                .unwrap_or_else(|| crate::blocked_request_mode::SAFE_ALTERNATIVE_MODE.to_owned());
+            let ask = mode == ASK_MODE;
+            let unbound = query.review_binding.is_none() && query.exact_token.is_none();
+            if ask && !unbound {
+                Some(RespondAsk::PausedReview(PausedAsk {}))
+            } else {
+                silent = true;
+                claude_notice = false;
+                delegated.remove("integrity_key_b64");
+                delegated.remove("integrity_key_id");
+                Some(RespondAsk::SilentReviewBlock(SilentAsk {
+                    ask,
+                    home_dir: query.envelope.home_dir.clone().unwrap_or_default(),
+                }))
+            }
+        }
+        other => other,
+    };
     let silent_response = matches!(respond, Some(RespondAsk::SilentReviewBlock(_)));
     if (silent && claude_notice) || (respond.is_some() && silent_response != silent) {
         return Err(INVALID);
@@ -303,11 +346,13 @@ pub(crate) fn delegate(
     let setup_reason = |ask: bool| connector.as_ref().and_then(|c| c.reason(ask, bound, exact));
     let respond = respond.map(|ask| Respond {
         setup_reason: setup_reason(match &ask {
+            RespondAsk::NativeReview(_) => false,
             RespondAsk::PausedReview(_) => true,
             RespondAsk::SilentReviewBlock(silent) => silent.ask,
         }),
         ask,
         harness: query.envelope.harness.clone(),
+        approval_center_url: query.approval_center_url.clone(),
         result: paused.clone(),
         retry_reuses_approval: bound,
         exact_action_allowable: exact,
@@ -321,6 +366,7 @@ pub(crate) fn delegate(
             respond.setup_reason.is_some(),
             respond.connector_is_local,
         ),
+        RespondAsk::NativeReview(_) => false,
         RespondAsk::PausedReview(_) => false,
     });
     if silent && !silent_links {
@@ -395,23 +441,33 @@ impl Delegated {
         let text = |key: &str| row.get(key).and_then(Value::as_str).map(str::to_owned);
         let (request_id, approval_url) = (text("request_id"), text("approval_url"));
         let response = match &respond.ask {
+            RespondAsk::NativeReview(_) => return reply,
             RespondAsk::PausedReview(PausedAsk {}) => {
                 let mut verdict = respond.result.clone();
                 if let Some(reason) = &respond.setup_reason {
                     verdict.insert("reason".to_owned(), Value::String(reason.clone()));
                 }
                 // The renderer reads only the link and the request id.
-                let approval = [("approval_url", approval_url), ("request_id", request_id)]
-                    .into_iter()
-                    .filter_map(|(key, value)| Some((key.to_owned(), Value::String(value?))))
-                    .collect();
-                paused_review(&PausedReviewInputsV1 {
+                let approval = [
+                    ("approval_url", approval_url),
+                    ("request_id", request_id),
+                    (
+                        "approval_center_url",
+                        Some(respond.approval_center_url.clone()),
+                    ),
+                ]
+                .into_iter()
+                .filter_map(|(key, value)| Some((key.to_owned(), Value::String(value?))))
+                .collect();
+                let mut response = paused_review(&PausedReviewInputsV1 {
                     harness: respond.harness.clone(),
                     verdict,
                     approval: Some(approval),
                     guard_home: guard_home.to_owned(),
                 })
-                .response
+                .response;
+                response.insert("prompted".to_owned(), json!(true));
+                response
             }
             RespondAsk::SilentReviewBlock(ask) => {
                 let inputs = SilentReviewBlockInputsV1 {

@@ -59,6 +59,41 @@ fn recording_only_response_continues() {
 }
 
 #[test]
+fn unavailable_event_uses_reason_overrides_from_the_daemon() {
+    let mut req = request("unavailable_event");
+    req.cli = Some(json!({
+        "payload": {"hook_event_name": "PreToolUse"},
+        "record_post_tool_activity": false,
+        "reason_code": "native_policy_update_pending",
+        "reason": "Policy update is still being applied.",
+    }));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    let response = &result.payload.expect("payload")["response"]["response"];
+    assert_eq!(response["reason_code"], "native_policy_update_pending");
+    assert_eq!(
+        response["hookSpecificOutput"]["permissionDecisionReason"],
+        "Policy update is still being applied."
+    );
+}
+
+#[test]
+fn structured_outage_without_python_view_stays_fail_closed() {
+    let mut req = request("structured_outage");
+    req.harness = "pi".to_owned();
+    req.cli = Some(json!({"event_name": "PostToolUse"}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    let response = &result.payload.expect("payload")["response"];
+    assert_eq!(
+        response["structured_content_mediation"]["action"],
+        "withhold"
+    );
+    assert_eq!(
+        response["structured_content_mediation"]["reason_code"],
+        "structured_native_edge_unavailable"
+    );
+}
+
+#[test]
 fn accepted_allow_response_marks_reuse_in_the_native_renderer() {
     let mut req = request("accepted_allow");
     req.harness = "pi".to_owned();

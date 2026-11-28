@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard.hook_execution_environment import (
     LIBRARY_SEARCH_PATH_NAMES,
     collect_hook_execution_environment,
 )
+from codex_plugin_scanner.guard.hook_review.hook_worker_native import _edge_harness_response
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge, review_raw_hook_native
 from codex_plugin_scanner.guard.native_hook_render import canonical_hook_event_name
 from codex_plugin_scanner.guard.native_route_receipt import native_hook_route
@@ -246,6 +247,32 @@ def test_edge_decoder_reads_whether_the_edge_recorded_its_activity(recorded: obj
 def test_edge_decoder_reads_whether_a_saved_block_may_name_the_command(hint: object, accepted: bool) -> None:
     edge = {**_edge_result(), "exact_command_block": hint}
     assert _decode_edge(edge) == (edge if accepted else None)
+
+
+def test_edge_decoder_accepts_a_rust_transition_observation_stamp() -> None:
+    observation = {"operation_id": "op", "request_id": "request", "observation": None}
+    edge = {**_edge_result(), "transition_hook_observation": observation}
+    assert _decode_edge(edge) == edge
+
+
+@pytest.mark.parametrize("value", ("observation", []))
+def test_edge_decoder_rejects_a_malformed_transition_observation_stamp(value: object) -> None:
+    assert _decode_edge({**_edge_result(), "transition_hook_observation": value}) is None
+
+
+def test_harness_response_forwards_only_the_rust_transition_observation() -> None:
+    edge = {
+        "harness_response": {"decision": "allow"},
+        "transition_hook_observation": {
+            "operation_id": "op",
+            "request_id": "request",
+            "observation": {"schema": "hol-guard.transition-hook-observation.v1", "request_id": "request"},
+        },
+    }
+    assert _edge_harness_response(edge)["guard_transition_observation"] == {
+        "schema": "hol-guard.transition-hook-observation.v1",
+        "request_id": "request",
+    }
 
 
 _EVIDENCE = {"policy_binding_valid": True, "binding": "binding", "token": None, "once_only_reason": "reason"}

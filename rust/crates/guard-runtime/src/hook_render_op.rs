@@ -31,6 +31,40 @@ use serde_json::{json, Value};
 
 use crate::package_authority_op::request_digest_with_limit;
 
+fn native_structured_output_binding() -> (Option<Value>, bool, Option<&'static str>) {
+    let state = crate::managed_policy_load::load_managed_policy(
+        &crate::managed_policy_load::ManagedPolicySource::native(),
+    );
+    if state.status == crate::managed_policy_load::ManagedPolicyStatus::Absent {
+        return (None, true, Some("absent"));
+    }
+    let Some(policy) = state.policy else {
+        return (None, false, Some(state.status.as_str()));
+    };
+    let policy_hash = policy.content_hash.clone();
+    let locked_settings = policy.locked_settings.iter().cloned().collect::<Vec<_>>();
+    let settings = policy
+        .settings
+        .get("data_control")
+        .and_then(Value::as_object)
+        .and_then(|control| control.get("structured_output"))
+        .map(|structured| json!({"data_control": {"structured_output": structured}}))
+        .unwrap_or_else(|| json!({}));
+    (
+        Some(json!({
+            "managed_policy_status": state.status.as_str(),
+            "managed_policy_hash": policy_hash,
+            "managed_locked_settings": locked_settings,
+            "managed_policy": {
+                "content_hash": policy.content_hash,
+                "settings": settings,
+            },
+        })),
+        true,
+        Some("active"),
+    )
+}
+
 #[path = "hook_render_saved_approval.rs"]
 mod saved_approval;
 
@@ -127,9 +161,33 @@ fn render(
             .get("event_name")
             .and_then(Value::as_str)
             .ok_or("native_hook_render_invalid")?;
-        return Ok(cli_payload(CliOutcome::Document(
-            crate::hook_direct::pi::outage_overlay(harness, event, params.get("view")),
-        )));
+        let explicit_view = params.get("view").cloned();
+        // A direct-lane binding with no view is unresolved and stays fail-closed.
+        // Only the native managed-policy loader can positively identify the
+        // machine-wide absent-policy case that leaves the destination open.
+        let (view, binding_known, native_policy_status) = if explicit_view.is_some() {
+            (explicit_view, false, None)
+        } else if let Some(store) = store {
+            if store.has_direct_lane_binding() {
+                (store.structured_output_config(), true, None)
+            } else {
+                native_structured_output_binding()
+            }
+        } else {
+            (None, false, None)
+        };
+        let overlay = if native_policy_status == Some("absent") {
+            crate::hook_direct::pi::outage_overlay_without_managed_policy(harness, event)
+        } else if binding_known {
+            crate::hook_direct::pi::outage_overlay_with_binding(harness, event, view.as_ref(), true)
+        } else {
+            crate::hook_direct::pi::outage_overlay(harness, event, view.as_ref())
+        };
+        let mut payload = cli_payload(CliOutcome::Document(overlay));
+        if let Some(status) = native_policy_status {
+            payload["native_policy_status"] = Value::String(status.to_owned());
+        }
+        return Ok(payload);
     }
     if request.kind == "availability" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
@@ -171,7 +229,11 @@ fn render(
             .get("event_name")
             .and_then(Value::as_str)
             .ok_or("native_hook_render_invalid")?;
-        let reason = "HOL Guard could not identify this hook event safely.";
+        let reason = params
+            .get("reason")
+            .and_then(Value::as_str)
+            .unwrap_or("HOL Guard could not identify this hook event safely.");
+        let prompt_reason = params.get("prompt_reason").and_then(Value::as_str);
         let permission = availability
             .get("permission_request")
             .and_then(Value::as_bool)
@@ -190,17 +252,21 @@ fn render(
         {
             json!({"hookSpecificOutput": {"hookEventName": "PermissionRequest"}})
         } else {
-            let reason_code = match event {
-                "PreToolUse" => "native_pre_tool_unavailable",
-                "PostToolUse" => "native_post_tool_unavailable",
-                _ => "native_hook_event_unavailable",
-            };
+            let reason_code =
+                params
+                    .get("reason_code")
+                    .and_then(Value::as_str)
+                    .unwrap_or(match event {
+                        "PreToolUse" => "native_pre_tool_unavailable",
+                        "PostToolUse" => "native_post_tool_unavailable",
+                        _ => "native_hook_event_unavailable",
+                    });
             guard_command::hook_responses::fail_closed::response(
                 harness,
                 event,
                 reason,
                 reason_code,
-                None,
+                prompt_reason,
             )
             .map(Value::Object)
             .map_err(|_| "native_hook_render_invalid")?

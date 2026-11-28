@@ -1,4 +1,6 @@
-"""``hol-guard integrations conformance``: run the provider conformance kit on one manifest.
+"""``hol-guard integrations``: the conformance kit here, the provider routes in a sibling module.
+
+``conformance`` runs the provider conformance kit on one manifest.
 
 The native runtime reads the manifest, finds the provider's recorded responses and the benign gate
 in the checkout that holds it (or the paths given), and runs the five checks. Nothing is written and
@@ -28,7 +30,9 @@ class IntegrationsCommandError(Exception):
 def configure_guard_integrations_parser(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
-    parser = guard_subparsers.add_parser("integrations", help="Check provider integration manifests")
+    from .integrations_providers_command import configure_provider_subcommands
+
+    parser = guard_subparsers.add_parser("integrations", help="Connect, test and check provider integrations")
     commands = parser.add_subparsers(dest="integrations_command", required=True, parser_class=FriendlyArgumentParser)
     conformance = commands.add_parser(
         "conformance",
@@ -43,6 +47,7 @@ def configure_guard_integrations_parser(
         "--gate", help="Benign gate file (default: tests/fixtures/benign_false_positive_gate.json)"
     )
     conformance.add_argument("--json", action="store_true", help="Print the native answer as JSON")
+    configure_provider_subcommands(commands)
 
 
 def run_integrations_command(
@@ -53,6 +58,10 @@ def run_integrations_command(
 ) -> int:
     stream = output_stream if output_stream is not None else sys.stdout
     errors = error_stream if error_stream is not None else sys.stderr
+    if getattr(args, "integrations_command", None) != "conformance":
+        from .integrations_providers_command import run_provider_command
+
+        return run_provider_command(args, output_stream=stream, error_stream=errors)
     as_json = bool(getattr(args, "json", False))
     try:
         result = _conformance(args)

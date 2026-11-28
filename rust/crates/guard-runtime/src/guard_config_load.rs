@@ -320,6 +320,22 @@ pub(crate) fn desktop_notifications(
     )
 }
 
+/// Effective blocked-request posture for a hook review, composed from the
+/// Guard home and optional workspace configuration.
+pub(crate) fn blocked_request_mode(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+) -> Result<Option<String>, String> {
+    let value = effective_config(guard_home, workspace, &ManagedPolicySource::native())
+        .ok()
+        .and_then(|config| config.get("blocked_request_mode").cloned());
+    Ok(match value.as_ref().and_then(Value::as_str) {
+        Some("ask") => Some("ask".to_owned()),
+        Some("safe-alternative") => Some("safe-alternative".to_owned()),
+        _ => None,
+    })
+}
+
 /// Effective evidence retention for storage maintenance: detail retention
 /// days and the receipt-detail and guard-event row limits, each limit
 /// defaulting to 250,000 when unset.

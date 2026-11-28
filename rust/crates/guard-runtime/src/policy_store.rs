@@ -238,6 +238,38 @@ pub(crate) struct PolicySnapshotStore {
 }
 
 impl PolicySnapshotStore {
+    pub(crate) fn structured_output_config(&self) -> Option<serde_json::Value> {
+        self.direct_lane.lock().ok().and_then(|binding| {
+            binding
+                .as_ref()
+                .and_then(|binding| binding.structured_output_config.clone())
+        })
+    }
+
+    pub(crate) fn has_direct_lane_binding(&self) -> bool {
+        self.direct_lane
+            .lock()
+            .ok()
+            .is_some_and(|binding| binding.is_some())
+    }
+    /// The bound blocked-request mode for daemon review rendering.
+    pub(crate) fn blocked_request_mode(&self) -> Option<String> {
+        self.direct_lane.lock().ok().and_then(|binding| {
+            binding
+                .as_ref()
+                .and_then(|binding| binding.review.blocked_request_mode.clone())
+        })
+    }
+    pub(crate) fn effective_blocked_request_mode(&self, workspace: Option<&str>) -> Option<String> {
+        self.blocked_request_mode().or_else(|| {
+            crate::guard_config_load::blocked_request_mode(
+                Path::new(&self.expected_guard_home),
+                workspace.map(Path::new),
+            )
+            .ok()
+            .flatten()
+        })
+    }
     #[cfg(test)]
     pub(crate) fn new(state_base: &Path, runtime_identity: &str) -> Result<Self, String> {
         Self::new_with_resident_generation(state_base, runtime_identity, 0)

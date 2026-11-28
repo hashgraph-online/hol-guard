@@ -67,7 +67,7 @@ pub(in crate::pretool) fn with_walk_memo<T>(evaluate: impl FnOnce() -> T) -> T {
         MEMO.with(|memo| memo.replace(Some(HashMap::new()))),
         KEYED.with(|memo| memo.replace(Some(HashMap::new()))),
     );
-    evaluate()
+    super::super::search_scope_listing::with_listings(evaluate)
 }
 
 /// The result of `walk` for this tree, walking it only on first use within

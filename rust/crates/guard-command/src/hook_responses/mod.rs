@@ -188,6 +188,7 @@ pub fn pre_tool_review(
     let canonical = canonical_hook_harness(harness);
     let approval_url = trimmed(approval, "approval_url");
     let approval_request_id = trimmed(approval, "request_id");
+    let approval_center_url = trimmed(approval, "approval_center_url");
     if let (Some(_), Some(linked)) = (&approval_url, linked_reason) {
         reason = linked.to_owned();
     }
@@ -224,6 +225,9 @@ pub fn pre_tool_review(
     }
     if let Some(id) = &approval_request_id {
         rendered.insert("approval_request_id".into(), json!(id));
+    }
+    if let Some(center) = &approval_center_url {
+        rendered.insert("approval_center_url".into(), json!(center));
     }
     if let (Some(id), Some(url)) = (&approval_request_id, &approval_url) {
         rendered.insert("primary_approval_request_id".into(), json!(id));
