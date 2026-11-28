@@ -1,5 +1,5 @@
 // Telemetry only. Probe metadata is diagnostic-only; Guard decisions and responses are unchanged.
-import { appendFileSync, closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, fstatSync, openSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
@@ -10,6 +10,24 @@ const hostLogPath = process.env.GUARD_GAUNTLET_HOST_OBSERVER_LOG;
 const actualFetch = globalThis.fetch.bind(globalThis);
 
 type JsonRecord = Record<string, unknown>;
+
+// The linked-cwd case needs Guard to receive the workspace through a directory link. The
+// extension sends the workspace in the hook query string (the loopback URL, or the bridge's
+// argument), not in the payload. It names the harness's own project directory, not the
+// spelling the harness was launched with: Oh My Pi resolves the launch directory and, on
+// macOS, drops the `/private` prefix again, so a workspace under `/tmp` arrives as
+// `/tmp/...`, which is itself a link. Any spelling that resolves to the fixture workspace
+// without being the resolved path is that shape.
+function linkedFixtureCwd(cwd: string | null, linked: string): boolean {
+  if (!cwd) return false;
+  if (cwd === linked) return true;
+  try {
+    const resolved = realpathSync(cwd);
+    return resolved !== cwd && resolved === realpathSync(linked);
+  } catch {
+    return false;
+  }
+}
 
 function transitionProbe(): { operation_id: string; request_id: string } {
   return {
@@ -103,13 +121,23 @@ function record(value: Record<string, unknown>): void {
   appendFileSync(logPath, JSON.stringify(value) + "\n", { mode: 0o600 });
 }
 
+function requestUrl(input: RequestInfo | URL): URL | null {
+  try {
+    if (typeof input === "string") return new URL(input);
+    if (input instanceof URL) return input;
+    return new URL(input.url);
+  } catch { return null; }
+}
+
+function queryWorkspace(query: unknown): string | null {
+  if (typeof query !== "string") return null;
+  try { return new URLSearchParams(query).get("workspace"); } catch { return null; }
+}
+
 function isGuard(input: RequestInfo | URL): boolean {
   try {
-    let target: string;
-    if (typeof input === "string") target = input;
-    else if (input instanceof URL) target = input.href;
-    else target = input.url;
-    const url = new URL(target);
+    const url = requestUrl(input);
+    if (!url) return false;
     return url.protocol === "http:" && url.hostname === "127.0.0.1"
       && url.port === guardPort && url.pathname === "/v1/hooks/omp";
   } catch { return false; }
@@ -125,6 +153,7 @@ function recordExchange(exchange: {
   elapsedMs: number;
   startedAtMs: number;
   transport?: string;
+  workspace: string | null;
 }): void {
   const { request, probe, body } = exchange;
   const nativeObservation = publicNativeObservation(body);
@@ -141,7 +170,7 @@ function recordExchange(exchange: {
     tool: request.tool_name,
     tool_call_id: request.tool_call_id,
     ...(process.env.GUARD_GAUNTLET_LINKED_CWD && exchange.event === "PreToolUse"
-      ? { linked_fixture_cwd: request.cwd === process.env.GUARD_GAUNTLET_LINKED_CWD } : {}),
+      ? { linked_fixture_cwd: linkedFixtureCwd(exchange.workspace, process.env.GUARD_GAUNTLET_LINKED_CWD) } : {}),
     input_json: input,
     input_sha256: createHash("sha256").update(input).digest("hex"),
     http_status: exchange.status,
@@ -187,7 +216,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
   }
   try {
     const body = await response.clone().json();
-    recordExchange({ event, request, probe, body, status: response.status, elapsedMs: elapsed(), startedAtMs });
+    const workspace = requestUrl(input)?.searchParams.get("workspace") ?? null;
+    recordExchange({ event, request, probe, body, status: response.status, elapsedMs: elapsed(), startedAtMs, workspace });
   } catch {
     record({ observer_error: true, event, elapsed_ms: elapsed() });
   }
@@ -207,7 +237,7 @@ type BridgeChild = {
   once(event: string, handler: (code: unknown) => void): unknown;
 };
 
-function observeBridge(child: BridgeChild): void {
+function observeBridge(child: BridgeChild, query: unknown): void {
   const started = performance.now();
   const startedAtMs = Date.now();
   const elapsed = () => Number((performance.now() - started).toFixed(3));
@@ -273,6 +303,7 @@ function observeBridge(child: BridgeChild): void {
         elapsedMs: elapsed(),
         startedAtMs,
         transport: "pi-hook-bridge",
+        workspace: queryWorkspace(query),
       });
     } catch {
       dropBridge(code);
@@ -289,7 +320,7 @@ const childPrototype = childProcess.ChildProcess.prototype;
 const actualChildSpawn = childPrototype.spawn;
 childPrototype.spawn = function (this: BridgeChild, options: { args?: unknown }): unknown {
   const result = actualChildSpawn.call(this, options);
-  if (Array.isArray(options?.args) && options.args[1] === "pi-hook-bridge") observeBridge(this);
+  if (Array.isArray(options?.args) && options.args[1] === "pi-hook-bridge") observeBridge(this, options.args[2]);
   return result;
 };
 
