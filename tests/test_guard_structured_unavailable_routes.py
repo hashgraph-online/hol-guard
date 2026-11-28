@@ -93,6 +93,38 @@ def test_unavailable_event_route_uses_native_projection_and_activity_marker(
     assert recorded == []
 
 
+def test_unavailable_event_uses_standalone_rust_without_sending_tool_contents(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.mdm import runtime_request
+
+    def standalone(feature, command, request, *, deadline, **_transport):
+        assert feature == "native-hook-unavailable-event-v1"
+        assert command == "hook-unavailable-event"
+        assert request == {"harness": "claude-code", "payload": {"hookEventName": "PermissionRequestV2"}}
+        assert deadline == 12.0
+        return {
+            "event_name": "PermissionRequest",
+            "response": {"guard_permission_passthrough": True},
+            "activity_recorded": False,
+        }
+
+    class StubWorker:
+        def _apply_structured_unavailable_overlay(self, response, **_kwargs):
+            return response
+
+    monkeypatch.setattr(hook_worker_unavailable, "native_unavailable_event_response", lambda *_a, **_k: None)
+    monkeypatch.setattr(runtime_request, "runtime_answer", standalone)
+    assert hook_worker_unavailable.unavailable_event_response(
+        StubWorker(),
+        payload={"hookEventName": "PermissionRequestV2", "tool_input": {"text": "fixture"}},
+        harness="claude-code",
+        guard_home=tmp_path,
+        workspace=None,
+        deadline=12.0,
+    ) == {"guard_permission_passthrough": True}
+
+
 def test_structured_outage_overlay_does_not_read_python_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     seen: list[dict[str, object]] = []
 
