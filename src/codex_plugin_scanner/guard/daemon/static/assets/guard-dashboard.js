@@ -35838,6 +35838,78 @@ function McpCallFooter({
     item.browser_card ? /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserReportPrompt, { requestId: item.request_id }) : null
   ] });
 }
+const BROWSER_BURST_WINDOW_MS = 2 * 60 * 1e3;
+function burstKey(item) {
+  if (item.status !== "pending" || item.browser_card == null) return null;
+  const key = item.browser_burst_key;
+  return typeof key === "string" && key.length > 0 ? key : null;
+}
+function arrivedAt(item) {
+  const at = new Date(item.created_at).getTime();
+  return Number.isFinite(at) ? at : Number.NaN;
+}
+function stepText(item) {
+  return item.browser_card?.headline || item.queue_preview || item.artifact_name;
+}
+function runsOf(rows) {
+  const ordered = rows.filter((row) => Number.isFinite(arrivedAt(row))).sort((a, b) => arrivedAt(a) - arrivedAt(b) || a.request_id.localeCompare(b.request_id));
+  const runs = [];
+  for (const row of ordered) {
+    const run = runs[runs.length - 1];
+    const previous = run?.[run.length - 1];
+    if (run && previous && arrivedAt(row) - arrivedAt(previous) <= BROWSER_BURST_WINDOW_MS) {
+      run.push(row);
+    } else {
+      runs.push([row]);
+    }
+  }
+  return runs.filter((run) => run.length > 1);
+}
+function coalesceBrowserBursts(items) {
+  const byKey = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    const key = burstKey(item);
+    if (key !== null) byKey.set(key, [...byKey.get(key) ?? [], item]);
+  }
+  const lead = /* @__PURE__ */ new Map();
+  const bursts = /* @__PURE__ */ new Map();
+  for (const rows of byKey.values()) {
+    for (const run of runsOf(rows)) {
+      const first = run[0];
+      bursts.set(first.request_id, {
+        count: run.length,
+        steps: run.map((row) => ({ requestId: row.request_id, text: stepText(row) }))
+      });
+      for (const row of run) lead.set(row.request_id, first);
+    }
+  }
+  if (bursts.size === 0) return { items, bursts };
+  const shown = /* @__PURE__ */ new Set();
+  const folded = [];
+  for (const item of items) {
+    const first = lead.get(item.request_id) ?? item;
+    if (shown.has(first.request_id)) continue;
+    shown.add(first.request_id);
+    folded.push(first);
+  }
+  return { items: folded, bursts };
+}
+const BrowserBurstContext = reactExports.createContext(/* @__PURE__ */ new Map());
+function useBrowserBurst(requestId) {
+  return reactExports.useContext(BrowserBurstContext).get(requestId) ?? null;
+}
+function BrowserBurstSteps({ requestId }) {
+  const burst = useBrowserBurst(requestId);
+  if (burst === null) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-browser-burst": burst.count, className: "border-t border-slate-100 px-4 py-2.5 sm:px-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
+      burst.count,
+      " steps on this site"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-1.5 list-decimal space-y-0.5 pl-5 text-sm text-brand-dark/80", children: burst.steps.map((step) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "break-words", children: step.text }, step.requestId)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-xs text-muted-foreground", children: "Your choice answers the first step. A grant also clears the steps it covers; the others stay waiting." })
+  ] });
+}
 function CardRow(props) {
   const Icon = props.icon;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[auto_minmax(4.5rem,auto)_minmax(0,1fr)] items-start gap-x-2.5 py-1.5 text-sm", children: [
@@ -35977,6 +36049,7 @@ function BrowserCallCard(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserInputPreview, { card }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserRiskChips, { chips: card.risk_chips })
         ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserBurstSteps, { requestId: item.request_id }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserProviderFindings, { findings: card.provider_findings }),
         explanation.code !== null && explanation.code.collapsed !== true && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-4 mb-4 sm:mx-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CodePanel, { requestId: item.request_id, code: explanation.code }) }),
         explanation.code !== null && explanation.code.collapsed === true && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-t border-slate-100 px-4 py-3 sm:px-5", children: [
@@ -39188,6 +39261,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
   const preview = queueItemPreview(item);
   const isRead = readState.isRead(item.request_id);
   const watchOnlyObservation = isWatchOnlyObservation(item);
+  const burstSteps = useBrowserBurst(item.request_id)?.count ?? 0;
   const showCheckbox = selectionMode;
   const canSelect = selectionMode && selectable;
   const handleClick = reactExports.useCallback(() => {
@@ -39266,7 +39340,8 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
                   queueRequesterName(item),
                   " · ",
                   formatQueueRequestDate(item),
-                  watchOnlyObservation ? " · Would have stopped" : ""
+                  watchOnlyObservation ? " · Would have stopped" : "",
+                  burstSteps > 1 ? ` · ${burstSteps} steps on this site` : ""
                 ] })
               ] }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -41231,7 +41306,7 @@ function ReviewWorkspace(props) {
   const setupIdentityKey = reactExports.useMemo(() => connectorSetupIdentityKey(requests), [requests]);
   const setupClis = useConnectorSetupClis(setupIdentityKey);
   const setupGroups = reactExports.useMemo(() => buildConnectorSetupGroups(requests, setupClis), [requests, setupClis]);
-  const filteredRequests = reactExports.useMemo(() => {
+  const queueView = reactExports.useMemo(() => {
     let items = setupFilter ? requests.filter(isConnectorSetupItem) : requests;
     if (semanticFilter !== "all") {
       const group = REVIEW_SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
@@ -41243,8 +41318,9 @@ function ReviewWorkspace(props) {
     }
     items = filterQueueByDateRange(items, { from: dateFrom, to: dateTo });
     const searched = searchQueue(items, searchTerm);
-    return sortQueue(searched, sortDirection);
+    return coalesceBrowserBursts(sortQueue(searched, sortDirection));
   }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, setupFilter, sortDirection, semanticFilter]);
+  const filteredRequests = queueView.items;
   const filterSignature = JSON.stringify([searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
   const appliedFilterSignatureRef = reactExports.useRef(filterSignature);
   reactExports.useEffect(() => {
@@ -41417,7 +41493,7 @@ function ReviewWorkspace(props) {
         ]
       }
     ) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-[320px_minmax(0,1fr)] lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] items-start", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(BrowserBurstContext.Provider, { value: queueView.bursts, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-[320px_minmax(0,1fr)] lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] items-start", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${mobileQueueOpen ? "block" : "hidden"} md:block`, children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewQueueList,
         {
@@ -41468,7 +41544,7 @@ function ReviewWorkspace(props) {
           approvalGate: props.approvalGate ?? null
         }
       )
-    ] })
+    ] }) })
   ] });
 }
 const DESKTOP_REQUESTS_META = "guard-desktop-requests";

@@ -30,6 +30,7 @@ mod aibom_vectors_tests;
 #[path = "adapters/detection/antigravity_detect.rs"]
 mod antigravity_detect;
 mod approval;
+mod approval_browser_burst;
 mod approval_browser_card;
 mod approval_browser_surface;
 mod approval_bulk_eligibility_op;
