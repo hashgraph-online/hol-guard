@@ -38,6 +38,7 @@ import {
 } from "./queue-bulk-approve-flow";
 import { useQueueBulkApprove } from "./use-queue-bulk-approve";
 import { ReviewDecisionCard } from "./review-decision-card";
+import { BrowserBurstContext, coalesceBrowserBursts } from "./browser-call/browser-burst";
 import { ReviewHeader, ReviewQueueList } from "./review-queue-list";
 import { queueRequesterName } from "./mcp-call/mcp-queue-name";
 import { ReviewEmptyState } from "./review-states";
@@ -145,7 +146,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const setupClis = useConnectorSetupClis(setupIdentityKey);
   const setupGroups = useMemo(() => buildConnectorSetupGroups(requests, setupClis), [requests, setupClis]);
 
-  const filteredRequests = useMemo(() => {
+  const queueView = useMemo(() => {
     let items = setupFilter ? requests.filter(isConnectorSetupItem) : requests;
     if (semanticFilter !== "all") {
       const group = REVIEW_SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
@@ -157,8 +158,9 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     }
     items = filterQueueByDateRange(items, { from: dateFrom, to: dateTo });
     const searched = searchQueue(items, searchTerm);
-    return sortQueue(searched, sortDirection);
+    return coalesceBrowserBursts(sortQueue(searched, sortDirection));
   }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, setupFilter, sortDirection, semanticFilter]);
+  const filteredRequests = queueView.items;
 
   const filterSignature = JSON.stringify([searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
   const appliedFilterSignatureRef = useRef(filterSignature);
@@ -352,6 +354,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         </button>
       </div>
 
+      <BrowserBurstContext.Provider value={queueView.bursts}>
       <div className="grid gap-4 md:grid-cols-[320px_minmax(0,1fr)] lg:grid-cols-[340px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)] items-start">
         <div className={`${mobileQueueOpen ? "block" : "hidden"} md:block`}>
           <ReviewQueueList
@@ -400,6 +403,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
           approvalGate={props.approvalGate ?? null}
         />
       </div>
+      </BrowserBurstContext.Provider>
     </div>
   );
 }

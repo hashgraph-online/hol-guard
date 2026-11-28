@@ -417,10 +417,20 @@ transcript in the pull request (after BP-T052).
   a clear reason. Removal is a protected settings mutation.
 - [ ] **BP-T065** Evaluation order per PRD 5.5 in `mcp_tool_policy_flow.rs`. Update the list in
   `docs/guard/mcp-server-contributions.md`. Add an ordering test with every tier present.
-- [ ] **BP-T066** Burst coalescing: pending browser rows from one session on one origin within the
+- [x] **BP-T066** Burst coalescing: pending browser rows from one session on one origin within the
   review window render as one card with a count and a step list; resolving with a grant resolves
   covered rows and leaves uncovered rows pending. Queue grouping in `dashboard/src/queue-state.ts` and
   `review-queue-item.tsx`.
+  - Done: `approval_browser_burst.rs` gives each carded row a `browser_burst_key`, a digest of the
+    harness, the session (the filed browser session, else the agent session), the driver and the
+    origin. A row with no known session or origin gets no key and keeps its own card.
+  - `dashboard/src/browser-call/browser-burst.ts` folds pending rows that share a key and arrived
+    within two minutes of each other into the first step, kept where the burst first appears. The
+    queue row names the step count and the card lists the steps (`browser-burst-steps.tsx`). The
+    grouping lives beside the browser card because `queue-state.ts` is past the size limit.
+  - Rows stay separate in the store. The choice answers the first step; a grant clears the rows it
+    covers through `covered_request_ids`, and the others stay pending and form the next card. Rows
+    without a page origin (click and type before BP-T062) do not coalesce yet.
 - [ ] **BP-T067** Dashboard grant controls: extend `dashboard/src/temporary-mcp-approval.ts`,
   `temporary-mcp-approval-controls.tsx` and `buildTemporaryMcpResolutionFields` for the new targets and
   durations, driven by the native options. Default preselection `site-category` for 15 minutes when
