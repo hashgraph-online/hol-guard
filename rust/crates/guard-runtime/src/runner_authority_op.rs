@@ -270,6 +270,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "local_mcp_probe" => crate::local_mcp_probe::dispatch(args),
         "local_identity" => crate::local_identity::dispatch(args),
         "hook_approval_wait" => crate::hook_approval_wait::dispatch(args),
+        "approval_browser_surface" => crate::approval_browser_surface::dispatch(args),
         "grok_detect" => grok_detect::detect(args),
         "grok_legacy_settings" => grok_legacy_settings::dispatch(args),
         "grok_user_config" => grok_user_config_op::dispatch(args),

@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import final
 
+from ..approval_browser_surface import approval_page_held
 from ..config import GuardConfig, load_guard_config
 from ..native_directory_trust import NativeDirectoryTrustError, native_directory_trust
 from ..store import GuardStore
@@ -17,6 +18,9 @@ from .surface_server import GuardSurfaceRuntime
 _SEVERITY_ORDER = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 _BROWSER_OPEN_COOLDOWN_SECONDS = 300.0
 _CRITICAL_BURST_COOLDOWN_SECONDS = 5.0
+# A page held by a live shared-browser session is checked again this often
+# while its operation still waits, so it opens once the session goes idle.
+_HELD_RECHECK_SECONDS = 30.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +188,9 @@ class ApprovalAttentionCoordinator:
             # without terminating the attention loop.
             return
         if config.approval_surface_policy != "attention-aware":
+            return
+        if approval_page_held(self._store.guard_home):
+            self._reschedule(item, due_at=now + _HELD_RECHECK_SECONDS)
             return
         open_key = f"approval-request:{item.request_ids[0]}"
         if self._runtime.has_surface_opened("approval-center", open_key):

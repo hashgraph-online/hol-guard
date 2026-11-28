@@ -68,6 +68,11 @@ pub(super) fn response(config: &ReadConfig, loaded: &Loaded) -> Option<(u16, Val
             "config_path": guard_home.join("config.toml").to_str()?,
             "settings": settings,
             "protection_capabilities": protection_capabilities()?,
+            // R-SURFACE: Pi and Oh My Pi open no approval page while it is held.
+            "approval_page_held": crate::approval_browser_surface::approval_page_held(
+                guard_home,
+                crate::approval_browser_surface::now_unix(),
+            ),
         }),
     ))
 }
