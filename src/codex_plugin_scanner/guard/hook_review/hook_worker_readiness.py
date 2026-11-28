@@ -110,15 +110,10 @@ def _wait_nudging_publisher(
         if getattr(publisher, "closed", False) is True:
             return
         last_error = getattr(publisher, "last_error", None)
-        native_wait = _native_wait_for_ack(publisher, last_error, _resident_streak(publisher), deadline)
-        if native_wait is False:
+        if last_error in POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS:
             return
-        # Compatibility path for a resident predating hook-policy-admission-v1.
-        if native_wait is None:
-            if last_error in POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS:
-                return
-            if is_resident_class_error(last_error) and _resident_streak(publisher) >= RESIDENT_FAIL_FAST_STREAK:
-                return
+        if is_resident_class_error(last_error) and _resident_streak(publisher) >= RESIDENT_FAIL_FAST_STREAK:
+            return
 
 
 def prepare_workspace_policy(
@@ -166,11 +161,15 @@ def prepare_workspace_policy(
             )
         )
         no_publication_error = last_error is None or (isinstance(last_error, str) and not last_error.strip())
-        native_wait = _native_wait_for_ack(
-            worker.policy_snapshot_publisher,
-            last_error,
-            _resident_streak(worker.policy_snapshot_publisher),
-            readiness_deadline,
+        native_wait = (
+            None
+            if no_publication_error
+            else _native_wait_for_ack(
+                worker.policy_snapshot_publisher,
+                last_error,
+                _resident_streak(worker.policy_snapshot_publisher),
+                readiness_deadline,
+            )
         )
         # A file-less directory adds no overlay, so the current ACK already
         # carries its policy unless an unsettled ancestor overlay is about to
