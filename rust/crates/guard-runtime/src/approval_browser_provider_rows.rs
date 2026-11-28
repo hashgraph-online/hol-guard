@@ -41,9 +41,26 @@ pub(crate) fn provider_rows(
     let Some((_, subject)) = origin_subject(origin) else {
         return Vec::new();
     };
+    // One savepoint makes the signal and connection reads see one committed state, so a reconnect
+    // landing between them cannot pair an old manifest's answer with the new manifest's labels. A
+    // savepoint nests inside a caller's transaction.
+    if connection.execute_batch("savepoint provider_rows").is_err() {
+        return Vec::new();
+    }
+    let rows = rows_in_snapshot(connection, providers, &subject.digest, now_ms);
+    let _ = connection.execute_batch("rollback to provider_rows; release provider_rows");
+    rows
+}
+
+fn rows_in_snapshot(
+    connection: &Connection,
+    providers: &[CompiledProviderIntegrationV1],
+    subject_digest: &str,
+    now_ms: u64,
+) -> Vec<BrowserCardProviderFindingV1> {
     let mut rows = Vec::new();
     for capability in CAPABILITIES {
-        let Ok(signals) = signals_for_subject(connection, capability, &subject.digest) else {
+        let Ok(signals) = signals_for_subject(connection, capability, subject_digest) else {
             return Vec::new();
         };
         for stored in signals {

@@ -159,3 +159,23 @@ fn the_approval_card_carries_the_rows_for_its_site() {
     .expect("card");
     assert_eq!(elsewhere["provider_findings"], json!([]));
 }
+
+#[test]
+fn the_snapshot_nests_in_a_caller_transaction_and_is_always_ended() {
+    let store = connected();
+    store.execute_batch("begin").unwrap();
+    assert_eq!(
+        provider_rows(&store, &[provider()], SITE, OBSERVED + 1).len(),
+        1
+    );
+    assert!(
+        !store.is_autocommit(),
+        "the caller's transaction is still open"
+    );
+    store.execute_batch("commit").unwrap();
+    assert_eq!(
+        provider_rows(&store, &[provider()], SITE, OBSERVED + 1).len(),
+        1
+    );
+    assert!(store.is_autocommit(), "no snapshot is left open");
+}
