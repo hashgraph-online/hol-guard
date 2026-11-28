@@ -11,6 +11,7 @@ from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, cast
 
+from ..native_hook_availability import standalone_unavailable_event
 from ..native_hook_render import (
     availability_harness_response,
     canonical_hook_event_name,
@@ -117,6 +118,11 @@ def unavailable_event_response(
         )
     except (OSError, RuntimeError, TypeError, ValueError):
         native = None
+    if native is None:
+        try:
+            native = standalone_unavailable_event(payload, harness, deadline=deadline)
+        except (OSError, RuntimeError, TypeError, ValueError):
+            native = None
     if native is not None:
         native_event = native.get("event_name")
         native_response = native.get("response")
