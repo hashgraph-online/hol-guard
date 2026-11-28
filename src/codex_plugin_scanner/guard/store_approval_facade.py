@@ -79,6 +79,7 @@ class StoreApprovalsMixin:
         silent: bool | None = False,
         claude_key: dict[str, str] | None = None,
         codex_live_wait: dict[str, object] | None = None,
+        codex_live_wait_payload: Mapping[str, object] | None = None,
         respond: dict[str, object] | None = None,
         connector_lookup: dict[str, object] | None = None,
         bound_bash: bool = False,
@@ -108,6 +109,10 @@ class StoreApprovalsMixin:
         resume record after it, in the same write. A bridge that is not live
         (``not_live``), or a wait the resident could not link or seed, leaves
         the request a manual retry.
+
+        ``codex_live_wait_payload`` is the raw hook payload used by the native
+        fallback to derive those facts. Rust removes it before the store write
+        and applies the same validation as the direct hook lane.
 
         ``respond`` asks for the hook response with the row: ``paused_review``
         or ``silent_review_block`` (the block's ``ask`` and ``home_dir``). The
@@ -140,6 +145,8 @@ class StoreApprovalsMixin:
             args["integrity_key_id"] = claude_key["integrity_key_id"]
         if codex_live_wait is not None:
             args["codex_live_wait_facts"] = codex_live_wait
+        if codex_live_wait_payload is not None:
+            args["codex_live_wait_payload"] = dict(codex_live_wait_payload)
         if respond is not None:
             args["respond"] = respond
         if connector_lookup is not None:

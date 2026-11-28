@@ -11,7 +11,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_adapter import NativeHookAdapterError, native_review_query
 from ..native_hook_authority_state import hook_authority_integrity_key
@@ -183,7 +182,7 @@ def pause_native_pre_tool_for_approval(
         package_approval=package_approval,
         policy_binding_verified=True,
         claude_notice=canonical_harness(harness) == "claude-code",
-        codex_live_wait=canonical_harness(harness) == "codex",
+        codex_live_wait_payload=payload if canonical_harness(harness) == "codex" else None,
         silent=None,
         respond={"native_review": {}},
     )
@@ -230,8 +229,8 @@ def queue_native_pre_tool_review(
     package_approval: Mapping[str, str] | None = None,
     claude_notice: bool = False,
     policy_binding_verified: bool = False,
-    codex_live_wait: bool = False,
-    silent: bool | None = False,
+    codex_live_wait_payload: Mapping[str, object] | None = None,
+    silent: bool | None = None,
     respond: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
     if not policy_binding_verified:
@@ -249,7 +248,6 @@ def queue_native_pre_tool_review(
     if not callable(queue):
         return None
     request_id = uuid.uuid4().hex
-    live_wait = _codex_live_wait(payload, workspace) if codex_live_wait else None
     review = {
         "result": dict(native_result),
         "native_receipt": dict(native_receipt) if native_receipt is not None else None,
@@ -293,7 +291,7 @@ def queue_native_pre_tool_review(
             hint={"deadline_left_ms": remaining_ms},
             silent=silent,
             claude_key=claude_key,
-            codex_live_wait=live_wait,
+            codex_live_wait_payload=codex_live_wait_payload,
             respond=respond,
             connector_lookup=connector_lookup,
             bound_bash=bound_bash is not None,
@@ -311,19 +309,6 @@ def _connector_setup(queued: object) -> Mapping[str, object]:
     """The connector the queue call found for the review, or nothing."""
     setup = queued.get("connector_setup") if isinstance(queued, dict) else None
     return cast(Mapping[str, object], setup) if isinstance(setup, dict) else {}
-
-
-def _codex_live_wait(payload: Mapping[str, object], workspace: Path | None) -> dict[str, object] | None:
-    """The waiting bridge's facts; the resident proves it live and builds the wait it links."""
-    process = payload.get(CODEX_BROWSER_WAIT_PROCESS_KEY)
-    timeout_seconds = payload.get(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY)
-    if process is None and timeout_seconds is None:
-        return None
-    return {
-        "process": process,
-        "timeout_seconds": timeout_seconds,
-        "workspace": None if workspace is None else str(workspace),
-    }
 
 
 def _native_review_artifact_id(harness: str, tool_name: str) -> str:
