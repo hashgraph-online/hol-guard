@@ -67,9 +67,24 @@ pub(super) fn nested(mut done: Rendered, root: &Path) -> Rendered {
         return done;
     }
     let inner = format!("{name}/");
+    // Only entry lines count: a line inside a fence is file content and may
+    // say anything, and the path itself must pass the same plain check.
+    // `fenced` opens and closes with one line of backticks longer than any
+    // run inside, so only that exact line ends the fence.
+    let mut fence: Option<&str> = None;
     let first = (done.text.lines())
-        .filter(|line| line.starts_with(&inner))
-        .find_map(|line| line.split(':').next())
+        .filter(|line| {
+            let ticks = line.len() >= 3 && line.chars().all(|c| c == '`');
+            match fence {
+                Some(open) if *line == open => fence = None,
+                Some(_) => {}
+                None if ticks => fence = Some(line),
+                None => return line.starts_with(&inner),
+            }
+            false
+        })
+        .filter_map(|line| line.split(':').next())
+        .find(|path| plain(path))
         .map(str::to_owned);
     if let Some(first) = first {
         let full = root.join(&first);
