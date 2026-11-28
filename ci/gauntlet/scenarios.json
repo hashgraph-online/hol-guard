@@ -3400,7 +3400,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "From the ledger service's source folder, find which of its test files use settleBatch: run the listed command once, exactly as written, and report what it printed.",
+      "prompt": "From the ledger service's source folder, find which of its spec files use settleBatch: run the listed command once, exactly as written, and report what it printed.",
       "commands": [
         "cd services/ledger/src && grep -rln \"settleBatch\" ../tests | head"
       ]

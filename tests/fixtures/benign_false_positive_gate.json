@@ -35500,7 +35500,7 @@
       "tool_input": {
         "command": "cd services/ledger/src && grep -rln \"settleBatch\" ../tests | head"
       },
-      "cwd": "worktree",
+      "cwd": "ledger_service",
       "expect": "allow"
     },
     {
@@ -35517,8 +35517,9 @@
       "tool_input": {
         "command": "cd services/ledger/src && grep -rln \"LEDGER_REGION\" ../tests | head"
       },
-      "cwd": "worktree",
-      "expect": "not_allow"
+      "cwd": "ledger_service",
+      "expect": "not_allow",
+      "contained_ok": true
     },
     {
       "id": "neg-doctl-databases-list-uri-format",

@@ -51,6 +51,7 @@ import pytest
 from ci.gauntlet.edge_clone_fixtures import write_edge_clone
 from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
+from ci.gauntlet.search_diff_fixtures import PARENT_TESTS_FILES
 from ci.gauntlet.source_output_fixtures import FALLBACK_SOURCES
 from ci.gauntlet.source_output_fixtures import SOURCES as TOKEN_SOURCES
 from tests import codex_containment_route
@@ -199,6 +200,8 @@ class BenignFixture:
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
             # A checkout whose committed template leaves its credentials empty.
             "env_template_empty_credentials": self.home / "Code" / "ignore-rules" / "ledger-api",
+            # A checkout whose tests folder keeps an environment fixture beside its sources.
+            "ledger_service": self.home / "Code" / "ledger-service",
             "feature_app": feature_app_path(self.home),
             "pnpm_monorepo": self.home / "Code" / "acme-platform",
             # A package inside a workspace whose shared type-check base sits at
@@ -303,10 +306,12 @@ def build_fixture(root: Path) -> BenignFixture:
     for relative, text in {**TOKEN_SOURCES, **FALLBACK_SOURCES}.items():
         _write(worktree / relative, text)
     # A package whose tests keep an environment fixture, searched through `..`
-    # from the package's source folder.
-    _write(worktree / "services" / "ledger" / "src" / "settle.ts", "export function settleBatch() {}\n")
-    _write(worktree / "services" / "ledger" / "tests" / "settle.test.ts", "import { settleBatch } from '../src/settle';\n")
-    _write(worktree / "services" / "ledger" / "tests" / "fixtures" / ".env.test", "LEDGER_REGION=synthetic\n")
+    # from the package's source folder. It is a checkout of its own, so the
+    # shared worktree's whole-tree searches never meet the fixture.
+    ledger_service = home / "Code" / "ledger-service"
+    for relative, text in PARENT_TESTS_FILES:
+        _write(ledger_service / relative, text)
+    _git(ledger_service, "init", "--quiet", "--initial-branch=main", home=home)
     # The test beside that source: a project file whose name reads like a
     # credential, named by the runner a session runs over it.
     _write(
