@@ -2,19 +2,22 @@
 //! drives, with the driver identity, the profile mode, the debugging ports a
 //! reviewed launch named and the current origin.
 //!
-//! The tables are owned by the native store. `ensure_browser_session_schema`
+//! The tables are owned by the native store; `browser_session_schema.rs`
 //! creates them idempotently and checks that the stored objects are exactly
-//! the ones below. It records no `schema_migrations` row, so it can never
-//! collide with a version number of the Python migration chain.
+//! the ones it declares, and records no `schema_migrations` row, so it never
+//! collides with a version number of the Python migration chain.
 //!
 //! Every recorded value only tightens what Guard already knows: the profile
 //! mode keeps the riskier of the old and new mode, and debugging ports are only
 //! added. Nothing here can produce an allow.
 
-use std::collections::BTreeMap;
-
 use guard_contracts::BrowserProfileModeV1;
 use rusqlite::{params, Connection, OptionalExtension};
+
+pub use crate::browser_session_schema::{
+    ensure_browser_session_schema, BrowserSessionResult, BrowserSessionStoreError,
+};
+use crate::browser_session_schema::{in_savepoint, is_digest};
 
 /// A session that has not been seen for this long is dropped.
 pub const BROWSER_SESSION_IDLE_SECONDS: i64 = 2 * 60 * 60;
@@ -23,66 +26,8 @@ pub const MAX_DEBUGGING_PORTS_PER_SESSION: usize = 16;
 /// Sessions kept per harness session; the least recently seen is dropped.
 pub const MAX_SESSIONS_PER_HARNESS_SESSION: i64 = 64;
 const MAX_ORIGIN_CHARS: usize = 512;
-const SAVEPOINT: &str = "browser_session_schema";
 const RECORD_SAVEPOINT: &str = "browser_session_record";
 const PRUNE_SAVEPOINT: &str = "browser_session_prune";
-
-const STATEMENTS: [&str; 4] = [
-    "create table if not exists guard_browser_sessions (
-        session_digest text primary key,
-        harness text not null,
-        harness_session_digest text not null,
-        driver_identity_hash text not null,
-        profile_mode text not null,
-        first_seen_unix integer not null,
-        last_seen_unix integer not null,
-        current_origin text
-    )",
-    "create index if not exists idx_guard_browser_sessions_harness_session
-        on guard_browser_sessions (harness, harness_session_digest, last_seen_unix)",
-    "create table if not exists guard_browser_session_ports (
-        session_digest text not null
-            references guard_browser_sessions (session_digest) on delete cascade,
-        port integer not null check (port between 1 and 65535),
-        primary key (session_digest, port)
-    )",
-    "create index if not exists idx_guard_browser_sessions_last_seen
-        on guard_browser_sessions (last_seen_unix)",
-];
-
-const OBJECTS: [(&str, &str); 4] = [
-    ("table", "guard_browser_sessions"),
-    ("index", "idx_guard_browser_sessions_harness_session"),
-    ("table", "guard_browser_session_ports"),
-    ("index", "idx_guard_browser_sessions_last_seen"),
-];
-
-#[derive(Debug)]
-pub enum BrowserSessionStoreError {
-    Invalid(&'static str),
-    Schema(String),
-    Store(rusqlite::Error),
-}
-
-impl From<rusqlite::Error> for BrowserSessionStoreError {
-    fn from(error: rusqlite::Error) -> Self {
-        Self::Store(error)
-    }
-}
-
-impl std::fmt::Display for BrowserSessionStoreError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Invalid(reason) => write!(formatter, "invalid_browser_session:{reason}"),
-            Self::Schema(reason) => write!(formatter, "invalid_browser_session_schema:{reason}"),
-            Self::Store(error) => write!(formatter, "browser_session_store:{error}"),
-        }
-    }
-}
-
-impl std::error::Error for BrowserSessionStoreError {}
-
-pub type BrowserSessionResult<T> = Result<T, BrowserSessionStoreError>;
 
 /// One sighting of a browser session by a hook.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,88 +54,6 @@ pub struct BrowserSession {
     pub last_seen_unix: i64,
     pub current_origin: Option<String>,
     pub debugging_ports: Vec<u16>,
-}
-
-fn normalized_sql(statement: &str) -> String {
-    statement
-        .to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .replace(" if not exists", "")
-}
-
-fn validate_objects(connection: &Connection) -> BrowserSessionResult<()> {
-    let mut statement = connection.prepare(
-        "select type, name, sql from sqlite_master \
-         where name like 'guard_browser_session%' or name like 'idx_guard_browser_session%'",
-    )?;
-    let mut actual: BTreeMap<(String, String), String> = BTreeMap::new();
-    let mut rows = statement.query([])?;
-    while let Some(row) = rows.next()? {
-        let kind: String = row.get(0)?;
-        let name: String = row.get(1)?;
-        let sql: Option<String> = row.get(2)?;
-        if let Some(sql) = sql {
-            actual.insert((kind, name), normalized_sql(&sql));
-        }
-    }
-    if actual.len() != OBJECTS.len() {
-        return Err(BrowserSessionStoreError::Schema("owned_objects".to_owned()));
-    }
-    for ((kind, name), statement) in OBJECTS.iter().zip(STATEMENTS.iter()) {
-        let key = (kind.to_string(), name.to_string());
-        if actual.get(&key) != Some(&normalized_sql(statement)) {
-            return Err(BrowserSessionStoreError::Schema(format!("{kind}:{name}")));
-        }
-    }
-    Ok(())
-}
-
-/// Creates the browser session tables when absent and checks that the stored
-/// objects match this module exactly. A failed check rolls back and leaves the
-/// store as it was.
-pub fn ensure_browser_session_schema(connection: &Connection) -> BrowserSessionResult<()> {
-    in_savepoint(connection, SAVEPOINT, || {
-        STATEMENTS
-            .iter()
-            .try_for_each(|statement| connection.execute_batch(statement))
-            .map_err(BrowserSessionStoreError::from)
-            .and_then(|()| validate_objects(connection))
-    })
-}
-
-/// Runs `body` inside a named savepoint. A failed body rolls back. A failed
-/// `release` (an outermost release is the commit, which a reader can hold off)
-/// also rolls back and removes the savepoint, so the connection never keeps an
-/// open write transaction that would swallow later writes; only this
-/// operation's savepoint is unwound, so a caller's outer transaction survives.
-fn in_savepoint<T>(
-    connection: &Connection,
-    name: &str,
-    body: impl FnOnce() -> BrowserSessionResult<T>,
-) -> BrowserSessionResult<T> {
-    connection.execute_batch(&format!("savepoint {name}"))?;
-    let outcome = body();
-    if outcome.is_err() {
-        if let Err(error) = connection.execute_batch(&format!("rollback to {name}")) {
-            let _ = connection.execute_batch(&format!("release {name}"));
-            return Err(error.into());
-        }
-    }
-    if let Err(error) = connection.execute_batch(&format!("release {name}")) {
-        let _ = connection.execute_batch(&format!("rollback to {name}"));
-        let _ = connection.execute_batch(&format!("release {name}"));
-        return Err(error.into());
-    }
-    outcome
-}
-
-fn is_digest(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn is_harness(value: &str) -> bool {

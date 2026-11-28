@@ -38,6 +38,7 @@ import { explainMcpCall } from "./mcp-call/explain-mcp-call";
 import { McpAppMark } from "./mcp-call/mcp-app-mark";
 import { listedMcpPreview, queueMcpMarkName, queueRequesterName } from "./mcp-call/mcp-queue-name";
 import type { RequestReadState } from "./request-read-state";
+import { useBrowserBurst } from "./browser-call/browser-burst";
 
 type RiskLevel = "high" | "medium" | "low";
 
@@ -77,6 +78,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
   const preview = queueItemPreview(item);
   const isRead = readState.isRead(item.request_id);
   const watchOnlyObservation = isWatchOnlyObservation(item);
+  const burstSteps = useBrowserBurst(item.request_id)?.count ?? 0;
   // Checkboxes render whenever bulk selection is active so the affordance is
   // always discoverable. Non-eligible rows show a disabled checkbox with a
   // tooltip instead of silently hiding the control.
@@ -162,6 +164,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
             <p className="truncate text-[11px] text-muted-foreground">
               {queueRequesterName(item)} · {formatQueueRequestDate(item)}
               {watchOnlyObservation ? " · Would have stopped" : ""}
+              {burstSteps > 1 ? ` · ${burstSteps} steps on this site` : ""}
             </p>
           </div>
           <span

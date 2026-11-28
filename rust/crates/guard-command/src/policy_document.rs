@@ -62,9 +62,12 @@ const MATCH_FIELDS: &[&str] = &[
     "workspaces",
     "browserIntents",
     "browserOperations",
+    "browserVerbs",
+    "browserDrivers",
     "browserProfiles",
     "origins",
     "pathPrefixes",
+    "siteGroups",
     "sensitiveSurfaces",
 ];
 

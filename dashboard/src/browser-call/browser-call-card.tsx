@@ -1,10 +1,12 @@
 import { isWatchOnlyObservation } from "../approval-center-utils";
-import type { GuardApprovalRequest, GuardBrowserCardV1 } from "../guard-types";
+import type { GuardApprovalGatePublicConfig, GuardApprovalRequest, GuardBrowserCardV1 } from "../guard-types";
 import { McpAppMark } from "../mcp-call/mcp-app-mark";
 import { actingApp, mcpMarkName } from "../mcp-call/mcp-brand";
 import { CodePanel, McpCallFooter, mcpCallReason, subtitleOf } from "../mcp-call/mcp-call-card";
 import { ConsequenceNote, EffectPill } from "../mcp-call/mcp-call-parts";
 import type { McpCallExplanation } from "../mcp-call/mcp-call-types";
+import { BrowserBurstSteps } from "./browser-burst-steps";
+import { BrowserGatePrompt, browserGateNeedsSetup } from "./browser-gate-prompt";
 import { BrowserInputPreview } from "./browser-input-preview";
 import { BrowserProfileLine } from "./browser-profile-line";
 import { BrowserProviderFindings } from "./browser-provider-findings";
@@ -24,6 +26,7 @@ export function BrowserCallCard(props: {
   item: GuardApprovalRequest;
   card: GuardBrowserCardV1;
   explanation: McpCallExplanation;
+  approvalGate?: GuardApprovalGatePublicConfig | null;
 }) {
   const { item, card, explanation } = props;
   return (
@@ -58,6 +61,8 @@ export function BrowserCallCard(props: {
         <BrowserInputPreview card={card} />
         <BrowserRiskChips chips={card.risk_chips} />
       </div>
+      {browserGateNeedsSetup(card.profile_line, props.approvalGate) && <BrowserGatePrompt />}
+      <BrowserBurstSteps requestId={item.request_id} />
       <BrowserProviderFindings findings={card.provider_findings} />
 
       {explanation.code !== null && explanation.code.collapsed !== true && (

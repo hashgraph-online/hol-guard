@@ -10,6 +10,9 @@
 //! under and the moment it runs out; a pick the card does not offer is refused
 //! by code, never widened to fit.
 //!
+//! An intent that names its driver identity and site also offers the site
+//! targets of `browser_site_grant.rs` (BP-T060).
+//!
 //! Two shapes share the kind:
 //! - `{"browser_intents": [intent, ...]}` answers `{"approvals": [...]}`, one
 //!   card payload or `null` per intent, in order.
@@ -18,6 +21,10 @@
 
 use serde_json::{json, Map, Value};
 
+use crate::browser_site_grant::{
+    is_site_target, site_scope, site_selector, site_targets, SiteScope, SESSION_BOUND_SECONDS,
+    SESSION_DURATION,
+};
 use crate::context_digest::python_strip;
 use crate::mcp_tool_policy_grants::{
     category_for, exact_grant_selector, risks_allow_grant, scope_grant_selector,
@@ -53,6 +60,23 @@ struct Eligibility {
     server_name: String,
     category: &'static str,
     target_label: Option<String>,
+    site: Option<SiteScope>,
+}
+
+impl Eligibility {
+    fn targets(&self) -> Vec<&'static str> {
+        let mut targets = TARGETS.to_vec();
+        targets.extend(self.site.as_ref().map(site_targets).unwrap_or_default());
+        targets
+    }
+
+    fn durations(&self) -> Vec<&'static str> {
+        let mut durations = vec!["once", "15m", "1h", "5h"];
+        if self.targets().contains(&"session-site") {
+            durations.push(SESSION_DURATION);
+        }
+        durations
+    }
 }
 
 pub(crate) fn dispatch(args: &Value) -> KindResult {
@@ -92,8 +116,8 @@ pub(crate) fn approval(intent: Option<&Value>) -> Option<Value> {
         "server_identity_hash": found.server_identity_hash,
         "category": found.category,
         "target_label": found.target_label,
-        "allowed_targets": TARGETS,
-        "allowed_durations": ["once", "15m", "1h", "5h"],
+        "allowed_targets": found.targets(),
+        "allowed_durations": found.durations(),
         "hard_risk_exclusions": HARD_RISK_EXCLUSIONS,
     }))
 }
@@ -101,7 +125,8 @@ pub(crate) fn approval(intent: Option<&Value>) -> Option<Value> {
 /// `eligibility_from_browser_intent`: the routine category must be claimed,
 /// and nothing beyond it but the informational external-domain flag.
 fn eligibility(intent: Option<&Value>) -> Option<Eligibility> {
-    let intent = intent?.as_object()?;
+    let filed = intent?;
+    let intent = filed.as_object()?;
     let server_identity_hash = nonempty(intent, "mcp_server_identity_hash");
     let server_name = nonempty(intent, "mcp_server_name");
     let category = nonempty(intent, "intent").and_then(|named| category_for(&named));
@@ -127,6 +152,7 @@ fn eligibility(intent: Option<&Value>) -> Option<Eligibility> {
         server_name,
         category,
         target_label,
+        site: site_scope(filed),
     })
 }
 
@@ -147,16 +173,19 @@ fn select(
         .get("target")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    if !TARGETS.contains(&target) {
+    if !found.targets().contains(&target) {
         return Ok(Err("invalid_mcp_grant_target"));
     }
     let duration = pick
         .get("duration")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    let session =
+        (duration == SESSION_DURATION && target == "session-site").then_some(SESSION_BOUND_SECONDS);
     let Some(seconds) = DURATIONS
         .iter()
         .find_map(|(name, seconds)| (*name == duration).then_some(*seconds))
+        .or(session)
     else {
         return Ok(Err("invalid_mcp_grant_duration"));
     };
@@ -165,9 +194,15 @@ fn select(
     else {
         return Ok(Err("invalid_mcp_grant_timestamp"));
     };
-    let artifact_id = match target {
-        "exact" => exact_grant_selector(artifact_id, artifact_hash),
-        "category" => scope_grant_selector(&found.server_identity_hash, Some(found.category)),
+    let artifact_id = match (target, found.site.as_ref()) {
+        (site_target, Some(site)) if is_site_target(site_target) => {
+            match site_selector(site, site_target, found.category) {
+                Some(selector) => selector,
+                None => return Ok(Err("invalid_mcp_grant_target")),
+            }
+        }
+        ("exact", _) => exact_grant_selector(artifact_id, artifact_hash),
+        ("category", _) => scope_grant_selector(&found.server_identity_hash, Some(found.category)),
         _ => scope_grant_selector(&found.server_identity_hash, None),
     };
     Ok(Ok(json!({

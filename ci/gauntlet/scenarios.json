@@ -3399,6 +3399,18 @@
       ]
     },
     {
+      "id": "omp-native-cd-folder-grep-parent-tests-env-fixture",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "From the ledger service's source folder, find which of its spec files use settleBatch: run the listed command once, exactly as written, and report what it printed.",
+      "commands": [
+        "cd services/ledger/src && grep -rln \"settleBatch\" ../tests | head"
+      ]
+    },
+    {
       "id": "omp-native-git-worktree-prune-then-list",
       "expectation": "allow",
       "oracle": "native-tools",

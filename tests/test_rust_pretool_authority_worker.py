@@ -108,6 +108,9 @@ def test_hook_worker_returns_native_allow(
     assert hook_output["permissionDecision"] == "allow"
 
 
+_REVIEW_OBSERVATION = {"schema": "hol-guard.transition-hook-observation.v1", "request_id": "request"}
+
+
 def test_hook_worker_native_review_does_not_escape_to_python_semantics(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -129,6 +132,11 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
                     "permissionDecision": "deny",
                 },
                 "policy_action": "review",
+            },
+            "transition_hook_observation": {
+                "operation_id": "op",
+                "request_id": "request",
+                "observation": _REVIEW_OBSERVATION,
             },
         }
         return with_review_evidence(edge, **kwargs)
@@ -176,6 +184,8 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
     assert isinstance(result.get("approval_request_id"), str)
     assert native_hook_route() == "native_resident"
     assert store.list_approval_requests(status="pending")
+    # The paused review is the edge's decision, so it keeps the edge's receipt stamp.
+    assert result["guard_transition_observation"] == _REVIEW_OBSERVATION
 
 
 def test_full_cli_review_keeps_native_terminal_provenance(

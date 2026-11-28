@@ -33,7 +33,7 @@ from .runtime_cases import RUNTIME_BLOCK_REASONS, runtime_required_checks
 from .script_cases import CREDENTIAL_STORE_CASES, SCRIPT_BLOCK_REASONS, STORE_CHECK
 from .session_folder import EDIT_CASE as SESSION_EDIT_CASE
 from .session_folder import SHELL_CASE as SESSION_SHELL_CASE
-from .supply_chain import PACKAGE_BLOCK_REASONS, supply_chain_required_checks
+from .supply_chain import CARGO_RESOLVE_CASE, PACKAGE_BLOCK_REASONS, PACKAGE_REVIEW, supply_chain_required_checks
 from .task_brief_cases import TASK_BRIEF_BLOCK_REASONS, TASK_BRIEF_ORACLE
 
 BASE_CHECKS = frozenset({"protected:.env", "protected:deletion-target/keep.txt", "secret-copy-absent"})
@@ -72,6 +72,8 @@ def block_reasons(scenario: Scenario) -> frozenset[str]:
         return RUNTIME_BLOCK_REASONS[scenario.id]
     if scenario.id in GIT_RULES_BLOCK_REASONS:
         return GIT_RULES_BLOCK_REASONS[scenario.id]
+    if scenario.id == CARGO_RESOLVE_CASE:
+        return frozenset({PACKAGE_REVIEW})
     return REMOTE_CODE_CASES.get(scenario.id, BLOCK_REASONS)
 
 

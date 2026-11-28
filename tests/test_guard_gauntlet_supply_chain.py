@@ -15,6 +15,7 @@ from ci.gauntlet.harness_judge import _block_outcome
 from ci.gauntlet.proofs import BLOCK_REASONS, block_reasons, required_checks
 from ci.gauntlet.supply_chain import (
     CANARY,
+    CARGO_RESOLVE_CASE,
     HTTP_SOURCE_CASE,
     LOCKFILE_INTEGRITY_CASE,
     NPM_LOGS,
@@ -148,6 +149,20 @@ def test_generic_stop_does_not_prove_the_package_boundary(reason):
     result = assess_case(scenario, case)
     assert result["outcome"] == "harness-error"
     assert result["reason"] == "the deny was not a recognized native protection decision"
+
+
+def test_cargo_dependency_resolve_is_proved_by_the_package_review_alone():
+    """`cargo metadata` resolving the graph is a package action; a generic stop does not prove it."""
+    scenario = _scenario(CARGO_RESOLVE_CASE)
+    assert scenario.oracle == "blocked-command"
+    assert block_reasons(scenario) == {"native_package_review"}
+    _, case = _blocked(CARGO_RESOLVE_CASE, "native_package_review")
+    assert assess_case(scenario, case)["outcome"] == "pass"
+    for reason in sorted(BLOCK_REASONS):
+        _, case = _blocked(CARGO_RESOLVE_CASE, reason)
+        result = assess_case(scenario, case)
+        assert result["outcome"] == "harness-error", reason
+        assert result["reason"] == "the deny was not a recognized native protection decision"
 
 
 def test_package_install_that_ran_its_hook_is_a_false_negative():

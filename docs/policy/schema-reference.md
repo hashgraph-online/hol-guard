@@ -148,9 +148,12 @@ Conditions:
 | `workspaces` | no | [stringSet](#stringset) |
 | `browserIntents` | no | array of one of `browser.navigation`, `browser.inspect`, `browser.interact`, `browser.transfer`, `browser.privileged` (min items 1, max items 256, unique items) |
 | `browserOperations` | no | [stringSet](#stringset) |
+| `browserVerbs` | no | array of one of `navigate`, `read`, `click`, `type`, `key`, `select`, `scroll`, `screenshot`, `upload`, `download`, `evaluate`, `cookie_read`, `cookie_write`, `storage_read`, `storage_write`, `intercept`, `permission`, `tab_control`, `attach`, `other` (min items 1, max items 256, unique items) |
+| `browserDrivers` | no | [stringSet](#stringset) |
 | `browserProfiles` | no | array of one of `isolated`, `dedicated`, `shared`, `remote-debugging`, `unknown` (min items 1, max items 256, unique items) |
 | `origins` | no | [stringSet](#stringset) |
 | `pathPrefixes` | no | [stringSet](#stringset) |
+| `siteGroups` | no | [stringSet](#stringset) |
 | `sensitiveSurfaces` | no | array of one of `cookies`, `storage`, `auth-headers`, `raw-cdp`, `script-eval`, `network-intercept`, `upload`, `download`, `clipboard`, `password-fields` (min items 1, max items 256, unique items) |
 
 No other fields are allowed, except extension keys matching `^x-[a-z0-9][a-z0-9.-]{0,62}$`.

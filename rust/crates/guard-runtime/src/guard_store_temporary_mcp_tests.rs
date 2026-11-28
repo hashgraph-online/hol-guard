@@ -62,6 +62,14 @@ fn requests() -> [(&'static str, &'static str, &'static str, String); 6] {
 /// Each request keeps its own queue group, so nothing is resolved as a
 /// duplicate of the request the grant settles.
 fn scenario(vectors: &Value) -> Value {
+    scenario_of(vectors, requests().to_vec())
+}
+
+/// The recorded `single` scenario with `requests` in place of its own rows.
+fn scenario_of(
+    vectors: &Value,
+    requests: Vec<(&'static str, &'static str, &'static str, String)>,
+) -> Value {
     let recorded = vectors["scenarios"]
         .as_array()
         .unwrap()
@@ -76,7 +84,7 @@ fn scenario(vectors: &Value) -> Value {
         .unwrap()
         .as_object()
         .unwrap();
-    let rows: Vec<Value> = requests()
+    let rows: Vec<Value> = requests
         .into_iter()
         .map(|(request_id, harness, policy_action, intent)| {
             let mut row = template.clone();
@@ -109,8 +117,27 @@ fn store(label: &str) -> std::path::PathBuf {
     home
 }
 
+/// A seeded store with `requests` pending.
+pub(super) fn store_of(
+    label: &str,
+    requests: Vec<(&'static str, &'static str, &'static str, String)>,
+) -> std::path::PathBuf {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let home = temp_home(&format!("temporary-mcp-{label}"));
+    seed(
+        &home.join("guard.db"),
+        &vectors,
+        &scenario_of(&vectors, requests),
+    );
+    home
+}
+
 /// One grant call, as `apply_temporary_mcp_grant_resolution` receives it.
-fn grant(home: &Path, request_id: &str, target: &str) -> Result<Value, (String, String)> {
+pub(super) fn grant(
+    home: &Path,
+    request_id: &str,
+    target: &str,
+) -> Result<Value, (String, String)> {
     store_call(
         home,
         "guard",
@@ -135,7 +162,7 @@ fn grant(home: &Path, request_id: &str, target: &str) -> Result<Value, (String, 
     )
 }
 
-fn covered(reply: &Value) -> Vec<String> {
+pub(super) fn covered(reply: &Value) -> Vec<String> {
     let mut ids: Vec<String> = reply["covered_request_ids"]
         .as_array()
         .unwrap()
@@ -159,7 +186,7 @@ fn statuses(home: &Path) -> BTreeMap<String, String> {
     rows.collect::<Result<_, _>>().unwrap()
 }
 
-fn pending(home: &Path) -> Vec<String> {
+pub(super) fn pending(home: &Path) -> Vec<String> {
     let mut ids: Vec<String> = statuses(home)
         .into_iter()
         .filter(|(_, status)| status == "pending")
@@ -277,3 +304,6 @@ fn a_caller_cannot_choose_the_time_the_grant_is_written_at() {
     assert_eq!(granted_selectors(&home), Vec::<String>::new());
     let _ = std::fs::remove_dir_all(&home);
 }
+
+#[path = "guard_store_temporary_mcp_site_tests.rs"]
+mod site;
