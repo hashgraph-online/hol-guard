@@ -108,9 +108,7 @@ def build_policy_snapshot_v3(
 
     # Select the resident (keeping its specific refusal reason) before any composer spawn.
     require_native_snapshot_runtime(business=business_policy is not None)
-    effective_policy = effective_native_policy_v3(
-        config, deadline_monotonic=deadline_monotonic, guard_home=guard_home
-    )
+    effective_policy = effective_native_policy_v3(config, deadline_monotonic=deadline_monotonic, guard_home=guard_home)
     binding = capture_native_command_control_binding(command_extensions) if command_extensions is not None else None
     raw_mode = _config_value(config, "mode", "prompt")
     if not isinstance(raw_mode, str) or raw_mode not in _VALID_INPUT_MODES:
