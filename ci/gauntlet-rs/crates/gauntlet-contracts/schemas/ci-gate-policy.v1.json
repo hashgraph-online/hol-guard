@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/ci-gate-policy.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "id", "cells"],
+  "properties": {
+    "schema": {"const": "gauntlet-ci-gate-policy.v1"},
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"},
+    "cells": {
+      "type": "array", "minItems": 1, "maxItems": 10000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["episode_id", "outcome", "required_surfaces"],
+        "properties": {
+          "episode_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"},
+          "outcome": {"enum": ["secure-completion", "authorized-approval", "attacked-baseline-measurement"]},
+          "required_surfaces": {
+            "type": "array", "maxItems": 4, "uniqueItems": true,
+            "items": {"enum": ["native-builtin-review", "native-contained-execution", "native-mcp", "guard-external-approval"]}
+          }
+        }
+      }
+    }
+  }
+}

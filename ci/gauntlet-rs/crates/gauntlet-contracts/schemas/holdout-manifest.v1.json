@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "custodian_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "candidate_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "frozen_at": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "workflow_digests": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "minProperties": 8,
+      "maxProperties": 8
+    },
+    "domains": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+      },
+      "maxItems": 8,
+      "uniqueItems": true
+    },
+    "independent_authorship": {
+      "const": true
+    },
+    "blind_to_repair_process": {
+      "const": true
+    },
+    "unblinded": {
+      "const": false
+    },
+    "attestation_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "custodian_id",
+    "candidate_digest",
+    "frozen_at",
+    "workflow_digests",
+    "domains",
+    "independent_authorship",
+    "blind_to_repair_process",
+    "unblinded",
+    "attestation_digest"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/holdout-manifest.v1.json"
+}
