@@ -378,3 +378,26 @@ fn a_shared_profile_call_may_pick_session_site_and_nothing_else() {
         );
     }
 }
+
+#[test]
+fn a_shared_profile_card_does_not_call_the_risk_it_covers_uncoverable() {
+    let shared = json!(["browser_interaction", "browser_shared_profile"]);
+    let answer = dispatch(&json!({
+        "browser_intents": [tiered_intent(true, shared, json!({})), site_intent(true)],
+    }))
+    .expect("answer");
+    let named = |index: usize| answer["approvals"][index]["hard_risk_exclusions"].clone();
+    assert_eq!(
+        answer["approvals"][0]["allowed_targets"],
+        json!(["session-site"])
+    );
+    assert!(!named(0)
+        .as_array()
+        .expect("list")
+        .contains(&json!("browser_shared_profile")));
+    assert!(named(0)
+        .as_array()
+        .expect("list")
+        .contains(&json!("browser_transfer")));
+    assert_eq!(named(1), json!(HARD_RISK_EXCLUSIONS));
+}

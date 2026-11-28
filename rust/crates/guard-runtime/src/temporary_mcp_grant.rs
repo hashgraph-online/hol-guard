@@ -23,7 +23,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::browser_grant_eligibility::{grant_tier, surface_clean, GrantTier};
+use crate::browser_grant_eligibility::{grant_tier, surface_clean, GrantTier, SHARED_PROFILE_RISK};
 use crate::browser_site_grant::{
     is_site_target, site_scope, site_selector, site_targets, SiteScope, SESSION_BOUND_SECONDS,
     SESSION_DURATION,
@@ -39,8 +39,9 @@ const MAX_INTENTS: usize = 4096;
 const TARGETS: [&str; 3] = ["exact", "category", "server"];
 /// `TEMPORARY_MCP_GRANT_DURATIONS` and their `_DURATION_SECONDS`.
 const DURATIONS: [(&str, i64); 3] = [("15m", 900), ("1h", 3600), ("5h", 18000)];
-/// `_HARD_RISK_EXCLUSIONS` — the shapes no grant ever covers, carried on the
-/// card so the surface can say so.
+/// `_HARD_RISK_EXCLUSIONS` — the shapes no grant covers, carried on the card so
+/// the surface can say so. A shared-profile card offers `session-site`, so its
+/// list leaves out `browser_shared_profile` (see `Eligibility::exclusions`).
 const HARD_RISK_EXCLUSIONS: [&str; 11] = [
     "browser_guard_origin",
     "browser_transfer",
@@ -67,6 +68,15 @@ struct Eligibility {
 }
 
 impl Eligibility {
+    /// The exclusions this card names: a `SharedSession` card can cover the
+    /// shared-profile risk with `session-site`, so it does not list it.
+    fn exclusions(&self) -> Vec<&'static str> {
+        HARD_RISK_EXCLUSIONS
+            .into_iter()
+            .filter(|risk| self.tier != GrantTier::SharedSession || *risk != SHARED_PROFILE_RISK)
+            .collect()
+    }
+
     fn targets(&self) -> Vec<&'static str> {
         let mut targets = TARGETS.to_vec();
         targets.extend(self.site.as_ref().map(site_targets).unwrap_or_default());
@@ -122,7 +132,7 @@ pub(crate) fn approval(intent: Option<&Value>) -> Option<Value> {
         "target_label": found.target_label,
         "allowed_targets": found.targets(),
         "allowed_durations": found.durations(),
-        "hard_risk_exclusions": HARD_RISK_EXCLUSIONS,
+        "hard_risk_exclusions": found.exclusions(),
     }))
 }
 
