@@ -59,7 +59,8 @@ hol-guard extensions generate --provider --from manifest \
   --output tests/fixtures/provider_integrations/<slug>/recordings.json
 ```
 
-The draft has one answer for every entry of each verdict table, one with a verdict the table does not
+The command creates the fixture directory when it is missing and refuses to replace an existing
+`recordings.json`. The draft has one answer for every entry of each verdict table, one with a verdict the table does not
 list, and the required failures: a refused key, rate limiting, a server error, an oversize body and a
 malformed body. Each expectation is what Guard reads from the drafted body. The bodies are
 placeholders shaped by the manifest's pointers, so replace each one with a real response from the

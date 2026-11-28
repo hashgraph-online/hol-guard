@@ -144,6 +144,25 @@ fn colliding_pointers_keep_the_verdict() {
 }
 
 #[test]
+fn a_root_verdict_pointer_and_a_tiny_response_limit_still_draft() {
+    let mut manifest = manifest();
+    manifest["capabilities"][0]["response"]["verdict"]["pointer"] = json!("");
+    manifest["capabilities"][0]["response"]["reasonCodes"]["pointer"] = json!("");
+    manifest["limits"]["maxResponseBytes"] = json!(24);
+    let rows = recordings(&draft(&manifest).expect("draft"));
+    let ok = rows
+        .iter()
+        .find(|row| row["expect"]["verdict"] == "ok")
+        .unwrap();
+    assert_eq!(ok["body"], "\"clean\"");
+    let malformed = rows
+        .iter()
+        .find(|row| row["expect"]["failure"] == "malformed")
+        .unwrap();
+    assert_eq!(malformed["body"], "{");
+}
+
+#[test]
 fn a_manifest_that_does_not_compile_is_refused_with_the_compiler_code() {
     let mut broken = manifest();
     broken["hosts"] = json!([]);

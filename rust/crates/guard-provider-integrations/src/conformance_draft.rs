@@ -8,8 +8,8 @@
 //! - one `200` answer per entry of the verdict table, with the provider's own verdict string at the
 //!   verdict pointer, the first declared reason code on a non-`ok` answer and the minimum lifetime;
 //! - one `200` answer with a verdict string the table does not list, which reads `unknown`;
-//! - `401`, `429` and `503` answers, a body one byte over `maxResponseBytes` and a body with a
-//!   repeated key.
+//! - `401`, `429` and `503` answers, a body one byte over `maxResponseBytes` and a body that is not
+//!   JSON.
 //!
 //! Each expectation is what the resident makes of the drafted body, read through the same code the
 //! kit runs, and the whole draft is checked by the kit's `recordings` check before it is returned.
@@ -159,7 +159,8 @@ fn draft_capability(
         (
             "malformed",
             200,
-            r#"{"verdict":"a","verdict":"b"}"#.to_owned(),
+            // One byte, so it stays under every `maxResponseBytes` and reads as malformed, not oversize.
+            "{".to_owned(),
             None,
             RecordedFailure::Malformed,
         ),
@@ -256,8 +257,15 @@ fn answer_body(
 }
 
 /// Set `value` at a JSON pointer, creating objects on the way. A pointer that runs through a value
-/// already set, or names one already set, is left alone, so the verdict always wins.
+/// already set, or names one already set, is left alone, so the verdict always wins. The empty
+/// pointer names the whole document, which only an untouched document gives up.
 fn insert_at(document: &mut Value, pointer: &str, value: Value) {
+    if pointer.is_empty() {
+        if document.as_object().is_some_and(Map::is_empty) {
+            *document = value;
+        }
+        return;
+    }
     let Some(rest) = pointer.strip_prefix('/') else {
         return;
     };

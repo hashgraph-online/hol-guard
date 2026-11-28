@@ -65,7 +65,8 @@ def generate_provider_recordings(args: argparse.Namespace) -> dict[str, object]:
     count = reply.get("recordings")
     if not isinstance(text, str) or not isinstance(count, int):
         raise BuilderError("provider_generate", "The native drafter returned invalid recordings.")
-    # Write the exact text the native kit checked.
+    # A new provider has no fixture directory yet. Write the exact text the native kit checked.
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     _write_new(args.output, text)
     return {
         "generated": True,

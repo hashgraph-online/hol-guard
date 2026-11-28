@@ -46,7 +46,7 @@ def test_provider_generate_sends_the_manifest_and_writes_the_checked_text(
         return {"ok": True, "provider_id": "provider.exampleshield", "recordings": 0, "recordingsText": RECORDINGS}
 
     monkeypatch.setattr(extension_builder_provider, "_native", fake)
-    output = tmp_path / "recordings.json"
+    output = tmp_path / "new-provider" / "recordings.json"
     status, result = run("generate", generate_args(output), capsys)
     assert status == 0, result
     assert sent == [("provider-recordings-draft", {"manifest": FIXTURE.read_text(encoding="utf-8")})]
