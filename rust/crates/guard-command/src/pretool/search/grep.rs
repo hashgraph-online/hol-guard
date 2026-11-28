@@ -386,7 +386,7 @@ fn scan_into(
                         &exclusions.files,
                         &exclusions.directories,
                         true,
-                        None,
+                        clearance.as_ref(),
                     ) || proven_glob(target, context)))
                     // `app/[slug]/route.ts` names one route when its class
                     // matches nothing, and is walked as that path.
