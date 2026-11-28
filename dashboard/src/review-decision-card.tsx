@@ -35,6 +35,7 @@ import { simpleMcpChoiceApplies } from "./mcp-call/mcp-decision-choice";
 import { ReviewDecisionControls } from "./review-decision-controls";
 import { decisionButtonLabels, resolvedActionCopy } from "./review-decision-labels";
 import { buildWhatWouldHappen, PrimaryActionCard } from "./review-states";
+import { browserGatePromptShown } from "./browser-call/browser-gate-prompt";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
 import { ApprovalExtensionCoverageCard } from "./approval-extension-coverage-card";
@@ -259,7 +260,7 @@ export function ReviewDecisionCard(props: {
           </Badge>
         </div>
 
-        {!nativeDisplayOnly && <PrimaryActionCard item={item} />}
+        {!nativeDisplayOnly && <PrimaryActionCard item={item} approvalGate={approvalGate} />}
         {nativeDisplayOnly && <BusinessReviewSummaryPanel key={`business-summary:${item.request_id}`} requestId={item.request_id} />}
         {resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
@@ -431,7 +432,7 @@ export function ReviewDecisionCard(props: {
             )}
           </ActionButton>
         </div>}
-        {resolutionBlockReason === null && resolved === null && approvalGateNeedsSetup(approvalGate) && (
+        {resolutionBlockReason === null && resolved === null && approvalGateNeedsSetup(approvalGate) && !browserGatePromptShown(item, approvalGate) && (
           <ApprovalGateRecommendationNotice />
         )}
       </div>

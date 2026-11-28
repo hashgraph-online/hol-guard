@@ -209,9 +209,40 @@ fn keyword_definition(line: &str) -> bool {
         || (top_level && BINDERS.iter().any(|binder| rest.starts_with(binder)))
 }
 
+/// Words that open a clause, `else: x = 1`, never a binding's name.
+const CLAUSES: [&str; 5] = ["finally", "except", "lambda", "default", "label"];
+
+/// The name a top-level value binding without a keyword gives: a constant
+/// written in capitals, `MAX_NESTING = 400`, or a value with a declared
+/// type, `_spec: Tuple[str, ...] = (` and Rust's `static NAME: T = x;`.
+/// Python and Ruby keep a module's settings this way, and a fix that only
+/// changes a limit edits nothing else. An ordinary lowercase assignment,
+/// `object = make()`, stays a statement.
+fn constant(line: &str) -> Option<&str> {
+    if line.starts_with(char::is_whitespace) {
+        return None;
+    }
+    let rest = unmodified(line);
+    let end = rest
+        .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .unwrap_or(rest.len());
+    let (name, after) = rest.split_at(end);
+    if !identifier(name) || STATEMENTS.contains(&name) || CLAUSES.contains(&name) {
+        return None;
+    }
+    let after = after.trim_start();
+    let capitals = name.chars().any(char::is_uppercase) && !name.chars().any(char::is_lowercase);
+    let assigned = |text: &str| text.starts_with('=') && !text.starts_with("==");
+    let typed = after
+        .strip_prefix(':')
+        .filter(|kind| !kind.starts_with([':', '=']))
+        .is_some_and(|kind| kind.contains(" = "));
+    (typed || (capitals && assigned(after))).then_some(name)
+}
+
 /// A line that opens a function, method, type or top-level value definition.
 pub(crate) fn definition(line: &str) -> bool {
-    keyword_definition(line) || method(line).is_some()
+    keyword_definition(line) || method(line).is_some() || constant(line).is_some()
 }
 
 fn identifier(word: &str) -> bool {
@@ -347,6 +378,11 @@ pub(crate) fn method(line: &str) -> Option<&str> {
 
 /// The name a definition line gives, as the code writes it.
 pub(crate) fn written_name(line: &str) -> Option<String> {
+    if !keyword_definition(line) && method(line).is_none() {
+        if let Some(name) = constant(line) {
+            return Some(name.to_owned());
+        }
+    }
     let rest = unmodified(line);
     let mut words = rest.split_whitespace();
     let definer = words.next().unwrap_or_default();

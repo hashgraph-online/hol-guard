@@ -262,6 +262,7 @@ pub(crate) fn get_next_pending_request(
     let candidates = payloads(
         rows.iter().zip(projections).collect(),
         args.opt_str("cwd")?,
+        connection,
         owner.map(|owner| (connection, owner)),
     )?;
     Ok(candidates

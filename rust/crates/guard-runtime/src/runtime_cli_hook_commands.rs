@@ -2,6 +2,7 @@
 
 use std::io;
 
+use crate::hook_render_op::unavailable_event;
 use crate::{
     codex_hook_trust, hook_launch_scan, hook_payload_facts_op, read_stdin_bounded,
     write_bytes_response, write_json,
@@ -24,6 +25,11 @@ pub(super) fn route(args: &[String]) -> Option<Result<(), String>> {
         return Some(
             read_stdin_bounded()
                 .and_then(|bytes| write_json(&hook_payload_facts_op::cli_availability(&bytes)?)),
+        );
+    }
+    if command == unavailable_event::CLI_COMMAND {
+        return Some(
+            read_stdin_bounded().and_then(|bytes| write_json(&unavailable_event::cli(&bytes)?)),
         );
     }
     let response = if codex_hook_trust::is_command(command) {

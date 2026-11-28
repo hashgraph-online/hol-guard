@@ -6,11 +6,13 @@ use serde_json::{Map, Value};
 
 use crate::approval_browser_burst::approval_browser_burst_key;
 use crate::approval_browser_card::approval_browser_card;
+use crate::approval_browser_provider_rows::provider_rows;
 use crate::cloud_request_text::{py_isspace, py_strip};
 use crate::guard_store_approval_read_scope::{parse_cell, to_json, unavailable};
 use crate::guard_store_db::{Row, StoreError, StoreResult};
 use crate::guard_store_json::py_repr_str;
 use crate::guard_store_silent_review::{py_str, raw};
+use crate::provider_integration_shipped::shipped_providers;
 use crate::pyjson::PyVal;
 
 const MULTI_ELEMENT_OPERATIONS: [&str; 3] = ["drag", "drag_drop_file", "fill_form"];
@@ -38,6 +40,7 @@ const RAW_TAIL: [&str; 7] = [
 pub(crate) fn draft(
     row: &Row,
     projection: &Value,
+    store: &rusqlite::Connection,
 ) -> StoreResult<(Map<String, Value>, Option<String>)> {
     let (launch_target, browser_target) = browser_launch_target(raw(row, "launch_target"));
     let risk_signals = risk_signals(
@@ -99,9 +102,17 @@ pub(crate) fn draft(
     );
     put("decision_v2_json", projection["decision_v2_json"].clone());
     let browser_intent = json_object(row, "browser_intent_json")?;
+    // The card lists the provider answers cached for its site when the queue is read, so a late
+    // answer shows on the next poll of an open card.
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+        });
+    let cached = |origin: &str| provider_rows(store, shipped_providers(), origin, now_ms);
     if let Some(harness) = raw(row, "harness").as_str() {
         let envelope = &projection["action_envelope_json"];
-        if let Some(card) = approval_browser_card(envelope, harness) {
+        if let Some(card) = approval_browser_card(envelope, harness, &cached) {
             if let Some(key) = approval_browser_burst_key(envelope, harness, &card, &browser_intent)
             {
                 put("browser_burst_key", Value::String(key));

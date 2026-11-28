@@ -32,6 +32,7 @@ mod antigravity_detect;
 mod approval;
 mod approval_browser_burst;
 mod approval_browser_card;
+mod approval_browser_provider_rows;
 mod approval_browser_surface;
 mod approval_bulk_eligibility_op;
 mod approval_copy;

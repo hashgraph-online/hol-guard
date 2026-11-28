@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.harness_context import HarnessContext
-from codex_plugin_scanner.guard.native_harness_client import ask
+from codex_plugin_scanner.guard.native_harness_client import ask, describe
 
 _SETTINGS = '{"mcpServers": {"local": {"command": "node", "args": []}}}'
 
@@ -17,11 +17,27 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home, workspace_dir=workspace, guard_home=guard_home)
 
 
+def _install_budget() -> float:
+    # A hooks install runs Cline's hook canary, which can take several seconds.
+    # Production gives the install the adapter's own install budget; the
+    # runner's default budget is shorter than the canary's own bound.
+    spec = next(adapter for adapter in describe()["adapters"] if adapter.get("harness") == "cline")
+    return float(spec["install_timeout"])
+
+
 def _hook_root(context: HarnessContext, tmp_path: Path) -> Path:
     runtime = tmp_path / "native-runtime"
     runtime.write_bytes(b"")
     facts = {"python": True, "runtime": str(runtime), "hook_argv": ["guard", "hook"], "identity": None}
-    answer = ask("install_transport", context, harness="cline", transport="hooks", frozen=False, facts=facts)
+    answer = ask(
+        "install_transport",
+        context,
+        harness="cline",
+        transport="hooks",
+        frozen=False,
+        facts=facts,
+        timeout_seconds=_install_budget(),
+    )
     return Path(answer["manifest"]["managed_hooks_root"])
 
 

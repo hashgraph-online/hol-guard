@@ -155,3 +155,62 @@ base: string): string {\n  return encodePath(base + input);\n}\n";
     );
     assert!(generic.is_none_or(|text| !text.contains("src/utility.ts:")));
 }
+
+#[test]
+fn a_module_constant_the_prompt_names_is_placed() {
+    let parser = "import sys\nfrom typing import Final\n\n# Nesting limit.\n\
+MAX_INLINE_NESTING: Final = sys.getrecursionlimit()\n\nMAX_KEY_PARTS: Final = 100\n\n\
+def parse_inline_table(src, pos, nest_lvl):\n    if nest_lvl > MAX_INLINE_NESTING:\n        \
+raise RecursionError\n    return pos\n";
+    let (home, _project, root) = project(ON, &[("src/tomli/_parser.py", parser)]);
+    let prompt = "Set smaller MAX_INLINE_NESTING to avoid worker thread crash";
+    let text = prompt_map(home.path(), &root, prompt).unwrap_or_default();
+    assert!(text.contains("src/tomli/_parser.py:5"), "{text}");
+    assert!(
+        text.contains("MAX_INLINE_NESTING: Final = sys.getrecursionlimit()"),
+        "{text}"
+    );
+}
+
+/// Methods the prompt calls by name, with no class named, come from the
+/// class that holds them all: `update()` beside `add()` is the list's
+/// `update`, not the dict's that sorts before it.
+#[test]
+fn called_methods_come_from_the_class_holding_them_all() {
+    let dict = "class SortedDict(dict):\n    def update(self, *args):\n        return dict.update(self, *args)\n";
+    let list = "class SortedList:\n    def add(self, value):\n        self._items.append(value)\n\n    def update(self, iterable):\n        self._items.extend(sorted(iterable))\n";
+    let (home, _project, root) = project(
+        ON,
+        &[("pkg/sorteddict.py", dict), ("pkg/sortedlist.py", list)],
+    );
+    let prompt = "Fix update() ordering to be more consistent with add() ordering";
+    let text = prompt_map(home.path(), &root, prompt).unwrap_or_default();
+    assert!(text.contains("pkg/sortedlist.py:5-6 def update"), "{text}");
+    assert!(!text.contains("pkg/sorteddict.py"), "{text}");
+}
+
+/// A fix to a method usually has to be made again where another class in the
+/// same file overrides it, so that override's first line is listed too,
+/// without its code.
+#[test]
+fn a_named_method_points_at_its_override_in_the_same_file() {
+    let list = "class SortedList:\n    def add(self, value):\n        self._items.append(value)\n\n    def update(self, iterable):\n        self._items.extend(sorted(iterable))\n\n\nclass SortedKeyList(SortedList):\n    def update(self, iterable):\n        self._items.extend(sorted(iterable, key=self._key))\n";
+    let (home, _project, root) = project(ON, &[("pkg/sortedlist.py", list)]);
+    let prompt = "Fix update() ordering to be more consistent with add() ordering";
+    let text = prompt_map(home.path(), &root, prompt).unwrap_or_default();
+    assert!(text.contains("pkg/sortedlist.py:5-6 def update"), "{text}");
+    let first = text
+        .find("pkg/sortedlist.py:5-6 def update")
+        .unwrap_or(usize::MAX);
+    let other = text.find("pkg/sortedlist.py:10-11 def update").unwrap_or(0);
+    assert!(
+        first < other,
+        "the override follows the method it overrides: {text}"
+    );
+    assert!(!text[first..other].contains("def add"), "{text}");
+    let after = &text[other..];
+    assert!(
+        after.contains("a change to `SortedList.update` usually belongs here too"),
+        "{text}"
+    );
+}

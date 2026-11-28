@@ -68,6 +68,9 @@ fn native_structured_output_binding() -> (Option<Value>, bool, Option<&'static s
 #[path = "hook_render_saved_approval.rs"]
 mod saved_approval;
 
+#[path = "hook_render_unavailable_event.rs"]
+pub(crate) mod unavailable_event;
+
 #[cfg(test)]
 fn evaluate_hook_render_request(request: &HookRenderRequestV1) -> Result<Vec<u8>, String> {
     evaluate_with_store(request, None)
@@ -162,6 +165,7 @@ fn render(
             .and_then(Value::as_str)
             .ok_or("native_hook_render_invalid")?;
         let explicit_view = params.get("view").cloned();
+        let has_explicit_view = explicit_view.is_some();
         // A direct-lane binding with no view is unresolved and stays fail-closed.
         // Only the native managed-policy loader can positively identify the
         // machine-wide absent-policy case that leaves the destination open.
@@ -176,12 +180,24 @@ fn render(
         } else {
             (None, false, None)
         };
-        let overlay = if native_policy_status == Some("absent") {
-            crate::hook_direct::pi::outage_overlay_without_managed_policy(harness, event)
-        } else if binding_known {
-            crate::hook_direct::pi::outage_overlay_with_binding(harness, event, view.as_ref(), true)
-        } else {
-            crate::hook_direct::pi::outage_overlay(harness, event, view.as_ref())
+        let overlay = match native_policy_status {
+            // An explicitly absent machine policy leaves the optional
+            // destination open. Every other native policy result is an
+            // authority failure and must withhold the destination while the
+            // resident is unavailable.
+            Some("absent") => {
+                crate::hook_direct::pi::outage_overlay_without_managed_policy(harness, event)
+            }
+            Some(_) if !binding_known && !has_explicit_view => {
+                crate::hook_direct::pi::outage_overlay_with_binding(harness, event, None, true)
+            }
+            _ if binding_known => crate::hook_direct::pi::outage_overlay_with_binding(
+                harness,
+                event,
+                view.as_ref(),
+                true,
+            ),
+            _ => crate::hook_direct::pi::outage_overlay(harness, event, view.as_ref()),
         };
         let mut payload = cli_payload(CliOutcome::Document(overlay));
         if let Some(status) = native_policy_status {
@@ -224,80 +240,7 @@ fn render(
     if request.kind == "unavailable_event" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
         let payload = object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;
-        let availability = crate::hook_payload_facts_op::availability_response(payload);
-        let event = availability
-            .get("event_name")
-            .and_then(Value::as_str)
-            .ok_or("native_hook_render_invalid")?;
-        let reason = params
-            .get("reason")
-            .and_then(Value::as_str)
-            .unwrap_or("HOL Guard could not identify this hook event safely.");
-        let prompt_reason = params.get("prompt_reason").and_then(Value::as_str);
-        let permission = availability
-            .get("permission_request")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let normalized_harness = harness.to_lowercase().replace('_', "-");
-        let response = if permission && normalized_harness == "claude-code" {
-            json!({
-                "guard_permission_passthrough": true,
-                "hookSpecificOutput": {"hookEventName": "PermissionRequest"},
-            })
-        } else if permission
-            && matches!(
-                normalized_harness.as_str(),
-                "codex" | "copilot" | "devin" | "zcode" | "muse"
-            )
-        {
-            json!({"hookSpecificOutput": {"hookEventName": "PermissionRequest"}})
-        } else {
-            let reason_code =
-                params
-                    .get("reason_code")
-                    .and_then(Value::as_str)
-                    .unwrap_or(match event {
-                        "PreToolUse" => "native_pre_tool_unavailable",
-                        "PostToolUse" => "native_post_tool_unavailable",
-                        _ => "native_hook_event_unavailable",
-                    });
-            guard_command::hook_responses::fail_closed::response(
-                harness,
-                event,
-                reason,
-                reason_code,
-                prompt_reason,
-            )
-            .map(Value::Object)
-            .map_err(|_| "native_hook_render_invalid")?
-        };
-        let activity_recorded = if params.get("record_post_tool_activity")
-            == Some(&Value::Bool(true))
-            && matches!(event, "PostToolUse" | "PostToolUseFailure")
-        {
-            if let Some(store) = store {
-                if let Ok(home) =
-                    crate::resident_state::private_root_for_state_base(store.state_base())
-                {
-                    crate::hook_evidence_writer_op::record_direct(&home, |writer| {
-                        crate::edge_receipt::queue_post_tool_activity(
-                            writer, harness, event, payload,
-                        )
-                    })
-                    .unwrap_or(false)
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        let mut document = Object::new();
-        document.insert("event_name".into(), Value::String(event.to_owned()));
-        document.insert("response".into(), response);
-        document.insert("activity_recorded".into(), Value::Bool(activity_recorded));
+        let document = unavailable_event::render(harness, payload, params, store)?;
         return Ok(cli_payload(CliOutcome::Document(document)));
     }
     if request.kind == "fail_closed_verdict" {

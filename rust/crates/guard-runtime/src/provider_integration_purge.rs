@@ -30,7 +30,7 @@ const PURGED_TABLES: [&str; 3] = [
     "provider_connections",
 ];
 
-fn has_provider_tables(connection: &Connection) -> rusqlite::Result<bool> {
+pub(crate) fn has_provider_tables(connection: &Connection) -> rusqlite::Result<bool> {
     connection
         .query_row(
             "select 1 from sqlite_master where type = 'table' and name = 'provider_connections'",

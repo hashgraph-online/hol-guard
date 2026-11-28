@@ -11,6 +11,7 @@ from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, cast
 
+from ..native_hook_availability import standalone_unavailable_event
 from ..native_hook_render import (
     availability_harness_response,
     canonical_hook_event_name,
@@ -77,6 +78,10 @@ def structured_outage_overlay(
         overlay = rendered[1]
         if overlay is not None and not overlay:
             native_status = rendered[2] if len(rendered) > 2 else None
+            # Preserve the local GuardConfig floor for an explicitly absent
+            # machine policy. Rust owns native authority status, while this
+            # compatibility check keeps a configured local managed policy
+            # fail-closed when the native loader cannot see it yet.
             if native_status == "absent" and callable(load_config):
                 try:
                     configured = load_config()
@@ -113,6 +118,11 @@ def unavailable_event_response(
         )
     except (OSError, RuntimeError, TypeError, ValueError):
         native = None
+    if native is None:
+        try:
+            native = standalone_unavailable_event(payload, harness, deadline=deadline)
+        except (OSError, RuntimeError, TypeError, ValueError):
+            native = None
     if native is not None:
         native_event = native.get("event_name")
         native_response = native.get("response")

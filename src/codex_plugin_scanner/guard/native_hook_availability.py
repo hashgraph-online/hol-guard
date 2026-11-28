@@ -8,6 +8,8 @@ from threading import Lock
 
 _CLI_AVAILABILITY_FEATURE = "native-hook-availability-v1"
 _CLI_AVAILABILITY_COMMAND = "hook-availability"
+_CLI_UNAVAILABLE_EVENT_FEATURE = "native-hook-unavailable-event-v1"
+_CLI_UNAVAILABLE_EVENT_COMMAND = "hook-unavailable-event"
 _EVENT_FIELDS = ("event", "eventName", "hook_event_name", "hookEventName", "hook_name", "hookName")
 _PASSIVE_EVENT_COMPACT = frozenset(
     {
@@ -81,6 +83,25 @@ def _native_availability(
         if isinstance(resident, Mapping):
             return dict(resident)
     return _runtime_availability(payload, deadline=deadline)
+
+
+def standalone_unavailable_event(
+    payload: Mapping[str, object], harness: str, *, deadline: float | None
+) -> dict[str, object] | None:
+    """Render an outage response without the resident or tool contents."""
+    from .mdm.runtime_request import runtime_answer
+
+    return runtime_answer(
+        _CLI_UNAVAILABLE_EVENT_FEATURE,
+        _CLI_UNAVAILABLE_EVENT_COMMAND,
+        {
+            "harness": harness,
+            "payload": {key: value for key in _EVENT_FIELDS if isinstance(value := payload.get(key), str)},
+        },
+        output_limit=64 * 1024,
+        timeout_seconds=1.0,
+        deadline=deadline,
+    )
 
 
 def canonical_hook_event_name(

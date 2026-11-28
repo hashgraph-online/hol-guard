@@ -490,12 +490,16 @@ fn spelling_allowed(value: &str) -> bool {
 /// Each component from the repository root down to the operand is screened
 /// too: without that, a root could be named straight through a directory the
 /// walk itself would refuse to enter.
+///
+/// `clearance` is the grep pattern's: a sensitive-named file it cannot match
+/// prints nothing, as it does below a root inside the current directory.
 pub(in crate::pretool) fn grep_walk_root(
     value: &str,
     context: ReadContext<'_>,
     excluded_files: &[&str],
     excluded_directories: &[&str],
     git_metadata: bool,
+    clearance: Option<&crate::pretool::search_pattern_clearance::PatternClearance>,
 ) -> bool {
     if value.is_empty()
         || value.len() > 4096
@@ -503,6 +507,7 @@ pub(in crate::pretool) fn grep_walk_root(
         || value.contains(['*', '?', '{', '}'])
         || !literal_brackets(value, context)
         || (value.starts_with('~') && value != "~" && !value.starts_with("~/"))
+        || (value.starts_with('~') && !context.shell_home_matches)
         || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
         return false;
@@ -550,11 +555,20 @@ pub(in crate::pretool) fn grep_walk_root(
     }
     // The caller reaches this route only where the command follows no
     // link, so the walk does not either.
-    tree::walk(
-        operand,
-        excluded_files,
-        excluded_directories,
-        git_metadata,
-        false,
-    )
+    match clearance {
+        Some(clearance) => super::walk_memo::cleared(
+            operand,
+            excluded_files,
+            excluded_directories,
+            (git_metadata, false, false),
+            clearance,
+        ),
+        None => tree::walk(
+            operand,
+            excluded_files,
+            excluded_directories,
+            git_metadata,
+            false,
+        ),
+    }
 }

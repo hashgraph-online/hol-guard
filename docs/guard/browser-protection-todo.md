@@ -454,10 +454,14 @@ transcript in the pull request (after BP-T052).
     build refuses a list that differs from the pin), `scripts/refresh_public_suffix_snapshot.py`
     with an offline `--check`, and native `guard_command::public_suffix::registrable_domain`. The
     browser target's `site_group` now uses it.
-- [ ] **BP-T069** Policy bundle: add `browserVerb`, `siteGroup`, `browserDriver` to
+- [x] **BP-T069** Policy bundle: add `browserVerb`, `siteGroup`, `browserDriver` to
   `BROWSER_SCOPE_KEYS` in `rust/crates/guard-policy-bundle/src/policy_bundle_v1_rules.rs`, update
   `spec/guard-policy/v1alpha1/schema.json`, `docs/policy/schema-reference.md`, and
   `tests/test_guard_policy_bundle_browser_scopes.py`.
+  - Landed: the three bundle keys (a `browserVerb` must name a `BrowserVerbV1` value), the plural
+    `browserVerbs`, `browserDrivers` and `siteGroups` matchers in the canonical schema and policy
+    document, and the regenerated schema reference. A rule scoped by them is skipped when decisions
+    are saved, like every other browser scope, so it never widens into a broad allow.
 - [x] **BP-T070** R-SURFACE: surface resolution in the resident beside `approval_surface_policy`. For
   `shared` and `remote-debugging` sessions never auto-open a browser approval page; show the request
   on every non-browser surface and print the link for the user. Extend
@@ -466,8 +470,11 @@ transcript in the pull request (after BP-T052).
     `unknown` session holds the page. The Codex bridge prints the link instead of opening it; the
     daemon surface, the attention timer and Pi/Oh My Pi (via `approval_page_held` on
     `/v1/settings`) open nothing. Explicit opens still work.
-- [ ] **BP-T071** R-GATE: setup prompt on the browser card when a shared or remote-debugging session
+- [x] **BP-T071** R-GATE: setup prompt on the browser card when a shared or remote-debugging session
   has no approval gate. The two required choices stay.
+  - Done: `browser-call/browser-gate-prompt.tsx` adds one line linking to approval setup when the
+    card's profile is `shared` or `remote-debugging` and no password, authenticator or Pulse is ready.
+    The general setup notice is not repeated below it, and the choices are untouched.
 - [x] **BP-T072** Agent-facing hook text for browser holds and denials: names the site and the wait,
   tells the agent not to retry in a loop. The approval link stays for every profile mode, shared
   ones included: `docs/guard/approval-invariant.md` requires every executable review to offer Allow
@@ -679,6 +686,10 @@ transcript in the pull request (after BP-T052).
     verdicts first and never touches Guard's own facts or choices. The approval queue's poll redraws
     an open card, so a late answer appears once the approval path passes cached signals in (the
     hook wiring item below).
+  - [x] The approval read model now fills those rows from the provider signal cache for the card's
+    origin. It reads only cached answers, lists a provider only while it stays connected to the
+    same compiled manifest, shows an answer past its expiry as stale, and leaves the card without
+    provider rows when the cache cannot be read.
 - [ ] **BP-T135** Playwright specs for the Integrations page, the connect dialog and the finding row
   at the contract widths, with the testkit provider.
 

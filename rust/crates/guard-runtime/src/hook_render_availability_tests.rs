@@ -86,6 +86,28 @@ fn unavailable_event_projects_aliases_and_permission_passthrough_in_rust() {
 }
 
 #[test]
+fn standalone_unavailable_event_matches_the_resident_without_recording_evidence() {
+    for (harness, wire_event, event) in [
+        ("claude-code", "PermissionRequestV2", "PermissionRequest"),
+        ("codex", "beforeShellExecution", "PreToolUse"),
+        ("pi", "post_toolcall", "PostToolUse"),
+    ] {
+        let payload = json!({"hook_event_name": wire_event});
+        let input = json!({"harness": harness, "payload": payload});
+        let standalone = unavailable_event::cli(&serde_json::to_vec(&input).unwrap()).unwrap();
+
+        let mut req = request("unavailable_event");
+        req.harness = harness.into();
+        req.cli = Some(json!({"payload": payload}));
+        let resident = decode(evaluate_hook_render_request(&req).expect("encoded"));
+        assert_eq!(resident.status, "ok");
+        assert_eq!(standalone, resident.payload.expect("payload")["response"]);
+        assert_eq!(standalone["event_name"], event);
+        assert_eq!(standalone["activity_recorded"], false);
+    }
+}
+
+#[test]
 fn unavailable_event_denies_pre_tool_and_preserves_post_tool_activity_marker() {
     let mut req = request("unavailable_event");
     req.harness = "cursor".into();

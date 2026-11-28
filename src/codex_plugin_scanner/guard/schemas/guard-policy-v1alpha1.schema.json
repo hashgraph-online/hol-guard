@@ -572,6 +572,39 @@
         "browserOperations": {
           "$ref": "#/$defs/stringSet"
         },
+        "browserVerbs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "navigate",
+              "read",
+              "click",
+              "type",
+              "key",
+              "select",
+              "scroll",
+              "screenshot",
+              "upload",
+              "download",
+              "evaluate",
+              "cookie_read",
+              "cookie_write",
+              "storage_read",
+              "storage_write",
+              "intercept",
+              "permission",
+              "tab_control",
+              "attach",
+              "other"
+            ]
+          }
+        },
+        "browserDrivers": {
+          "$ref": "#/$defs/stringSet"
+        },
         "browserProfiles": {
           "type": "array",
           "minItems": 1,
@@ -591,6 +624,9 @@
           "$ref": "#/$defs/stringSet"
         },
         "pathPrefixes": {
+          "$ref": "#/$defs/stringSet"
+        },
+        "siteGroups": {
           "$ref": "#/$defs/stringSet"
         },
         "sensitiveSurfaces": {

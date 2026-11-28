@@ -64,8 +64,9 @@ pub(crate) fn marked_terms(prompt: &str) -> Vec<(String, bool)> {
             .map(|piece| (piece.to_lowercase(), false));
         for (part, whole) in std::iter::once((joined, true)).chain(pieces) {
             let term = singular(&part);
+            // `update()` names a method even though "update" alone is a stop word.
             if term.chars().count() >= 3
-                && !STOP_WORDS.contains(&term.as_str())
+                && (shaped || !STOP_WORDS.contains(&term.as_str()))
                 // `passes` is a task word whose singular form, `passe`, is not.
                 && (shaped
                     || !(TASK_WORDS.contains(&term.as_str())
