@@ -162,6 +162,7 @@ fn render(
             .and_then(Value::as_str)
             .ok_or("native_hook_render_invalid")?;
         let explicit_view = params.get("view").cloned();
+        let has_explicit_view = explicit_view.is_some();
         // A direct-lane binding with no view is unresolved and stays fail-closed.
         // Only the native managed-policy loader can positively identify the
         // machine-wide absent-policy case that leaves the destination open.
@@ -176,12 +177,21 @@ fn render(
         } else {
             (None, false, None)
         };
-        let overlay = if native_policy_status == Some("absent") {
-            crate::hook_direct::pi::outage_overlay_without_managed_policy(harness, event)
-        } else if binding_known {
-            crate::hook_direct::pi::outage_overlay_with_binding(harness, event, view.as_ref(), true)
-        } else {
-            crate::hook_direct::pi::outage_overlay(harness, event, view.as_ref())
+        let overlay = match native_policy_status {
+            // An explicitly absent machine policy leaves the optional
+            // destination open. Every other native policy result is an
+            // authority failure and must withhold the destination while the
+            // resident is unavailable.
+            Some("absent") => {
+                crate::hook_direct::pi::outage_overlay_without_managed_policy(harness, event)
+            }
+            Some(_) if !binding_known && !has_explicit_view => {
+                crate::hook_direct::pi::outage_overlay_with_binding(harness, event, None, true)
+            }
+            _ if binding_known => {
+                crate::hook_direct::pi::outage_overlay_with_binding(harness, event, view.as_ref(), true)
+            }
+            _ => crate::hook_direct::pi::outage_overlay(harness, event, view.as_ref()),
         };
         let mut payload = cli_payload(CliOutcome::Document(overlay));
         if let Some(status) = native_policy_status {
