@@ -3178,6 +3178,10 @@
       "commands": [
         "ls /tmp/.s.PGSQL.5432 2>/dev/null",
         "ls -la /tmp/.guard-benign-gate-absent.lock 2>/dev/null"
+      ],
+      "benign_exit_commands": [
+        "ls /tmp/.s.PGSQL.5432 2>/dev/null",
+        "ls -la /tmp/.guard-benign-gate-absent.lock 2>/dev/null"
       ]
     },
     {
