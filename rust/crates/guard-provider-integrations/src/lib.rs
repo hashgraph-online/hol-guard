@@ -13,6 +13,7 @@
 //!   lifetime. Anything the manifest does not declare reads `unknown` or is dropped.
 //! - `adapter`: the closed list of reviewed adapters for protocols data cannot express, and the
 //!   bar a new one must meet. Empty in this phase.
+//! - `conformance` and `conformance_draft`: the conformance kit and the first recordings it runs on.
 //! - `noise`: the per-session caps that keep a provider from adding prompts (PRD 6.12).
 //! - `overrides`: repeated allow-throughs of one provider reason, the offer to quiet it and undo.
 //! - `compose`: several providers on one subject, one deciding row and the card order.
@@ -28,6 +29,7 @@ pub mod answer;
 pub mod client;
 pub mod compose;
 pub mod conformance;
+pub mod conformance_draft;
 pub mod conformance_fixtures;
 pub mod fixture_origin;
 pub mod noise;

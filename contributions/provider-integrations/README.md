@@ -29,6 +29,8 @@ one that maps to `unknown`, and one each for a refused key (`401`), rate limitin
 body and a malformed body. The format is described in
 `rust/crates/guard-provider-integrations/src/conformance_fixtures.rs`, and
 `tests/fixtures/provider_integrations/exampleshield/` is a complete example.
+`hol-guard extensions generate --provider --from manifest --input <manifest> --output <recordings>`
+drafts the full set from the manifest; replace each placeholder body with a real response.
 
 Run the checks on your manifest with the released CLI from a checkout of this repository:
 
