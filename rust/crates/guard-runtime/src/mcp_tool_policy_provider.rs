@@ -37,6 +37,9 @@ use crate::provider_integration_store::provider_connection;
 
 pub(crate) const PROVIDER_REVIEW_SOURCE: &str = "provider-integration-review";
 pub(crate) const PROVIDER_BLOCK_SOURCE: &str = "provider-integration-block";
+pub(crate) const PROVIDER_FRESH_CHECK_SOURCE: &str = "provider-integration-fresh-check-unavailable";
+pub(crate) const PROVIDER_MANAGED_UNKNOWN_SOURCE: &str =
+    "provider-integration-managed-policy-unknown";
 
 /// The Guard store to read cached provider answers from for an in-process policy lookup, or `None`
 /// when no provider ships or the lookup cannot read the store. The relay passes the connection it
@@ -63,14 +66,12 @@ pub(crate) fn with_provider_floor(
     let (false, Some(connection), Some(origin)) = (providers.is_empty(), store, origin) else {
         return current;
     };
-    // Unknown managed settings (a policy that failed closed) leave the local settings in force.
-    // The floor still only tightens, so this can never allow what Guard would not.
-    let managed = managed_settings(&load_managed_policy(&managed_policy_source()))
-        .unwrap_or_else(ManagedProviderSettings::none);
+    // `None` when managed policy failed closed or its provider settings do not parse.
+    let managed = managed_settings(&load_managed_policy(&managed_policy_source()));
     floor(&Floor {
         connection,
         providers,
-        managed: &managed,
+        managed: managed.as_ref(),
         origin,
         now_ms: now_ms(),
         current,
@@ -80,7 +81,8 @@ pub(crate) fn with_provider_floor(
 pub(crate) struct Floor<'a> {
     pub(crate) connection: &'a Connection,
     pub(crate) providers: &'a [CompiledProviderIntegrationV1],
-    pub(crate) managed: &'a ManagedProviderSettings,
+    /// The managed provider settings, or `None` when they cannot be known.
+    pub(crate) managed: Option<&'a ManagedProviderSettings>,
     pub(crate) origin: &'a str,
     pub(crate) now_ms: u64,
     pub(crate) current: Current,
@@ -95,49 +97,114 @@ pub(crate) fn floor(input: &Floor<'_>) -> Current {
     let Some((_, subject)) = origin_subject(input.origin) else {
         return current;
     };
-    let connected = connected_providers(input.connection, input.providers);
-    if connected.is_empty() {
+    // One savepoint makes the connection and signal reads see one committed state, so a reconnect
+    // under another manifest cannot pair the new connection with the old manifest's answers. A
+    // savepoint nests inside a caller's transaction.
+    if input
+        .connection
+        .execute_batch("savepoint provider_floor")
+        .is_err()
+    {
         return current;
     }
-    let baseline = baseline(current.action);
+    let raised = raised_in_snapshot(input, &subject.digest, current.action);
+    let _ = input
+        .connection
+        .execute_batch("rollback to provider_floor; release provider_floor");
+    let Some(raised) = raised else {
+        return current;
+    };
+    let action = crate::mcp_tool_policy_flow::most_restrictive(current.action, raised.action);
+    let mut signals = current.signals.clone();
+    signals.push(raised.signal);
+    Current {
+        action,
+        source: raised.source.to_owned(),
+        summary: raised.summary.to_owned(),
+        signals,
+        ..current
+    }
+}
+
+struct Raised {
+    action: GuardAction,
+    source: &'static str,
+    summary: &'static str,
+    signal: String,
+}
+
+impl Raised {
+    fn new(action: GuardAction, source: &'static str, summary: &'static str, detail: &str) -> Self {
+        Self {
+            action,
+            source,
+            summary,
+            signal: format!("{source}:{detail}"),
+        }
+    }
+}
+
+/// The stronger recommendation the cached answers call for, or `None` to keep Guard's own.
+fn raised_in_snapshot(
+    input: &Floor<'_>,
+    subject_digest: &str,
+    action: GuardAction,
+) -> Option<Raised> {
+    let connected = connected_providers(input.connection, input.providers);
+    if connected.is_empty() {
+        return None;
+    }
+    let baseline = baseline(action);
+    let Some(managed) = input.managed else {
+        // Managed policy may set an enforced floor Guard cannot read now. Fail closed to a review
+        // rather than decide from the local settings alone.
+        return (baseline < BaselineDecision::Review).then(|| {
+            Raised::new(
+                GuardAction::Review,
+                PROVIDER_MANAGED_UNKNOWN_SOURCE,
+                "Managed security provider settings could not be read. Review this site before \
+                 the agent opens it.",
+                "managed-policy",
+            )
+        });
+    };
     let request = DecideRequest {
         baseline,
         capability: ProviderCapabilityV1::OriginReputation,
-        subject_digest: &subject.digest,
+        subject_digest,
         providers: &connected,
         now_ms: input.now_ms,
-        managed: input.managed,
+        managed,
     };
     // The noise caps count per session; this pass has no session ledger yet, so it admits every
     // signal. That can only add reviews, never remove one.
-    let Ok(decided) = decide(input.connection, &mut NoiseLedger::new(), &request) else {
-        return current;
-    };
-    let provider = decided.deciding_provider.unwrap_or_default();
-    let (action, source, summary) = match decided.decision {
-        _ if decided.decision <= baseline => return current,
-        BaselineDecision::Block => (
+    let decided = decide(input.connection, &mut NoiseLedger::new(), &request).ok()?;
+    if decided.decision <= baseline {
+        return None;
+    }
+    let raised = match (decided.decision, decided.deciding_provider.as_deref()) {
+        (BaselineDecision::Block, provider) => Raised::new(
             GuardAction::Block,
             PROVIDER_BLOCK_SOURCE,
             "A connected security provider reports this site as dangerous, and its blocks are \
              enforced.",
+            provider.unwrap_or_default(),
         ),
-        _ => (
+        (_, Some(provider)) => Raised::new(
             GuardAction::Review,
             PROVIDER_REVIEW_SOURCE,
             "A connected security provider flagged this site. Review it before the agent opens it.",
+            provider,
+        ),
+        (_, None) => Raised::new(
+            GuardAction::Review,
+            PROVIDER_FRESH_CHECK_SOURCE,
+            "A security provider set to require a fresh check has no current answer for this \
+             site. Review it before the agent opens it.",
+            &decided.fresh_check_required.join(","),
         ),
     };
-    let action = crate::mcp_tool_policy_flow::most_restrictive(current.action, action);
-    let mut signals = current.signals.clone();
-    signals.push(format!("{source}:{provider}"));
-    Current {
-        action,
-        source: source.to_owned(),
-        summary: summary.to_owned(),
-        signals,
-        ..current
-    }
+    Some(raised)
 }
 
 /// Shipped providers still connected to the manifest this build compiled. A connection made under

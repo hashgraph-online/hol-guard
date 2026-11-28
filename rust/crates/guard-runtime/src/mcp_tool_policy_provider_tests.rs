@@ -80,11 +80,27 @@ fn current(action: GuardAction) -> Current {
 }
 
 fn run(connection: &Connection, origin: &str, now_ms: u64, action: GuardAction) -> Current {
+    run_with(
+        connection,
+        Some(&ManagedProviderSettings::none()),
+        origin,
+        now_ms,
+        action,
+    )
+}
+
+fn run_with(
+    connection: &Connection,
+    managed: Option<&ManagedProviderSettings>,
+    origin: &str,
+    now_ms: u64,
+    action: GuardAction,
+) -> Current {
     let providers = [provider()];
     floor(&Floor {
         connection,
         providers: &providers,
-        managed: &ManagedProviderSettings::none(),
+        managed,
         origin,
         now_ms,
         current: current(action),
@@ -206,4 +222,62 @@ fn the_same_origin_spelled_differently_finds_the_same_answer() {
         GuardAction::Allow,
     );
     assert_eq!(result.action, GuardAction::Review);
+}
+
+#[test]
+fn unknown_managed_settings_review_a_site_a_connected_provider_could_answer() {
+    let connection = connected(V::Ok);
+    let result = run_with(&connection, None, SITE, NOW, GuardAction::Allow);
+    assert_eq!(result.action, GuardAction::Review);
+    assert_eq!(result.source, PROVIDER_MANAGED_UNKNOWN_SOURCE);
+    let blocked = run_with(&connection, None, SITE, NOW, GuardAction::Block);
+    unchanged(&blocked, GuardAction::Block);
+    let old_manifest = store(V::Ok, &format!("{:064x}", 9));
+    unchanged(
+        &run_with(&old_manifest, None, SITE, NOW, GuardAction::Allow),
+        GuardAction::Allow,
+    );
+}
+
+#[test]
+fn a_missing_fresh_check_reviews_without_naming_a_provider_finding() {
+    let connection = connected(V::Ok);
+    put_capability_setting(
+        &connection,
+        SHIELD,
+        Cap::OriginReputation,
+        CapabilitySetting {
+            effect_level: Level::Tighten,
+            require_fresh: true,
+        },
+    )
+    .unwrap();
+    let result = run(&connection, SITE, EXPIRES, GuardAction::Allow);
+    assert_eq!(result.action, GuardAction::Review);
+    assert_eq!(result.source, PROVIDER_FRESH_CHECK_SOURCE);
+    assert_eq!(
+        result.signals.last().unwrap(),
+        &format!("{PROVIDER_FRESH_CHECK_SOURCE}:{SHIELD}")
+    );
+    assert!(!result.summary.contains("flagged"));
+}
+
+#[test]
+fn the_snapshot_nests_in_a_caller_transaction_and_is_always_ended() {
+    let connection = connected(V::Danger);
+    connection.execute_batch("begin").unwrap();
+    assert_eq!(
+        run(&connection, SITE, NOW, GuardAction::Allow).action,
+        GuardAction::Review
+    );
+    assert!(
+        !connection.is_autocommit(),
+        "the caller's transaction is still open"
+    );
+    connection.execute_batch("commit").unwrap();
+    assert_eq!(
+        run(&connection, SITE, NOW, GuardAction::Allow).action,
+        GuardAction::Review
+    );
+    assert!(connection.is_autocommit(), "no snapshot is left open");
 }
