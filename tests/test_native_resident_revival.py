@@ -429,6 +429,10 @@ def test_unavailable_native_keeps_specific_reason_overrides_on_fallback(
         return None
 
     monkeypatch.setattr(evidence, "native_unavailable_event_response", unexpected_native)
+    def unavailable_standalone(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("native runtime unavailable")
+
+    monkeypatch.setattr(evidence, "standalone_unavailable_event", unavailable_standalone)
     host = SimpleNamespace(metrics=SimpleNamespace(record_route=lambda _route: None), activity_writer=None)
     response = evidence._record_unavailable_native(
         cast(Any, host),
@@ -441,6 +445,29 @@ def test_unavailable_native_keeps_specific_reason_overrides_on_fallback(
     )
     assert called is True
     assert response["hookSpecificOutput"]["permissionDecisionReason"] == "Policy update is still being applied."
+
+
+def test_unavailable_native_uses_standalone_rust_document_when_resident_is_down(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.hook_review import hook_worker_native_evidence as evidence
+
+    monkeypatch.setattr(evidence, "native_unavailable_event_response", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        evidence,
+        "standalone_unavailable_event",
+        lambda *_a, **_k: {"event_name": "PreToolUse", "response": {"decision": "deny"}},
+    )
+    host = SimpleNamespace(metrics=SimpleNamespace(record_route=lambda _route: None), activity_writer=None)
+    response = evidence._record_unavailable_native(
+        cast(Any, host),
+        {"hook_event_name": "PreToolUse", "tool_name": "Bash"},
+        harness="codex",
+        event_name="PreToolUse",
+        reason_code="native_pre_tool_unavailable",
+        guard_home=tmp_path,
+    )
+    assert response == {"decision": "deny"}
 
 
 def test_unavailable_native_passes_derived_failure_reason_to_rust(
