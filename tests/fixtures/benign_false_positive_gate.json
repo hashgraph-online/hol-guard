@@ -35504,6 +35504,41 @@
       "expect": "allow"
     },
     {
+      "id": "grep-recursive-parent-tests-cleared-env-fixture",
+      "fix_area": "search",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd services/ledger/src && grep -rln \"settleBatch\" ../tests | head"
+      },
+      "cwd": "ledger_service",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grep-recursive-parent-tests-env-fixture-value",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd services/ledger/src && grep -rln \"LEDGER_REGION\" ../tests | head"
+      },
+      "cwd": "ledger_service",
+      "expect": "not_allow",
+      "contained_ok": true
+    },
+    {
       "id": "neg-doctl-databases-list-uri-format",
       "fix_area": "negative",
       "harnesses": [

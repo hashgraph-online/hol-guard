@@ -236,6 +236,11 @@ CONTAINED_OK_CASES = {
     # sandbox already holds, with no home or network reach.
     "neg-grep-late-exclude-dir-separated-value",
     "neg-grep-late-exclude-beside-include",
+    # A recursive grep from a sibling directory whose value pattern can
+    # match the dotenv file in that tree: the read keeps its review, and the
+    # contained profiles hide dotenv files inside the workspace (denied reads
+    # on macOS, masked mounts on Linux), so the run prints no value.
+    "neg-grep-recursive-parent-tests-env-fixture-value",
     # The pattern exemption's own negatives: the producer opens a dotenv
     # file, dumps the environment, or names one as a pathspec, so the
     # credential word is never the only signal. A contained run has no home
