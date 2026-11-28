@@ -14,6 +14,7 @@ from typing import Any
 SEARCH_WORDS_CASE = "omp-native-shell-search-credential-word-quiet-errors"
 DIFF_EXCLUSION_CASE = "omp-native-git-diff-exclusion-pathspec-report"
 LINKED_RG_CASE = "omp-native-rg-include-globs-linked-cwd"
+PARENT_TESTS_CASE = "omp-native-cd-folder-grep-parent-tests-env-fixture"
 
 # Identifiers only: names a project uses for its settings, with no secret in them.
 SEARCH_WORDS_FILE = "src/limits.ts"
@@ -29,6 +30,15 @@ SEARCH_WORDS_SOURCE = (
 DIFF_FILE = "src/settings.ts"
 DIFF_ADDED_LINE = 'export const region = process.env.APP_REGION ?? "local";\n'
 
+# A package whose tests keep an environment fixture. The search reads the
+# tests folder through `..` from the package's source folder, and its pattern
+# is absent from the fixture, so the fixture prints nothing.
+PARENT_TESTS_FILES = (
+    ("services/ledger/src/settle.ts", "export function settleBatch() {}\n"),
+    ("services/ledger/tests/settle.test.ts", "import { settleBatch } from '../src/settle';\n"),
+    ("services/ledger/tests/fixtures/.env.test", "LEDGER_REGION=synthetic\n"),
+)
+
 
 def add_search_and_diff_content(workspace: Path, scenario_id: str | None) -> None:
     """Give each report case's commands something to print."""
@@ -38,6 +48,11 @@ def add_search_and_diff_content(workspace: Path, scenario_id: str | None) -> Non
         (workspace / "tests").mkdir(exist_ok=True)
         (workspace / "src/rail.ts").write_text("export const railStage = 1;\n", encoding="utf-8", newline="\n")
         (workspace / "tests/rail.test.tsx").write_text("export const railStage = 2;\n", encoding="utf-8", newline="\n")
+    elif scenario_id == PARENT_TESTS_CASE:
+        for relative, text in PARENT_TESTS_FILES:
+            target = workspace / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8", newline="\n")
     elif scenario_id == DIFF_EXCLUSION_CASE:
         with (workspace / DIFF_FILE).open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(DIFF_ADDED_LINE)

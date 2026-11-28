@@ -302,6 +302,11 @@ def build_fixture(root: Path) -> BenignFixture:
     # helper) and its Python link helper.
     for relative, text in {**TOKEN_SOURCES, **FALLBACK_SOURCES}.items():
         _write(worktree / relative, text)
+    # A package whose tests keep an environment fixture, searched through `..`
+    # from the package's source folder.
+    _write(worktree / "services" / "ledger" / "src" / "settle.ts", "export function settleBatch() {}\n")
+    _write(worktree / "services" / "ledger" / "tests" / "settle.test.ts", "import { settleBatch } from '../src/settle';\n")
+    _write(worktree / "services" / "ledger" / "tests" / "fixtures" / ".env.test", "LEDGER_REGION=synthetic\n")
     # The test beside that source: a project file whose name reads like a
     # credential, named by the runner a session runs over it.
     _write(
