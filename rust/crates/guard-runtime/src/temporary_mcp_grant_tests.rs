@@ -380,10 +380,14 @@ fn a_shared_profile_call_may_pick_session_site_and_nothing_else() {
 }
 
 #[test]
-fn a_shared_profile_card_does_not_call_the_risk_it_covers_uncoverable() {
+fn a_card_offering_session_site_does_not_call_the_risk_it_covers_uncoverable() {
     let shared = json!(["browser_interaction", "browser_shared_profile"]);
     let answer = dispatch(&json!({
-        "browser_intents": [tiered_intent(true, shared, json!({})), site_intent(true)],
+        "browser_intents": [
+            tiered_intent(true, shared, json!({})),
+            site_intent(false),
+            site_intent(true),
+        ],
     }))
     .expect("answer");
     let named = |index: usize| answer["approvals"][index]["hard_risk_exclusions"].clone();
@@ -400,4 +404,9 @@ fn a_shared_profile_card_does_not_call_the_risk_it_covers_uncoverable() {
         .expect("list")
         .contains(&json!("browser_transfer")));
     assert_eq!(named(1), json!(HARD_RISK_EXCLUSIONS));
+    assert!(answer["approvals"][2]["allowed_targets"]
+        .as_array()
+        .expect("targets")
+        .contains(&json!("session-site")));
+    assert_eq!(named(2), named(0));
 }

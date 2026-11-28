@@ -40,8 +40,8 @@ const TARGETS: [&str; 3] = ["exact", "category", "server"];
 /// `TEMPORARY_MCP_GRANT_DURATIONS` and their `_DURATION_SECONDS`.
 const DURATIONS: [(&str, i64); 3] = [("15m", 900), ("1h", 3600), ("5h", 18000)];
 /// `_HARD_RISK_EXCLUSIONS` — the shapes no grant covers, carried on the card so
-/// the surface can say so. A shared-profile card offers `session-site`, so its
-/// list leaves out `browser_shared_profile` (see `Eligibility::exclusions`).
+/// the surface can say so. A card that offers `session-site` leaves out
+/// `browser_shared_profile`, which that grant covers (`Eligibility::exclusions`).
 const HARD_RISK_EXCLUSIONS: [&str; 11] = [
     "browser_guard_origin",
     "browser_transfer",
@@ -68,12 +68,13 @@ struct Eligibility {
 }
 
 impl Eligibility {
-    /// The exclusions this card names: a `SharedSession` card can cover the
-    /// shared-profile risk with `session-site`, so it does not list it.
+    /// The exclusions this card names. A `session-site` grant covers a
+    /// shared-profile call, so a card that offers it does not list that risk.
     fn exclusions(&self) -> Vec<&'static str> {
+        let session_site = self.targets().contains(&"session-site");
         HARD_RISK_EXCLUSIONS
             .into_iter()
-            .filter(|risk| self.tier != GrantTier::SharedSession || *risk != SHARED_PROFILE_RISK)
+            .filter(|risk| !session_site || *risk != SHARED_PROFILE_RISK)
             .collect()
     }
 
