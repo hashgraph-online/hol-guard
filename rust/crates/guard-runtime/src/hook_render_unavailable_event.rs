@@ -16,6 +16,12 @@ const INVALID: &str = "native_hook_render_invalid";
 struct CliRequest {
     harness: String,
     payload: Map<String, Value>,
+    #[serde(default)]
+    reason_code: Option<String>,
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    prompt_reason: Option<String>,
 }
 
 pub(crate) fn cli(input: &[u8]) -> Result<Value, String> {
@@ -24,7 +30,17 @@ pub(crate) fn cli(input: &[u8]) -> Result<Value, String> {
     }
     let request: CliRequest =
         serde_json::from_slice(input).map_err(|_| "hook_unavailable_event_request_invalid")?;
-    render(&request.harness, &request.payload, &Map::new(), None)
+    let mut params = Map::new();
+    if let Some(value) = request.reason_code {
+        params.insert("reason_code".to_owned(), Value::String(value));
+    }
+    if let Some(value) = request.reason {
+        params.insert("reason".to_owned(), Value::String(value));
+    }
+    if let Some(value) = request.prompt_reason {
+        params.insert("prompt_reason".to_owned(), Value::String(value));
+    }
+    render(&request.harness, &request.payload, &params, None)
         .map(Value::Object)
         .map_err(str::to_owned)
 }

@@ -86,18 +86,32 @@ def _native_availability(
 
 
 def standalone_unavailable_event(
-    payload: Mapping[str, object], harness: str, *, deadline: float | None
+    payload: Mapping[str, object],
+    harness: str,
+    *,
+    deadline: float | None,
+    reason_code: str | None = None,
+    reason: str | None = None,
+    prompt_reason: str | None = None,
 ) -> dict[str, object] | None:
     """Render an outage response without the resident or tool contents."""
     from .mdm.runtime_request import runtime_answer
 
+    request: dict[str, object] = {
+        "harness": harness,
+        "payload": {key: value for key in _EVENT_FIELDS if isinstance(value := payload.get(key), str)},
+    }
+    for key, value in (
+        ("reason_code", reason_code),
+        ("reason", reason),
+        ("prompt_reason", prompt_reason),
+    ):
+        if value is not None:
+            request[key] = value
     return runtime_answer(
         _CLI_UNAVAILABLE_EVENT_FEATURE,
         _CLI_UNAVAILABLE_EVENT_COMMAND,
-        {
-            "harness": harness,
-            "payload": {key: value for key in _EVENT_FIELDS if isinstance(value := payload.get(key), str)},
-        },
+        request,
         output_limit=64 * 1024,
         timeout_seconds=1.0,
         deadline=deadline,

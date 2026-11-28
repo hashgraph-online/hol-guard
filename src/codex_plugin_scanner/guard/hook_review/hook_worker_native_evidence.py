@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..native_hook_availability import standalone_unavailable_event
 from ..native_hook_render import (
     availability_harness_response,
     native_render_recording_only_pre_tool,
@@ -77,6 +78,16 @@ def _record_unavailable_native(
         prompt_reason=prompt_reason,
     )
     native_response = native.get("response") if isinstance(native, dict) else None
+    if native_response is None:
+        native = standalone_unavailable_event(
+            payload,
+            harness,
+            deadline=deadline,
+            reason_code=reason_code,
+            reason=resolved_reason,
+            prompt_reason=prompt_reason,
+        )
+        native_response = native.get("response") if isinstance(native, dict) else None
     response = (
         dict(native_response)
         if isinstance(native_response, Mapping)
