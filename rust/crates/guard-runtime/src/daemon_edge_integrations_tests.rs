@@ -8,7 +8,7 @@ use crate::daemon_route_paths::{
 };
 use crate::hook_evidence_store_gate::STORAGE_GATE_FILE_NAME;
 use crate::managed_policy::parse_managed_policy;
-use crate::managed_policy_load::ManagedPolicyStatus;
+use crate::managed_policy_load::{ManagedPolicyState, ManagedPolicyStatus};
 use crate::provider_integration_routes::tests::provider;
 use crate::provider_integration_store::{provider_connection, put_connection, ProviderConnection};
 

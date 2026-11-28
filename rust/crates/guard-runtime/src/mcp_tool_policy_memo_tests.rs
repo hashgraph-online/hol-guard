@@ -48,6 +48,7 @@ fn pass(
         lookup: None,
         memo,
         catalog: None,
+        provider_store: None,
     };
     outcome(evaluate_pass(&ctx, subject, Phase::Initial, claim))
 }

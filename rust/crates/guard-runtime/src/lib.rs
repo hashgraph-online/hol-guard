@@ -1031,6 +1031,7 @@ mod mcp_tool_policy_extension;
 mod mcp_tool_policy_flow;
 mod mcp_tool_policy_grants;
 mod mcp_tool_policy_lookup;
+mod mcp_tool_policy_provider;
 mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
 mod mdm_integrity_snapshot;

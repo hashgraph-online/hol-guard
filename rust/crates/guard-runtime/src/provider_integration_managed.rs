@@ -26,6 +26,8 @@ use std::collections::BTreeMap;
 use guard_contracts::{provider_id_is_valid, ProviderCapabilityV1, ProviderEffectLevelV1};
 use serde_json::{Map, Value};
 
+use crate::managed_policy_floor::effective_managed_policy;
+use crate::managed_policy_load::ManagedPolicyState;
 use crate::provider_integration_store::CapabilitySetting;
 
 /// The managed-policy settings key, and the `lockedSettings` path that locks it.
@@ -193,6 +195,22 @@ fn parse_entry(
             require_fresh_check,
         },
     ))
+}
+
+/// The managed provider settings, or `None` when they cannot be known: a
+/// policy that failed closed, or a `provider_integrations` value that does not
+/// parse. Guard then refuses the routes rather than guess at a floor.
+pub(crate) fn managed_settings(state: &ManagedPolicyState) -> Option<ManagedProviderSettings> {
+    if state.policy.is_none() && state.status.fails_closed() {
+        return None;
+    }
+    let Some(policy) = effective_managed_policy(state) else {
+        return Some(ManagedProviderSettings::none());
+    };
+    let locked = policy
+        .locked_settings
+        .contains(PROVIDER_INTEGRATIONS_SETTING);
+    ManagedProviderSettings::from_settings(&policy.settings, locked).ok()
 }
 
 #[cfg(test)]
