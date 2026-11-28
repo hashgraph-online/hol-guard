@@ -79,6 +79,10 @@ BACKGROUND_READ_CASE = "omp-native-read-background-job-output"
 # work rather than this scenario.
 ROUTE_SEGMENT_GLOB_CASE = "omp-native-glob-dynamic-route-segment"
 ROUTE_SEGMENT_DIRECTORY = ("app", "items", "[slug]")
+# The eval tool's own help page. Oh My Pi 19.2 runs the eval prelude's `read()` through the
+# tool hooks and reads it with `:raw`, so the case's one read reaches Guard as this address.
+EVAL_HELP_CASE = "omp-native-eval-reads-help-docs"
+EVAL_HELP_PATH = re.compile(r"help://eval(?::raw)?")
 JOB_OUTPUT_PATH = re.compile(r"proc://(?P<job>[A-Za-z0-9_][A-Za-z0-9_.-]*)(?::[1-9][0-9]*-[1-9][0-9]*)?")
 # The scenario's one command is `git hash-object README.md`, so its output is a single object id.
 # Holding the read to it keeps a read of some other job, or of an empty table row, from passing.
@@ -777,9 +781,15 @@ def native_tools_scope_error(
         "omp-native-eval-reads-skill-doc": "{{home}}/.agent/skills/x/SKILL.md",
     }.get(scenario.id)
     for call in calls:
-        if call["id"] in bridged and (
-            bridge_file is None or call["name"] != "read" or _write_path(call["args"]) != bridge_file
-        ):
+        if call["id"] not in bridged:
+            continue
+        if scenario.id == EVAL_HELP_CASE:
+            target = call["args"].get("path") if isinstance(call.get("args"), dict) else None
+            if call["name"] == "read" and set(call["args"]) == {"path"} and isinstance(target, str):
+                if EVAL_HELP_PATH.fullmatch(target):
+                    continue
+            return "eval bridge used an unexpected tool or file"
+        if bridge_file is None or call["name"] != "read" or _write_path(call["args"]) != bridge_file:
             return "eval bridge used an unexpected tool or file"
     delegated = case.get("delegated_call_ids", [])
     if (

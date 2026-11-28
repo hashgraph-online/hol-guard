@@ -28,6 +28,8 @@ from .mixed_reads import assess_mixed_reads
 from .native_routes import native_route_proof_error, native_sink_calls
 from .native_tools import (
     BACKGROUND_READ_CASE,
+    EVAL_HELP_CASE,
+    EVAL_HELP_PATH,
     JOB_OUTPUT_PATH,
     MISSPELLED_FIXTURE_READ,
     misspelled_fixture_reads,
@@ -285,7 +287,8 @@ def virtual_uri_error(scenario: Scenario, calls: list[dict[str, Any]]) -> str | 
 
     A disposable fixture holds ordinary files, so a virtual URI usually means the model went
     somewhere the task never named. One scenario's whole point is reading a background job's
-    output, which is addressed by a proc:// selector and nothing else.
+    output, which is addressed by a proc:// selector and nothing else. Another reads the eval
+    tool's own help page, `help://eval`, from inside an eval cell.
     """
 
     for call in calls:
@@ -293,6 +296,8 @@ def virtual_uri_error(scenario: Scenario, calls: list[dict[str, Any]]) -> str | 
         if "://" not in target:
             continue
         if scenario.id == BACKGROUND_READ_CASE and JOB_OUTPUT_PATH.fullmatch(target):
+            continue
+        if scenario.id == EVAL_HELP_CASE and call["name"] == "read" and EVAL_HELP_PATH.fullmatch(target):
             continue
         return "virtual URI operations are outside the disposable task scope"
     return None
