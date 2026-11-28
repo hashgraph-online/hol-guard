@@ -1228,6 +1228,19 @@
       ]
     },
     {
+      "id": "omp-native-git-grep-exclusion-pathspec-search",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Find where the project exports and imports code by running each listed git command once, in order, from the project directory, and summarize the output.",
+      "commands": [
+        "git grep -n \"export\" -- ':!package-lock.json' | grep -v \"^docs/\" | head",
+        "git grep -l \"import\" HEAD -- . ':^dist' ':(exclude)bun.lock'"
+      ]
+    },
+    {
       "id": "omp-native-git-inline-config-reads",
       "expectation": "allow",
       "oracle": "native-tools",
