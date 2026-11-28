@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .branch_return_fixtures import branch_return_checks
 from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
-from .cargo_package_fixtures import add_cargo_package
+from .cargo_package_fixtures import add_cargo_package, add_rustup_home
 from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .design_token_fixtures import add_design_token_documents
 from .edge_clone_fixtures import write_edge_clone
@@ -456,6 +456,7 @@ def create_fixture(
     add_home_bun_runtime(home, scenario_id)
     add_design_token_documents(workspace, scenario_id)
     add_cargo_package(workspace, scenario_id)
+    add_rustup_home(home, scenario_id)
     add_search_and_diff_content(workspace, scenario_id)
     add_nested_workspace_package(workspace, environment, scenario_id)
     add_backfill_shapes(workspace, environment, scenario_id)
