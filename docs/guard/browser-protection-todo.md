@@ -181,7 +181,7 @@ place to put its cases.
     route without an origin, and a transport that always sends the literal fixture key (proven
     against a loopback stub). Still open: the compiler refusal under `contributions/`, the
     resident wiring, the Integrations page mark and the Gauntlet stub.
-- [ ] **BP-T180** Conformance kit: `conformance.rs` and `hol-guard integrations conformance
+- [x] **BP-T180** Conformance kit: `conformance.rs` and `hol-guard integrations conformance
   <manifest>` (PRD 6.12), runnable from the released CLI. Five checks: compile and labels, recorded
   responses, share set, no added prompt, bounded prompt. CI runs it for every manifest under
   `contributions/provider-integrations/`. Add `hol-guard extensions generate --provider` and
@@ -194,6 +194,11 @@ place to put its cases.
     provider and every contributed manifest.
   - CLI done: `hol-guard integrations conformance <manifest>` runs the native `provider-conformance`
     command. Still open: `extensions generate/validate --provider`.
+  - Builder done: `hol-guard extensions generate --provider --from manifest` drafts a manifest's
+    `recordings.json` through the native `provider-recordings-draft` command (every mapped verdict,
+    `unknown` and each required failure, checked by the kit before it is written), and
+    `extensions validate --provider` runs the conformance kit. The recordings are the provider's
+    gate rows: the benign browser corpus is shared and needs no per-provider rows.
 - [x] **BP-T181** Calibration for `verified` (D12): document the report format, the public list named
   by digest and the starting thresholds in the provider contributing guide. No list is checked in.
 - [ ] **BP-T182** Noise view on the provider detail page and in `hol-guard integrations status <id>`:

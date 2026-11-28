@@ -201,7 +201,7 @@ pub fn recorded_outcome(
     map_answer(body, &answer_mapping(capability)).map_err(|_| RecordedFailure::Malformed)
 }
 
-fn check_recordings(
+pub(crate) fn check_recordings(
     compiled: &CompiledProviderIntegrationV1,
     recordings: &[Recording<'_>],
 ) -> ConformanceCheck {

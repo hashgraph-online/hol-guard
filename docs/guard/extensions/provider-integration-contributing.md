@@ -51,13 +51,28 @@ a decision below what Guard decides without the provider.
 
 ## Check a manifest before you open a pull request
 
-Add recorded responses for the manifest (see the
-[provider integrations README](../../../contributions/provider-integrations/README.md#recorded-responses)),
-then run:
+Draft the recorded responses from the manifest instead of writing them by hand:
 
 ```bash
-hol-guard integrations conformance contributions/provider-integrations/provider.<slug>.json
+hol-guard extensions generate --provider --from manifest \
+  --input contributions/provider-integrations/provider.<slug>.json \
+  --output tests/fixtures/provider_integrations/<slug>/recordings.json
 ```
+
+The draft has one answer for every entry of each verdict table, one with a verdict the table does not
+list, and the required failures: a refused key, rate limiting, a server error, an oversize body and a
+malformed body. Each expectation is what Guard reads from the drafted body. The bodies are
+placeholders shaped by the manifest's pointers, so replace each one with a real response from the
+provider and keep its expectation true (see the
+[provider integrations README](../../../contributions/provider-integrations/README.md#recorded-responses)).
+Then run:
+
+```bash
+hol-guard extensions validate --provider contributions/provider-integrations/provider.<slug>.json
+```
+
+`validate --provider` runs the same checks as
+`hol-guard integrations conformance <manifest>` and exits non-zero when one fails.
 
 The five checks are:
 

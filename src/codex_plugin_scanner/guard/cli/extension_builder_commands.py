@@ -41,7 +41,7 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
         "--from",
         dest="source_adapter",
         required=True,
-        choices=("cli", "help", "click", "oclif", "mcp", "snapshot", "openapi"),
+        choices=("cli", "help", "click", "oclif", "mcp", "snapshot", "openapi", "manifest"),
     )
     generate.add_argument("--input", type=Path, required=True, help="Local exported inventory or discovery snapshot")
     generate.add_argument(
@@ -60,6 +60,11 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
         action="store_true",
         help="Draft a browser driver profile from an MCP tool list; --output names a new file",
     )
+    generate.add_argument(
+        "--provider",
+        action="store_true",
+        help="Draft recorded responses for a provider manifest (--from manifest); --output names a new file",
+    )
     generate.add_argument("--server", help="MCP server name the --browser driver matches")
     generate.add_argument(
         "--gate-output",
@@ -74,11 +79,21 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
     validate = commands.add_parser(
         "validate", help="Rebuild a kit and verify every byte without importing generated code"
     )
-    validate.add_argument("kit", type=Path, help="Kit directory, or a pack or profile file with --cloud or --browser")
+    validate.add_argument(
+        "kit", type=Path, help="Kit directory, or a pack, profile or manifest file with --cloud, --browser or --provider"
+    )
     validate.add_argument("--cloud", action="store_true", help="Validate a cloud action pack and run its fixtures")
     validate.add_argument("--browser", action="store_true", help="Compile a browser driver profile as a contribution")
     validate.add_argument(
-        "--gate-rows", type=Path, help="Benign gate rows for a --browser profile: a row array or the gate fixture"
+        "--provider", action="store_true", help="Run the provider conformance checks on a provider manifest"
+    )
+    validate.add_argument(
+        "--gate-rows",
+        type=Path,
+        help="Benign gate rows for a --browser profile (a row array or the gate fixture), or the gate for --provider",
+    )
+    validate.add_argument(
+        "--recordings", type=Path, help="Recorded responses for a --provider manifest (default: the fixture path)"
     )
     diff = commands.add_parser("diff", help="Compare valid kits; exit 1 when their inventories or reviews differ")
     diff.add_argument("previous", type=Path)
@@ -101,6 +116,11 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
         command.add_argument("--json", action="store_true", help="Emit a deterministic JSON result")
 
 
+def _one_mode(args: argparse.Namespace) -> None:
+    if sum(bool(getattr(args, mode, False)) for mode in ("cloud", "browser", "provider")) > 1:
+        raise BuilderError("builder_mode", "Choose one of --cloud, --browser or --provider.")
+
+
 def _generate(args: argparse.Namespace) -> dict[str, object]:
     from ..extension_builder.discover import discover
     from ..extension_builder.io import read_json
@@ -108,8 +128,13 @@ def _generate(args: argparse.Namespace) -> dict[str, object]:
     from ..extension_builder.models import Metadata
     from ..extension_builder.review import default_review, load_review
 
-    if args.cloud and args.browser:
-        raise BuilderError("builder_mode", "Choose --cloud or --browser, not both.")
+    _one_mode(args)
+    if args.provider:
+        from .extension_builder_provider import generate_provider_recordings
+
+        return generate_provider_recordings(args)
+    if args.source_adapter == "manifest":
+        raise BuilderError("provider_source", "A provider manifest drafts recorded responses; add --provider.")
     if args.browser:
         from .extension_builder_browser import generate_browser_draft
 
@@ -240,8 +265,13 @@ def _operate(args: argparse.Namespace) -> dict[str, object]:
     if command == "handoff":
         return _handoff(args)
     if command == "validate":
-        if args.cloud and args.browser:
-            raise BuilderError("builder_mode", "Choose --cloud or --browser, not both.")
+        _one_mode(args)
+        if args.provider:
+            from .extension_builder_provider import validate_provider_manifest
+
+            return validate_provider_manifest(args.kit, args.recordings, args.gate_rows)
+        if args.recordings is not None:
+            raise BuilderError("builder_mode", "--recordings only applies to --provider.")
         if args.browser:
             from .extension_builder_browser import validate_browser_driver
 
@@ -274,6 +304,10 @@ def _emit(result: dict[str, object], command: str, output: TextIO) -> None:
         print("Kits differ." if result["changed"] else "Kits are identical.", file=output)
         for name in ("addedOperations", "removedOperations", "changedOperations", "changedReviews"):
             print(f"{name}: {result[name]}", file=output)
+    elif command in ("generate", "validate") and result.get("provider"):
+        from .extension_builder_provider import emit_provider_summary
+
+        emit_provider_summary(command, result, output)
     elif command in ("generate", "validate") and result.get("browser"):
         from .extension_builder_browser import emit_browser_summary
 
@@ -327,4 +361,6 @@ def run_extension_builder_command(args: argparse.Namespace, *, output_stream: Te
         print(canonical_json(result), end="", file=output)
     else:
         _emit(result, args.extension_builder_command, output)
-    return 1 if args.extension_builder_command == "diff" and result.get("changed") else 0
+    if args.extension_builder_command == "diff" and result.get("changed"):
+        return 1
+    return 1 if result.get("provider") and result.get("passed") is False else 0

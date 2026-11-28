@@ -862,6 +862,7 @@ mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
 mod provider_conformance_command;
+mod provider_draft_command;
 mod pyyaml_dump;
 mod runtime_output;
 mod runtime_output_directory;
