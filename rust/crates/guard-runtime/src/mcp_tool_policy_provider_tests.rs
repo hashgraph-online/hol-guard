@@ -263,6 +263,53 @@ fn a_missing_fresh_check_reviews_without_naming_a_provider_finding() {
 }
 
 #[test]
+fn a_fresh_ok_beside_a_missing_fresh_check_is_not_named_as_the_flag() {
+    const OTHER: &str = "provider.otherwatch";
+    let connection = connected(V::Ok);
+    let mut other = provider();
+    other.id = OTHER.to_owned();
+    put_connection(
+        &connection,
+        &ProviderConnection {
+            provider_id: OTHER.to_owned(),
+            manifest_digest: other.manifest_digest.clone(),
+            state: State::Connected,
+            opt_in_facts: Vec::new(),
+            connected_at_ms: 1_000,
+            updated_at_ms: 1_000,
+            last_verified_at_ms: Some(1_000),
+        },
+    )
+    .unwrap();
+    put_capability_setting(
+        &connection,
+        OTHER,
+        Cap::OriginReputation,
+        CapabilitySetting {
+            effect_level: Level::Tighten,
+            require_fresh: true,
+        },
+    )
+    .unwrap();
+    let providers = [provider(), other];
+    let result = floor(&Floor {
+        connection: &connection,
+        providers: &providers,
+        managed: Some(&ManagedProviderSettings::none()),
+        origin: SITE,
+        now_ms: NOW,
+        current: current(GuardAction::Allow),
+    });
+    assert_eq!(result.action, GuardAction::Review);
+    assert_eq!(result.source, PROVIDER_FRESH_CHECK_SOURCE);
+    assert_eq!(
+        result.signals.last().unwrap(),
+        &format!("{PROVIDER_FRESH_CHECK_SOURCE}:{OTHER}")
+    );
+    assert!(!result.summary.contains("flagged"));
+}
+
+#[test]
 fn the_snapshot_nests_in_a_caller_transaction_and_is_always_ended() {
     let connection = connected(V::Danger);
     connection.execute_batch("begin").unwrap();

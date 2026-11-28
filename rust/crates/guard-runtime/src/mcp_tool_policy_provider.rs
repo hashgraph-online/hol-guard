@@ -21,7 +21,7 @@ use guard_contracts::{
     BrowserAutomationIntentV1, McpPolicyLookupInputV1, ProviderCapabilityV1,
     ProviderConnectionStateV1,
 };
-use guard_provider_integrations::noise::{BaselineDecision, NoiseLedger};
+use guard_provider_integrations::noise::{BaselineDecision, NoiseLedger, ProviderEffect};
 use rusqlite::Connection;
 
 use crate::local_store_read::require_store_path;
@@ -182,21 +182,24 @@ fn raised_in_snapshot(
     if decided.decision <= baseline {
         return None;
     }
-    let raised = match (decided.decision, decided.deciding_provider.as_deref()) {
-        (BaselineDecision::Block, provider) => Raised::new(
+    // Name a provider only when its own answer raised the decision. A fresh `ok` can still be the
+    // deciding row while a fresh check missing elsewhere is what lifts this to a review.
+    let provider = decided.deciding_provider.as_deref().unwrap_or_default();
+    let raised = match (decided.decision, decided.effect) {
+        (BaselineDecision::Block, _) => Raised::new(
             GuardAction::Block,
             PROVIDER_BLOCK_SOURCE,
             "A connected security provider reports this site as dangerous, and its blocks are \
              enforced.",
-            provider.unwrap_or_default(),
+            provider,
         ),
-        (_, Some(provider)) => Raised::new(
+        (_, ProviderEffect::Review | ProviderEffect::Block) => Raised::new(
             GuardAction::Review,
             PROVIDER_REVIEW_SOURCE,
             "A connected security provider flagged this site. Review it before the agent opens it.",
             provider,
         ),
-        (_, None) => Raised::new(
+        _ => Raised::new(
             GuardAction::Review,
             PROVIDER_FRESH_CHECK_SOURCE,
             "A security provider set to require a fresh check has no current answer for this \
