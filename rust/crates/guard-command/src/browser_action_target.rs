@@ -124,17 +124,12 @@ fn path_prefix(path: &str) -> String {
     format!("/{first}")
 }
 
-/// The last two DNS labels, or the whole host for an IP literal, `localhost` or a single label.
-/// This is a display grouping, not a public-suffix decision: grants key on the origin.
+/// The registrable domain from the pinned public-suffix snapshot (`shop.example-org.co.uk` groups
+/// as `example-org.co.uk`). An IP literal, a single-label host, or a host that is itself a public
+/// suffix groups as the whole host.
 fn site_group(host: &str) -> String {
-    if host.starts_with('[') || host.parse::<std::net::Ipv4Addr>().is_ok() {
-        return host.to_owned();
-    }
-    let labels: Vec<&str> = host.trim_end_matches('.').split('.').collect();
-    if labels.len() <= 2 {
-        return labels.join(".");
-    }
-    labels[labels.len() - 2..].join(".")
+    crate::public_suffix::registrable_domain(host)
+        .unwrap_or_else(|| host.trim_end_matches('.').to_owned())
 }
 
 fn host_is_loopback(host: &str) -> bool {
