@@ -507,6 +507,7 @@ pub(in crate::pretool) fn grep_walk_root(
         || value.contains(['*', '?', '{', '}'])
         || !literal_brackets(value, context)
         || (value.starts_with('~') && value != "~" && !value.starts_with("~/"))
+        || (value.starts_with('~') && !context.shell_home_matches)
         || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
         return false;

@@ -35519,7 +35519,7 @@
       },
       "cwd": "ledger_service",
       "expect": "not_allow",
-      "contained_ok": true
+      "sandbox_does_not_protect": true
     },
     {
       "id": "neg-doctl-databases-list-uri-format",
