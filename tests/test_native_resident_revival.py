@@ -429,7 +429,10 @@ def test_unavailable_native_keeps_specific_reason_overrides_on_fallback(
         return None
 
     monkeypatch.setattr(evidence, "native_unavailable_event_response", unexpected_native)
-    monkeypatch.setattr(evidence, "standalone_unavailable_event", lambda *_args, **_kwargs: None)
+    def unavailable_standalone(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("native runtime unavailable")
+
+    monkeypatch.setattr(evidence, "standalone_unavailable_event", unavailable_standalone)
     host = SimpleNamespace(metrics=SimpleNamespace(record_route=lambda _route: None), activity_writer=None)
     response = evidence._record_unavailable_native(
         cast(Any, host),
