@@ -42,14 +42,17 @@ def _native_wait_for_ack(
     guard_home = getattr(publisher, "guard_home", None)
     if not isinstance(guard_home, Path):
         return None
-    timeout_seconds = min(0.1, max(0.0, deadline - time.monotonic()))
-    if timeout_seconds <= 0:
+    probe_deadline = min(deadline, time.monotonic() + 0.1)
+    if probe_deadline <= time.monotonic():
         return None
     try:
         status_reader = getattr(publisher, "current_runtime_status", None)
         status = cast(NativeRuntimeStatus | None, status_reader() if callable(status_reader) else None)
         if status is None:
-            status = native_runtime_status(deadline_monotonic=time.monotonic() + timeout_seconds)
+            status = native_runtime_status(deadline_monotonic=probe_deadline)
+        timeout_seconds = probe_deadline - time.monotonic()
+        if timeout_seconds <= 0:
+            return None
         request_id = f"hook-policy-admission-{uuid4().hex}"
         request: dict[str, object] = {
             "schema": "guard-hook-policy-admission-request.v1",
@@ -66,6 +69,7 @@ def _native_wait_for_ack(
             required_feature="hook-policy-admission-v1",
             response_schema="guard-hook-policy-admission-result.v1",
             record_resilience=False,
+            diagnostic=True,
             status=status,
         )
         result = response.get("result") if response is not None else None

@@ -7,8 +7,10 @@ from codex_plugin_scanner.guard.hook_review import hook_worker_readiness as read
 def test_native_admission_posture_is_transported_to_rust(monkeypatch, tmp_path: Path) -> None:
     publisher = SimpleNamespace(guard_home=tmp_path / "guard-home", current_runtime_status=lambda: object())
     requests: list[dict[str, object]] = []
+    call_options: dict[str, object] = {}
 
     def resident_request(**kwargs: object) -> dict[str, object]:
+        call_options.update(kwargs)
         request = kwargs["request"]
         assert isinstance(request, dict)
         requests.append(request)
@@ -28,6 +30,8 @@ def test_native_admission_posture_is_transported_to_rust(monkeypatch, tmp_path: 
     assert requests[0]["schema"] == "guard-hook-policy-admission-request.v1"
     assert requests[0]["last_error"] == "native_client_timed_out"
     assert requests[0]["resident_failure_streak"] == 4
+    assert call_options["diagnostic"] is True
+    assert 0 < call_options["timeout_seconds"] <= 0.1
 
 
 def test_missing_native_admission_result_uses_python_compatibility_path(tmp_path: Path, monkeypatch) -> None:

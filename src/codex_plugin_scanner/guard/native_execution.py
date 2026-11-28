@@ -76,6 +76,7 @@ def _resident_request(
     record_success: bool = True,
     record_resilience: bool = True,
     status: NativeRuntimeStatus | None = None,
+    diagnostic: bool = False,
 ) -> dict[str, object] | None:
     """Envelope + transport shared by all contained-execution ops.
 
@@ -116,6 +117,7 @@ def _resident_request(
         environment=environment,
         payload=payload,
         timeout_seconds=timeout_seconds,
+        diagnostic=diagnostic,
     )
     if response is None:
         if record_resilience:
