@@ -117,11 +117,43 @@ pub(super) fn meant<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<
             return Some(first.as_str());
         }
     }
-    (defined.iter())
+    let stem = (defined.iter())
         .filter(|name| item.name && name.len() >= MIN_STEM && name.len() < item.text.len())
         .filter(|name| item.text.starts_with(name.as_str()))
-        .max_by_key(|name| name.len())
-        .map(String::as_str)
+        .max_by_key(|name| name.len());
+    stem.or_else(|| family(item, defined)).map(String::as_str)
+}
+
+/// The shortest ending a new name shares with a family of defined names.
+const MIN_FAMILY_ENDING: usize = 5;
+
+/// A new name written as code that ends like two or more defined names
+/// joins their family: asked to add `filterQuery` beside `getQuery` and
+/// `parseQuery`, an agent reads the shortest of them first, where the new
+/// one goes and how it is written.
+fn family<'a>(item: &Sought, defined: &'a BTreeSet<String>) -> Option<&'a String> {
+    if !item.name {
+        return None;
+    }
+    let ending = |name: &str| {
+        (item.text.chars().rev().zip(name.chars().rev()))
+            .take_while(|(a, b)| a == b)
+            .count()
+    };
+    let members: Vec<(&String, usize)> = (defined.iter())
+        .filter(|name| name.len() > MIN_FAMILY_ENDING && *name != &item.text)
+        .map(|name| (name, ending(name)))
+        .filter(|(name, shared)| *shared >= MIN_FAMILY_ENDING && *shared < name.len())
+        .collect();
+    let longest = members.iter().map(|(_, shared)| *shared).max()?;
+    let family: Vec<&String> = (members.iter())
+        .filter(|(_, shared)| *shared == longest)
+        .map(|(name, _)| *name)
+        .collect();
+    if family.len() < 2 {
+        return None;
+    }
+    family.into_iter().min_by_key(|name| (name.len(), name.as_str()))
 }
 
 /// Whether `a` and `b` differ by one letter added, dropped or changed, or
