@@ -11,6 +11,7 @@
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
+use crate::browser_site_grant::{is_site_target, site_covers, site_scope, SiteScope};
 use crate::context_digest::python_strip;
 use crate::guard_store_approval_page_reads::ORDER;
 use crate::guard_store_approval_queue_result::{
@@ -139,7 +140,8 @@ fn write_decision(
 
 /// `_covered_pending_request_ids_locked`: the pending requests of the same
 /// harness that this grant answers, minus any that cannot be resolved at all.
-/// An exact grant covers only the request that asked for it.
+/// An exact grant covers only the request that asked for it. A site grant
+/// takes its driver identity and site from the request that asked for it.
 fn covered_request_ids(
     connection: &Connection,
     guard_home: &str,
@@ -154,7 +156,20 @@ fn covered_request_ids(
     }
     let server = args.str("grant_server_identity_hash")?;
     let category = args.str("grant_category")?;
-    let whole_server = target == "server";
+    let site = if is_site_target(target) {
+        match site_scope(&source["browser_intent"]) {
+            Some(site) => Some((target, site)),
+            None => return Ok(Vec::new()),
+        }
+    } else {
+        None
+    };
+    let grant = Grant {
+        server,
+        category,
+        whole_server: target == "server",
+        site: site.as_ref().map(|(target, site)| (*target, site)),
+    };
     let harness = source["harness"].as_str().unwrap_or_default();
     let rows = query_all(
         connection,
@@ -177,10 +192,7 @@ fn covered_request_ids(
         let Some(candidate_id) = item["request_id"].as_str() else {
             continue;
         };
-        if candidate_id == request_id
-            || !covers(&item, server, category, whole_server)
-            || block_reason(&item).is_some()
-        {
+        if candidate_id == request_id || !covers(&item, &grant) || block_reason(&item).is_some() {
             continue;
         }
         covered.push(candidate_id.to_owned());
@@ -188,14 +200,36 @@ fn covered_request_ids(
     Ok(covered)
 }
 
+/// What a broad grant was filed for.
+struct Grant<'a> {
+    server: &'a str,
+    category: &'a str,
+    whole_server: bool,
+    site: Option<(&'a str, &'a SiteScope)>,
+}
+
 /// `temporary_mcp_grant_covers_request`: a broad grant answers a pending
 /// request when that request is itself routine for the same server, and for
-/// the same category unless the grant covers the whole server.
-fn covers(item: &Value, server: &str, category: &str, whole_server: bool) -> bool {
-    let Some((candidate_server, candidate_category)) = eligibility(&item["browser_intent"]) else {
+/// the same category unless the grant covers the whole server. A site grant
+/// also needs the same driver identity and site.
+fn covers(item: &Value, grant: &Grant<'_>) -> bool {
+    let intent = &item["browser_intent"];
+    let Some((candidate_server, candidate_category)) = eligibility(intent) else {
         return false;
     };
-    candidate_server == server && (whole_server || candidate_category == category)
+    if candidate_server != grant.server {
+        return false;
+    }
+    let Some((target, site)) = grant.site else {
+        return grant.whole_server || candidate_category == grant.category;
+    };
+    site_scope(intent).is_some_and(|candidate| {
+        site_covers(
+            target,
+            (site, grant.category),
+            (&candidate, candidate_category),
+        )
+    })
 }
 
 /// `eligibility_from_browser_intent`: the server a stored browser intent names

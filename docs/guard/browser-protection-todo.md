@@ -390,13 +390,18 @@ transcript in the pull request (after BP-T052).
   - Open: expiry when the harness session ends (`expire_harness_session` has no caller because the
     runtime receives no session-end event yet), and moving the schema step into the native
     `ensure_schema` op, which does not exist yet.
-- [ ] **BP-T060** Add targets `site-category`, `site`, `site-group`, `session-site` and duration
+- [x] **BP-T060** Add targets `site-category`, `site`, `site-group`, `session-site` and duration
   `session` to `rust/crates/guard-runtime/src/temporary_mcp_grant.rs` with the selectors in PRD 5.5.
   Extend `guard_store_temporary_mcp.rs` (`covers`, `covered_request_ids`, `resolve_covered`) with
   target kind and digests. Existing `exact`, `category`, `server` selectors keep working for stored
   rows. Compute `driver_identity_hash` as PRD section 3 defines it. Tests: a second profiled tool of the
   same driver on the same site is covered, an unprofiled tool of the same driver is not, and a changed
   tool schema ends the grant.
+  - Done: `browser_driver_ledger.rs` (driver key, schema epoch, bounded per-driver ledger, ADR
+    0019), `browser_site_grant.rs` (site scope, selectors, coverage), offered by
+    `temporary_mcp_grant.rs` only when the filed intent names `driver_identity_hash` and
+    `target_origin` (plus `site_group` / `session_ref_digest` for those targets). `session` is bounded
+    by 5h until session-end expiry lands with BP-T040. The hook filling those intent fields is BP-T065.
 - [ ] **BP-T061** Eligibility rules: `site*` targets keep today's routine-only rule and hard
   exclusions. `session-site` is eligible when the only excluded risk is `browser_shared_profile`, and
   never covers transfer, privileged, a sensitive surface, a password or payment element, or a

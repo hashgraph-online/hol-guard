@@ -102,10 +102,17 @@ Verified against `origin/main` at `c72a9c5187` (2026-11-25).
 - **Driver profile**: declarative data that tells Guard how one driver names its actions and arguments.
 - **Browser session**: one agent session driving one browser instance through one driver, identified by
   `(harness, harness_session_id, driver_identity_hash, profile_mode)`.
-- **Driver identity hash**: a digest over the driver's server identity (MCP server name, launch
-  command or package, and the existing `server_identity_hash`) and the `tool_identity_hash` and
-  `schema_hash` of every tool the driver profile maps. A changed launch command, an added or removed
-  tool, or a changed tool schema gives a new hash, so no grant or saved allow carries over to it.
+- **Driver identity hash**: a digest over the driver key and the driver's schema epoch
+  ([ADR 0019](adr/0019-browser-driver-identity.md)). The driver key digests the driver profile id and
+  profile digest, the MCP server name and the existing `server_identity_hash`; a change to any of them
+  is another driver with a fresh ledger. A per-driver schema ledger in the native browser store
+  records the `schema_hash` of each profiled tool seen. A changed schema hash for a tool already in the
+  ledger bumps the epoch, and so does a new tool once the ledger holds its cap of tools; either way
+  every grant on the driver ends rather than being re-hashed. A new profiled tool below the cap joins
+  without ending grants. A tool the profile does not map is never covered by a grant. **Known gap:** a
+  call with no schema hash never writes to the ledger and never counts as seen; it can use a grant
+  only through the identity match, so a schema change on such a call is noticed only when a call of
+  that tool carries a schema hash.
 - **Site**: an origin (`scheme://host[:port]`). A **site group** is a registrable domain plus its
   subdomains, offered only when Guard can compute it natively from a pinned public-suffix snapshot.
 - **Provider**: a third party that answers a closed set of questions about a site, a page inventory, or
