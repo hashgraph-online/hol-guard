@@ -129,9 +129,14 @@ function requestUrl(input: RequestInfo | URL): URL | null {
   } catch { return null; }
 }
 
-function queryWorkspace(query: unknown): string | null {
-  if (typeof query !== "string") return null;
-  try { return new URLSearchParams(query).get("workspace"); } catch { return null; }
+// The pi-hook-bridge argument is a JSON config whose `query` field holds the hook query string.
+function bridgeWorkspace(config: unknown): string | null {
+  if (typeof config !== "string") return null;
+  try {
+    const parsed = JSON.parse(config) as { query?: unknown } | null;
+    if (typeof parsed?.query !== "string") return null;
+    return new URLSearchParams(parsed.query).get("workspace");
+  } catch { return null; }
 }
 
 function isGuard(input: RequestInfo | URL): boolean {
@@ -303,7 +308,7 @@ function observeBridge(child: BridgeChild, query: unknown): void {
         elapsedMs: elapsed(),
         startedAtMs,
         transport: "pi-hook-bridge",
-        workspace: queryWorkspace(query),
+        workspace: bridgeWorkspace(query),
       });
     } catch {
       dropBridge(code);
