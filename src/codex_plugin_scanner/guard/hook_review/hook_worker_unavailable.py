@@ -76,8 +76,18 @@ def structured_outage_overlay(
     if rendered is not None and rendered[0] == "document":
         overlay = rendered[1]
         if overlay is not None and not overlay:
-            # Rust resolves the managed-policy status and withholds every
-            # authority failure. Python only transports the overlay result.
+            native_status = rendered[2] if len(rendered) > 2 else None
+            # Preserve the local GuardConfig floor for an explicitly absent
+            # machine policy. Rust owns native authority status, while this
+            # compatibility check keeps a configured local managed policy
+            # fail-closed when the native loader cannot see it yet.
+            if native_status == "absent" and callable(load_config):
+                try:
+                    configured = load_config()
+                    if getattr(configured, "managed_policy", None) is not None:
+                        return withhold
+                except Exception:
+                    return withhold
             return {}
         if overlay is not None and overlay != withhold:
             return withhold
