@@ -11,7 +11,9 @@
 //! by code, never widened to fit.
 //!
 //! An intent that names its driver identity and site also offers the site
-//! targets of `browser_site_grant.rs` (BP-T060).
+//! targets of `browser_site_grant.rs` (BP-T060), under the tiers of
+//! `browser_grant_eligibility.rs` (BP-T061): a shared-profile call may carry a
+//! `session-site` grant and nothing else.
 //!
 //! Two shapes share the kind:
 //! - `{"browser_intents": [intent, ...]}` answers `{"approvals": [...]}`, one
@@ -21,14 +23,13 @@
 
 use serde_json::{json, Map, Value};
 
+use crate::browser_grant_eligibility::{grant_tier, surface_clean, GrantTier, SHARED_PROFILE_RISK};
 use crate::browser_site_grant::{
     is_site_target, site_scope, site_selector, site_targets, SiteScope, SESSION_BOUND_SECONDS,
     SESSION_DURATION,
 };
 use crate::context_digest::python_strip;
-use crate::mcp_tool_policy_grants::{
-    category_for, exact_grant_selector, risks_allow_grant, scope_grant_selector,
-};
+use crate::mcp_tool_policy_grants::{category_for, exact_grant_selector, scope_grant_selector};
 use crate::runner_authority_op::KindResult;
 
 const ERR_INVALID: &str = "native_temporary_mcp_grant_invalid";
@@ -38,8 +39,9 @@ const MAX_INTENTS: usize = 4096;
 const TARGETS: [&str; 3] = ["exact", "category", "server"];
 /// `TEMPORARY_MCP_GRANT_DURATIONS` and their `_DURATION_SECONDS`.
 const DURATIONS: [(&str, i64); 3] = [("15m", 900), ("1h", 3600), ("5h", 18000)];
-/// `_HARD_RISK_EXCLUSIONS` — the shapes no grant ever covers, carried on the
-/// card so the surface can say so.
+/// `_HARD_RISK_EXCLUSIONS` — the shapes no grant covers, carried on the card so
+/// the surface can say so. A card that offers `session-site` leaves out
+/// `browser_shared_profile`, which that grant covers (`Eligibility::exclusions`).
 const HARD_RISK_EXCLUSIONS: [&str; 11] = [
     "browser_guard_origin",
     "browser_transfer",
@@ -61,12 +63,25 @@ struct Eligibility {
     category: &'static str,
     target_label: Option<String>,
     site: Option<SiteScope>,
+    tier: GrantTier,
+    surface_clean: bool,
 }
 
 impl Eligibility {
+    /// The exclusions this card names. A `session-site` grant covers a
+    /// shared-profile call, so a card that offers it does not list that risk.
+    fn exclusions(&self) -> Vec<&'static str> {
+        let session_site = self.targets().contains(&"session-site");
+        HARD_RISK_EXCLUSIONS
+            .into_iter()
+            .filter(|risk| !session_site || *risk != SHARED_PROFILE_RISK)
+            .collect()
+    }
+
     fn targets(&self) -> Vec<&'static str> {
         let mut targets = TARGETS.to_vec();
         targets.extend(self.site.as_ref().map(site_targets).unwrap_or_default());
+        targets.retain(|target| self.tier.allows(target, self.surface_clean));
         targets
     }
 
@@ -118,12 +133,14 @@ pub(crate) fn approval(intent: Option<&Value>) -> Option<Value> {
         "target_label": found.target_label,
         "allowed_targets": found.targets(),
         "allowed_durations": found.durations(),
-        "hard_risk_exclusions": HARD_RISK_EXCLUSIONS,
+        "hard_risk_exclusions": found.exclusions(),
     }))
 }
 
 /// `eligibility_from_browser_intent`: the routine category must be claimed,
-/// and nothing beyond it but the informational external-domain flag.
+/// and nothing beyond it but the informational external-domain flag and, for
+/// a `session-site` grant only, the shared-profile risk. An intent that leaves
+/// no target to offer offers nothing.
 fn eligibility(intent: Option<&Value>) -> Option<Eligibility> {
     let filed = intent?;
     let intent = filed.as_object()?;
@@ -142,18 +159,19 @@ fn eligibility(intent: Option<&Value>) -> Option<Eligibility> {
         .flatten()
         .filter_map(Value::as_str)
         .collect();
-    if !risks_allow_grant(category, &risk_categories) {
-        return None;
-    }
+    let tier = grant_tier(category, &risk_categories)?;
     let target_label =
         nonempty(intent, "target_domain").or_else(|| nonempty(intent, "target_origin"));
-    Some(Eligibility {
+    let found = Eligibility {
         server_identity_hash,
         server_name,
         category,
         target_label,
         site: site_scope(filed),
-    })
+        tier,
+        surface_clean: surface_clean(intent),
+    };
+    (!found.targets().is_empty()).then_some(found)
 }
 
 /// `parse_temporary_mcp_grant_selection` and the selector

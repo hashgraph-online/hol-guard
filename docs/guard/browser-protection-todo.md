@@ -402,10 +402,18 @@ transcript in the pull request (after BP-T052).
     `temporary_mcp_grant.rs` only when the filed intent names `driver_identity_hash` and
     `target_origin` (plus `site_group` / `session_ref_digest` for those targets). `session` is bounded
     by 5h until session-end expiry lands with BP-T040. The hook filling those intent fields is BP-T065.
-- [ ] **BP-T061** Eligibility rules: `site*` targets keep today's routine-only rule and hard
+- [x] **BP-T061** Eligibility rules: `site*` targets keep today's routine-only rule and hard
   exclusions. `session-site` is eligible when the only excluded risk is `browser_shared_profile`, and
   never covers transfer, privileged, a sensitive surface, a password or payment element, or a
   `looks_like_secret` input. Table-driven tests for every combination.
+  - Done: `browser_grant_eligibility.rs` gives each filed intent a tier (`Routine`, or
+    `SharedSession` when `browser_shared_profile` is the only extra risk) and a surface check
+    (`sensitive_surface_flags`, `element.is_password` / `is_payment`, `input.preview_class`
+    `looks_like_secret` / `looks_like_payment`; any other shape reads as unclean). Site targets need
+    a clean surface; a shared-profile call is offered and covered by `session-site` only. The legacy
+    `exact`, `category` and `server` targets keep today's rule. The offer (`temporary_mcp_grant.rs`)
+    and the covered-request sweep (`guard_store_temporary_mcp.rs`) share it. The hook filling
+    `element` and `input` on the filed intent is BP-T065.
 - [ ] **BP-T062** Cross-origin rule: a grant never follows a navigation to another origin. The first
   action on the new origin is reviewed with a "left the granted site" marker. Navigations and other
   URL-bearing calls are decided on their destination before they run, and a command with no known
