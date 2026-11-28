@@ -448,8 +448,14 @@ transcript in the pull request (after BP-T052).
   - Done: `browser-call/browser-gate-prompt.tsx` adds one line linking to approval setup when the
     card's profile is `shared` or `remote-debugging` and no password, authenticator or Pulse is ready.
     The general setup notice is not repeated below it, and the choices are untouched.
-- [ ] **BP-T072** Agent-facing hook text for browser holds and denials: names the site and the wait,
-  tells the agent not to retry in a loop, omits the approval link for shared profiles.
+- [x] **BP-T072** Agent-facing hook text for browser holds and denials: names the site and the wait,
+  tells the agent not to retry in a loop. The approval link stays for every profile mode, shared
+  ones included: `docs/guard/approval-invariant.md` requires every executable review to offer Allow
+  once and Always allow on every route, and a Codex bridge holds its wait only when the block names
+  the link. Keeping the page itself closed for shared sessions is R-SURFACE (BP-T070), still
+  open: until it lands, a shared or remote-debugging session can still auto-open the approval page.
+  - Done: `browser_hold_text.rs` adds the note to the stored row's hook reply, for paused reviews
+    and silent blocks. A block no approval can release says not to wait.
 - [ ] **BP-T073** Daemon routes `/v1/browser/sessions`, `/v1/browser/sites`, `/v1/browser/grants` in
   `daemon_route_paths.rs` and `daemon_edge_route_calls.rs`, with preview plus one-use proof on every
   mutation.
