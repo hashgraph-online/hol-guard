@@ -193,6 +193,20 @@ fn raw_codex_payload_facts_are_extracted_before_the_queue_write() {
 }
 
 #[test]
+fn raw_codex_payload_without_wait_facts_clears_a_supplied_snapshot() {
+    let guard_home = home("live-wait-raw-none", "approval_wait_timeout_seconds = 30\n");
+    let mut args = payload_args("Codex", json!({}), Value::Null);
+    args.get_mut("request").unwrap()["continuation_snapshot"] = json!({
+        "capability": "suspended-response",
+        "hookAttached": true,
+    });
+    let prepared = prepare("add_native_review_approval_request", &args, &guard_home).unwrap();
+    assert!(!prepared.contains_key(NOT_LIVE_KEY));
+    assert!(!prepared.contains_key(PAYLOAD_KEY));
+    assert!(prepared["request"].get("continuation_snapshot").is_none());
+}
+
+#[test]
 fn non_codex_raw_payloads_are_left_for_the_daemon() {
     let guard_home = home(
         "live-wait-raw-non-codex",

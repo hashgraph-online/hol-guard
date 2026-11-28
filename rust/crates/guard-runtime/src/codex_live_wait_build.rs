@@ -23,6 +23,10 @@ pub(crate) const PAYLOAD_KEY: &str = "codex_live_wait_payload";
 /// Set in place of the link when the facts name no live, bounded wait.
 pub(crate) const NOT_LIVE_KEY: &str = "codex_live_wait_not_live";
 
+fn is_codex(harness: &str) -> bool {
+    harness.trim().eq_ignore_ascii_case("codex")
+}
+
 /// The queue write's arguments with `codex_live_wait_facts` turned
 /// into the `codex_live_wait` link and the request's `continuation_snapshot`.
 ///
@@ -56,8 +60,11 @@ pub(crate) fn prepare(
                 .and_then(Value::as_object)
                 .and_then(|request| request.get("harness"))
                 .and_then(Value::as_str)
-                == Some("codex") =>
+                .is_some_and(is_codex) =>
         {
+            if let Some(Value::Object(request)) = prepared.get_mut("request") {
+                request.remove("continuation_snapshot");
+            }
             return Some(prepared);
         }
         None => return None,
@@ -85,7 +92,11 @@ pub(crate) fn prepare(
 /// validator.
 fn payload_facts(args: &Map<String, Value>) -> Option<Value> {
     let request = args.get("request")?.as_object()?;
-    if request.get("harness").and_then(Value::as_str) != Some("codex") {
+    if !request
+        .get("harness")
+        .and_then(Value::as_str)
+        .is_some_and(is_codex)
+    {
         return None;
     }
     let payload = args.get(PAYLOAD_KEY)?.as_object()?;
@@ -103,7 +114,11 @@ fn payload_facts(args: &Map<String, Value>) -> Option<Value> {
 
 fn build(facts: &Value, args: &Map<String, Value>, guard_home: &Path) -> Option<(Value, Value)> {
     let request = args.get("request")?.as_object()?;
-    if request.get("harness").and_then(Value::as_str) != Some("codex") {
+    if !request
+        .get("harness")
+        .and_then(Value::as_str)
+        .is_some_and(is_codex)
+    {
         return None;
     }
     let request_id = request.get("request_id")?.as_str()?;
