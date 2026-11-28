@@ -430,6 +430,13 @@ class TestBrowserScopeDecisionNarrowing:
             ("browserDriver", ["playwright-mcp"]),
         ):
             rule = self._local_match_rule()
+            rule["artifactType"] = "package_request"
+            rule["matcherFamilies"] = ["package-request"]
+            rule["scope"]["ecosystems"] = []
+            control = _build_policy_bundle_decisions(
+                _valid_bundle_with_rules([rule]), device_id="device-1", device_name="dev"
+            )
+            assert len(control) == 1 and control[0].scope == "harness", key
             rule["scope"][key] = value
             bundle = _valid_bundle_with_rules([rule])
             decisions = _build_policy_bundle_decisions(bundle, device_id="device-1", device_name="dev")
