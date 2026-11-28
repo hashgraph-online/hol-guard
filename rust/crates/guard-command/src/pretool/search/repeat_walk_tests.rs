@@ -312,3 +312,63 @@ fn a_submission_lists_a_large_glob_directory_once() {
     let resolved = super::tree::AGENT_STATE_RESOLVED.with(std::cell::Cell::get);
     assert!(resolved < 100, "resolved {resolved} paths");
 }
+
+/// The named entries of a large glob are screened against the directory's
+/// path as it resolved at the start of the proof. A directory replaced with a
+/// link into agent state while the names are screened must not keep that
+/// proof.
+#[cfg(unix)]
+#[test]
+fn a_glob_directory_replaced_mid_proof_proves_nothing() {
+    let root = tempfile::Builder::new()
+        .prefix("guard-glob-directory-swap")
+        .tempdir()
+        .expect("temp root");
+    let home = std::fs::canonicalize(root.path()).expect("canonical home");
+    let source = home.join("projects").join("engine").join("src");
+    let skills = home.join(".agent").join("skills").join("engine");
+    for directory in [&source, &skills] {
+        std::fs::create_dir_all(directory).expect("fixture directory");
+        // More matches than a glob expansion keeps, so the search is proven
+        // from the named entries of the directory.
+        for index in 0..300 {
+            std::fs::write(
+                directory.join(format!("module_{index}.rs")),
+                "pub fn render_intent() {}\n",
+            )
+            .expect("fixture file");
+        }
+    }
+    let home_text = home.to_str().expect("home text");
+    let cwd_text = source.to_str().expect("cwd text");
+    let proven = || {
+        super::walk_memo::with_walk_memo(|| {
+            super::tree::safe_glob_search_operand(
+                "*.rs",
+                crate::pretool::PathContext {
+                    home_dir: Some(home_text),
+                    cwd: Some(cwd_text),
+                    ..Default::default()
+                },
+            )
+        })
+    };
+    assert!(proven(), "the unchanged directory is proven");
+    let moved = home.join("projects").join("engine").join("src-moved");
+    let (swap_source, swap_skills) = (source.clone(), skills.clone());
+    super::tree::AFTER_ENTRIES_DIRECTORY_RESOLVED.with(|hook| {
+        *hook.borrow_mut() = Some(Box::new(move || {
+            std::fs::rename(&swap_source, &moved).expect("move directory");
+            std::os::unix::fs::symlink(&swap_skills, &swap_source).expect("link directory");
+        }));
+    });
+    let swapped = proven();
+    let fired = super::tree::AFTER_ENTRIES_DIRECTORY_RESOLVED
+        .with(|hook| hook.borrow_mut().take())
+        .is_none();
+    assert!(fired, "the proof never reached the named entries");
+    assert!(
+        !swapped,
+        "a directory swapped into agent state stays proven"
+    );
+}

@@ -173,6 +173,14 @@ thread_local! {
         const { std::cell::Cell::new(0) };
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Runs once after a glob proof resolves the directory of its named
+    /// entries, so a test can replace that directory mid-proof.
+    pub(super) static AFTER_ENTRIES_DIRECTORY_RESOLVED: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 pub(super) fn inside_agent_state(path: &std::path::Path, context: ReadContext<'_>) -> bool {
     #[cfg(test)]
     AGENT_STATE_RESOLVED.with(|resolved| resolved.set(resolved.get() + 1));
@@ -411,7 +419,13 @@ fn glob_search_operand_uncached(value: &str, context: ReadContext<'_>) -> bool {
             // directory of thousands of matches resolves once, not once per
             // match.
             let base = std::fs::canonicalize(&directory).ok();
-            entries.into_iter().all(|entry| {
+            #[cfg(test)]
+            if let Some(hook) =
+                AFTER_ENTRIES_DIRECTORY_RESOLVED.with(|hook| hook.borrow_mut().take())
+            {
+                hook();
+            }
+            let screened = entries.into_iter().all(|entry| {
                 let agent_state = match (&base, entry.file_name()) {
                     (Some(base), Some(name)) => super::super::read_paths::inside_agent_state_tree(
                         &base.join(name),
@@ -422,7 +436,12 @@ fn glob_search_operand_uncached(value: &str, context: ReadContext<'_>) -> bool {
                 descendant_allowed(&entry, &directory, true)
                     && !agent_state
                     && walk(entry, &[], &[], false, false)
-            })
+            });
+            // The names were screened under the path the directory had at
+            // the start. A directory replaced since then, for example by a
+            // link into agent state, resolves elsewhere now and proves
+            // nothing.
+            screened && std::fs::canonicalize(&directory).ok() == base
         }
         GlobSearch::Refused => false,
     }
