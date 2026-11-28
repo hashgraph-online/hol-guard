@@ -1,6 +1,8 @@
 //! Which prompt words the uses list looks for.
 use super::super::tests::{files, later, looking_for};
 use super::super::{map, Asked};
+use super::sought;
+use crate::context_assistance_prompt_files::Walk;
 
 const PARSE: &str =
     "def parse(text):\n    value = text.strip()\n    return 1\n\n\ndef other():\n    pass\n";
@@ -70,5 +72,38 @@ fn plain_words_place_no_long_definition() {
     assert!(
         text.contains("src/table.py:1-203 table (lines 2, 3)"),
         "{text}"
+    );
+}
+
+/// A new name written as code that ends like a family of defined names is
+/// read beside the shortest of them: `filterQuery` beside `getQuery` and
+/// `parseQuery`. One name with that ending is no family.
+#[test]
+fn a_new_name_finds_the_family_it_ends_like() {
+    let source = "export function getQuery(input) {\n  return parseQuery(input);\n}\n\n\
+export function parseQuery(text) {\n  return {};\n}\n\n\
+export function withBase(input, base) {\n  return base + input;\n}\n";
+    let walk = Walk {
+        checked: 200,
+        holding: vec![0],
+        words: vec![0],
+        spelled: vec![0],
+        complete: true,
+        ..Walk::default()
+    };
+    let mapped = |text: &str, name: bool| {
+        let list = files(&[("src/query.ts", text)]);
+        let sought = sought(&walk, &[("filterquery".to_owned(), name)], &[]);
+        map(&list, &sought, &Asked::default(), later()).map(|mapped| mapped.text)
+    };
+    let text = mapped(source, true).unwrap();
+    assert!(text.contains("src/query.ts:1-3"), "{text}");
+    assert!(!text.contains("withBase"), "{text}");
+    assert!(mapped(source, false).is_none_or(|text| !text.contains("src/query.ts:1-3")));
+    let lone = source.replace("parseQuery(text)", "parseItems(text)");
+    let lone = mapped(&lone, true);
+    assert!(
+        lone.is_none_or(|text| !text.contains("src/query.ts:1-3")),
+        "one is no family"
     );
 }
