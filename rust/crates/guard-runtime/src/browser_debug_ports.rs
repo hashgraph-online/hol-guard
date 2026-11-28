@@ -32,8 +32,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::browser_session_store::{
-    ensure_browser_session_schema, known_debugging_ports, record_browser_session,
-    BrowserSessionObservation, MAX_DEBUGGING_PORTS_PER_SESSION,
+    ensure_browser_session_schema, known_debugging_ports, prune_idle_browser_sessions,
+    record_browser_session, BrowserSessionObservation, MAX_DEBUGGING_PORTS_PER_SESSION,
 };
 use crate::local_store_read::{open_read_only, table_exists, STORE_FILE_NAME};
 use crate::policy_enforcement::ActionFloor;
@@ -336,9 +336,10 @@ fn lenient_ipv4(host: &str) -> Option<Ipv4Addr> {
     u32::try_from(address).ok().map(Ipv4Addr::from)
 }
 
-/// Records each port on the harness session's shell-launched browser. A store
-/// that cannot be opened or written records nothing; the call is judged on
-/// the ports it names itself.
+/// Records each port on the harness session's shell-launched browser. Sessions
+/// idle past the bound are dropped first, so the table stays bounded without a
+/// separate sweeper. A store that cannot be opened or written records nothing;
+/// the call is judged on the ports it names itself.
 fn record(guard_home: &Path, harness: &str, harness_session: &str, ports: &[u16], now_unix: i64) {
     let Ok(connection) = Connection::open(guard_home.join(STORE_FILE_NAME)) else {
         return;
@@ -348,6 +349,7 @@ fn record(guard_home: &Path, harness: &str, harness_session: &str, ports: &[u16]
     {
         return;
     }
+    let _ = prune_idle_browser_sessions(&connection, now_unix);
     let session_digest = hex_digest(&format!("{SHELL_LAUNCH_DRIVER}\0{harness_session}"));
     let driver_identity_hash = hex_digest(SHELL_LAUNCH_DRIVER);
     for port in ports {
