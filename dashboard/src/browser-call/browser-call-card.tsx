@@ -5,6 +5,7 @@ import { actingApp, mcpMarkName } from "../mcp-call/mcp-brand";
 import { CodePanel, McpCallFooter, mcpCallReason, subtitleOf } from "../mcp-call/mcp-call-card";
 import { ConsequenceNote, EffectPill } from "../mcp-call/mcp-call-parts";
 import type { McpCallExplanation } from "../mcp-call/mcp-call-types";
+import { BrowserBurstSteps } from "./browser-burst-steps";
 import { BrowserGatePrompt, browserGateNeedsSetup } from "./browser-gate-prompt";
 import { BrowserInputPreview } from "./browser-input-preview";
 import { BrowserProfileLine } from "./browser-profile-line";
@@ -61,6 +62,7 @@ export function BrowserCallCard(props: {
         <BrowserRiskChips chips={card.risk_chips} />
       </div>
       {browserGateNeedsSetup(card.profile_line, props.approvalGate) && <BrowserGatePrompt />}
+      <BrowserBurstSteps requestId={item.request_id} />
       <BrowserProviderFindings findings={card.provider_findings} />
 
       {explanation.code !== null && explanation.code.collapsed !== true && (

@@ -4,6 +4,7 @@
 use guard_command::browser_mcp_intent::classify_operation;
 use serde_json::{Map, Value};
 
+use crate::approval_browser_burst::approval_browser_burst_key;
 use crate::approval_browser_card::approval_browser_card;
 use crate::cloud_request_text::{py_isspace, py_strip};
 use crate::guard_store_approval_read_scope::{parse_cell, to_json, unavailable};
@@ -97,11 +98,16 @@ pub(crate) fn draft(
         projection["action_envelope_json"].clone(),
     );
     put("decision_v2_json", projection["decision_v2_json"].clone());
-    if let Some(card) = raw(row, "harness")
-        .as_str()
-        .and_then(|harness| approval_browser_card(&projection["action_envelope_json"], harness))
-    {
-        put("browser_card", card);
+    let browser_intent = json_object(row, "browser_intent_json")?;
+    if let Some(harness) = raw(row, "harness").as_str() {
+        let envelope = &projection["action_envelope_json"];
+        if let Some(card) = approval_browser_card(envelope, harness) {
+            if let Some(key) = approval_browser_burst_key(envelope, harness, &card, &browser_intent)
+            {
+                put("browser_burst_key", Value::String(key));
+            }
+            put("browser_card", card);
+        }
     }
     put(
         "watch_only_observation",
@@ -111,7 +117,7 @@ pub(crate) fn draft(
         "scanner_evidence",
         Value::Array(json_object_list(row, "scanner_evidence_json")?),
     );
-    put("browser_intent", json_object(row, "browser_intent_json")?);
+    put("browser_intent", browser_intent);
     put(
         "continuation_snapshot",
         json_object(row, "continuation_snapshot_json")?,

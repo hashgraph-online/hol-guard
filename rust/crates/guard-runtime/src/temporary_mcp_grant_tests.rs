@@ -207,3 +207,87 @@ fn malformed_requests_are_invalid() {
         assert_eq!(dispatch(&args), Err(ERR_INVALID), "{args}");
     }
 }
+
+fn site_intent(session: bool) -> Value {
+    let mut filed = intent(json!(["browser_interaction"]));
+    filed["driver_identity_hash"] = json!("d".repeat(64));
+    if session {
+        filed["session_ref_digest"] = json!("5".repeat(64));
+    }
+    filed
+}
+
+#[test]
+fn a_driver_and_site_named_intent_also_offers_site_targets() {
+    let answer = dispatch(&json!({
+        "browser_intents": [site_intent(true), site_intent(false)],
+    }))
+    .expect("answer");
+    assert_eq!(
+        answer["approvals"][0]["allowed_targets"],
+        json!([
+            "exact",
+            "category",
+            "server",
+            "session-site",
+            "site-category",
+            "site"
+        ])
+    );
+    assert_eq!(
+        answer["approvals"][0]["allowed_durations"],
+        json!(["once", "15m", "1h", "5h", "session"])
+    );
+    assert_eq!(
+        answer["approvals"][1]["allowed_targets"],
+        json!(["exact", "category", "server", "site-category", "site"])
+    );
+    assert_eq!(
+        answer["approvals"][1]["allowed_durations"],
+        json!(["once", "15m", "1h", "5h"])
+    );
+}
+
+#[test]
+fn a_site_pick_is_filed_under_the_driver_identity_hash() {
+    let answer = select_one(site_intent(true), pick("site", "1h"));
+    let selector = answer["selection"]["artifact_id"]
+        .as_str()
+        .expect("selector");
+    let driver = "d".repeat(64);
+    assert!(
+        selector.starts_with(&format!("browser-grant:v2:{driver}:site:")),
+        "{selector}"
+    );
+    let session = select_one(site_intent(true), pick("session-site", "session"));
+    assert_eq!(session["refusal"], Value::Null);
+    assert_eq!(
+        session["selection"]["expires_at"],
+        json!("2026-07-21T17:00:00+00:00")
+    );
+}
+
+#[test]
+fn site_picks_the_card_does_not_offer_are_refused() {
+    let refused = |filed: Value, target: &str, duration: &str| {
+        select_one(filed, pick(target, duration))["refusal"].clone()
+    };
+    // No driver identity: no site targets at all.
+    assert_eq!(
+        refused(intent(json!(["browser_interaction"])), "site", "1h"),
+        json!("invalid_mcp_grant_target")
+    );
+    // No session: no session-site, and `session` is not a timed duration.
+    assert_eq!(
+        refused(site_intent(false), "session-site", "1h"),
+        json!("invalid_mcp_grant_target")
+    );
+    assert_eq!(
+        refused(site_intent(true), "site", "session"),
+        json!("invalid_mcp_grant_duration")
+    );
+    assert_eq!(
+        refused(site_intent(true), "site-group", "1h"),
+        json!("invalid_mcp_grant_target")
+    );
+}
