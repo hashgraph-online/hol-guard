@@ -103,7 +103,32 @@ function useConfirmDialog() {
   ) : null;
   return { confirm, dialog };
 }
+const PULSE_SITE_URL = "https://pulse.yanez.ai/?referrer_id=holguard";
+const PULSE_LABEL_CLASS = "text-xs font-semibold uppercase tracking-[0.18em] text-slate-500";
+const PULSE_INPUT_CLASS = "mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20";
+function pulseCooldownLabel(seconds) {
+  if (seconds === 900) return "15 minutes, same kind of action";
+  if (seconds === 3600) return "1 hour, same kind of action";
+  return "Every action (recommended)";
+}
+function ErrorNote({ message }) {
+  if (message === null) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark", children: message });
+}
+function Field(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: PULSE_LABEL_CLASS, children: props.label }),
+    props.children,
+    props.hint ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-slate-500", children: props.hint }) : null
+  ] });
+}
 export {
   ConfirmDialog as C,
+  ErrorNote as E,
+  Field as F,
+  PULSE_INPUT_CLASS as P,
+  PULSE_SITE_URL as a,
+  PULSE_LABEL_CLASS as b,
+  pulseCooldownLabel as p,
   useConfirmDialog as u
 };

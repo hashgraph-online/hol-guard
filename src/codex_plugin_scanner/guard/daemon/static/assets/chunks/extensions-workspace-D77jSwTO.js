@@ -1,5 +1,5 @@
-import { r as reactExports, cK as fetchExtensionCatalog, cL as ExtensionControlApiError, cM as normalizeExtensionCatalogSummary, cN as normalizeExtensionPermission, cO as ExtensionControlProtocolError, cP as normalizeExtensionCatalogItem, cQ as guardApiCacheScope, cR as fetchExtensionCatalogV2Api, cS as localPermissionDraftState, cT as setLocalPermissionDraftState, cU as extensionPolicyAuthorityUnchanged, cV as newExtensionPolicyDraftIdentity, cW as extensionPolicyDraftIsDirty, cX as setLocalPermissionDraftStates, cY as buildExtensionPolicyDraftMutation, cZ as fetchEffectiveExtensionControls, c_ as previewExtensionMutation, c$ as isCurrentExtensionPolicyDraft, d0 as applyExtensionMutation, d1 as fetchExtensionControlHistory, j as jsxRuntimeExports, d2 as managedPermissionState, aj as HiMiniSparkles, G as HiMiniCheckCircle, z as HiMiniNoSymbol, K as HiMiniLockClosed, aq as HiMiniExclamationTriangle, d3 as controlProvenance, d4 as treatmentLabel, br as isApprovalProofSubmitDisabled, ak as HiMiniXMark, bq as ApprovalProofFieldInputs, d5 as useResolvedApprovalGate, d6 as groupPermissionsByFamily, k as HiMiniArrowPath, ad as HiMiniShieldCheck, d7 as HiMiniInformationCircle, bs as buildApprovalProofCredentials, d8 as LocalCliApiError, d9 as hasSuggestedRules, da as approvalProofRecentlySatisfied, h as HiMiniMagnifyingGlass, db as StyledSelect, dc as bulkCommandState, q as HiMiniChevronRight, dd as fetchLocalCliApi, de as ExtensionBrandMark, x as HiMiniChevronDown, df as fetchMcpProviderActions, dg as connectorSetupReady, dh as shortIdentity, di as customExtensionDisplayName, dj as previewLocalCliMutation, dk as applyLocalCliMutation, dl as LOCAL_CLI_CAPABILITIES, dm as loadLocalCliCommands, dn as DiscoveryFailure, dp as readJson, dq as enrollablePackageScriptCommands, dr as seenSuggestionMeta, H as HiMiniPlus, ds as looksLikeProjectRelocatePaste, dt as packageScriptFilterNeedle, y as HiMiniCheck, du as initialAddCommand, dv as suggestedPackageScriptExtensions, dw as filterExtensionSuggestions, dx as suggestedHarnessExtensions, dy as suggestedSeenExtensions, dz as keepsPackageScriptCatalog, dA as prefillSuggestedStates, dB as recognizeLocalCli, dC as preferredPackageScriptExtension, dD as looksLikePackageScriptPaste, dE as enrollmentCommandStates, dF as isBulkApproveGateReady, bZ as HiMiniArrowLeft, dG as fetchLocalCliList, dH as normalizeLocalCliList, dI as unreviewedToolChangeCount, dJ as connectorSetupMatch, dK as refreshMcpInventory, dL as connectorGroupOutcome, dM as allowedEarlierVersion, dN as startGuardCloudConnect, dO as extensionEffectiveState, dP as permissionEffectiveState, bv as HiMiniArrowTopRightOnSquare, an as HiMiniCloud, dQ as fetchExtensionControlApi, dR as permissionForRule, dS as refreshEffectiveExtensionControls, aV as HiMiniClipboardDocumentCheck, aW as HiMiniClipboard, aY as ApprovalProofModal, dT as fetchExtensionDiscoveryApi, I as HiMiniArrowRight, bO as HiMiniClock, R as createCommandActivityClient, U as fetchCommandActivityApi, dU as startCancelableDiscoveryJob, dV as waitForMcpDiscoveryJob, dW as isLocalCliId, cc as guardAwareHref, dX as localCliHref, bI as isGuardDemoMode, dY as fetchPluginUpdatesApi, dZ as filterCodexHostApps, d_ as connectorWorkspaceItems, d$ as customExtensionNeedsReview, e0 as profileSetupCommand, e1 as customExtensionBadge, bn as HiMiniAdjustmentsHorizontal, e2 as extensionDisplayName, e3 as catalogRowSecondLine, e4 as extensionStateLabel, e5 as HiMiniGlobeAlt, e6 as HiMiniFunnel, e7 as loadCurrentDashboardBuild, e8 as fetchProviderIntegrationApi, e9 as discoveryFailureMessage, cC as WorkspacePageHeader, ea as refreshCodexHostInventory, eb as CODEX_HOST_FALLBACK, ec as CONFIGURED_CONNECTIONS_FALLBACK, ed as readExtensionDetailUrlState, ee as parseProtectionRoute, ef as canonicalExtensionId, eg as extensionDetailHref, eh as DEFAULT_EXTENSION_DETAIL_URL_STATE, ei as addCustomExtensionPrefillHref, ej as acknowledgeDegradedExtensionControlAuthority, ek as recoverExtensionControlAuthority, el as connectorSetupLinkFromSearch, em as addCustomExtensionHref, en as HiMiniCheckBadge } from "../guard-dashboard.js";
-import { u as useConfirmDialog } from "./confirm-dialog-C1Asj0OK.js";
+import { r as reactExports, cK as fetchExtensionCatalog, cL as ExtensionControlApiError, cM as normalizeExtensionCatalogSummary, cN as normalizeExtensionPermission, cO as ExtensionControlProtocolError, cP as normalizeExtensionCatalogItem, cQ as guardApiCacheScope, cR as fetchExtensionCatalogV2Api, cS as localPermissionDraftState, cT as setLocalPermissionDraftState, cU as extensionPolicyAuthorityUnchanged, cV as newExtensionPolicyDraftIdentity, cW as extensionPolicyDraftIsDirty, cX as setLocalPermissionDraftStates, cY as buildExtensionPolicyDraftMutation, cZ as fetchEffectiveExtensionControls, c_ as previewExtensionMutation, c$ as isCurrentExtensionPolicyDraft, d0 as applyExtensionMutation, d1 as fetchExtensionControlHistory, j as jsxRuntimeExports, d2 as managedPermissionState, aj as HiMiniSparkles, G as HiMiniCheckCircle, z as HiMiniNoSymbol, K as HiMiniLockClosed, aq as HiMiniExclamationTriangle, d3 as controlProvenance, d4 as treatmentLabel, br as isApprovalProofSubmitDisabled, ak as HiMiniXMark, bq as ApprovalProofFieldInputs, d5 as useResolvedApprovalGate, d6 as groupPermissionsByFamily, k as HiMiniArrowPath, ad as HiMiniShieldCheck, d7 as HiMiniInformationCircle, bs as buildApprovalProofCredentials, d8 as LocalCliApiError, d9 as hasSuggestedRules, da as approvalProofRecentlySatisfied, h as HiMiniMagnifyingGlass, db as StyledSelect, dc as bulkCommandState, q as HiMiniChevronRight, dd as fetchLocalCliApi, de as ExtensionBrandMark, x as HiMiniChevronDown, df as fetchMcpProviderActions, dg as connectorSetupReady, dh as shortIdentity, di as customExtensionDisplayName, dj as previewLocalCliMutation, dk as applyLocalCliMutation, dl as LOCAL_CLI_CAPABILITIES, dm as loadLocalCliCommands, dn as DiscoveryFailure, dp as readJson, dq as enrollablePackageScriptCommands, dr as seenSuggestionMeta, H as HiMiniPlus, ds as looksLikeProjectRelocatePaste, dt as packageScriptFilterNeedle, y as HiMiniCheck, du as initialAddCommand, dv as suggestedPackageScriptExtensions, dw as filterExtensionSuggestions, dx as suggestedHarnessExtensions, dy as suggestedSeenExtensions, dz as keepsPackageScriptCatalog, dA as prefillSuggestedStates, dB as recognizeLocalCli, dC as preferredPackageScriptExtension, dD as looksLikePackageScriptPaste, dE as enrollmentCommandStates, dF as isBulkApproveGateReady, bZ as HiMiniArrowLeft, dG as fetchLocalCliList, dH as normalizeLocalCliList, dI as unreviewedToolChangeCount, dJ as connectorSetupMatch, dK as refreshMcpInventory, dL as connectorGroupOutcome, dM as allowedEarlierVersion, dN as startGuardCloudConnect, dO as extensionEffectiveState, dP as permissionEffectiveState, bv as HiMiniArrowTopRightOnSquare, an as HiMiniCloud, dQ as fetchExtensionControlApi, dR as permissionForRule, dS as refreshEffectiveExtensionControls, aV as HiMiniClipboardDocumentCheck, aW as HiMiniClipboard, aY as ApprovalProofModal, dT as fetchExtensionDiscoveryApi, I as HiMiniArrowRight, bO as HiMiniClock, R as createCommandActivityClient, U as fetchCommandActivityApi, dU as startCancelableDiscoveryJob, dV as waitForMcpDiscoveryJob, dW as isLocalCliId, cc as guardAwareHref, dX as localCliHref, bI as isGuardDemoMode, dY as fetchPluginUpdatesApi, dZ as filterCodexHostApps, d_ as connectorWorkspaceItems, d$ as customExtensionNeedsReview, e0 as profileSetupCommand, e1 as customExtensionBadge, bn as HiMiniAdjustmentsHorizontal, e2 as extensionDisplayName, e3 as catalogRowSecondLine, e4 as extensionStateLabel, e5 as HiMiniGlobeAlt, e6 as HiMiniFunnel, e7 as loadCurrentDashboardBuild, e8 as fetchProviderIntegrationApi, e9 as discoveryFailureMessage, cC as WorkspacePageHeader, ea as refreshCodexHostInventory, eb as CODEX_HOST_FALLBACK, ec as CONFIGURED_CONNECTIONS_FALLBACK, ed as readExtensionDetailUrlState, ee as parseProtectionRoute, ef as canonicalExtensionId, eg as extensionDetailHref, eh as DEFAULT_EXTENSION_DETAIL_URL_STATE, ei as addCustomExtensionPrefillHref, ej as acknowledgeDegradedExtensionControlAuthority, ek as recoverExtensionControlAuthority, el as connectorSetupLinkFromSearch, em as addCustomExtensionHref, bh as GuardModalLayer, S as SectionLabel, A as ActionButton, en as HiMiniCheckBadge } from "../guard-dashboard.js";
+import { u as useConfirmDialog, E as ErrorNote, b as PULSE_LABEL_CLASS, F as Field, P as PULSE_INPUT_CLASS } from "./pulse-setup-parts-DumagxlL.js";
 const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
@@ -7056,7 +7056,7 @@ const VIEWABLE_DWELL_MS = 1e3;
 let measurementRefused = false;
 const tokens = /* @__PURE__ */ new Map();
 const recorded = /* @__PURE__ */ new WeakMap();
-function postJson(path, body) {
+function postJson$1(path, body) {
   return fetchExtensionDiscoveryApi(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -7070,7 +7070,7 @@ function renderToken(placement, surface, snapshotId) {
   const pending = (async () => {
     if (measurementRefused || typeof crypto?.randomUUID !== "function") return null;
     try {
-      const response = await postJson("/v1/discovery/extensions/renders", {
+      const response = await postJson$1("/v1/discovery/extensions/renders", {
         snapshotId,
         publicPlacementId: placement.publicPlacementId,
         creativeVersion: placement.creativeVersion,
@@ -7099,7 +7099,7 @@ async function sendEvent(token, kind) {
   const value = await token;
   if (!value || measurementRefused) return;
   try {
-    await postJson("/v1/discovery/extensions/events", { events: [{ token: value, kind }] });
+    await postJson$1("/v1/discovery/extensions/events", { events: [{ token: value, kind }] });
   } catch {
   }
 }
@@ -9682,6 +9682,43 @@ async function fetchProviderDetail(providerId) {
   const response = await fetchProviderIntegrationApi(`/v1/integrations/providers/${providerId}`);
   return normalizeProviderDetail(await readProviderJson(response));
 }
+function normalizeConnectPreview(value) {
+  if (!isRecord(value)) throw new Error("Invalid connect preview");
+  const challenge = text(value.challenge);
+  const expiresAtMs = value.expires_at_ms;
+  if (!challenge || typeof expiresAtMs !== "number" || !Number.isFinite(expiresAtMs)) {
+    throw new Error("Invalid connect preview proof");
+  }
+  return {
+    providerId: text(value.provider_id),
+    shares: strings(value.shares),
+    optInFacts: strings(value.opt_in_facts),
+    hosts: strings(value.hosts),
+    challenge,
+    expiresAtMs
+  };
+}
+function postJson(path, body) {
+  return fetchProviderIntegrationApi(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+}
+async function previewProviderConnect(providerId) {
+  if (!isProviderId(providerId)) throw new ProviderIntegrationApiError("provider_not_found", 404);
+  const response = await postJson(`/v1/integrations/providers/${providerId}/connect/preview`, {});
+  return normalizeConnectPreview(await readProviderJson(response));
+}
+async function connectProvider(providerId, request2) {
+  if (!isProviderId(providerId)) throw new ProviderIntegrationApiError("provider_not_found", 404);
+  const response = await postJson(`/v1/integrations/providers/${providerId}/connect`, {
+    key: request2.key,
+    proof: request2.proof,
+    enabled_opt_in_facts: request2.enabledOptInFacts
+  });
+  return normalizeProviderDetail(await readProviderJson(response));
+}
 const INTEGRATIONS_HREF = "/extensions/integrations";
 function parseIntegrationsRoute(pathname) {
   const path = pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
@@ -10726,6 +10763,232 @@ function providerErrorMessage(code) {
       return "Guard could not load provider integrations.";
   }
 }
+const PROOF_MARGIN_MS = 1e4;
+function connectOutcome(code) {
+  switch (code) {
+    case "provider_key_invalid":
+      return "key_invalid";
+    case "provider_rate_limited":
+      return "rate_limited";
+    case "provider_capability_unavailable":
+    case "provider_managed_policy_unavailable":
+      return "disabled";
+    case "provider_proof_invalid":
+    case "provider_connect_superseded":
+      return "start_again";
+    default:
+      return "unreachable";
+  }
+}
+const OUTCOME_TEXT = {
+  connected: "Connected. Guard checked the key with the provider.",
+  key_invalid: "The provider rejected this key. Check it and paste it again.",
+  unreachable: "Guard could not reach the provider. Nothing was saved. Try again later.",
+  rate_limited: "The provider is limiting requests right now. Nothing was saved. Try again in a minute.",
+  disabled: "Provider integrations are turned off on this device, so nothing was saved.",
+  start_again: "This connect request is no longer valid. Review what is shared and connect again."
+};
+function getKeyHref(obtainUrl) {
+  const safe = safeHttpsUrl(obtainUrl);
+  if (!safe) return null;
+  const url = new URL(safe);
+  url.searchParams.set("referrer_id", "holguard");
+  return url.toString();
+}
+function sameSet(left, right) {
+  return left.length === right.length && [...left].sort().join("\n") === [...right].sort().join("\n");
+}
+function sameDisclosure(left, right) {
+  return sameSet(left.shares, right.shares) && sameSet(left.optInFacts, right.optInFacts) && sameSet(left.hosts, right.hosts);
+}
+async function runProviderConnect(shown, steps) {
+  try {
+    let proof = shown.challenge;
+    if (steps.now() > shown.expiresAtMs - PROOF_MARGIN_MS) {
+      const fresh = await steps.preview();
+      if (!sameDisclosure(shown, fresh)) return { kind: "changed", preview: fresh };
+      proof = fresh.challenge;
+    }
+    const detail = await steps.connect(proof);
+    return { kind: "done", outcome: detail.summary.state === "connected" ? "connected" : "disabled", detail };
+  } catch (error) {
+    const code = error instanceof ProviderIntegrationApiError ? error.code : "provider_request_failed";
+    return { kind: "done", outcome: connectOutcome(code) };
+  }
+}
+function OptInToggle(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex min-h-11 items-start gap-3 text-sm text-brand-dark", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: "checkbox",
+        className: "mt-1 size-4",
+        checked: props.checked,
+        onChange: (event) => props.onChange(event.target.checked)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: factDescription(props.fact) })
+  ] });
+}
+function ConnectReview(props) {
+  const getKey = getKeyHref(props.obtainUrl);
+  const ready = props.keyValue.trim().length > 0 && !props.pending;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "form",
+    {
+      className: "space-y-5 p-6",
+      onSubmit: (event) => {
+        event.preventDefault();
+        if (ready) props.onSubmit();
+      },
+      children: [
+        props.changed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "alert", className: "text-sm font-medium text-brand-dark", children: [
+          props.name,
+          " changed what it asks for since you opened this window. Review it before you connect."
+        ] }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: PULSE_LABEL_CLASS, children: "What leaves this device" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 list-disc space-y-1 pl-5 text-sm text-brand-dark", children: props.preview.shares.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: factDescription(fact) }, fact)) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
+            "Sent only to ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono break-all", children: props.preview.hosts.join(", ") })
+          ] })
+        ] }),
+        props.preview.optInFacts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: PULSE_LABEL_CLASS, children: "Also share (optional)" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1", children: props.preview.optInFacts.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+            OptInToggle,
+            {
+              fact,
+              checked: props.optIn.includes(fact),
+              onChange: (checked) => props.onOptInChange(fact, checked)
+            },
+            fact
+          )) })
+        ] }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Field, { label: "API key", hint: "Guard stores the key encrypted on this device and never shows it again.", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "password",
+            autoComplete: "off",
+            spellCheck: false,
+            value: props.keyValue,
+            onChange: (event) => props.onKeyChange(event.target.value),
+            className: PULSE_INPUT_CLASS
+          }
+        ) }),
+        getKey ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "a",
+          {
+            href: getKey,
+            target: "_blank",
+            rel: "noopener noreferrer",
+            referrerPolicy: "no-referrer",
+            className: "inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-blue",
+            children: [
+              "Get a key from ",
+              props.name,
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+            ]
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorNote, { message: props.outcome && props.outcome !== "connected" ? OUTCOME_TEXT[props.outcome] : null }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "submit", disabled: !ready, children: props.pending ? "Checking the key..." : "Connect and verify" })
+      ]
+    }
+  );
+}
+function ProviderConnectDialog(props) {
+  const [step, setStep] = reactExports.useState({ kind: "loading" });
+  const [keyValue, setKeyValue] = reactExports.useState("");
+  const [optIn, setOptIn] = reactExports.useState([]);
+  const open = reactExports.useRef(true);
+  reactExports.useEffect(() => {
+    open.current = true;
+    previewProviderConnect(props.providerId).then(
+      (preview) => open.current && setStep({ kind: "review", preview, spent: false, outcome: null, changed: false }),
+      (error) => open.current && setStep({
+        kind: "error",
+        message: providerErrorMessage(error instanceof ProviderIntegrationApiError ? error.code : "provider_request_failed")
+      })
+    );
+    return () => {
+      open.current = false;
+    };
+  }, [props.providerId]);
+  const submit = reactExports.useCallback(async () => {
+    if (step.kind !== "review") return;
+    const key = keyValue.trim();
+    const facts = optIn.filter((fact) => step.preview.optInFacts.includes(fact));
+    setKeyValue("");
+    setStep({ kind: "sending", preview: step.preview });
+    const shown = step.spent ? { ...step.preview, expiresAtMs: 0 } : step.preview;
+    const result = await runProviderConnect(shown, {
+      now: () => Date.now(),
+      preview: () => previewProviderConnect(props.providerId),
+      connect: (proof) => connectProvider(props.providerId, { key, proof, enabledOptInFacts: facts })
+    });
+    if (!open.current) return;
+    if (result.kind === "changed") {
+      setStep({ kind: "review", preview: result.preview, spent: false, outcome: null, changed: true });
+    } else if (result.outcome === "connected" && result.detail) {
+      setStep({ kind: "connected", detail: result.detail });
+    } else {
+      setStep({ kind: "review", preview: step.preview, spent: true, outcome: result.outcome, changed: false });
+    }
+  }, [keyValue, optIn, props, step]);
+  const canClose = step.kind !== "sending";
+  const close = () => {
+    if (canClose) props.onClose();
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(GuardModalLayer, { ariaLabel: `Connect ${props.name}`, onClose: close, panelClassName: "w-full max-w-2xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-h-[90vh] overflow-y-auto rounded-3xl border border-brand-blue/15 bg-white shadow-2xl", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Provider integration" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: [
+          "Connect ",
+          props.name
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: close,
+          hidden: !canClose,
+          className: "inline-flex size-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-brand-dark",
+          "aria-label": `Close Connect ${props.name}`,
+          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-5", "aria-hidden": "true" })
+        }
+      )
+    ] }),
+    step.kind === "loading" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "p-6 text-sm text-slate-600", children: "Loading what this provider receives..." }) : null,
+    step.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ErrorNote, { message: step.message }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onClose, children: "Close" })
+    ] }) : null,
+    step.kind === "review" || step.kind === "sending" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ConnectReview,
+      {
+        name: props.name,
+        preview: step.preview,
+        obtainUrl: props.obtainUrl,
+        optIn,
+        onOptInChange: (fact, checked) => setOptIn((current) => checked ? [...current.filter((item) => item !== fact), fact] : current.filter((item) => item !== fact)),
+        keyValue,
+        onKeyChange: setKeyValue,
+        outcome: step.kind === "review" ? step.outcome : null,
+        changed: step.kind === "review" && step.changed,
+        pending: step.kind === "sending",
+        onSubmit: () => void submit()
+      }
+    ) : null,
+    step.kind === "connected" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "text-sm text-brand-dark", children: OUTCOME_TEXT.connected }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: props.onClose, children: "Done" })
+    ] }) : null
+  ] }) });
+}
 function useLoad(read) {
   const [state, setState] = reactExports.useState({ kind: "loading" });
   const [attempt, setAttempt] = reactExports.useState(0);
@@ -10813,7 +11076,6 @@ function ExternalLink(props) {
 function ProviderDetailView(props) {
   const { detail } = props;
   const { summary } = detail;
-  const [showCli, setShowCli] = reactExports.useState(false);
   const optInNote = (fact) => !factIsOptIn(fact) ? "" : detail.enabledOptInFacts.includes(fact) ? " (you turned this on)" : " (only if you turn it on)";
   const connectLabel = summary.state === "connected" ? "Replace key" : "Connect";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mx-auto max-w-4xl space-y-4", children: [
@@ -10830,20 +11092,13 @@ function ProviderDetailView(props) {
           "button",
           {
             type: "button",
-            onClick: () => props.onConnect ? props.onConnect() : setShowCli(true),
+            onClick: props.onConnect,
             className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white",
             children: connectLabel
           }
         )
       ] })
     ] }),
-    showCli && !props.onConnect ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: EXTENSION_PANEL_CLASS, role: "status", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: "Connect from a terminal. Guard asks for the key there and never shows it again." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { className: "mt-2 block font-mono text-sm break-all text-brand-dark", children: [
-        "hol-guard integrations connect ",
-        summary.id
-      ] })
-    ] }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "provider-checks", className: EXTENSION_PANEL_CLASS, children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "provider-checks", className: "text-base font-semibold text-brand-dark", children: "What it checks" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-3", children: detail.settings.map((setting) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
@@ -10892,6 +11147,7 @@ function IntegrationsListPage() {
 function ProviderDetailPage(props) {
   const read = reactExports.useCallback(() => fetchProviderDetail(props.providerId), [props.providerId]);
   const [state, retry] = useLoad(read);
+  const [connecting, setConnecting] = reactExports.useState(false);
   if (state.kind === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading provider" });
   if (state.kind === "error" && state.code === "provider_not_found") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -10906,7 +11162,21 @@ function ProviderDetailPage(props) {
   if (state.kind === "error") {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadError, { title: "Provider unavailable", detail: providerErrorMessage(state.code), onRetry: retry });
   }
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderDetailView, { detail: state.value });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderDetailView, { detail: state.value, onConnect: () => setConnecting(true) }),
+    connecting ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ProviderConnectDialog,
+      {
+        providerId: props.providerId,
+        name: state.value.summary.name,
+        obtainUrl: state.value.obtainUrl,
+        onClose: () => {
+          setConnecting(false);
+          retry();
+        }
+      }
+    ) : null
+  ] });
 }
 function IntegrationsWorkspace(props) {
   return props.route.kind === "integrations" ? /* @__PURE__ */ jsxRuntimeExports.jsx(IntegrationsListPage, {}) : /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderDetailPage, { providerId: props.route.providerId }, props.route.providerId);
