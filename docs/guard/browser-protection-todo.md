@@ -462,8 +462,11 @@ transcript in the pull request (after BP-T052).
     `unknown` session holds the page. The Codex bridge prints the link instead of opening it; the
     daemon surface, the attention timer and Pi/Oh My Pi (via `approval_page_held` on
     `/v1/settings`) open nothing. Explicit opens still work.
-- [ ] **BP-T071** R-GATE: setup prompt on the browser card when a shared or remote-debugging session
+- [x] **BP-T071** R-GATE: setup prompt on the browser card when a shared or remote-debugging session
   has no approval gate. The two required choices stay.
+  - Done: `browser-call/browser-gate-prompt.tsx` adds one line linking to approval setup when the
+    card's profile is `shared` or `remote-debugging` and no password, authenticator or Pulse is ready.
+    The general setup notice is not repeated below it, and the choices are untouched.
 - [x] **BP-T072** Agent-facing hook text for browser holds and denials: names the site and the wait,
   tells the agent not to retry in a loop. The approval link stays for every profile mode, shared
   ones included: `docs/guard/approval-invariant.md` requires every executable review to offer Allow

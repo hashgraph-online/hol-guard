@@ -1,6 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import type { GuardActionEnvelope, GuardApprovalRequest, GuardBrowserCardV1 } from "../guard-types";
+import type {
+  GuardActionEnvelope,
+  GuardApprovalGatePublicConfig,
+  GuardApprovalRequest,
+  GuardBrowserCardV1,
+} from "../guard-types";
 import { PrimaryActionCard } from "../review-states";
+import { browserGatePromptShown } from "./browser-gate-prompt";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -196,4 +202,58 @@ const render = (request: GuardApprovalRequest) => renderToStaticMarkup(PrimaryAc
 {
   const markup = render(item("page_open", { url: "https://shop.example.test/" }, null));
   assert(!markup.includes("data-browser-card"), "T-BCC-20: no card, no browser layout");
+}
+
+// R-GATE: a shared or remote-debugging step with no approval gate links to approval setup.
+{
+  const gate = (enabled: boolean, configured = enabled): GuardApprovalGatePublicConfig => ({
+    enabled,
+    configured,
+    cooldown_seconds: 0,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: false,
+    strict_all_decisions: false,
+  });
+  const withGate = (profile: GuardBrowserCardV1["profile_line"], approvalGate: GuardApprovalGatePublicConfig | null) => {
+    const request = item("page_open", { url: "https://shop.example.test/" }, card({ profile_line: profile }));
+    return {
+      markup: renderToStaticMarkup(PrimaryActionCard({ item: request, approvalGate })),
+      shown: browserGatePromptShown(request, approvalGate),
+    };
+  };
+  for (const profile of ["shared", "remote-debugging"] as const) {
+    const { markup, shown } = withGate(profile, gate(false));
+    assert(markup.includes("data-browser-gate-prompt"), `T-BCC-21: ${profile} without a gate shows the setup prompt`);
+    assert(markup.includes('href="/settings?section=approval"'), `T-BCC-22: ${profile} prompt links to approval setup`);
+    assert(shown, `T-BCC-23: ${profile} prompt is reported so the general notice is not repeated`);
+  }
+  for (const profile of ["isolated", "dedicated", "unknown"] as const) {
+    const { markup, shown } = withGate(profile, gate(false));
+    assert(!markup.includes("data-browser-gate-prompt") && !shown, `T-BCC-24: ${profile} shows no browser setup prompt`);
+  }
+  for (const [label, approvalGate] of [["a ready gate", gate(true)], ["an unloaded gate", null]] as const) {
+    const { markup, shown } = withGate("shared", approvalGate);
+    assert(!markup.includes("data-browser-gate-prompt") && !shown, `T-BCC-25: ${label} shows no prompt`);
+  }
+  {
+    const { markup } = withGate("shared", gate(true, false));
+    assert(markup.includes("data-browser-gate-prompt"), "T-BCC-26: an enabled gate with nothing configured still asks");
+  }
+  // The two required choices live below the card and stay: the card never carries them.
+  const plain = item("page_open", { url: "https://shop.example.test/" }, card({ profile_line: "shared" }));
+  assert(
+    !browserGatePromptShown({ ...plain, browser_card: null }, gate(false)),
+    "T-BCC-27: a request without a browser card never claims the prompt",
+  );
+  assert(
+    !browserGatePromptShown({ ...plain, action_envelope_json: null }, gate(false)),
+    "T-BCC-27b: a card the decision view cannot draw leaves the general notice",
+  );
+  assert(
+    !browserGatePromptShown({ ...plain, native_business_review_display_only: true }, gate(false)),
+    "T-BCC-27c: a display-only review leaves the general notice",
+  );
+  assert(browserGatePromptShown(plain, gate(false)), "T-BCC-27d: a drawn shared card carries the prompt");
 }

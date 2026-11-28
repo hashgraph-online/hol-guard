@@ -17,6 +17,7 @@ import {
   watchProtectedOutcome,
 } from "./approval-center-utils";
 import type {
+  GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
   GuardCodexResumeResult,
   GuardProtectionState,
@@ -202,11 +203,17 @@ export function ReviewEmptyState({ runtime, resolutionMessage, codexResume, onRe
   );
 }
 
-export function PrimaryActionCard({ item }: { item: GuardApprovalRequest }) {
+export function PrimaryActionCard({
+  item,
+  approvalGate,
+}: {
+  item: GuardApprovalRequest;
+  approvalGate?: GuardApprovalGatePublicConfig | null;
+}) {
   const mcpCall = explainMcpCall(item);
   const browserCard = parseBrowserCard(item.browser_card);
   if (mcpCall !== null && browserCard !== null) {
-    return <BrowserCallCard item={item} card={browserCard} explanation={mcpCall} />;
+    return <BrowserCallCard item={item} card={browserCard} explanation={mcpCall} approvalGate={approvalGate} />;
   }
   if (mcpCall !== null) {
     return <McpCallCard item={item} explanation={mcpCall} />;
