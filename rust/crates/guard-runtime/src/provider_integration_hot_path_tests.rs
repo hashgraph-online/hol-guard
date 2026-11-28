@@ -34,7 +34,9 @@ pub(crate) const MAX_PROVIDER_DECIDE_P95_MS: f64 = 2.0;
 /// Items that can send a provider request or hold the decision for the worker.
 const NETWORK_OR_WORKER_ITEMS: &[&str] = &[
     "provider_integration_lookup",
+    "provider_integration_schedule",
     "provider_integration_worker",
+    "drain_lookups",
     "ProviderWorker",
     "ProviderTransport",
     "HttpProviderTransport",
@@ -48,8 +50,8 @@ const NETWORK_OR_WORKER_ITEMS: &[&str] = &[
 /// The modules allowed to name those items: their owners and their tests. `lib.rs` is scanned like
 /// any other file apart from the module declarations in `MODULE_DECLARATIONS`.
 /// The connect route checks a key with the provider, so its route module and the daemon edge that
-/// runs it are owners too. The daemon's background scheduler joins this list when it lands, never
-/// a hook or relay module.
+/// runs it are owners too, and so is the daemon's lookup pass, which takes the queued requests off
+/// the decision path. A hook or relay module may queue a request but never joins this list.
 const OWNERS: &[&str] = &[
     "daemon_edge_integrations.rs",
     "daemon_edge_integrations_tests.rs",
@@ -60,6 +62,8 @@ const OWNERS: &[&str] = &[
     "provider_integration_routes_connect_tests.rs",
     "provider_integration_routes_lookup.rs",
     "provider_integration_routes_lookup_tests.rs",
+    "provider_integration_schedule.rs",
+    "provider_integration_schedule_tests.rs",
     "provider_integration_worker.rs",
     "provider_integration_worker_tests.rs",
 ];
@@ -67,6 +71,7 @@ const OWNERS: &[&str] = &[
 /// The only lines of `lib.rs` that may name an owner module.
 const MODULE_DECLARATIONS: &[&str] = &[
     "pub mod provider_integration_lookup;",
+    "pub mod provider_integration_schedule;",
     "pub mod provider_integration_worker;",
     "mod provider_integration_hot_path_tests;",
 ];
