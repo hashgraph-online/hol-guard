@@ -188,9 +188,12 @@ fn render(
             Some(_) if !binding_known && !has_explicit_view => {
                 crate::hook_direct::pi::outage_overlay_with_binding(harness, event, None, true)
             }
-            _ if binding_known => {
-                crate::hook_direct::pi::outage_overlay_with_binding(harness, event, view.as_ref(), true)
-            }
+            _ if binding_known => crate::hook_direct::pi::outage_overlay_with_binding(
+                harness,
+                event,
+                view.as_ref(),
+                true,
+            ),
             _ => crate::hook_direct::pi::outage_overlay(harness, event, view.as_ref()),
         };
         let mut payload = cli_payload(CliOutcome::Document(overlay));
