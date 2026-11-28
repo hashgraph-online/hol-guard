@@ -1,9 +1,10 @@
 //! Resident-owned explanation for a hook policy admission failure.
 //!
 //! The hook route still waits for the publisher's acknowledgement in Python,
-//! but the decision about which recovery posture to communicate belongs to
-//! the Rust control plane. This operation accepts only bounded, privacy-safe
-//! failure state and returns the fixed user-facing reason.
+//! but the decision about which recovery posture to communicate and whether
+//! another ACK should be awaited belongs to the Rust control plane. This
+//! operation accepts only bounded, privacy-safe failure state and returns the
+//! fixed user-facing reason and wait posture.
 
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -18,6 +19,23 @@ const RESIDENT_FAIL_FAST_STREAK: u64 = 4;
 const POLICY_SOURCE_FENCE_ERROR: &str = "native_business_source_mutation_in_progress";
 const PERSISTENT_ERROR: &str = "native_command_program_binding_mismatch";
 const PREFIX: &str = "HOL Guard could not prepare the native policy safely.";
+
+// Keep the publication retry posture beside the daemon's policy-admission
+// explanation. The Python worker only transports the publisher state here.
+const TRANSIENT_PUBLICATION_ERRORS: [&str; 11] = [
+    "native_policy_snapshot_resident_changed",
+    "native_approval_authority_busy",
+    "native_resident_restart_budget_busy",
+    "native_command_control_mutation_in_progress",
+    "native_command_control_authority_not_current",
+    "native_command_control_binding_changed",
+    "native_command_pack_projection_changed",
+    "native_business_source_mutation_in_progress",
+    "native_business_source_binding_changed",
+    "native_local_cli_revision_changed",
+    "native_provider_catalog_changed",
+];
+const SNAPSHOT_EXPIRY_ERROR: &str = "native_policy_snapshot_expired";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -58,6 +76,15 @@ fn reason(last_error: Option<&str>, resident_failure_streak: u64) -> String {
             RETRY
         };
     format!("{PREFIX} {code}. {advice}")
+}
+
+fn waits_for_ack(last_error: Option<&str>, resident_failure_streak: u64) -> bool {
+    let Some(code) = last_error.filter(|code| !code.is_empty()) else {
+        return true;
+    };
+    TRANSIENT_PUBLICATION_ERRORS.contains(&code)
+        || code == SNAPSHOT_EXPIRY_ERROR
+        || (resident_class_error(code) && resident_failure_streak < RESIDENT_FAIL_FAST_STREAK)
 }
 
 /// Render the publisher's failure directly in the daemon. Calling the
@@ -111,6 +138,7 @@ pub(crate) fn evaluate(request: &HookPolicyAdmissionRequestV1) -> Result<Vec<u8>
         "result": {
             "request_id": request.request_id,
             "reason": reason(request.last_error.as_deref(), request.resident_failure_streak.unwrap_or(0)),
+            "wait_for_ack": waits_for_ack(request.last_error.as_deref(), request.resident_failure_streak.unwrap_or(0)),
         },
     }))
 }
