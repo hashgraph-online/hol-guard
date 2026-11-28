@@ -111,6 +111,9 @@ def native_unavailable_event_response(
     guard_home: Path | None = None,
     deadline: float | None = None,
     record_post_tool_activity: bool = False,
+    reason_code: str | None = None,
+    reason: str | None = None,
+    prompt_reason: str | None = None,
 ) -> dict[str, object] | None:
     """Ask Rust for the canonical event and its outage response.
 
@@ -118,13 +121,20 @@ def native_unavailable_event_response(
     evidence admission. Python only decodes this transport envelope.
     """
 
+    params: dict[str, object] = {
+        "payload": dict(payload),
+        "record_post_tool_activity": record_post_tool_activity,
+    }
+    if reason_code is not None:
+        params["reason_code"] = reason_code
+    if reason is not None:
+        params["reason"] = reason
+    if prompt_reason is not None:
+        params["prompt_reason"] = prompt_reason
     rendered = native_render_cli(
         "unavailable_event",
         harness,
-        {
-            "payload": dict(payload),
-            "record_post_tool_activity": record_post_tool_activity,
-        },
+        params,
         guard_home=guard_home,
         deadline=deadline,
     )
@@ -149,7 +159,7 @@ def native_render_cli(
     *,
     guard_home: Path | None = None,
     deadline: float | None = None,
-) -> tuple[str, dict[str, object] | None] | None:
+) -> tuple[str, dict[str, object] | None] | tuple[str, dict[str, object] | None, str] | None:
     """Render the in-process CLI hook outcome; ``None`` when the resident cannot answer.
 
     ``kind`` is ``cli_response`` or ``cli_document``. The result is the outcome
@@ -195,7 +205,11 @@ def native_render_cli(
     if payload is None or outcome not in {"document", "silent", "fallback"}:
         return None
     document = payload.get("response")
-    return str(outcome), dict(document) if isinstance(document, dict) else None
+    rendered = (str(outcome), dict(document) if isinstance(document, dict) else None)
+    native_policy_status = payload.get("native_policy_status")
+    if kind == "structured_outage" and isinstance(native_policy_status, str):
+        return (*rendered, native_policy_status)
+    return rendered
 
 
 def native_cursor_shell_route(

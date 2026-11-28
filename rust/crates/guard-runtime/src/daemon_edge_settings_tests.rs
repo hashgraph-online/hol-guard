@@ -45,8 +45,11 @@ fn settings_match_the_recorded_daemon_answers() {
             std::fs::write(home.join("config.toml"), toml).unwrap();
         }
         let config = config(&home);
-        let (status, body) = settings(&config).expect(name);
+        let (status, mut body) = settings(&config).expect(name);
         assert_eq!(status, 200, "{name}");
+        // No browser session is recorded under a fresh home.
+        let held = body.as_object_mut().unwrap().remove("approval_page_held");
+        assert_eq!(held, Some(Value::Bool(false)), "{name}");
         assert_eq!(with_home(body, &home), case["settings"], "{name}");
         let (status, body) = export(&config).expect(name);
         assert_eq!(status, 200, "{name}");

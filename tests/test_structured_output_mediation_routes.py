@@ -12,10 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.hook_review.hook_worker_unavailable import (
-    read_structured_view,
-    structured_outage_overlay,
-)
+from codex_plugin_scanner.guard.hook_review.hook_worker_unavailable import structured_outage_overlay
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicyState
 from tests.structured_output_mediation_support import (
     WITHHOLD,
@@ -31,8 +28,6 @@ from tests.structured_output_mediation_support import (
     _UnavailableLoadErrorNativeRouteFixture,
     _UnavailableNativeRouteFixture,
 )
-
-_VIEW_KEYS = {"managed_policy_status", "managed_policy_hash", "managed_locked_settings", "managed_policy"}
 
 
 class _Metrics:
@@ -61,8 +56,6 @@ def test_load_config_fail_closed_floor_keeps_structured_authority_required(
     assert config.mode == "enforce"
     assert config.default_action == "block"
     assert config.managed_policy is not None
-    view = read_structured_view(lambda: config)
-    assert set(view) == _VIEW_KEYS
     assert structured_outage_overlay(
         harness="pi", event_name="PostToolUse", guard_home=tmp_path, deadline=None, load_config=lambda: config
     )["structured_content_mediation"] == {

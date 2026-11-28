@@ -66,6 +66,18 @@ fn may_name_an_option(directory: &Path, value: &str) -> bool {
     if !first.contains(['*', '?', '[']) {
         return first.starts_with('-');
     }
+    // Every floor that proves the segment asks again, and a large directory
+    // costs a full listing each time, so the answer is kept for the
+    // evaluation.
+    let key = format!("glob-may-name-option\0{directory:?}");
+    super::super::walk_memo::memoized_keyed(key, || any_entry_names_an_option(directory))
+}
+
+/// Whether an entry of `directory` starts with `-`, has no UTF-8 name, or
+/// lies past the budget.
+fn any_entry_names_an_option(directory: &Path) -> bool {
+    #[cfg(test)]
+    super::super::walk_memo::count_walk("glob-option-listing", directory);
     let Ok(entries) = std::fs::read_dir(directory) else {
         return true;
     };
@@ -111,6 +123,14 @@ pub(in crate::pretool) fn glob_surely_matches(value: &str, context: ReadContext<
 /// shell always hands the word on. A bracket, an escape or a budget that
 /// runs out answers no. A trailing `/` or `/.` matches only a directory.
 fn surely_matches(directory: &Path, value: &str) -> bool {
+    // Asked again by every floor, as [`may_name_an_option`] is.
+    let key = format!("glob-surely-matches\0{directory:?}\0{value}");
+    super::super::walk_memo::memoized_keyed(key, || surely_matches_uncached(directory, value))
+}
+
+fn surely_matches_uncached(directory: &Path, value: &str) -> bool {
+    #[cfg(test)]
+    super::super::walk_memo::count_walk("glob-sure-match", directory);
     let directory_only = directories_only(value);
     let components: Vec<&str> = value
         .split('/')
@@ -166,7 +186,12 @@ fn surely_matches(directory: &Path, value: &str) -> bool {
             {
                 continue;
             }
-            if last || entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            // A match of the last component is the existing entry this
+            // asks for, so the rest of the directory need not be read.
+            if last {
+                return true;
+            }
+            if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
                 pending.push((entry.path(), index + 1));
             }
         }
@@ -180,3 +205,7 @@ pub(super) fn directories_only(pattern: &str) -> bool {
     let trimmed = pattern.trim_end_matches('/');
     trimmed.len() < pattern.len() || trimmed.ends_with("/.")
 }
+
+#[cfg(test)]
+#[path = "glob_search_cleared_tests.rs"]
+mod tests;

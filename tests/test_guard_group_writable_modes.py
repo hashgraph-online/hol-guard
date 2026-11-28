@@ -24,6 +24,19 @@ from tests.native_runtime_stamp import stamp_native_runtime
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits")
 
 
+@pytest.fixture(autouse=True)
+def _no_native_provider_purge(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    """Uninstall tests run without the native runtime; record the provider purge instead."""
+    purged: list[Path] = []
+
+    def record(guard_home: Path) -> dict[str, object]:
+        purged.append(guard_home)
+        return {"keys_deleted": 0, "providers_forgotten": 0}
+
+    monkeypatch.setattr(uninstall_commands, "forget_provider_integrations", record)
+    return purged
+
+
 @posix_only
 def test_changed_user_file_group_write_is_normalized(tmp_path: Path) -> None:
     change = TransitionFile(tmp_path / ".zshrc", b"a", b"b", before_mode=0o664, after_mode=0o664)

@@ -1,0 +1,9 @@
+{
+  "schema": "guard.public-suffix-snapshot.v1",
+  "source": "https://publicsuffix.org/list/public_suffix_list.dat",
+  "license": "MPL-2.0",
+  "version": "2026-11-26_18-39-01_UTC",
+  "commit": "88b076a1fb2ae58cd2a6959d570f075e04d21867",
+  "file": "public_suffix_list.dat",
+  "sha256": "8c0d1577cb09d1bc4196ac41f3ce6847df2ff5201387877f69e100f159162bef"
+}

@@ -197,6 +197,7 @@ pub(crate) const KNOWN_SUBCOMMANDS: &[&str] = &[
     "enroll-approval-authority",
     "enroll-approval-v4-authority",
     "enroll-workspace-review-authority",
+    "forget-provider-integrations",
     "hook",
     "hook-client",
     "mcp-config-assess",

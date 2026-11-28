@@ -24,6 +24,19 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home, workspace_dir=None, guard_home=guard_home)
 
 
+@pytest.fixture(autouse=True)
+def _no_native_provider_purge(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    """Uninstall tests run without the native runtime; record the provider purge instead."""
+    purged: list[Path] = []
+
+    def record(guard_home: Path) -> dict[str, object]:
+        purged.append(guard_home)
+        return {"keys_deleted": 0, "providers_forgotten": 0}
+
+    monkeypatch.setattr(uninstall_commands, "forget_provider_integrations", record)
+    return purged
+
+
 def test_self_uninstall_dry_run_reports_full_removal_plan(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
@@ -534,3 +547,90 @@ def test_a_busy_barrier_on_one_attempt_is_retried(
 
     assert update_retirement.retire_native_resident_for_home(tmp_path / "home", attempt_barrier=barrier) is True
     assert attempts == ["busy", "stop"]
+
+
+def _quiet_uninstall(monkeypatch: pytest.MonkeyPatch, context: HarnessContext) -> None:
+    monkeypatch.setattr(uninstall_commands, "_current_version", lambda: "2.0.764")
+    monkeypatch.setattr(uninstall_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(uninstall_commands, "package_shim_status", lambda _context: {"installed_managers": []})
+    monkeypatch.setattr(uninstall_commands, "retire_all_guard_daemons_for_home", lambda _guard_home: [])
+    monkeypatch.setattr(
+        uninstall_commands,
+        "uninstall_package_shims",
+        lambda _context, managers=None: {"removed_managers": [], "removed_paths": [], "remaining_managers": []},
+    )
+    monkeypatch.setattr(uninstall_commands, "remove_guard_profile_blocks", lambda _context: {"changed": False})
+
+
+def test_self_uninstall_forgets_provider_integrations_before_the_package_goes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    _no_native_provider_purge: list[Path],
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    _quiet_uninstall(monkeypatch, context)
+    purged_before_package: list[bool] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        purged_before_package.append(_no_native_provider_purge == [context.guard_home])
+        return subprocess.CompletedProcess(command, 0, stdout="hol-guard removed", stderr="")
+
+    monkeypatch.setattr(uninstall_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = uninstall_commands.run_guard_self_uninstall(
+        dry_run=False, context=context, store=store, now="2026-06-18T00:00:00Z"
+    )
+
+    assert exit_code == 0
+    assert purged_before_package == [True], "the runtime that reads the keys is still installed"
+    assert payload["provider_integrations"] == {"keys_deleted": 0, "providers_forgotten": 0}
+
+
+def test_self_uninstall_reports_a_store_it_could_not_clear_without_blaming_the_keys(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    _quiet_uninstall(monkeypatch, context)
+    monkeypatch.setattr(
+        uninstall_commands,
+        "forget_provider_integrations",
+        lambda _guard_home: {"error": "provider_store_not_purged"},
+    )
+    monkeypatch.setattr(
+        uninstall_commands.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 0, stdout="", stderr=""),
+    )
+
+    payload, _exit_code = uninstall_commands.run_guard_self_uninstall(
+        dry_run=False, context=context, store=store, now="2026-06-18T00:00:00Z"
+    )
+
+    assert payload["provider_integrations"] == {"error": "provider_store_not_purged"}
+    assert any("keys were deleted" in note for note in payload["notes"])
+    assert not any("Could not delete provider integration keys" in note for note in payload["notes"])
+
+
+def test_self_uninstall_reports_provider_keys_it_could_not_delete(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    _quiet_uninstall(monkeypatch, context)
+    monkeypatch.setattr(uninstall_commands, "forget_provider_integrations", lambda _guard_home: None)
+    monkeypatch.setattr(
+        uninstall_commands.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 0, stdout="", stderr=""),
+    )
+
+    payload, _exit_code = uninstall_commands.run_guard_self_uninstall(
+        dry_run=False, context=context, store=store, now="2026-06-18T00:00:00Z"
+    )
+
+    assert payload["provider_integrations"] == {"error": "provider_keys_not_deleted"}
+    assert any("provider integration keys" in note for note in payload["notes"])

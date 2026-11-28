@@ -10,7 +10,7 @@ use super::*;
 use crate::provider_integration_secret::{load_provider_key, store_provider_key, ProviderKey};
 use crate::provider_integration_store::{capability_settings, ensure_provider_integration_schema};
 
-const SHIELD: &str = "provider.exampleshield";
+pub(crate) const SHIELD: &str = "provider.exampleshield";
 const NOW: u64 = 50_000_000;
 const KEY: &str = "fixture-key-aaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -51,14 +51,14 @@ pub(crate) fn provider() -> CompiledProviderIntegrationV1 {
     compile_provider_integration(&serde_json::to_vec(&manifest).unwrap(), &[]).unwrap()
 }
 
-struct Fixture {
+pub(crate) struct Fixture {
     home: tempfile::TempDir,
-    connection: Connection,
+    pub(crate) connection: Connection,
     providers: Vec<CompiledProviderIntegrationV1>,
     managed: ManagedProviderSettings,
     ledger: ProofLedger,
     enabled: bool,
-    now_ms: u64,
+    pub(crate) now_ms: u64,
 }
 
 impl Fixture {
@@ -76,7 +76,7 @@ impl Fixture {
         }
     }
 
-    fn connected() -> Self {
+    pub(crate) fn connected() -> Self {
         let fixture = Self::new();
         put_connection(
             &fixture.connection,
@@ -102,7 +102,7 @@ impl Fixture {
         fixture
     }
 
-    fn call(&mut self, method: &str, path: &str, body: Value) -> RouteAnswer {
+    pub(crate) fn call(&mut self, method: &str, path: &str, body: Value) -> RouteAnswer {
         let context = RouteContext {
             enabled: self.enabled,
             providers: &self.providers,
@@ -125,15 +125,15 @@ impl Fixture {
     }
 }
 
-fn path(rest: &str) -> String {
+pub(crate) fn path(rest: &str) -> String {
     format!("{PREFIX}/{SHIELD}{rest}")
 }
 
-fn code(answer: &RouteAnswer) -> &str {
+pub(crate) fn code(answer: &RouteAnswer) -> &str {
     answer.body["error"].as_str().unwrap_or_default()
 }
 
-fn enforce_change() -> Value {
+pub(crate) fn enforce_change() -> Value {
     json!({
         "settings": [{"capability": "browser.origin-reputation", "effect": "enforce",
                       "require_fresh_check": true, "quieted_reason_codes": []}],
@@ -141,19 +141,19 @@ fn enforce_change() -> Value {
     })
 }
 
-fn with_proof(change: &Value, proof: &str) -> Value {
+pub(crate) fn with_proof(change: &Value, proof: &str) -> Value {
     let mut request = change.clone();
     request["proof"] = json!(proof);
     request
 }
 
 /// What the store reports for a capability nobody has set.
-const UNCHANGED: Option<CapabilitySetting> = Some(CapabilitySetting {
+pub(crate) const UNCHANGED: Option<CapabilitySetting> = Some(CapabilitySetting {
     effect_level: Level::Tighten,
     require_fresh: false,
 });
 
-fn stored_setting(fixture: &Fixture) -> Option<CapabilitySetting> {
+pub(crate) fn stored_setting(fixture: &Fixture) -> Option<CapabilitySetting> {
     capability_settings(&fixture.connection, SHIELD)
         .unwrap()
         .get(&Cap::OriginReputation)
@@ -238,6 +238,14 @@ fn list_and_detail_show_the_provider_without_secrets() {
         Some(&0)
     );
     assert!(!detail.body.to_string().contains(KEY));
+    // The page renders the publisher, the hosts it calls and the provider's own policies.
+    let manifest = provider();
+    assert_eq!(parsed.publisher_name, manifest.publisher_name);
+    assert_eq!(parsed.hosts, manifest.hosts);
+    assert_eq!(parsed.privacy_url, manifest.privacy_url);
+    assert_eq!(parsed.terms_url, manifest.terms_url);
+    assert_eq!(parsed.obtain_url, manifest.obtain_url);
+    assert!(parsed.privacy_url.starts_with("https://"));
 
     let missing = fixture.call("GET", &format!("{PREFIX}/provider.otherwatch"), Value::Null);
     assert_eq!((missing.status, code(&missing)), (404, NOT_FOUND));

@@ -150,6 +150,29 @@ def test_compound_raw_selector_binds_with_the_same_host_result_proof():
         assert not post_input_matches("read", {"path": f"{{{{workspace}}}}/src/one.ts:{selector}"}, post, result)
 
 
+def test_raw_read_of_an_omp_internal_document_binds_to_its_internal_source():
+    """Oh My Pi's eval prelude reads `help://eval` as `help://eval:raw`; its result names an internal source."""
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    pre, post = {"path": "help://eval:raw"}, {"path": "help://eval"}
+    result = {
+        "details": {"meta": {"source": {"type": "internal", "value": "help://eval"}}, "displayContent": {"startLine": 1}}
+    }
+    assert post_input_matches("read", pre, post, result)
+    assert not post_input_matches("read", pre, post)
+    # The internal source must be the same address, reported as internal by the host.
+    assert not post_input_matches("read", pre, {"path": "help://other"}, result)
+    as_file = {"details": {**result["details"], "meta": {"source": {"type": "path", "value": "help://eval"}}}}
+    assert not post_input_matches("read", pre, post, as_file)
+    assert not post_input_matches("read", pre, {**post, "limit": 5}, result)
+    late = {"details": {**result["details"], "displayContent": {"startLine": 2}}}
+    assert not post_input_matches("read", pre, post, late)
+    # A workspace file or a file:// URL never takes the internal route.
+    for address in ("file:///etc/passwd", "{{workspace}}/help", "help:/eval", "help://a b"):
+        claimed = {"details": {**result["details"], "meta": {"source": {"type": "internal", "value": address}}}}
+        assert not post_input_matches("read", {"path": f"{address}:raw"}, {"path": address}, claimed), address
+
+
 def test_windows_resolved_read_paths_bind_only_whole_backslash_form():
     from ci.gauntlet.input_evidence import post_input_matches
 
@@ -184,3 +207,41 @@ def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():
     assert "input_json" not in exported
     tampered = public_observations([{**observation, "input_json": "{}", "tool": "read"}], {})[0]
     assert tampered == {"tool": "read", "observer_error": True, "observer_error_code": "input_digest_mismatch"}
+
+
+def test_eval_help_case_allows_only_its_own_help_page_read():
+    """Oh My Pi 19.2 routes the eval prelude's read through the tool hooks; only `help://eval` is the case."""
+    from ci.gauntlet.catalog import load_catalog
+    from ci.gauntlet.evidence import virtual_uri_error
+    from ci.gauntlet.native_tools import native_tools_scope_error
+
+    catalog = {item.id: item for item in load_catalog()}
+    scenario = catalog["omp-native-eval-reads-help-docs"]
+    code = {"language": "js", "code": 'return await read("help://eval");'}
+    parent = {"id": "eval-1", "name": "eval", "args": code}
+
+    def bridged(name: str, args: dict) -> list[dict]:
+        return [parent, {"id": "js-read-1", "name": name, "args": args, "bridge_parent_id": "eval-1"}]
+
+    for path in ("help://eval:raw", "help://eval"):
+        calls = bridged("read", {"path": path})
+        assert native_tools_scope_error(scenario, calls, {}) is None, path
+        assert virtual_uri_error(scenario, calls) is None, path
+    for name, args in (
+        ("read", {"path": "help://eval/judge:raw"}),
+        ("read", {"path": "help://other:raw"}),
+        ("read", {"path": "help://eval:1-5"}),
+        ("read", {"path": "help://eval:raw", "limit": 5}),
+        ("read", {"path": "{{workspace}}/README.md"}),
+        ("write", {"path": "help://eval"}),
+    ):
+        calls = bridged(name, args)
+        assert native_tools_scope_error(scenario, calls, {}) == "eval bridge used an unexpected tool or file", args
+    # The exception belongs to this case alone; any other scenario still treats the read as off-task.
+    other = catalog["omp-native-eval-reads-skill-doc"]
+    help_read = bridged("read", {"path": "help://eval:raw"})
+    assert native_tools_scope_error(other, help_read, {}) == "eval bridge used an unexpected tool or file"
+    assert virtual_uri_error(other, help_read) == "virtual URI operations are outside the disposable task scope"
+    assert virtual_uri_error(scenario, [{"id": "r", "name": "read", "args": {"path": "help://other"}}]) == (
+        "virtual URI operations are outside the disposable task scope"
+    )

@@ -93,6 +93,16 @@ pub struct ProviderSummaryV1 {
 #[serde(deny_unknown_fields)]
 pub struct ProviderDetailV1 {
     pub summary: ProviderSummaryV1,
+    /// Who publishes the manifest. `summary.verified` says whether HOL checked that claim.
+    pub publisher_name: String,
+    pub publisher_url: Option<String>,
+    pub surfaces: Vec<String>,
+    /// The only hosts Guard calls for this provider.
+    pub hosts: Vec<String>,
+    pub privacy_url: String,
+    pub terms_url: String,
+    /// Where a person gets a key. The dashboard adds a static referral parameter and nothing else.
+    pub obtain_url: Option<String>,
     pub auth_kind: ProviderAuthKindV1,
     pub shares: Vec<ProviderShareableFactV1>,
     pub enabled_opt_in_facts: Vec<ProviderShareableFactV1>,
@@ -100,6 +110,10 @@ pub struct ProviderDetailV1 {
     pub last_verified_at_ms: Option<u64>,
     /// Cached signal count per capability id.
     pub cache_counts: BTreeMap<String, u64>,
+    /// Digest of the stored settings and opt-in facts. A settings preview that names it is
+    /// refused when the stored state has changed since this read.
+    #[serde(default)]
+    pub settings_baseline: String,
 }
 
 /// `POST .../connect/preview` response: the exact share set and a one-use proof challenge.

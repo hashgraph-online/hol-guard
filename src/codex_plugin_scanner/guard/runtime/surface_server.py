@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..approval_browser_surface import approval_page_held
 from ..approvals import primary_approval_browser_url, queue_blocked_approvals
 from ..codex_resume import seed_request_resume_record
 from ..models import GuardArtifact, HarnessDetection
@@ -332,6 +333,8 @@ class GuardSurfaceRuntime:
             and self.has_surface_opened(surface, open_key)
         ):
             return {"surface": surface, "opened": False, "reason": "already-opened", "open_key": open_key}
+        if not force_open and approval_page_held(self.store.guard_home):
+            return {"surface": surface, "opened": False, "reason": "browser-session-held", "open_key": open_key}
         try:
             opened = opener(browser_url or approval_center_url)
         except Exception:

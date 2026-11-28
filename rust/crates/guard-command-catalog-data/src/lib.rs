@@ -50,3 +50,15 @@ pub const BUILD_JSON_LEN: &str = env!("GUARD_PACKAGED_BUILD_LEN");
 
 /// Host/target command-source implementation identity bound into the artifacts.
 pub const IMPLEMENTATION_DIGEST: &str = env!("GUARD_COMMAND_SOURCE_IMPLEMENTATION");
+
+/// Compiled public-suffix rules (one ASCII rule per line, `!` and `*.` kept), zstd-19 compressed.
+pub const PUBLIC_SUFFIX_RULES_ZST: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/public-suffix-rules.v1.txt.zst"));
+/// SHA-256 hex of the uncompressed compiled public-suffix rules.
+pub const PUBLIC_SUFFIX_RULES_SHA256: &str = env!("GUARD_PUBLIC_SUFFIX_RULES_SHA256");
+/// Byte length of the uncompressed compiled public-suffix rules.
+pub const PUBLIC_SUFFIX_RULES_LEN: &str = env!("GUARD_PUBLIC_SUFFIX_RULES_LEN");
+/// SHA-256 hex of the pinned public-suffix snapshot file the rules were compiled from.
+pub const PUBLIC_SUFFIX_SNAPSHOT_SHA256: &str = env!("GUARD_PUBLIC_SUFFIX_SNAPSHOT_SHA256");
+/// Upstream version label of the pinned public-suffix snapshot.
+pub const PUBLIC_SUFFIX_VERSION: &str = env!("GUARD_PUBLIC_SUFFIX_VERSION");

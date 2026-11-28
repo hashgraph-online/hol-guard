@@ -38,6 +38,7 @@ def _build_local_url(host: str, port: int, path: str) -> str:
 
 
 def _settings_response_payload(guard_home: Path, settings: dict[str, object]) -> dict[str, object]:
+    from ..approval_browser_surface import approval_page_held
     from ..protection_capabilities import protection_capability_payloads
 
     return {
@@ -45,6 +46,7 @@ def _settings_response_payload(guard_home: Path, settings: dict[str, object]) ->
         "config_path": str(guard_home / "config.toml"),
         "settings": settings,
         "protection_capabilities": protection_capability_payloads(),
+        "approval_page_held": approval_page_held(guard_home),
     }
 
 

@@ -88,6 +88,7 @@ pub(super) enum GlobSearch {
     Capped(PathBuf),
     /// As [`GlobSearch::Capped`], with every file of the directory that its
     /// last and only pattern can name. The search opens nothing else there.
+    /// Each entry is a regular file, never a link, directly in the directory.
     Entries(PathBuf, Vec<PathBuf>),
     /// The glob reached something unsafe or ambiguous.
     Refused,

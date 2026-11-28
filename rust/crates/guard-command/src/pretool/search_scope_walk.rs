@@ -13,7 +13,7 @@ use super::search_scope_ignore::{
     holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
     slash_path, IgnoreRule, IgnoreTiers, ScopeUnproven,
 };
-use super::search_scope_listing::{inherited_tiers, listing_may_hold};
+use super::search_scope_listing::{inherited_tiers, listing_may_hold, read_listing};
 use super::search_scope_plain_skips::PlainSkips;
 use super::search_scope_tracked::{Tracked, TrackedFiles};
 use std::path::{Path, PathBuf};
@@ -377,13 +377,12 @@ fn walk_scope_inner(
         let base = slash_path(&directory.path).ok_or(ScopeUnproven)?;
         // The listing, read once, says which ignore and repository entries the
         // directory may hold, so a directory without them costs no lookups.
-        // It is read no further than the entry budget could reach.
-        let children = std::fs::read_dir(&directory.path)
-            .map_err(|_| ScopeUnproven)?
-            .take((entry_limit + scope_entries).saturating_sub(inspected) + 1)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| ScopeUnproven)?;
-        let holds = |wanted: &str| listing_may_hold(&children, wanted);
+        // It is read no further than the entry budget could reach, and the
+        // other walks proving the same search share it.
+        let limit = (entry_limit + scope_entries).saturating_sub(inspected) + 1;
+        let listed = read_listing(&directory.path, limit).ok_or(ScopeUnproven)?;
+        let children = &listed[..listed.len().min(limit)];
+        let holds = |wanted: &str| listing_may_hold(children, wanted);
         // Most directories add no rules, so they share their parent's tiers
         // rather than copying every inherited rule.
         let mut nested = false;
@@ -422,12 +421,11 @@ fn walk_scope_inner(
             if inspected > entry_limit || budget.is_some_and(|limit| Instant::now() >= limit) {
                 return Err(ScopeUnproven);
             }
-            let path = entry.path();
-            let name = entry.file_name();
-            let name = name.to_str().ok_or(ScopeUnproven)?;
+            let name = entry.name.to_str().ok_or(ScopeUnproven)?;
+            let path = directory.path.join(name);
             // The entry's own kind, as the listing reports it: never follow
             // links or open a candidate secret.
-            let file_type = entry.file_type().map_err(|_| ScopeUnproven)?;
+            let file_type = entry.file_type;
             let relative = if directory.relative.is_empty() {
                 name.to_string()
             } else {
@@ -500,12 +498,19 @@ fn walk_scope_inner(
                     (is_directory || filter.type_allows(name), false)
                 }
             };
-            let beyond = ignores == Ignores::RipgrepGlob
-                && (directory.beyond
-                    || name.starts_with('.')
-                    || (selected && is_ignored(&tiers, &rendered, is_directory)?)
-                    || PlainSkips::hit(&skips, &rendered, is_directory));
+            // Only a sensitive file consults it, and a directory hands it
+            // down, so a plain file never matches the excludes for it: most
+            // entries are such files, and matching every one of them against
+            // the global excludes was most of a large walk.
+            let beyond = || -> Result<bool, ScopeUnproven> {
+                Ok(ignores == Ignores::RipgrepGlob
+                    && (directory.beyond
+                        || name.starts_with('.')
+                        || (selected && is_ignored(&tiers, &rendered, is_directory)?)
+                        || PlainSkips::hit(&skips, &rendered, is_directory)))
+            };
             if is_directory {
+                let beyond = beyond()?;
                 pending.push(PendingDirectory {
                     path,
                     relative,
@@ -516,7 +521,7 @@ fn walk_scope_inner(
             } else if searched
                 && !names
                 && sensitive_scope_file(&path, home)
-                && !(ignores == Ignores::RipgrepGlob && !beyond && tracked.committed(&path))
+                && !(ignores == Ignores::RipgrepGlob && !beyond()? && tracked.committed(&path))
                 && !match tracked.classify(&path) {
                     Tracked::Clean => true,
                     // A committed `Secret` manifest is held for the values it

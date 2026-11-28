@@ -5,9 +5,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.hook_review import hook_worker, hook_worker_unavailable
-from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane_structured import structured_output_view
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.structured_output_mediation_support import _config
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
@@ -22,21 +20,17 @@ def test_daemon_unavailable_routes_withhold_only_required_structured_content(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     worker = hook_worker.HookWorker(store=GuardStore(guard_home))
-    config = _config()
 
     def render(kind, adapter, params, **_transport):
         if kind == "unavailable_event":
             return None
         assert kind == "structured_outage"
         assert adapter == harness
-        assert params == {"event_name": "PostToolUse", "view": structured_output_view(config)}
+        assert params == {"event_name": "PostToolUse"}
         overlay = hook_worker_unavailable.withhold_structured_destination({}) if required else {}
         return "document", overlay
 
     monkeypatch.setattr(hook_worker_unavailable, "native_render_cli", render)
-    # A readable config; an unreadable one is always required, so reading the
-    # real one would make the result depend on an installed runtime.
-    monkeypatch.setattr(worker, "_load_config", lambda *_args, **_kwargs: config)
     # Pin the native edge as unavailable so the result is independent of any
     # runtime binary installed on the machine running the test.
     monkeypatch.setattr(worker, "_review_raw_hook_native", lambda **_: None)
@@ -97,3 +91,22 @@ def test_unavailable_event_route_uses_native_projection_and_activity_marker(
     )
     assert result == {"decision": "allow"}
     assert recorded == []
+
+
+def test_structured_outage_overlay_does_not_read_python_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen: list[dict[str, object]] = []
+
+    def render(kind, harness, params, **_kwargs):
+        seen.append({"kind": kind, "harness": harness, "params": params})
+        return "document", {}
+
+    monkeypatch.setattr(hook_worker_unavailable, "native_render_cli", render)
+    overlay = hook_worker_unavailable.structured_outage_overlay(
+        harness="pi",
+        event_name="PostToolUse",
+        guard_home=tmp_path,
+        deadline=None,
+        load_config=lambda: (_ for _ in ()).throw(AssertionError("python config read")),
+    )
+    assert overlay == {}
+    assert seen == [{"kind": "structured_outage", "harness": "pi", "params": {"event_name": "PostToolUse"}}]

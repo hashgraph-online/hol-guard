@@ -50,6 +50,39 @@ fn global_native_only_policy_prevents_codex_browser_fallback() {
         );
         assert_eq!(opened.get(), expected);
     }
+    // R-SURFACE: a live session in a shared profile keeps the page closed even
+    // where the policy would open it.
+    let connection = rusqlite::Connection::open(home.join("guard.db")).unwrap();
+    crate::browser_session_store::ensure_browser_session_schema(&connection).unwrap();
+    let seen = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    crate::browser_session_store::record_browser_session(
+        &connection,
+        &crate::browser_session_store::BrowserSessionObservation {
+            session_digest: &"a".repeat(64),
+            harness: "codex",
+            harness_session_digest: &"1".repeat(64),
+            driver_identity_hash: &"2".repeat(64),
+            profile_mode: guard_contracts::BrowserProfileModeV1::Shared,
+            origin: None,
+            debugging_port: None,
+            now_unix: seen,
+        },
+    )
+    .unwrap();
+    let opened = Cell::new(false);
+    open_pending_with_source(
+        Some("http://127.0.0.1:4781/requests/request_123"),
+        &home.join("daemon.json"),
+        |_| {
+            opened.set(true);
+            true
+        },
+        &source,
+    );
+    assert!(!opened.get());
     std::fs::remove_file(token).unwrap();
     std::fs::remove_file(config).unwrap();
     std::fs::remove_dir_all(home).unwrap();
